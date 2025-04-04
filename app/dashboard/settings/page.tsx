@@ -1,0 +1,322 @@
+"use client"
+
+import type React from "react"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { useAuth } from "@/contexts/auth-context"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
+export default function SettingsPage() {
+  const [profileData, setProfileData] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const router = useRouter()
+  const { user } = useAuth()
+  const supabase = createClientSupabaseClient()
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return
+
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        // Get user data
+        const { data: userData, error: userError } = await supabase.from("users").select("*").eq("id", user.id).single()
+
+        if (userError) throw userError
+
+        // Get role-specific profile data
+        if (userData.role === "advertiser") {
+          const { data: advertiserData, error: advertiserError } = await supabase
+            .from("advertiser_profiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .single()
+
+          if (advertiserError) throw advertiserError
+
+          setProfileData({
+            ...userData,
+            ...advertiserData,
+            role: "advertiser",
+          })
+        } else {
+          const { data: creatorData, error: creatorError } = await supabase
+            .from("creator_profiles")
+            .select("*")
+            .eq("user_id", user.id)
+            .single()
+
+          if (creatorError) throw creatorError
+
+          setProfileData({
+            ...userData,
+            ...creatorData,
+            role: "creator",
+          })
+        }
+      } catch (err: any) {
+        setError(err.message || "Failed to load profile")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchProfile()
+  }, [user, supabase])
+
+  const handleUserUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    setIsSaving(true)
+
+    try {
+      // Update user data
+      const { error: userError } = await supabase
+        .from("users")
+        .update({
+          email: profileData.email,
+          profile_pic: profileData.profile_pic,
+        })
+        .eq("id", user?.id)
+
+      if (userError) throw userError
+
+      // Update role-specific data
+      if (profileData.role === "advertiser") {
+        const { error: advertiserError } = await supabase
+          .from("advertiser_profiles")
+          .update({
+            company_name: profileData.company_name,
+            logo_url: profileData.logo_url,
+            website: profileData.website,
+            social_media_handles: profileData.social_media_handles || {},
+          })
+          .eq("user_id", user?.id)
+
+        if (advertiserError) throw advertiserError
+      } else {
+        const { error: creatorError } = await supabase
+          .from("creator_profiles")
+          .update({
+            username: profileData.username,
+            bio: profileData.bio,
+            linked_platforms: profileData.linked_platforms || {},
+          })
+          .eq("user_id", user?.id)
+
+        if (creatorError) throw creatorError
+      }
+
+      setSuccess("Profile updated successfully")
+    } catch (err: any) {
+      setError(err.message || "Failed to update profile")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target
+    setProfileData((prev: any) => ({
+      ...prev,
+      [id]: value,
+    }))
+  }
+
+  if (isLoading || !profileData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p>Loading profile...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+
+      <Tabs defaultValue="profile" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="profile">Profile</TabsTrigger>
+          <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile Settings</CardTitle>
+              <CardDescription>Update your profile information visible to others on the platform</CardDescription>
+            </CardHeader>
+            <form onSubmit={handleUserUpdate}>
+              <CardContent className="space-y-4">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                {success && (
+                  <Alert className="bg-green-50 text-green-800">
+                    <AlertDescription>{success}</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    value={profileData.email || ""}
+                    onChange={handleInputChange}
+                    disabled
+                    placeholder="email@example.com"
+                  />
+                </div>
+
+                {profileData.role === "advertiser" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="company_name">Company Name</Label>
+                      <Input
+                        id="company_name"
+                        value={profileData.company_name || ""}
+                        onChange={handleInputChange}
+                        placeholder="Your company name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="website">Website</Label>
+                      <Input
+                        id="website"
+                        value={profileData.website || ""}
+                        onChange={handleInputChange}
+                        placeholder="https://example.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="logo_url">Logo URL</Label>
+                      <Input
+                        id="logo_url"
+                        value={profileData.logo_url || ""}
+                        onChange={handleInputChange}
+                        placeholder="https://example.com/logo.png"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2"></div>
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        value={profileData.username || ""}
+                        onChange={handleInputChange}
+                        placeholder="Your username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="bio">Bio</Label>
+                      <Textarea
+                        id="bio"
+                        value={profileData.bio || ""}
+                        onChange={handleInputChange}
+                        placeholder="Tell us about yourself"
+                        rows={4}
+                      />
+                    </div>
+                  </>
+                )}
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </Button>
+              </CardFooter>
+            </form>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="account">
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Settings</CardTitle>
+              <CardDescription>Manage your account settings and preferences</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="flex space-x-2">
+                  <Input id="password" type="password" value="••••••••" disabled />
+                  <Button variant="outline">Change</Button>
+                </div>
+              </div>
+
+              {profileData.role === "creator" && (
+                <div className="space-y-2">
+                  <Label htmlFor="payment">Payment Information</Label>
+                  <div className="flex space-x-2">
+                    <Input id="payment" value="••••••••" disabled />
+                    <Button variant="outline">Update</Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Add or update your payment details to receive payments for contest winnings
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <Button variant="destructive">Delete Account</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <Card>
+            <CardHeader>
+              <CardTitle>Notification Settings</CardTitle>
+              <CardDescription>Configure how you want to be notified</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">Email Notifications</h3>
+                  <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+                </div>
+                <div>
+                  <Button variant="outline">Configure</Button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">Push Notifications</h3>
+                  <p className="text-sm text-muted-foreground">Receive notifications in your browser</p>
+                </div>
+                <div>
+                  <Button variant="outline">Configure</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
