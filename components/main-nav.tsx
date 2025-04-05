@@ -3,25 +3,13 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { useAuth } from "@/contexts/auth-context"
 
 export function MainNav() {
   const pathname = usePathname()
-  const { user, signOut } = useAuth()
 
   return (
     <div className="flex items-center space-x-4 lg:space-x-6">
-      <Link
-        href="/"
-        className={cn(
-          "text-sm font-medium transition-colors hover:text-primary",
-          pathname === "/" ? "text-primary" : "text-muted-foreground",
-        )}
-      >
-        Home
-      </Link>
-      <Link
+      {/* <Link
         href="/about"
         className={cn(
           "text-sm font-medium transition-colors hover:text-primary",
@@ -29,7 +17,7 @@ export function MainNav() {
         )}
       >
         About
-      </Link>
+      </Link> */}
       <Link
         href="/brands"
         className={cn(
@@ -48,32 +36,6 @@ export function MainNav() {
       >
         For Creators
       </Link>
-
-      {user ? (
-        <>
-          <Link
-            href="/dashboard"
-            className={cn(
-              "text-sm font-medium transition-colors hover:text-primary",
-              pathname.startsWith("/dashboard") ? "text-primary" : "text-muted-foreground",
-            )}
-          >
-            Dashboard
-          </Link>
-          <Button variant="ghost" onClick={() => signOut()}>
-            Sign Out
-          </Button>
-        </>
-      ) : (
-        <>
-          <Link href="/login">
-            <Button variant="ghost">Sign In</Button>
-          </Link>
-          <Link href="/signup">
-            <Button>Sign Up</Button>
-          </Link>
-        </>
-      )}
     </div>
   )
 }

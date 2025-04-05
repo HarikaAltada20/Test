@@ -62,13 +62,11 @@ export function MobileNav() {
           ) : (
             <>
               <Link href="/login" onClick={handleLinkClick}>
-                <Button variant="ghost" className="w-full">
-                  Sign In
+                <Button className="w-full">
+                  Login
                 </Button>
               </Link>
-              <Link href="/signup" onClick={handleLinkClick}>
-                <Button className="w-full">Sign Up</Button>
-              </Link>
+
             </>
           )}
         </nav>

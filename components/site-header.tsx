@@ -1,20 +1,29 @@
 import Link from "next/link"
 import { MainNav } from "@/components/main-nav"
 import { MobileNav } from "@/components/mobile-nav"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { AuthNav } from "./auth-nav"
+import Image from "next/image"
+import logo from "@/public/images/GoViral_transparent_logo.png"
+// import { ThemeToggle } from "@/components/theme-toggle"
 
 export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center">
-        <Link href="/" className="mr-6 flex items-center space-x-2">
-          <span className="hidden font-bold sm:inline-block">Go Viral</span>
+      <div className="container flex h-16 items-center justify-between">
+
+        {/* Left: Logo */}
+        <Link href="/" className="flex items-center space-x-2">
+          <Image className="ml-8" src={logo} alt="Go Viral Logo" width={80} height={80} />
         </Link>
-        <div className="hidden md:flex md:flex-1">
+
+        {/* Center: Brands & Creators */}
+        <div className="hidden md:flex absolute left-1/2 -translate-x-1/2">
           <MainNav />
         </div>
-        <div className="flex flex-1 items-center justify-end space-x-4">
-          <ThemeToggle />
+
+        {/* Right: Auth options */}
+        <div className="flex items-center space-x-4">
+          <AuthNav />
           <MobileNav />
         </div>
       </div>
