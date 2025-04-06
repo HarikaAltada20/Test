@@ -3,6 +3,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowRight, CheckCircle } from "lucide-react"
+import heroImg from "@/public/images/GoViral_transparent_logo.png"
 
 export function HeroSection() {
   return (
@@ -25,12 +26,12 @@ export function HeroSection() {
                 </p>
               </div>
               <div className="flex flex-col gap-2 min-[400px]:flex-row">
-                <Link href="/brand/register">
+                <Link href="/brands">
                   <Button size="lg" className="bg-white text-purple-700 hover:bg-gray-100">
                     I'm a Brand
                   </Button>
                 </Link>
-                <Link href="/creator/register">
+                <Link href="/creators">
                   <Button size="lg" variant="outline" className="border-white bg-purple-700 text-white hover:bg-white/10">
                     I'm a Creator
                   </Button>
@@ -39,7 +40,7 @@ export function HeroSection() {
             </div>
             <div className="flex justify-center lg:justify-end">
               <Image
-                src="/hero-image.png"
+                src={heroImg}
                 alt="Influencer marketing illustration"
                 width={500}
                 height={400}

@@ -1,7 +1,12 @@
+"use client"
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function AboutPage() {
+  const { user } = useAuth()
+
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
@@ -69,17 +74,19 @@ export default function AboutPage() {
             </li>
           </ul>
 
-          <div className="text-center mt-12">
-            <h2 className="text-2xl font-bold mb-4">Ready to Get Started?</h2>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
-              <Button asChild>
-                <Link href="/signup">Create an Account</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/contact">Contact Us</Link>
-              </Button>
+          {!user && (
+            <div className="text-center mt-12">
+              <h2 className="text-2xl font-bold mb-4">Ready to Get Started?</h2>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
+                <Button asChild>
+                  <Link href="/auth/signup">Create an Account</Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/contact">Contact Us</Link>
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

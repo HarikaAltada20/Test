@@ -1,34 +1,65 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, DollarSign, Filter, Trophy } from "lucide-react"
+import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { useAuth } from "@/contexts/auth-context"
 
-export default async function OpportunitiesPage() {
-  const supabase = createServerSupabaseClient()
+export default function OpportunitiesPage() {
+  const [availableContests, setAvailableContests] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+  const { user } = useAuth()
+  const supabase = createClientSupabaseClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
 
-  if (!session) {
-    redirect("/login")
+      if (!user) {
+        router.push("/login")
+        return
+      }
+
+      // Get user role from the database
+      const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single()
+
+      if (userData?.role !== "creator") {
+        router.push("/dashboard")
+        return
+      }
+
+      // Get available contests
+      const { data: contests } = await supabase
+        .from("contests_with_status")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      setAvailableContests(contests || [])
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [user, router, supabase])
+
+  const handleViewDetails = (id: string) => {
+    router.push(`/dashboard/opportunities/${id}`)
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
-
-  if (userData?.role !== "creator") {
-    redirect("/dashboard")
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p>Loading opportunities...</p>
+        </div>
+      </div>
+    )
   }
-
-  // Get available contests
-  const { data: availableContests } = await supabase
-    .from("contests_with_status")
-    .select("*")
-    .order("created_at", { ascending: false })
 
   return (
     <div>
@@ -84,14 +115,14 @@ export default async function OpportunitiesPage() {
                       Prize Pool: $
                       {Array.isArray(contest.prizes)
                         ? (
-                            contest.prizes.reduce((sum: number, prize: any) => sum + (prize.amount || 0), 0) / 100
-                          ).toFixed(2)
+                          contest.prizes.reduce((sum: number, prize: any) => sum + (prize.amount || 0), 0) / 100
+                        ).toFixed(2)
                         : "0.00"}
                     </span>
                   </div>
                   <div className="pt-2">
-                    <Button className="w-full" asChild>
-                      <Link href={`/dashboard/opportunities/${contest.id}`}>View Details</Link>
+                    <Button className="w-full" onClick={() => handleViewDetails(contest.id)}>
+                      View Details
                     </Button>
                   </div>
                 </div>

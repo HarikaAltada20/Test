@@ -1,56 +1,117 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+"use client"
+
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
+import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { useAuth } from "@/contexts/auth-context"
 
-export default async function OpportunityDetailPage({ params }: { params: { id: string } }) {
-  const supabase = createServerSupabaseClient()
+export default function OpportunityDetailPage({ params }: { params: { id: string } }) {
+  const [contest, setContest] = useState<any>(null)
+  const [existingSubmission, setExistingSubmission] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const { user } = useAuth()
+  const supabase = createClientSupabaseClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
 
-  if (!session) {
-    redirect("/login")
+      try {
+        if (!user) {
+          router.push("/login")
+          return
+        }
+
+        // Get user role from the database
+        const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single()
+
+        if (userData?.role !== "creator") {
+          router.push("/dashboard")
+          return
+        }
+
+        // Get contest details
+        const { data: contestData, error: contestError } = await supabase
+          .from("contests_with_status")
+          .select("*, advertiser_profiles(company_name)")
+          .eq("id", params.id)
+          .single()
+
+        if (contestError || !contestData) {
+          console.error("Error fetching contest:", contestError)
+          setError("Failed to load contest details")
+          router.push("/dashboard/opportunities")
+          return
+        }
+
+        setContest(contestData)
+
+        // Check if user has already submitted to this contest
+        const { data: submissionData } = await supabase
+          .from("submissions")
+          .select("*")
+          .eq("contest_id", params.id)
+          .eq("creator_id", user.id)
+          .single()
+
+        if (submissionData) {
+          setExistingSubmission(submissionData)
+        }
+      } catch (err) {
+        console.error("Error in component:", err)
+        setError("An unexpected error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [params.id, user, router, supabase])
+
+  const handleSubmitContent = () => {
+    router.push(`/dashboard/opportunities/${params.id}/submit`)
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
-
-  if (userData?.role !== "creator") {
-    redirect("/dashboard")
+  const handleViewSubmission = (submissionId: string) => {
+    router.push(`/dashboard/content/${submissionId}`)
   }
 
-  // Get contest details
-  const { data: contest } = await supabase
-    .from("contests_with_status")
-    .select("*, advertiser_profiles(company_name)")
-    .eq("id", params.id)
-    .single()
-
-  if (!contest) {
-    redirect("/dashboard/opportunities")
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p>Loading contest details...</p>
+        </div>
+      </div>
+    )
   }
 
-  // Check if user has already submitted to this contest
-  const { data: existingSubmission } = await supabase
-    .from("submissions")
-    .select("*")
-    .eq("contest_id", params.id)
-    .eq("creator_id", session.user.id)
-    .single()
+  if (error || !contest) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-red-500">{error || "Failed to load contest details"}</p>
+          <Button className="mt-4" onClick={() => router.push("/dashboard/opportunities")}>
+            Back to Opportunities
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/opportunities">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+        <Button variant="ghost" size="icon" onClick={() => router.push("/dashboard/opportunities")}>
+          <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-2xl font-bold">{contest.title}</h1>
         <Badge
@@ -176,8 +237,8 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                     $
                     {Array.isArray(contest.prizes)
                       ? (
-                          contest.prizes.reduce((sum: number, prize: any) => sum + (prize.amount || 0), 0) / 100
-                        ).toFixed(2)
+                        contest.prizes.reduce((sum: number, prize: any) => sum + (prize.amount || 0), 0) / 100
+                      ).toFixed(2)
                       : "0.00"}
                   </p>
                 </div>
@@ -204,13 +265,19 @@ export default async function OpportunityDetailPage({ params }: { params: { id: 
                       You submitted on {new Date(existingSubmission.submitted_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <Button className="w-full" asChild>
-                    <Link href={`/dashboard/content/${existingSubmission.id}`}>View My Submission</Link>
+                  <Button
+                    className="w-full"
+                    onClick={() => handleViewSubmission(existingSubmission.id)}
+                  >
+                    View My Submission
                   </Button>
                 </div>
               ) : contest.status === "live" ? (
-                <Button className="w-full" asChild>
-                  <Link href={`/dashboard/opportunities/${params.id}/submit`}>Submit Content</Link>
+                <Button
+                  className="w-full"
+                  onClick={handleSubmitContent}
+                >
+                  Submit Content
                 </Button>
               ) : contest.status === "upcoming" ? (
                 <div className="bg-muted p-4 rounded-lg text-center">

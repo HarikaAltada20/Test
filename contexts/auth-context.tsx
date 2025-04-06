@@ -1,104 +1,184 @@
 "use client"
 
-import type React from "react"
-
 import { createContext, useContext, useEffect, useState } from "react"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
-import type { User } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
+import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { type User as SupabaseUser } from "@supabase/supabase-js"
 
-type AuthContextType = {
-  user: User | null
-  loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, role: "advertiser" | "creator") => Promise<void>
-  signOut: () => Promise<void>
+interface User extends SupabaseUser {
+  avatar_url?: string;
+  full_name?: string;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+interface AuthContextValue {
+  isLoading: boolean
+  user: User | null
+  error: string | null
+  signUp: (email: string, password: string, fullName?: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  forgotPassword: (email: string) => Promise<void>
+  resetPassword: (password: string) => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClientSupabaseClient()
 
   useEffect(() => {
     const getUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      setUser(session?.user ?? null)
-      setLoading(false)
+      setIsLoading(true)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        setUser(session?.user as User || null)
 
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUser(session?.user ?? null)
-        router.refresh()
-      })
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+          (event, session) => {
+            setUser(session?.user as User || null)
+          }
+        )
 
-      return () => {
-        subscription.unsubscribe()
+        return () => {
+          authListener.subscription.unsubscribe()
+        }
+      } catch (error: any) {
+        setError(error.message)
+      } finally {
+        setIsLoading(false)
       }
     }
 
     getUser()
-  }, [supabase, router])
+  }, [supabase.auth])
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+  const signUp = async (email: string, password: string, fullName?: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          }
+        }
+      })
+
+      if (error) throw error
+
+      // Create user profile after sign up
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            email: data.user.email,
+            full_name: fullName || null,
+          })
+
+        if (profileError) throw profileError
+      }
+
+      router.push('/dashboard')
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const signUp = async (email: string, password: string, role: "advertiser" | "creator") => {
-    const { error, data } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { role },
-      },
-    })
+  const signIn = async (email: string, password: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) throw error
+      if (error) throw error
 
-    // Create user profile in the database
-    if (data.user) {
-      if (role === "advertiser") {
-        await supabase.from("users").insert({
-          id: data.user.id,
-          email: data.user.email!,
-          role: "advertiser",
-        })
-
-        await supabase.from("advertiser_profiles").insert({
-          user_id: data.user.id,
-          company_name: email.split("@")[0], // Temporary company name
-        })
-      } else {
-        await supabase.from("users").insert({
-          id: data.user.id,
-          email: data.user.email!,
-          role: "creator",
-        })
-
-        await supabase.from("creator_profiles").insert({
-          user_id: data.user.id,
-          username: email.split("@")[0], // Temporary username
-        })
-      }
+      router.push('/dashboard')
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const signOut = async () => {
-    await supabase.auth.signOut()
-    router.push("/")
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      setUser(null)
+      router.push('/')
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  return <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>{children}</AuthContext.Provider>
+  const forgotPassword = async (email: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      })
+      if (error) throw error
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const resetPassword = async (password: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password,
+      })
+      if (error) throw error
+
+      // Redirect to sign in page
+      router.push('/auth/signin')
+    } catch (error: any) {
+      setError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{
+        isLoading,
+        user,
+        error,
+        signUp,
+        signIn,
+        signOut,
+        forgotPassword,
+        resetPassword,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext)
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider")

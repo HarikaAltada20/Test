@@ -2,9 +2,10 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-// import { ThemeProvider } from "@/components/theme-provider"
-import { SiteHeader } from "@/components/site-header"
 import { AuthProvider } from "@/contexts/auth-context"
+// import { ThemeProvider } from "@/components/theme-provider"
+import { Nav } from "@/components/nav"
+import { Footer } from "@/components/footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,11 +23,17 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        {/* <ThemeProvider attribute="class" defaultTheme="system" enableSystem> */}
+        {/* <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        > */}
         <AuthProvider>
           <div className="relative flex min-h-screen flex-col">
-            <SiteHeader />
+            <Nav />
             <main className="flex-1">{children}</main>
+            <Footer />
           </div>
         </AuthProvider>
         {/* </ThemeProvider> */}
@@ -34,7 +41,3 @@ export default function RootLayout({
     </html >
   )
 }
-
-
-
-import './globals.css'
