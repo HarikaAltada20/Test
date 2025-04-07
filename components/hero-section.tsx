@@ -208,7 +208,7 @@ export function HeroSection() {
               </p>
             </div>
             <div className="flex flex-col gap-2 min-[400px]:flex-row">
-              <Link href="/brand/register">
+              <Link href="/auth/signup">
                 <Button size="lg" className="bg-white text-purple-700 hover:bg-gray-100">
                   Get Started <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>

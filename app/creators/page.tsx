@@ -15,7 +15,7 @@ export default function CreatorsPage() {
               Join Go Viral to find creative opportunities, collaborate with brands, and get paid for your content.
             </p>
             <Button size="lg" asChild>
-              <Link href="/signup">Start Creating Today</Link>
+              <Link href="/auth/signup">Start Creating Today</Link>
             </Button>
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function CreatorsPage() {
               Join thousands of creators already using Go Viral to turn their passion into profit.
             </p>
             <Button size="lg" variant="secondary" asChild>
-              <Link href="/signup">
+              <Link href="/auth/signup">
                 Join as a Creator <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>

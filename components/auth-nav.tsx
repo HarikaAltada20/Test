@@ -30,7 +30,7 @@ export function AuthNav() {
     }
 
     return (
-        <Link href="/login">
+        <Link href="/auth/signin">
             <Button>Login</Button>
         </Link>
     )

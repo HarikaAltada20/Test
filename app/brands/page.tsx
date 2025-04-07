@@ -16,7 +16,7 @@ export default function BrandsPage() {
               your production costs and time.
             </p>
             <Button size="lg" asChild>
-              <Link href="/signup">Get Started Today</Link>
+              <Link href="/auth/signup">Get Started Today</Link>
             </Button>
           </div>
         </div>
@@ -187,7 +187,7 @@ export default function BrandsPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="lg" variant="secondary" asChild>
-                <Link href="/signup">
+                <Link href="/auth/signup">
                   Get Started <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>

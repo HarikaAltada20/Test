@@ -7,6 +7,7 @@ export interface Database {
         Row: {
           id: string
           email: string
+          full_name: string | null
           profile_pic: string | null
           role: "advertiser" | "creator"
           wallet_balance: number
@@ -16,6 +17,7 @@ export interface Database {
         Insert: {
           id?: string
           email: string
+          full_name?: string | null
           profile_pic?: string | null
           role: "advertiser" | "creator"
           wallet_balance?: number
@@ -25,6 +27,7 @@ export interface Database {
         Update: {
           id?: string
           email?: string
+          full_name?: string | null
           profile_pic?: string | null
           role?: "advertiser" | "creator"
           wallet_balance?: number

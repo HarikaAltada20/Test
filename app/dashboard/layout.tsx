@@ -15,7 +15,7 @@ export default async function DashboardLayout({
   } = await supabase.auth.getSession()
 
   if (!session) {
-    redirect("/login")
+    redirect("/auth/signin")
   }
 
   // Get user role from the database

@@ -97,7 +97,7 @@ export default function Home() {
               </div>
 
               <Button size="lg" className="bg-rose-600 hover:bg-rose-700 text-white min-w-[200px]" asChild>
-                <Link href="/signup">Get Started</Link>
+                <Link href="/auth/signup">Get Started</Link>
               </Button>
             </div>
           </div>

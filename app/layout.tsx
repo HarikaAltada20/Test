@@ -2,42 +2,29 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { AuthProvider } from "@/contexts/auth-context"
-// import { ThemeProvider } from "@/components/theme-provider"
 import { Nav } from "@/components/nav"
 import { Footer } from "@/components/footer"
+import ClientLayout from "./client-layout"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Go Viral - Brand-Creator Collaboration Platform",
-  description: "Connect brands with creators to create viral content",
-  generator: 'v0.dev'
+  title: "Go Viral",
+  description: "Connect brands with content creators for viral marketing campaigns",
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        {/* <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        > */}
-        <AuthProvider>
+        <ClientLayout>
           <div className="relative flex min-h-screen flex-col">
             <Nav />
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
-        </AuthProvider>
-        {/* </ThemeProvider> */}
+        </ClientLayout>
       </body>
-    </html >
+    </html>
   )
 }

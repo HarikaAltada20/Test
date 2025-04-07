@@ -14,7 +14,7 @@ interface AuthContextValue {
   isLoading: boolean
   user: User | null
   error: string | null
-  signUp: (email: string, password: string, fullName?: string) => Promise<void>
+  signUp: (email: string, password: string, fullName?: string, role?: "advertiser" | "creator") => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   forgotPassword: (email: string) => Promise<void>
@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getUser()
   }, [supabase.auth])
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = async (email: string, password: string, fullName?: string, role?: "advertiser" | "creator") => {
     setIsLoading(true)
     setError(null)
     try {
@@ -66,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           data: {
             full_name: fullName,
+            role: role || 'advertiser',
           }
         }
       })
@@ -74,15 +75,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Create user profile after sign up
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email: data.user.email,
-            full_name: fullName || null,
-          })
+        // First check if user already exists in users table
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', data.user.id)
+          .single()
 
-        if (profileError) throw profileError
+        if (!existingUser) {
+          // Insert new user record
+          const { error: userError } = await supabase
+            .from('users')
+            .insert({
+              id: data.user.id,
+              email: data.user.email,
+              full_name: fullName,
+              role: role || 'advertiser',
+              wallet_balance: 0,
+              currency_code: 'USD'
+            })
+
+          if (userError) throw userError
+        } else {
+          // Update existing user record
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({
+              full_name: fullName,
+              role: role || 'advertiser'
+            })
+            .eq('id', data.user.id)
+
+          if (updateError) throw updateError
+        }
       }
 
       router.push('/dashboard')
