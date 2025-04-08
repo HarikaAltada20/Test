@@ -1,15 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/contexts/auth-context"
-import { Loader2, Eye, EyeOff } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { Loader2, Eye, EyeOff, Check } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 
 export default function SignInPage() {
@@ -20,7 +20,20 @@ export default function SignInPage() {
     const [isLoading, setIsLoading] = useState(false)
     const { signIn } = useAuth()
     const router = useRouter()
+    const searchParams = useSearchParams()
     const { toast } = useToast()
+
+    // Check if user was redirected after verification
+    useEffect(() => {
+        const verification = searchParams.get('verification')
+        if (verification === 'pending') {
+            toast({
+                title: "Verification Email Sent",
+                description: "Please check your email and verify your account before signing in.",
+                duration: 6000, // 6 seconds
+            })
+        }
+    }, [searchParams, toast])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -28,15 +41,37 @@ export default function SignInPage() {
         setIsLoading(true)
 
         try {
-            await signIn(email, password)
-            toast({
-                title: "Success!",
-                description: "You've been signed in successfully.",
-            })
-            router.push("/dashboard")
+            const result = await signIn(email, password)
+
+            if (result.success) {
+                toast({
+                    title: "Success!",
+                    description: "You've been signed in successfully.",
+                    duration: 3000, // 3 seconds
+                })
+
+                // Delay navigation to dashboard to ensure toast is visible
+                setTimeout(() => {
+                    router.push("/dashboard")
+                }, 500)
+            } else {
+                setError(result.error || "Failed to sign in")
+                toast({
+                    variant: "destructive",
+                    title: "Sign in failed",
+                    description: result.error || "Failed to sign in. Please check your credentials.",
+                    duration: 5000, // 5 seconds
+                })
+                setIsLoading(false)
+            }
         } catch (err: any) {
             setError(err.message || "Failed to sign in")
-        } finally {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: err.message || "Failed to sign in",
+                duration: 5000, // 5 seconds
+            })
             setIsLoading(false)
         }
     }

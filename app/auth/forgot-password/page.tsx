@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Loader2, CheckCircle } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 
 export default function ForgotPasswordPage() {
@@ -29,10 +29,17 @@ export default function ForgotPasswordPage() {
             setIsSuccess(true)
             toast({
                 title: "Reset link sent",
-                description: "Check your email for the password reset link."
+                description: "Check your email for the password reset link.",
+                duration: 5000,
             })
         } catch (err: any) {
             setError(err.message || "Failed to send reset password email")
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: err.message || "Failed to send reset password email",
+                duration: 5000,
+            })
         } finally {
             setIsLoading(false)
         }
