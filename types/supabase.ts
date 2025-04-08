@@ -107,6 +107,12 @@ export interface Database {
           prizes: Json
           resources: Json
           created_at: string
+          is_draft: boolean | null
+          category: string | null
+          inspiration_links: Json | null
+          price_tier: string | null
+          winner_count: number | null
+          total_prize: number | null
         }
         Insert: {
           id?: string
@@ -121,6 +127,12 @@ export interface Database {
           prizes: Json
           resources?: Json
           created_at?: string
+          is_draft?: boolean | null
+          category?: string | null
+          inspiration_links?: Json | null
+          price_tier?: string | null
+          winner_count?: number | null
+          total_prize?: number | null
         }
         Update: {
           id?: string
@@ -135,6 +147,12 @@ export interface Database {
           prizes?: Json
           resources?: Json
           created_at?: string
+          is_draft?: boolean | null
+          category?: string | null
+          inspiration_links?: Json | null
+          price_tier?: string | null
+          winner_count?: number | null
+          total_prize?: number | null
         }
       }
       submissions: {
@@ -183,6 +201,12 @@ export interface Database {
           resources: Json
           created_at: string
           status: "upcoming" | "live" | "past"
+          is_draft: boolean | null
+          category: string | null
+          inspiration_links: Json | null
+          price_tier: string | null
+          winner_count: number | null
+          total_prize: number | null
         }
       }
     }

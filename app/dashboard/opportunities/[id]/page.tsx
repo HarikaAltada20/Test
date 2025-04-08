@@ -38,18 +38,64 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
           return
         }
 
-        // Get contest details
-        const { data: contestData, error: contestError } = await supabase
+        // First try to get contest details without joining advertiser_profiles
+        let { data: contestData, error: contestError } = await supabase
           .from("contests_with_status")
-          .select("*, advertiser_profiles(company_name)")
+          .select("*")
           .eq("id", params.id)
           .single()
 
-        if (contestError || !contestData) {
-          console.error("Error fetching contest:", contestError)
-          setError("Failed to load contest details")
-          router.push("/dashboard/opportunities")
+        // If there's an error with the view, try the base contests table
+        if (contestError) {
+          console.error("Error fetching from contests_with_status:", contestError)
+
+          // Try to get data from the base contests table instead
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from("contests")
+            .select("*")
+            .eq("id", params.id)
+            .single()
+
+          if (fallbackError) {
+            console.error("Fallback error:", fallbackError)
+            setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}. 
+                     Fallback also failed: ${fallbackError.message || "Unknown error"}`)
+            setLoading(false)
+            return
+          }
+
+          if (fallbackData) {
+            console.log("Using fallback data instead of view")
+            contestData = fallbackData
+            contestError = null
+          }
+        }
+
+        if (contestError) {
+          console.error("All attempts to fetch contest failed:", contestError)
+          setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}`)
+          setLoading(false)
           return
+        }
+
+        if (!contestData) {
+          setError("Contest not found - No data returned from database")
+          setLoading(false)
+          return
+        }
+
+        // If we have contest data and it has an advertiser_id, fetch the advertiser details separately
+        if (contestData.advertiser_id) {
+          const { data: advertiserData } = await supabase
+            .from("advertiser_profiles")
+            .select("company_name")
+            .eq("id", contestData.advertiser_id)
+            .single()
+
+          if (advertiserData) {
+            // Merge the advertiser data into our contest data
+            contestData.advertiser_profiles = advertiserData
+          }
         }
 
         setContest(contestData)
@@ -164,13 +210,16 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
               <div>
                 <h3 className="font-medium mb-2">Prize Structure</h3>
                 <div className="space-y-2">
-                  {Array.isArray(contest.prizes) &&
+                  {Array.isArray(contest.prizes) && contest.prizes.length > 0 ? (
                     contest.prizes.map((prize: any, index: number) => (
                       <div key={index} className="flex items-center justify-between">
-                        <span>Position {prize.position}</span>
-                        <span>${(prize.amount / 100).toFixed(2)}</span>
+                        <span>Position {prize.position || index + 1}</span>
+                        <span>${((prize.amount || 0) / 100).toFixed(2)}</span>
                       </div>
-                    ))}
+                    ))
+                  ) : (
+                    <p className="text-gray-500 italic">Prize structure not available</p>
+                  )}
                 </div>
               </div>
 
@@ -235,7 +284,7 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
                   <h3 className="text-sm font-medium">Total Prize Pool</h3>
                   <p className="text-sm text-muted-foreground">
                     $
-                    {Array.isArray(contest.prizes)
+                    {Array.isArray(contest.prizes) && contest.prizes.length > 0
                       ? (
                         contest.prizes.reduce((sum: number, prize: any) => sum + (prize.amount || 0), 0) / 100
                       ).toFixed(2)
