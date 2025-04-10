@@ -21,6 +21,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { subscriptionPlans, MAX_CONTEST_BUDGET } from "@/constants/subscriptionPlans"
 import { Progress } from "@/components/ui/progress"
 import { toLocalDateTimeStrings, toUTCISOString, formatLocalDateTime } from "@/lib/utils"
+import { formatCurrency, dollarsToCents } from "@/lib/currency-utils"
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -69,7 +70,7 @@ You must show the Go Viral App Store listing in your video`)
   const [newInspirationLink, setNewInspirationLink] = useState("")
   const [priceTier, setPriceTier] = useState<"bronze" | "silver" | "gold" | "platinum" | "diamond">("bronze")
   const [winnerCount, setWinnerCount] = useState<number>(3)
-  const [winnerAmounts, setWinnerAmounts] = useState<number[]>([500, 300, 200])
+  const [winnerAmounts, setWinnerAmounts] = useState<number[]>([5000, 3000, 2000])
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -115,11 +116,6 @@ You must show the Go Viral App Store listing in your video`)
 
   // Add this to the state declarations
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>({});
-
-  // Add a utility function to convert cents to dollars for display
-  const formatCurrency = (cents: number): string => {
-    return `$${(cents / 100).toFixed(2)}`;
-  }
 
   // Add this function for handling resource file uploads
   const handleResourceFileUpload = async (name: string, file: File) => {
@@ -235,6 +231,13 @@ You must show the Go Viral App Store listing in your video`)
       setIsLoading(true);
       setUploadProgress("Saving draft...");
 
+      // Add timeout to clear loading state if something goes wrong
+      const draftTimeoutId = setTimeout(() => {
+        setIsLoading(false)
+        setUploadProgress(null)
+        setError("Draft save timed out. Please try again.")
+      }, 30000) // 30 second timeout as safety measure
+
       // Get the authenticated user first to verify we're logged in
       const { data: authData, error: authError } = await supabase.auth.getUser();
 
@@ -242,11 +245,15 @@ You must show the Go Viral App Store listing in your video`)
         setError("You must be logged in to save drafts");
         setIsLoading(false);
         setUploadProgress(null);
+        clearTimeout(draftTimeoutId);
         return;
       }
 
       // Now call handleSubmit with draft=true
       await handleSubmit(true);
+
+      // Clear timeout if we got here successfully
+      clearTimeout(draftTimeoutId);
     } catch (error: any) {
       console.error("Error saving draft:", error);
       setError(`Failed to save draft: ${error.message || "Unknown error"}`);
@@ -400,10 +407,10 @@ You must show the Go Viral App Store listing in your video`)
         }
       }
 
-      // Create prize array - store prize amounts directly in dollars (no cents conversion)
+      // Create prize array - store prize amounts in cents
       const prizesArray = Array.from({ length: winnerCount }, (_, i) => ({
         position: i + 1,
-        amount: winnerAmounts[i] || 0
+        amount: dollarsToCents(winnerAmounts[i] || 0)
       }))
 
       let thumbnailUrl = thumbnailPreview && !thumbnail ? thumbnailPreview : ""
@@ -1255,7 +1262,7 @@ You must show the Go Viral App Store listing in your video`)
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white p-6 rounded-lg max-w-md w-full">
           <h3 className="text-xl font-bold mb-4">High Budget Contest</h3>
-          <p className="mb-4">For contests with budgets over ${formatCurrency(MAX_CONTEST_BUDGET)}, we recommend speaking with our team for personalized guidance and support.</p>
+          <p className="mb-4">For contests with budgets over {formatCurrency(MAX_CONTEST_BUDGET)}, we recommend speaking with our team for personalized guidance and support.</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowContactModal(false)}>Cancel</Button>
             <Button
@@ -1282,7 +1289,7 @@ You must show the Go Viral App Store listing in your video`)
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white p-6 rounded-lg max-w-md w-full">
           <h3 className="text-xl font-bold mb-4">High Value Contest</h3>
-          <p className="mb-4">For contests with budgets over ${formatCurrency(HIGH_BUDGET_THRESHOLD)}, we recommend reaching out to our team for personalized guidance and support.</p>
+          <p className="mb-4">For contests with budgets over {formatCurrency(HIGH_BUDGET_THRESHOLD)}, we recommend reaching out to our team for personalized guidance and support.</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowHighBudgetPrompt(false)}>Continue Anyway</Button>
             <Button
@@ -1345,7 +1352,7 @@ You must show the Go Viral App Store listing in your video`)
                   </div>
                   <div>
                     <h4 className="text-xl font-bold">{currentPlan.name} Plan</h4>
-                    <p className="text-sm text-gray-500">${currentPlan.price}/month</p>
+                    <p className="text-sm text-gray-500">{formatCurrency(currentPlan.price)}/month</p>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1355,7 +1362,7 @@ You must show the Go Viral App Store listing in your video`)
                   </div>
                   <div className="flex justify-between">
                     <span>Min Budget Per Contest:</span>
-                    <span className="font-medium">${planFeatures.minContestBudget}</span>
+                    <span className="font-medium">{formatCurrency(planFeatures.minContestBudget)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Max Active Contests:</span>

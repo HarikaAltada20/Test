@@ -19,12 +19,3 @@ export function formatCurrency(cents: number): string {
 export function dollarsToCents(dollars: number): number {
   return Math.round(dollars * 100);
 }
-
-/**
- * Converts cents to dollars
- * @param cents Amount in cents
- * @returns Amount in dollars (float)
- */
-export function centsToDollars(cents: number): number {
-  return cents / 100;
-} 
