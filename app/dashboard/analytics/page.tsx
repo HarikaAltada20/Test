@@ -4,6 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 
+// Add the formatCurrency utility function
+// Add this utility function to convert cents to dollars for display
+const formatCurrency = (cents: number): string => {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 export default async function AnalyticsPage() {
   const supabase = createServerSupabaseClient()
 
@@ -89,7 +95,7 @@ export default async function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${profile?.total_spent ? (profile.total_spent / 100).toFixed(2) : "0.00"}
+              {formatCurrency(profile?.total_spent || 0)}
             </div>
             <p className="text-xs text-muted-foreground">Total budget</p>
           </CardContent>
@@ -151,13 +157,12 @@ export default async function AnalyticsPage() {
                         <div className="flex justify-between items-start mb-2">
                           <h3 className="font-medium">{contest.title}</h3>
                           <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              contest.status === "live"
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${contest.status === "live"
                                 ? "bg-green-100 text-green-800"
                                 : contest.status === "upcoming"
                                   ? "bg-blue-100 text-blue-800"
                                   : "bg-gray-100 text-gray-800"
-                            }`}
+                              }`}
                           >
                             {contest.status}
                           </span>

@@ -1,0 +1,90 @@
+In this file I will add issues I find after testing the application , you need to fix all the issues and also explain me what is the issue and how you fixed it, so I can understand the issue on code level and can verify it, also make sure you can ask questions if you have any doubt but make sure you fix the issue correctly
+
+Issue 1 :-
+While creating contest When we upload asset -
+There Provide separate buttons for - Uploading asset and  Add External resource ..
+
+
+Like this ;-
+
+A container with upload button inside it to upload anything once user selected that thing that will be shown on UI , And there is an option to write something corresponding to that asset .... once that is done the Upload button will appear for asset .. which user can click so the file can be uploaded to supabase .. along with the description of the asset ..
+
+And there is one more option which is add the external drive link to your asset or resource and again there is a description box with that in which user can enter anything to describe what that Url resource is ...
+
+
+currently When we upload asset I see this request goes :-
+Request URL:
+https://lwqwinsxqtlxfqffjidm.supabase.co/storage/v1/bucket/contest-assets
+Request Method:
+GET
+Status Code:
+200 OK
+Remote Address:
+104.18.38.10:443
+Referrer Policy:
+strict-origin-when-cross-origin
+
+{id: "contest-assets", name: "contest-assets", owner: "", public: true, file_size_limit: null,…}
+allowed_mime_types
+: 
+null
+created_at
+: 
+"2025-04-09T11:35:45.116Z"
+file_size_limit
+: 
+null
+id
+: 
+"contest-assets"
+name
+: 
+"contest-assets"
+owner
+: 
+""
+public
+: 
+true
+updated_at
+: 
+"2025-04-09T11:35:45.116Z"
+
+Now in the parameters we are passing , dont' you think owner field has value - which can be email id of the advertiser or a uuid whatever you find is best to store ,and in id and name both contest-assets is mentioned why ? can't we store the file name whatever is file name is instead of contests name everywhere.
+We should store the advertiser user id here whoever is uploading the assets , and store it in contests table or else remove owner option simply we have the contests table where we are storing all the things ..
+File size limit should be 20 mbs , because I think we mentioned same on UI as well ...
+
+
+
+Issue 2 :-
+
+Don't assume anything don't provide bronze plan which you provide initally, remove that things
+Whatever user plan is and subscription user has show that even initially also ..keep it simple according to production grade .
+
+
+issue 3:-
+Just like calendar you didn't show past date , same do this with time don't allow the time to select now time always allow to select the time after now 
+For example today is 9th april and time is currently 17:00 so disable the selection option for any date and time before 9th april 17:01 .
+
+This way we can improve User experience we are showing only what user can select ...
+
+and same when user select a start date and time than restrict minimum 1 day from there not just date but also time to select ...
+For example start date is 9th april 2025 17:00 , than user can't select anything before 10th april 17:00 .
+
+
+
+Issue 3:-
+
+Also provide an option of save draft on each section of Create contest , so if user wants to store the contest in draft anywhere he can , and can continue draft later on ...
+
+Whenever draft is saved whaterver till that time is stored is only stored in draft rest not filled values will either remain null or empty ...
+
+So, as you can see currently there is an issue Whenever we save as draft it makes the contest live which is incorrect so it should be fixed than ...
+
+
+Now once user Create the contest when all the details are filled ... Make sure you validate the things before storing ... and don't store upcoming and live in status I think that is not a correct approach think here ....
+
+You should store based on start time and end time , and that upcoming, live will be shown based on the start date &time and end date & time .... this way , whenever creator or anyone see the contest they will get latest status rather than old status stored in db ...
+
+
+First fix these things ...

@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/contexts/auth-context"
 import { Loader2, Eye, EyeOff } from "lucide-react"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 
 export default function SignupPage() {
@@ -34,21 +34,79 @@ export default function SignupPage() {
         // Basic validation
         if (password.length < 6) {
             setError("Password must be at least 6 characters")
+            toast({
+                variant: "destructive",
+                title: "Validation Error",
+                description: "Password must be at least 6 characters",
+                duration: 5000,
+            })
             setIsLoading(false)
             return
         }
 
         try {
             const fullName = `${firstName} ${lastName}`.trim()
-            await signUp(email, password, fullName, role)
-            toast({
-                title: "Account created!",
-                description: "Your account has been created successfully."
-            })
-            router.push("/dashboard")
+            const result = await signUp(email, password, fullName, role)
+
+            if (result.success) {
+                if (result.emailConfirmationRequired) {
+                    toast({
+                        title: "Account created!",
+                        description: "A verification email has been sent to your email address. Please verify your email before signing in.",
+                        duration: 10000, // 10 seconds so they have time to read it
+                    })
+                    // Redirect to signin page with a verification message
+                    setTimeout(() => {
+                        router.push("/auth/signin?verification=pending")
+                    }, 2000)
+                } else {
+                    toast({
+                        title: "Account created!",
+                        description: "Your account has been created successfully.",
+                        duration: 3000,
+                    })
+                    // Delay navigation to dashboard to ensure toast is visible
+                    setTimeout(() => {
+                        router.push("/dashboard")
+                    }, 500)
+                }
+            } else {
+                const isDuplicateEmailError = result.error &&
+                    (result.error.includes("already exists") ||
+                        result.error.includes("violates unique constraint"));
+
+                setError(result.error || "Failed to sign up")
+
+                toast({
+                    variant: "destructive",
+                    title: isDuplicateEmailError ? "Account Already Exists" : "Sign up failed",
+                    description: isDuplicateEmailError ?
+                        <>
+                            {result.error}
+                            <div className="mt-2">
+                                <Button
+                                    variant="outline"
+                                    className="bg-white text-black hover:bg-gray-100 border-0 text-xs"
+                                    onClick={() => router.push("/auth/signin")}
+                                >
+                                    Go to Sign in
+                                </Button>
+                            </div>
+                        </> :
+                        result.error || "Failed to create your account. Please try again.",
+                    duration: 8000,
+                })
+
+                setIsLoading(false)
+            }
         } catch (err: any) {
             setError(err.message || "Failed to sign up")
-        } finally {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: err.message || "Failed to sign up",
+                duration: 5000,
+            })
             setIsLoading(false)
         }
     }

@@ -94,7 +94,14 @@ export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarPr
         <Button
           variant="ghost"
           className="w-full justify-start gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-all hover:bg-accent"
-          onClick={() => signOut()}
+          onClick={() => {
+            try {
+              signOut();
+              console.log("Sign out initiated");
+            } catch (error) {
+              console.error("Sign out error in sidebar:", error);
+            }
+          }}
         >
           <LogOut className="h-4 w-4" />
           Sign out

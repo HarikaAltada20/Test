@@ -14,8 +14,8 @@ interface AuthContextValue {
   isLoading: boolean
   user: User | null
   error: string | null
-  signUp: (email: string, password: string, fullName?: string, role?: "advertiser" | "creator") => Promise<void>
-  signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, fullName?: string, role?: "advertiser" | "creator") => Promise<{ success: boolean, emailConfirmationRequired: boolean, error: string | null }>
+  signIn: (email: string, password: string) => Promise<{ success: boolean, error: string | null }>
   signOut: () => Promise<void>
   forgotPassword: (email: string) => Promise<void>
   resetPassword: (password: string) => Promise<void>
@@ -34,12 +34,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getUser = async () => {
       setIsLoading(true)
       try {
+        // First get session
         const { data: { session } } = await supabase.auth.getSession()
-        setUser(session?.user as User || null)
+
+        // Then verify with getUser if session exists
+        if (session) {
+          const { data: { user } } = await supabase.auth.getUser()
+          setUser(user as User || null)
+        }
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
-          (event, session) => {
-            setUser(session?.user as User || null)
+          async (event, session) => {
+            // On auth state change, verify with getUser()
+            if (session) {
+              const { data: { user: verifiedUser } } = await supabase.auth.getUser()
+              setUser(verifiedUser as User || null)
+            } else {
+              setUser(null)
+            }
           }
         )
 
@@ -60,6 +72,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
+      // First check if user already exists in the users table
+      const { data: existingUserCheck, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      // If the user already exists in our database, show a friendly error
+      if (existingUserCheck) {
+        throw new Error("An account with this email already exists. Please sign in instead.");
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -75,14 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Create user profile after sign up
       if (data.user) {
-        // First check if user already exists in users table
-        const { data: existingUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('id', data.user.id)
-          .single()
-
-        if (!existingUser) {
+        try {
           // Insert new user record
           const { error: userError } = await supabase
             .from('users')
@@ -95,24 +112,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               currency_code: 'USD'
             })
 
-          if (userError) throw userError
-        } else {
-          // Update existing user record
-          const { error: updateError } = await supabase
-            .from('users')
-            .update({
-              full_name: fullName,
-              role: role || 'advertiser'
-            })
-            .eq('id', data.user.id)
-
-          if (updateError) throw updateError
+          if (userError) {
+            // Check if it's a duplicate key error
+            if (userError.message && userError.message.includes("violates unique constraint") &&
+              userError.message.includes("users_email_key")) {
+              throw new Error("An account with this email already exists. Please sign in instead.");
+            }
+            throw userError;
+          }
+        } catch (insertError: any) {
+          // If there was an error creating the user profile, we should also delete the auth user
+          // to prevent orphaned auth accounts
+          await supabase.auth.admin.deleteUser(data.user.id);
+          throw insertError;
         }
       }
 
-      router.push('/dashboard')
+      // Check if email confirmation is required
+      const emailConfirmationRequired = !data.session;
+
+      return {
+        success: true,
+        emailConfirmationRequired,
+        error: null
+      };
     } catch (error: any) {
-      setError(error.message)
+      let errorMessage = error.message;
+
+      // Make the error message more user-friendly
+      if (errorMessage.includes("violates unique constraint") && errorMessage.includes("users_email_key")) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      } else if (errorMessage.includes("User already registered")) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      }
+
+      setError(errorMessage);
+      return {
+        success: false,
+        emailConfirmationRequired: false,
+        error: errorMessage
+      };
     } finally {
       setIsLoading(false)
     }
@@ -127,11 +166,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       })
 
-      if (error) throw error
+      if (error) {
+        // Handle specific error types and provide more user-friendly messages
+        let errorMessage = error.message;
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "The email or password you entered is incorrect";
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Please confirm your email address before signing in";
+        }
 
-      router.push('/dashboard')
+        throw new Error(errorMessage);
+      }
+
+      return { success: true, error: null };
     } catch (error: any) {
       setError(error.message)
+      return { success: false, error: error.message };
     } finally {
       setIsLoading(false)
     }
@@ -141,12 +191,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      // First clear user state
       setUser(null)
-      router.push('/')
+
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error("Sign out error:", error)
+        throw error
+      }
+
+      // Redirect to login page instead of home page
+      window.location.href = '/auth/signin'
     } catch (error: any) {
+      console.error("Sign out failed:", error)
       setError(error.message)
+      // Even if there's an error, we should redirect to login page
+      window.location.href = '/auth/signin'
     } finally {
       setIsLoading(false)
     }

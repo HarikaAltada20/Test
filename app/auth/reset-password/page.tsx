@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CheckCircle, Loader2, Eye, EyeOff } from "lucide-react"
 import { createClientSupabaseClient } from "@/lib/supabase/client"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 
 export default function ResetPasswordPage() {
@@ -39,11 +39,17 @@ export default function ResetPasswordPage() {
                 }
             } catch (err: any) {
                 setError(err.message)
+                toast({
+                    variant: "destructive",
+                    title: "Error",
+                    description: err.message || "Invalid or expired reset link. Please try again.",
+                    duration: 5000,
+                })
             }
         }
 
         handlePasswordReset()
-    }, [supabase])
+    }, [supabase, toast])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -52,12 +58,24 @@ export default function ResetPasswordPage() {
 
         if (password !== confirmPassword) {
             setError("Passwords do not match")
+            toast({
+                variant: "destructive",
+                title: "Validation Error",
+                description: "Passwords do not match",
+                duration: 5000,
+            })
             setIsLoading(false)
             return
         }
 
         if (password.length < 6) {
             setError("Password must be at least 6 characters")
+            toast({
+                variant: "destructive",
+                title: "Validation Error",
+                description: "Password must be at least 6 characters",
+                duration: 5000,
+            })
             setIsLoading(false)
             return
         }
@@ -68,11 +86,17 @@ export default function ResetPasswordPage() {
             setIsSuccess(true)
             toast({
                 title: "Password reset successful",
-                description: "Your password has been reset successfully."
+                description: "Your password has been reset successfully.",
+                duration: 5000,
             })
         } catch (err: any) {
             setError(err.message || "Failed to reset password")
-        } finally {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: err.message || "Failed to reset password",
+                duration: 5000,
+            })
             setIsLoading(false)
         }
     }

@@ -10,6 +10,11 @@ import { Calendar, DollarSign, Filter, Trophy } from "lucide-react"
 import { createClientSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 
+// Add the formatCurrency utility function at the top of the file
+const formatCurrency = (cents: number): string => {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +43,8 @@ export default function OpportunitiesPage() {
       const { data: contests } = await supabase
         .from("contests_with_status")
         .select("*")
+        .not('status', 'eq', 'draft')
+        .in('status', ['live', 'upcoming', 'completed'])
         .order("created_at", { ascending: false })
 
       setAvailableContests(contests || [])
@@ -112,12 +119,7 @@ export default function OpportunitiesPage() {
                   <div className="flex items-center text-sm">
                     <DollarSign className="h-4 w-4 mr-2" />
                     <span>
-                      Prize Pool: $
-                      {Array.isArray(contest.prizes)
-                        ? (
-                          contest.prizes.reduce((sum: number, prize: any) => sum + (prize.amount || 0), 0) / 100
-                        ).toFixed(2)
-                        : "0.00"}
+                      Prize Pool: {formatCurrency(contest.total_prize || 0)}
                     </span>
                   </div>
                   <div className="pt-2">
