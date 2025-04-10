@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,8 @@ import { Loader2, Eye, EyeOff, Check } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 
-export default function SignInPage() {
+// Separate client component for handling search params
+function SignInForm() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
@@ -81,6 +82,76 @@ export default function SignInPage() {
     }
 
     return (
+        <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+                <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            )}
+
+            <div className="space-y-2">
+                <Label htmlFor="email">Email address</Label>
+                <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="h-11"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                    <Label htmlFor="password">Password</Label>
+                    <Link
+                        href="/auth/forgot-password"
+                        className="text-sm text-primary hover:underline"
+                    >
+                        Forgot password?
+                    </Link>
+                </div>
+                <div className="relative">
+                    <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="h-11 pr-10"
+                    />
+                    <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                        onClick={togglePasswordVisibility}
+                    >
+                        {showPassword ? (
+                            <EyeOff className="h-5 w-5" />
+                        ) : (
+                            <Eye className="h-5 w-5" />
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            <Button type="submit" className="w-full h-11 bg-rose-600 hover:bg-rose-700" disabled={isLoading}>
+                {isLoading ? (
+                    <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                    </>
+                ) : (
+                    "Sign in"
+                )}
+            </Button>
+        </form>
+    )
+}
+
+// Main page component with Suspense boundary
+export default function SignInPage() {
+    return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
             <div className="w-full max-w-md">
                 <div className="mb-6">
@@ -98,70 +169,9 @@ export default function SignInPage() {
                         </p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        {error && (
-                            <Alert variant="destructive">
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        )}
-
-                        <div className="space-y-2">
-                            <Label htmlFor="email">Email address</Label>
-                            <Input
-                                id="email"
-                                type="email"
-                                placeholder="name@example.com"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                                className="h-11"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <Label htmlFor="password">Password</Label>
-                                <Link
-                                    href="/auth/forgot-password"
-                                    className="text-sm text-primary hover:underline"
-                                >
-                                    Forgot password?
-                                </Link>
-                            </div>
-                            <div className="relative">
-                                <Input
-                                    id="password"
-                                    type={showPassword ? "text" : "password"}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    className="h-11 pr-10"
-                                />
-                                <button
-                                    type="button"
-                                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                                    onClick={togglePasswordVisibility}
-                                >
-                                    {showPassword ? (
-                                        <EyeOff className="h-5 w-5" />
-                                    ) : (
-                                        <Eye className="h-5 w-5" />
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-
-                        <Button type="submit" className="w-full h-11 bg-rose-600 hover:bg-rose-700" disabled={isLoading}>
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Signing in...
-                                </>
-                            ) : (
-                                "Sign in"
-                            )}
-                        </Button>
-                    </form>
+                    <Suspense fallback={<div className="text-center py-4">Loading sign-in form...</div>}>
+                        <SignInForm />
+                    </Suspense>
                 </div>
             </div>
         </div>

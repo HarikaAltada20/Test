@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,7 +14,8 @@ import { createClientSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-export default function SettingsPage() {
+// Separate the component that uses useSearchParams
+function SettingsContent() {
   const [profileData, setProfileData] = useState<any>(null)
   const [youtubeAccount, setYoutubeAccount] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -462,5 +463,14 @@ export default function SettingsPage() {
       </Tabs>
     </div>
   )
+}
+
+// Main component with Suspense boundary
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-center">Loading settings...</div>}>
+      <SettingsContent />
+    </Suspense>
+  );
 }
 
