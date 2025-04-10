@@ -82,7 +82,7 @@ You must show the Go Viral App Store listing in your video`)
   const [showContactModal, setShowContactModal] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [totalPrizePool, setTotalPrizePool] = useState<number>(1000) // Default total prize pool
+  const [totalPrizePool, setTotalPrizePool] = useState<number>(10000) // Default total prize pool
   const [hasExceededBudgetThreshold, setHasExceededBudgetThreshold] = useState<boolean>(false)
 
   // New state for contest duration
