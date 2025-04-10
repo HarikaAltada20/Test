@@ -44,6 +44,7 @@ export interface Database {
           social_media_handles: Json
           total_contests_organized: number
           total_spent: number
+          subscription_tier: string | null
         }
         Insert: {
           user_id: string
@@ -53,6 +54,7 @@ export interface Database {
           social_media_handles?: Json
           total_contests_organized?: number
           total_spent?: number
+          subscription_tier?: string | null
         }
         Update: {
           user_id?: string
@@ -62,6 +64,7 @@ export interface Database {
           social_media_handles?: Json
           total_contests_organized?: number
           total_spent?: number
+          subscription_tier?: string | null
         }
       }
       creator_profiles: {
