@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { subscriptionPlans, MAX_CONTEST_BUDGET } from "@/constants/subscriptionPlans"
 import { Progress } from "@/components/ui/progress"
+import { toLocalDateTimeStrings, toUTCISOString, formatLocalDateTime } from "@/lib/utils"
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -94,23 +95,50 @@ You must show the Go Viral App Store listing in your video`)
   const [resourceUploadProgress, setResourceUploadProgress] = useState<number>(0)
 
   // Constants
-  const MIN_PRIZE_PER_WINNER = 5 // Minimum prize amount per winner in dollars
-  const MAX_PRIZE_PER_WINNER = 1000 // Maximum prize amount per winner in dollars
+  const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
+  const MAX_PRIZE_PER_WINNER = 100000  // $1,000.00 in cents
   const DEFAULT_PRIZE_ALLOCATIONS = {
-    1: 500,
-    2: 300,
-    3: 200,
-    4: 100,
-    5: 50
+    1: 50000, // $500.00
+    2: 30000, // $300.00
+    3: 20000, // $200.00
+    4: 10000, // $100.00
+    5: 5000   // $50.00
   }
 
   // High budget threshold
-  const HIGH_BUDGET_THRESHOLD = 1000
+  const HIGH_BUDGET_THRESHOLD = 100000  // $1,000 in cents
 
 
   // Add draft ID state for tracking loaded drafts
   const [draftId, setDraftId] = useState<string | null>(null)
   const [draftLoaded, setDraftLoaded] = useState(false)
+
+  // Add this to the state declarations
+  const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>({});
+
+  // Add a utility function to convert cents to dollars for display
+  const formatCurrency = (cents: number): string => {
+    return `$${(cents / 100).toFixed(2)}`;
+  }
+
+  // Add this function for handling resource file uploads
+  const handleResourceFileUpload = async (name: string, file: File) => {
+    try {
+      // Store the file temporarily for preview
+      setResourceFiles(prev => ({
+        ...prev,
+        [name]: file
+      }));
+
+      // Update resources object with a temporary URL for preview
+      setResources(prev => ({
+        ...prev,
+        [name]: URL.createObjectURL(file)
+      }));
+    } catch (error) {
+      console.error("Error handling resource file:", error);
+    }
+  };
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -165,211 +193,214 @@ You must show the Go Viral App Store listing in your video`)
   }
 
   const addFileResource = async () => {
-    if (!user) {
-      setError("You must be logged in to upload resources")
-      return
-    }
-
     if (!resourceFile) {
-      return
+      setError("No file selected");
+      return;
     }
 
     try {
-      // Check storage availability first
-      const isStorageAvailable = await checkStorageAvailability()
-
-      if (!isStorageAvailable) {
-        setError("File upload is unavailable due to storage configuration. Please use external resource links instead.")
-        return
-      }
-
-      setIsLoading(true)
-      setResourceUploadProgress(10) // Start with 10% to show activity
-
-      // Use original file name in the path
-      const fileName = `contest_resources/${user.id}_${Date.now()}_${resourceFile.name}`
-
-      // Simple upload without options - Supabase JS client doesn't support progress
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('contest-assets')
-        .upload(fileName, resourceFile)
-
-      // Simulate progress after upload starts
-      setResourceUploadProgress(70)
-
-      if (uploadError) {
-        throw new Error(`Failed to upload resource: ${uploadError.message}`)
-      }
-
-      setResourceUploadProgress(90)
-
-      const { data: publicUrlData } = supabase.storage
-        .from('contest-assets')
-        .getPublicUrl(fileName)
-
-      const resourceUrl = publicUrlData?.publicUrl || ''
-      setResourceUploadProgress(100)
-
       // Use filename as default resource name if none provided
-      const resourceName = resourceDescription || resourceFile.name
+      const resourceName = resourceDescription || resourceFile.name;
 
+      // Store the resource in state
       setResources({
         ...resources,
-        [resourceName]: resourceUrl,
-      })
+        [resourceName]: resourceFilePreview || URL.createObjectURL(resourceFile)
+      });
+
+      // Store the file reference for later upload
+      setResourceFiles({
+        ...resourceFiles,
+        [resourceName]: resourceFile
+      });
 
       // Reset form
-      removeResourceFile()
+      removeResourceFile();
+      setSuccess("Resource added!");
 
     } catch (error: any) {
-      setError(`Resource upload failed: ${error.message}`)
-    } finally {
-      setIsLoading(false)
+      console.error("Error adding resource:", error);
+      setError(`Failed to add resource: ${error.message}`);
     }
   }
 
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+
   const handleSaveDraft = async () => {
-    await handleSubmit(true);
+    try {
+      // Reset states
+      setError(null);
+      setValidationError(null);
+      setSuccess(null);
+      setIsLoading(true);
+      setUploadProgress("Saving draft...");
+
+      // Get the authenticated user first to verify we're logged in
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !authData.user) {
+        setError("You must be logged in to save drafts");
+        setIsLoading(false);
+        setUploadProgress(null);
+        return;
+      }
+
+      // Now call handleSubmit with draft=true
+      await handleSubmit(true);
+    } catch (error: any) {
+      console.error("Error saving draft:", error);
+      setError(`Failed to save draft: ${error.message || "Unknown error"}`);
+      setIsLoading(false);
+      setUploadProgress(null);
+    }
   };
 
   const handleSubmit = async (isDraft: boolean = false) => {
+    // Reset states
     setError(null)
     setValidationError(null)
     setSuccess(null)
     setIsLoading(true)
 
-    if (!user) {
-      setError("You must be logged in to create a contest")
+    // Add timeout to clear loading state if something goes wrong
+    const loadingTimeoutId = setTimeout(() => {
       setIsLoading(false)
-      return
-    }
+      setUploadProgress(null)
+      setError("Request timed out. Please try again.")
+    }, 30000) // 30 second timeout as safety measure
 
-    // Validate required fields if not a draft
-    if (!isDraft) {
-      if (!title) {
-        setValidationError("Contest title is required");
-        setIsLoading(false);
-        return;
-      }
-
-      if (!thumbnail && !thumbnailPreview) {
-        setValidationError("Contest thumbnail is required");
-        setIsLoading(false);
-        return;
-      }
-
-      if (!brief) {
-        setValidationError("Contest brief is required");
-        setIsLoading(false);
-        return;
-      }
-
-      if (!rules) {
-        setValidationError("Contest rules are required");
-        setIsLoading(false);
-        return;
-      }
-
-      // Validate dates and times
-      if (!startDate || !startTime || !endDate || !endTime) {
-        setValidationError("Contest start and end dates/times are required")
-        setIsLoading(false)
-        return
-      }
-
-      const startDateTime = new Date(`${startDate}T${startTime}`)
-      const endDateTime = new Date(`${endDate}T${endTime}`)
-      const now = new Date()
-
-      if (startDateTime < now) {
-        setValidationError("Contest start time must be in the future")
-        setIsLoading(false)
-        return
-      }
-
-      if (endDateTime <= startDateTime) {
-        setValidationError("Contest end time must be after the start time")
-        setIsLoading(false)
-        return
-      }
-
-      // Check if duration is at least 1 day (24 hours)
-      const durationMs = endDateTime.getTime() - startDateTime.getTime()
-      const oneDayMs = 24 * 60 * 60 * 1000
-      if (durationMs < oneDayMs) {
-        setValidationError("Contest duration must be at least 1 day")
-        setIsLoading(false)
-        return
-      }
-    }
+    // Declare timeout ID at the function scope so it's available in all blocks
+    let prepTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
     try {
-      // Calculate total prize amount
-      let totalPrize = 0
-      for (let i = 0; i < winnerCount; i++) {
-        totalPrize += winnerAmounts[i] || 0
-      }
-
-      // Check if budget exceeds threshold - only if not a draft
-      if (!isDraft && totalPrize > HIGH_BUDGET_THRESHOLD) {
-        setShowHighBudgetPrompt(true)
+      // Early return for draft with no title but keep other fields
+      if (isDraft && !title) {
+        setValidationError("Title is required even for drafts")
         setIsLoading(false)
+        setUploadProgress(null)
+        clearTimeout(loadingTimeoutId)
         return
       }
 
-      // Validate against plan features - only if not a draft
-      const planFeatures = getPlanFeatures(userPlan)
-
-      // Perform validations only if not saving as draft
-      if (!isDraft) {
-        // Check winner count
-        if (winnerCount > planFeatures.maxWinnersPerContest) {
-          setValidationError(`Your ${userPlan || 'current'} plan is limited to ${planFeatures.maxWinnersPerContest} winners per contest. Upgrade your plan for more.`)
+      // Client-side validation for prize amounts
+      for (let i = 0; i < winnerCount; i++) {
+        if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+          setValidationError(`Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`)
           setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
           return
-        }
-
-        // Check minimum contest budget
-        if (totalPrize < planFeatures.minContestBudget) {
-          setValidationError(`The minimum contest budget for your ${userPlan || 'current'} plan is $${planFeatures.minContestBudget}. Please increase your prize pool.`)
-          setIsLoading(false)
-          return
-        }
-
-        // Check if budget exceeds maximum recommended
-        if (totalPrize > MAX_CONTEST_BUDGET) {
-          setShowContactModal(true)
-          setIsLoading(false)
-          return
-        }
-
-        // Check active contests limit (would require a database check)
-        // This is a simplified version, in production you'd check against actual data
-        try {
-          const { count, error: countError } = await supabase
-            .from("contests")
-            .select("*", { count: "exact", head: true })
-            .eq("advertiser_id", user.id)
-            .eq("is_draft", false)
-            .or(`end_date.is.null,end_date.gt.${new Date().toISOString()}`)
-
-          if (countError) {
-            console.error("Error checking active contests:", countError)
-            // Continue with default count of 0
-          }
-
-          if (count && count >= planFeatures.maxActiveContests) {
-            setValidationError(`Your ${userPlan || 'current'} plan is limited to ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for current contests to complete.`)
-            setIsLoading(false)
-            return
-          }
-        } catch (err) {
-          console.error("Error checking active contests:", err)
-          // Continue with submission as fallback
         }
       }
 
-      // Create prize array
+      // Check if any required user plan information is available
+      const userId = user?.id
+      if (!isDraft && !userId) {
+        setError("User information not available. Please refresh the page and try again.")
+        setIsLoading(false)
+        setUploadProgress(null)
+        clearTimeout(loadingTimeoutId)
+        return
+      }
+
+      // Only run these validations if we're not in draft mode
+      if (!isDraft) {
+        setUploadProgress("Preparing contest...");
+
+        // Add this timeout to prevent getting stuck forever
+        prepTimeoutId = setTimeout(() => {
+          // If we're still at "Preparing contest..." after 5 seconds, 
+          // something might be wrong - provide feedback to the user
+          if (isLoading && uploadProgress === "Preparing contest...") {
+            console.log("Contest creation taking longer than expected...");
+            setUploadProgress("Validating contest details...");
+          }
+        }, 5000);
+
+        if (!thumbnail && !thumbnailPreview) {
+          setValidationError("Contest thumbnail is required")
+          setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
+          return
+        }
+
+        if (!brief) {
+          setValidationError("Contest brief is required")
+          setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
+          return
+        }
+
+        if (!rules) {
+          setValidationError("Contest rules are required")
+          setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
+          return
+        }
+
+        // Validate dates and times for published contests
+        if (!startDate || !startTime || !endDate || !endTime) {
+          setValidationError("Contest start and end dates/times are required for publishing")
+          setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
+          return
+        }
+
+        try {
+          const startDateTime = new Date(`${startDate}T${startTime}`)
+          const endDateTime = new Date(`${endDate}T${endTime}`)
+          const now = new Date()
+
+          // Make sure dates are valid
+          if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+            setValidationError("Invalid date or time format. Please check your entries.")
+            setIsLoading(false)
+            setUploadProgress(null)
+            clearTimeout(loadingTimeoutId)
+            return
+          }
+
+          if (startDateTime < now) {
+            setValidationError("Contest start time must be in the future")
+            setIsLoading(false)
+            setUploadProgress(null)
+            clearTimeout(loadingTimeoutId)
+            return
+          }
+
+          if (endDateTime <= startDateTime) {
+            setValidationError("Contest end time must be after the start time")
+            setIsLoading(false)
+            setUploadProgress(null)
+            clearTimeout(loadingTimeoutId)
+            return
+          }
+
+          // Check if duration is at least 1 day (24 hours)
+          const durationMs = endDateTime.getTime() - startDateTime.getTime()
+          const oneDayMs = 24 * 60 * 60 * 1000
+          if (durationMs < oneDayMs) {
+            setValidationError("Contest duration must be at least 1 day")
+            setIsLoading(false)
+            setUploadProgress(null)
+            clearTimeout(loadingTimeoutId)
+            return
+          }
+        } catch (error) {
+          console.error("Date validation error:", error);
+          setValidationError("There was an error with the date/time format. Please check your entries.")
+          setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
+          return
+        }
+      }
+
+      // Create prize array - store prize amounts directly in dollars (no cents conversion)
       const prizesArray = Array.from({ length: winnerCount }, (_, i) => ({
         position: i + 1,
         amount: winnerAmounts[i] || 0
@@ -377,7 +408,9 @@ You must show the Go Viral App Store listing in your video`)
 
       let thumbnailUrl = thumbnailPreview && !thumbnail ? thumbnailPreview : ""
 
+      // Upload thumbnail if provided
       if (thumbnail) {
+        setUploadProgress(isDraft ? "Uploading thumbnail..." : "Uploading thumbnail (1/2)...")
         try {
           // Check if storage is available first
           const isStorageAvailable = await checkStorageAvailability()
@@ -388,7 +421,7 @@ You must show the Go Viral App Store listing in your video`)
             // Don't return here, let the form continue submitting
           } else {
             // Use original file name in the path for better organization
-            const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${thumbnail.name}`
+            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name}`
             const { data: uploadData, error: uploadError } = await supabase.storage
               .from('contest-assets')
               .upload(fileName, thumbnail)
@@ -406,32 +439,153 @@ You must show the Go Viral App Store listing in your video`)
         } catch (error: any) {
           setError(`Thumbnail upload failed: ${error.message}`)
           setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
           return
         }
       }
 
+      // Upload resource files to storage if any exist
+      if (Object.keys(resourceFiles).length > 0) {
+        setUploadProgress(isDraft ? "Uploading assets..." : "Uploading assets (2/2)...")
+        try {
+          // Check if storage is available first
+          const isStorageAvailable = await checkStorageAvailability()
+
+          if (!isStorageAvailable) {
+            if (isDraft) {
+              // For drafts, just show a warning but continue
+              console.warn("Storage not available, continuing with draft save without uploading resources")
+            } else {
+              setError("File upload is unavailable due to storage configuration. Contest will be created without resources.")
+            }
+          } else {
+            // Track all resource uploads
+            const resourceUploadPromises = [];
+            const failedUploads = [];
+
+            for (const [name, file] of Object.entries(resourceFiles)) {
+              try {
+                // Use original file name in the path
+                const fileName = `contest_resources/${userId}_${Date.now()}_${file.name}`
+
+                const uploadPromise = supabase.storage
+                  .from('contest-assets')
+                  .upload(fileName, file)
+                  .then(({ data: uploadData, error: uploadError }) => {
+                    if (uploadError) {
+                      failedUploads.push(name);
+                      if (!isDraft) throw new Error(`Failed to upload resource: ${uploadError.message}`);
+                      return null;
+                    }
+
+                    // getPublicUrl returns an object directly, not a Promise
+                    const result = supabase.storage
+                      .from('contest-assets')
+                      .getPublicUrl(fileName);
+
+                    const resourceUrl = result.data.publicUrl || '';
+                    // Update resource URL with the actual storage URL
+                    resources[name] = resourceUrl;
+                    return resourceUrl;
+                  })
+                  .catch(err => {
+                    console.error(`Error uploading resource ${name}:`, err);
+                    failedUploads.push(name);
+                    return null;
+                  });
+
+                resourceUploadPromises.push(uploadPromise);
+              } catch (err) {
+                console.error(`Error uploading resource ${name}:`, err);
+                failedUploads.push(name);
+              }
+            }
+
+            // Wait for all uploads to complete
+            await Promise.allSettled(resourceUploadPromises);
+
+            // Show warning if some uploads failed but we're in draft mode
+            if (failedUploads.length > 0 && isDraft) {
+              console.warn(`Some resource uploads failed: ${failedUploads.join(', ')}`);
+            }
+          }
+        } catch (error) {
+          console.error("Error handling resource uploads:", error);
+          // For drafts, continue despite errors
+          if (!isDraft) {
+            setError("Failed to upload resources. Please try again.");
+            setIsLoading(false);
+            setUploadProgress(null);
+            clearTimeout(loadingTimeoutId)
+            return;
+          }
+          // Continue with submission using temporary URLs
+        }
+      }
+
+      // Format dates properly to ensure they're in ISO format (UTC)
+      let formattedStartDate = null
+      let formattedEndDate = null
+
+      try {
+        // For published contests, dates are required and must be formatted
+        if (!isDraft) {
+          if (startDate && startTime) {
+            formattedStartDate = toUTCISOString(startDate, startTime);
+            if (!formattedStartDate) throw new Error("Invalid start date/time format");
+          }
+
+          if (endDate && endTime) {
+            formattedEndDate = toUTCISOString(endDate, endTime);
+            if (!formattedEndDate) throw new Error("Invalid end date/time format");
+          }
+        } else {
+          // For drafts, dates are optional and should be null if not provided
+          if (startDate && startTime) {
+            formattedStartDate = toUTCISOString(startDate, startTime);
+          }
+
+          if (endDate && endTime) {
+            formattedEndDate = toUTCISOString(endDate, endTime);
+          }
+        }
+      } catch (error) {
+        console.error("Error formatting dates:", error)
+        // If there's an error formatting dates for a published contest, show an error
+        if (!isDraft) {
+          setError("There was a problem with the date format. Please check the start and end dates.")
+          setIsLoading(false)
+          setUploadProgress(null)
+          clearTimeout(loadingTimeoutId)
+          return
+        }
+        // For drafts, continue with null dates if there's an error
+      }
+
       // Prepare contest data for submission
+      setUploadProgress(isDraft ? "Finalizing draft..." : "Creating contest...")
       const contestData = {
-        advertiser_id: user.id,
+        advertiser_id: userId, // Use userId from auth.getUser()
         title,
         thumbnail_url: thumbnailUrl,
         category,
         platform: "youtube", // Default platform
         brief,
-        prizes: prizesArray,
-        total_prize: totalPrize * 100, // convert to cents
+        prizes: prizesArray, // Prize amounts in dollars
+        total_prize: prizesArray.reduce((sum, prize) => sum + prize.amount, 0), // Store total in dollars
         rules: { list: rules.split("\n") },
         resources,
         inspiration_links: inspirationLinks,
         subscription_plan: userPlan, // Use subscription_plan instead of price_tier
         winner_count: winnerCount,
         is_draft: isDraft, // Mark as draft
-        start_date: `${startDate}T${startTime}`, // Always store dates for both drafts and published
-        end_date: `${endDate}T${endTime}`  // Always store dates for both drafts and published
+        start_date: formattedStartDate, // Use proper ISO format or null
+        end_date: formattedEndDate   // Use proper ISO format or null
         // Note: We do not store status explicitly as it will be calculated by the view
       }
 
-      let responseData, responseError;
+      let responseData, responseError
 
       if (draftId) {
         // Update existing draft
@@ -441,8 +595,8 @@ You must show the Go Viral App Store listing in your video`)
           .eq("id", draftId)
           .select()
 
-        responseData = response.data;
-        responseError = response.error;
+        responseData = response.data
+        responseError = response.error
       } else {
         // Create new contest
         const response = await supabase
@@ -450,30 +604,49 @@ You must show the Go Viral App Store listing in your video`)
           .insert(contestData)
           .select()
 
-        responseData = response.data;
-        responseError = response.error;
+        responseData = response.data
+        responseError = response.error
       }
 
       if (responseError) throw responseError
 
       // Set draft ID if this is a new draft
       if (isDraft && !draftId && responseData && responseData.length > 0) {
-        setDraftId(responseData[0].id);
+        setDraftId(responseData[0].id)
       }
 
       // Only redirect if not a draft
       if (!isDraft) {
-        router.push("/dashboard/contests")
+        setUploadProgress("Contest created successfully! Redirecting...");
+        // Clear any pending timeouts
+        if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
+        setTimeout(() => {
+          router.push("/dashboard/contests");
+        }, 1000);
       } else {
-        setIsLoading(false)
+        // Clear resource files after successful draft save to prevent duplicate uploads on next save
+        setResourceFiles({});
+        // Clear any pending timeouts
+        if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
+        setIsLoading(false);
+        setUploadProgress(null);
         // Show success message for draft
-        setSuccess("Draft saved successfully!")
+        setSuccess("Draft saved successfully!");
         // Clear success message after 3 seconds
-        setTimeout(() => setSuccess(null), 3000)
+        setTimeout(() => setSuccess(null), 3000);
       }
     } catch (err: any) {
-      setError(err.message || "Failed to create contest")
+      console.error("Error submitting contest:", err)
+      // Clear any pending timeouts
+      clearTimeout(loadingTimeoutId)
+      if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
+      if (err.message && err.message.includes("timestamp with time zone")) {
+        setError("Invalid date format. Please make sure all dates and times are properly set.")
+      } else {
+        setError(`Failed to ${isDraft ? "save draft" : "create contest"}: ${err.message || "Unknown error"}`)
+      }
       setIsLoading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -486,14 +659,44 @@ You must show the Go Viral App Store listing in your video`)
       })
       setNewResourceUrl("")
       setExternalResourceDescription("")
+      setSuccess("External resource added!")
     }
   }
 
-  const removeResource = (name: string) => {
-    const newResources = { ...resources }
-    delete newResources[name]
-    setResources(newResources)
-  }
+  const removeResource = async (name: string) => {
+    try {
+      // Get the URL from resources
+      const url = resources[name];
+
+      // Only attempt deletion if it's a Supabase storage URL
+      if (url && url.includes('supabase.co/storage/v1/object/public/contest-assets/')) {
+        // Extract file path from URL
+        const filePath = url.split('public/contest-assets/')[1];
+
+        if (filePath) {
+          // Delete the file from storage
+          const { error } = await supabase.storage
+            .from('contest-assets')
+            .remove([filePath]);
+
+          if (error) {
+            console.error("Error removing file from storage:", error);
+          }
+        }
+      }
+
+      // Remove from state regardless of storage deletion success
+      const newResources = { ...resources };
+      delete newResources[name];
+      setResources(newResources);
+    } catch (error) {
+      console.error("Error removing resource:", error);
+      // Still remove from state even if storage deletion fails
+      const newResources = { ...resources };
+      delete newResources[name];
+      setResources(newResources);
+    }
+  };
 
   const addInspirationLink = () => {
     if (newInspirationLink && !inspirationLinks.includes(newInspirationLink)) {
@@ -507,26 +710,40 @@ You must show the Go Viral App Store listing in your video`)
   }
 
   const handleWinnerAmountChange = (index: number, value: string) => {
-    const numValue = Number(value)
-
-    // Validate the amount is within allowed limits
-    if (numValue < MIN_PRIZE_PER_WINNER) {
-      setError(`Prize amount cannot be less than $${MIN_PRIZE_PER_WINNER}`)
+    // Don't validate empty inputs to allow users to delete and type new values
+    if (value === '') {
+      const newWinnerAmounts = [...winnerAmounts]
+      newWinnerAmounts[index] = 0 // Set to zero temporarily but don't show validation error
+      setWinnerAmounts(newWinnerAmounts)
+      updateTotalPrizePool(newWinnerAmounts)
       return
     }
 
-    if (numValue > MAX_PRIZE_PER_WINNER) {
-      setError(`Prize amount cannot exceed $${MAX_PRIZE_PER_WINNER}`)
-      return
+    // Convert from display dollars to cents for storage
+    const dollars = parseFloat(value);
+    if (!isNaN(dollars)) {
+      // Convert dollars to cents for internal storage
+      const numValue = Math.round(dollars * 100);
+
+      // Clear previous errors
+      setError(null)
+      setValidationError(null)
+
+      // Update the value immediately to improve responsiveness
+      const newWinnerAmounts = [...winnerAmounts]
+      newWinnerAmounts[index] = numValue
+      setWinnerAmounts(newWinnerAmounts)
+
+      // Update total prize pool
+      updateTotalPrizePool(newWinnerAmounts)
+
+      // Show validation errors only after a complete value is entered
+      if (numValue < MIN_PRIZE_PER_WINNER) {
+        setValidationError(`Prize amount for Winner ${index + 1} cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`)
+      } else if (numValue > MAX_PRIZE_PER_WINNER) {
+        setValidationError(`Prize amount for Winner ${index + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`)
+      }
     }
-
-    setError(null)
-    const newWinnerAmounts = [...winnerAmounts]
-    newWinnerAmounts[index] = numValue
-    setWinnerAmounts(newWinnerAmounts)
-
-    // Update total prize pool
-    updateTotalPrizePool(newWinnerAmounts)
   }
 
   // Keep the original function for backward compatibility
@@ -626,110 +843,112 @@ You must show the Go Viral App Store listing in your video`)
   // Check if storage is available and create bucket if missing
   const checkStorageAvailability = async () => {
     try {
+      // First, get the authenticated user properly
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error("Authentication error:", userError);
+        setStorageAvailable(false);
+        return false;
+      }
+
       // Check if we can access the storage bucket
-      const { data, error } = await supabase.storage.getBucket('contest-assets')
+      const { data, error } = await supabase.storage.getBucket('contest-assets');
 
       if (error) {
         console.error("Storage access error:", error);
-        // Try to create the bucket if it doesn't exist
-        try {
-          // Create the bucket with public access
-          const { data: createData, error: createError } = await supabase.storage.createBucket('contest-assets', {
-            public: true, // Make bucket public
-            fileSizeLimit: 20 * 1024 * 1024, // 20MB limit
-          })
 
-          if (createError) {
-            console.error("Failed to create storage bucket:", createError);
-            setStorageAvailable(false)
-            return false
-          }
+        // Instead of trying to create the bucket, which requires admin privileges,
+        // just set storage as unavailable
+        setStorageAvailable(false);
 
-          console.log("Created storage bucket successfully")
-          setStorageAvailable(true)
-          return true
-        } catch (createErr) {
-          console.error("Error creating bucket:", createErr);
-          setStorageAvailable(false)
-          return false
-        }
+        // Only log the error instead of attempting to create the bucket
+        console.log("Storage bucket 'contest-assets' is not available. Please contact administrator.");
+        return false;
       }
 
-      // If bucket exists but doesn't have correct settings, update it
-      if (data && (!data.file_size_limit || data.file_size_limit !== 20 * 1024 * 1024)) {
-        try {
-          const { error: updateError } = await supabase.storage.updateBucket('contest-assets', {
-            public: true,
-            fileSizeLimit: 20 * 1024 * 1024, // 20MB limit
-          })
-
-          if (updateError) {
-            console.error("Failed to update storage bucket:", updateError)
-          }
-        } catch (updateErr) {
-          console.error("Error updating bucket:", updateErr)
-        }
-      }
-
-      setStorageAvailable(true)
-      return true
+      // Bucket exists
+      setStorageAvailable(true);
+      return true;
     } catch (error) {
       console.error("Storage check error:", error);
-      setStorageAvailable(false)
-      return false
+      setStorageAvailable(false);
+      return false;
     }
   }
 
   // New function to get the current user's subscription plan
   const getUserPlan = async () => {
-    if (!user) return
+    if (!user) return;
 
     try {
-      // First try to get the subscription from a dedicated subscriptions table
-      const { data: subscriptionData, error: subscriptionError } = await supabase
-        .from("subscriptions")
-        .select("plan_id, status")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
+      // Use getUser() instead of relying on session data
+      const { data: authData, error: authError } = await supabase.auth.getUser();
 
-      if (!subscriptionError && subscriptionData?.plan_id) {
-        setUserPlan(subscriptionData.plan_id)
-        return
+      if (authError || !authData.user) {
+        console.error("Authentication error in getUserPlan:", authError);
+        setUserPlan(null);
+        return;
+      }
+
+      const userId = authData.user.id;
+
+      // First try to get the subscription from a dedicated subscriptions table
+      try {
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+          .from("subscriptions")
+          .select("plan_id, status")
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!subscriptionError && subscriptionData?.plan_id) {
+          setUserPlan(subscriptionData.plan_id);
+          return;
+        }
+      } catch (err) {
+        console.error("Error fetching subscription:", err);
       }
 
       // If that doesn't work, try the users table
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("subscription_plan")
-        .eq("id", user.id)
-        .single()
+      try {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("subscription_plan")
+          .eq("id", userId)
+          .single();
 
-      if (!userError && userData?.subscription_plan) {
-        setUserPlan(userData.subscription_plan)
-        return
+        if (!userError && userData?.subscription_plan) {
+          setUserPlan(userData.subscription_plan);
+          return;
+        }
+      } catch (err) {
+        console.error("Error fetching user subscription plan:", err);
       }
 
       // If no plan is found in either table, check advertiser_profiles
-      const { data: advertiserData, error: advertiserError } = await supabase
-        .from("advertiser_profiles")
-        .select("subscription_tier")
-        .eq("user_id", user.id)
-        .single()
+      try {
+        const { data: advertiserData, error: advertiserError } = await supabase
+          .from("advertiser_profiles")
+          .select("subscription_tier")
+          .eq("user_id", userId)
+          .single();
 
-      if (!advertiserError && advertiserData?.subscription_tier) {
-        setUserPlan(advertiserData.subscription_tier)
-        return
+        if (!advertiserError && advertiserData?.subscription_tier) {
+          setUserPlan(advertiserData.subscription_tier);
+          return;
+        }
+      } catch (err) {
+        console.error("Error fetching advertiser profile:", err);
       }
 
-      // If we couldn't find a subscription anywhere, don't set a default
-      // The UI will handle showing the appropriate message
-      setUserPlan(null)
+      // If we couldn't find a subscription anywhere, default to 'bronze'
+      setUserPlan('bronze');
     } catch (error) {
-      console.error("Error in getUserPlan:", error)
-      setUserPlan(null) // Don't default to any plan on error
+      console.error("Error in getUserPlan:", error);
+      setUserPlan('bronze'); // Default to bronze plan on error
     }
   }
 
@@ -769,9 +988,17 @@ You must show the Go Viral App Store listing in your video`)
 
   // Function to load draft data
   const loadDraftData = async () => {
-    if (!user) return;
-
     try {
+      // Use getUser instead of session
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !authData.user) {
+        console.error("Authentication error in loadDraftData:", authError);
+        return;
+      }
+
+      const userId = authData.user.id;
+
       // Check if there's a 'new' parameter in the URL - if so, don't load any draft
       const urlParams = new URLSearchParams(window.location.search);
       const isNewContest = urlParams.get('new') === 'true';
@@ -790,7 +1017,7 @@ You must show the Go Viral App Store listing in your video`)
           .from("contests")
           .select("*")
           .eq("id", draftIdFromUrl)
-          .eq("advertiser_id", user.id) // Security check to make sure user owns this draft
+          .eq("advertiser_id", userId) // Security check to make sure user owns this draft
           .single();
 
         if (specificError) {
@@ -808,7 +1035,7 @@ You must show the Go Viral App Store listing in your video`)
       const { data: draftContests, error } = await supabase
         .from("contests")
         .select("*")
-        .eq("advertiser_id", user.id)
+        .eq("advertiser_id", userId)
         .eq("is_draft", true)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -869,17 +1096,17 @@ You must show the Go Viral App Store listing in your video`)
       updateTotalPrizePool(amounts);
     }
 
-    // Set dates and times if available
+    // Convert UTC dates to local timezone for display
     if (draft.start_date) {
-      const startDateTime = new Date(draft.start_date);
-      setStartDate(startDateTime.toISOString().split('T')[0]);
-      setStartTime(startDateTime.toISOString().split('T')[1].substring(0, 5));
+      const { dateString, timeString } = toLocalDateTimeStrings(draft.start_date);
+      setStartDate(dateString);
+      setStartTime(timeString);
     }
 
     if (draft.end_date) {
-      const endDateTime = new Date(draft.end_date);
-      setEndDate(endDateTime.toISOString().split('T')[0]);
-      setEndTime(endDateTime.toISOString().split('T')[1].substring(0, 5));
+      const { dateString, timeString } = toLocalDateTimeStrings(draft.end_date);
+      setEndDate(dateString);
+      setEndTime(timeString);
     }
 
     // If thumbnail URL is available, show it in the preview
@@ -893,13 +1120,24 @@ You must show the Go Viral App Store listing in your video`)
 
   // Call this once when component mounts
   useEffect(() => {
-    checkStorageAvailability()
-    getUserPlan()
-    loadDraftData() // Load draft data if available
+    // Modified to handle storage errors more gracefully
+    const initializeData = async () => {
+      try {
+        await checkStorageAvailability();
+        await getUserPlan();
+        await loadDraftData();
 
-    // Set initial default prize allocations for the default 3 winners
-    updateTotalPrizePool()
-  }, [user]) // Re-run when user changes
+        // Set initial default prize allocations for the default 3 winners
+        updateTotalPrizePool();
+      } catch (error) {
+        console.error("Error initializing data:", error);
+        // Continue with the application even if there are errors
+        // as most functionality will still work without storage
+      }
+    };
+
+    initializeData();
+  }, [user]); // Re-run when user changes
 
   // Calculate and format contest duration
   const getContestDuration = () => {
@@ -1017,7 +1255,7 @@ You must show the Go Viral App Store listing in your video`)
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white p-6 rounded-lg max-w-md w-full">
           <h3 className="text-xl font-bold mb-4">High Budget Contest</h3>
-          <p className="mb-4">For contests with budgets over ${MAX_CONTEST_BUDGET}, we recommend speaking with our team for personalized guidance and support.</p>
+          <p className="mb-4">For contests with budgets over ${formatCurrency(MAX_CONTEST_BUDGET)}, we recommend speaking with our team for personalized guidance and support.</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowContactModal(false)}>Cancel</Button>
             <Button
@@ -1044,7 +1282,7 @@ You must show the Go Viral App Store listing in your video`)
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white p-6 rounded-lg max-w-md w-full">
           <h3 className="text-xl font-bold mb-4">High Value Contest</h3>
-          <p className="mb-4">For contests with budgets over ${HIGH_BUDGET_THRESHOLD}, we recommend reaching out to our team for personalized guidance and support.</p>
+          <p className="mb-4">For contests with budgets over ${formatCurrency(HIGH_BUDGET_THRESHOLD)}, we recommend reaching out to our team for personalized guidance and support.</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowHighBudgetPrompt(false)}>Continue Anyway</Button>
             <Button
@@ -1219,7 +1457,7 @@ You must show the Go Viral App Store listing in your video`)
               <h3 className="text-lg font-medium">Prize distribution</h3>
               <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                 <span className="text-sm font-medium">Total Prize Pool:</span>
-                <span className="text-lg font-bold">${totalPrizePool}</span>
+                <span className="text-lg font-bold">{formatCurrency(totalPrizePool)}</span>
               </div>
             </div>
 
@@ -1259,13 +1497,15 @@ You must show the Go Viral App Store listing in your video`)
                   <Label className="w-48">Winner {i + 1}</Label>
                   <Input
                     type="number"
-                    value={winnerAmounts[i] || MIN_PRIZE_PER_WINNER}
+                    step="0.01"
+                    value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
                     onChange={(e) => handleWinnerAmountChange(i, e.target.value)}
-                    min={MIN_PRIZE_PER_WINNER}
+                    min={MIN_PRIZE_PER_WINNER / 100}
+                    max={MAX_PRIZE_PER_WINNER / 100}
                     className="w-48"
                   />
                   <div className="text-sm text-gray-500">
-                    <span>Min: ${MIN_PRIZE_PER_WINNER}</span>
+                    <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
                   </div>
                 </div>
               ))}
@@ -1274,7 +1514,7 @@ You must show the Go Viral App Store listing in your video`)
             {totalPrizePool < planFeatures.minContestBudget && (
               <Alert className="mt-2">
                 <AlertDescription>
-                  The minimum prize pool for your {userPlan || 'current'} plan is ${planFeatures.minContestBudget}. Please increase your prize amounts.
+                  The minimum prize pool for your {userPlan || 'current'} plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase your prize amounts.
                 </AlertDescription>
               </Alert>
             )}
@@ -1282,6 +1522,90 @@ You must show the Go Viral App Store listing in your video`)
         </CardContent>
       </>
     );
+  };
+
+  // Modify the clearResources function
+  const clearResources = async () => {
+    // Get references to all resource URLs
+    const resourceUrls = Object.values(resources);
+
+    // Only proceed if there are resources to delete
+    if (resourceUrls.length > 0) {
+      try {
+        for (const url of resourceUrls) {
+          // Only attempt deletion if it's a Supabase storage URL
+          if (url && url.includes('supabase.co/storage/v1/object/public/contest-assets/')) {
+            // Extract file path from URL
+            const filePath = url.split('public/contest-assets/')[1];
+
+            if (filePath) {
+              // Delete the file from storage
+              await supabase.storage
+                .from('contest-assets')
+                .remove([filePath]);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error removing resources from storage:", error);
+      }
+    }
+
+    // Clear resources state
+    setResources({});
+  };
+
+  // Create a utility function to clean up all contest assets
+  const cleanupContestAssets = async (contestId: string) => {
+    try {
+      // Get prefix for files related to this contest
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData?.user) return;
+
+      const userId = authData.user.id;
+
+      // For contest resources
+      try {
+        // List files in the contest_resources folder
+        const { data: resourceFiles, error: resourceError } = await supabase.storage
+          .from('contest-assets')
+          .list(`contest_resources`, {
+            search: `${userId}_${contestId}`
+          });
+
+        if (resourceError) {
+          console.error("Error listing resource files:", resourceError);
+        } else if (resourceFiles && resourceFiles.length > 0) {
+          // Delete all found resource files
+          const resourceFilePaths = resourceFiles.map(file => `contest_resources/${file.name}`);
+          await supabase.storage.from('contest-assets').remove(resourceFilePaths);
+        }
+      } catch (err) {
+        console.error("Error deleting resource files:", err);
+      }
+
+      // For thumbnails
+      try {
+        // List files in the contest_thumbnails folder
+        const { data: thumbnailFiles, error: thumbnailError } = await supabase.storage
+          .from('contest-assets')
+          .list(`contest_thumbnails`, {
+            search: `${userId}_${contestId}`
+          });
+
+        if (thumbnailError) {
+          console.error("Error listing thumbnail files:", thumbnailError);
+        } else if (thumbnailFiles && thumbnailFiles.length > 0) {
+          // Delete all found thumbnail files
+          const thumbnailFilePaths = thumbnailFiles.map(file => `contest_thumbnails/${file.name}`);
+          await supabase.storage.from('contest-assets').remove(thumbnailFilePaths);
+        }
+      } catch (err) {
+        console.error("Error deleting thumbnail files:", err);
+      }
+    } catch (error) {
+      console.error("Error cleaning up contest assets:", error);
+    }
   };
 
   return (
@@ -1466,7 +1790,14 @@ You must show the Go Viral App Store listing in your video`)
                   onClick={handleSaveDraft}
                   disabled={isLoading}
                 >
-                  {isLoading ? "Saving..." : "Save Draft"}
+                  {isLoading && uploadProgress && uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <span>{uploadProgress}</span>
+                      <Progress value={uploadProgress ? 70 : 0} className="w-10 h-2" />
+                    </div>
+                  ) : (
+                    "Save Draft"
+                  )}
                 </Button>
                 <Button
                   type="button"
@@ -1571,7 +1902,14 @@ You must show the Go Viral App Store listing in your video`)
                   onClick={handleSaveDraft}
                   disabled={isLoading}
                 >
-                  {isLoading ? "Saving..." : "Save Draft"}
+                  {isLoading && uploadProgress && uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <span>{uploadProgress}</span>
+                      <Progress value={uploadProgress ? 70 : 0} className="w-10 h-2" />
+                    </div>
+                  ) : (
+                    "Save Draft"
+                  )}
                 </Button>
                 <Button
                   type="button"
@@ -1603,7 +1941,28 @@ You must show the Go Viral App Store listing in your video`)
                 <h3 className="text-lg font-semibold mb-2">Resources for Participants</h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Add resources that will help participants understand your brand and contest requirements.
+                  You can upload assets and add external links.
                 </p>
+
+                {validationError && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertDescription>{validationError}</AlertDescription>
+                  </Alert>
+                )}
+
+                {success && (
+                  <Alert className="mb-4 bg-green-50 border-green-200 text-green-700">
+                    <Check className="h-4 w-4 mr-2" />
+                    <AlertDescription>{success}</AlertDescription>
+                  </Alert>
+                )}
+
+                {error && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertCircle className="h-4 w-4 mr-2" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
                 <div className="space-y-6">
                   {/* File Upload Container */}
@@ -1622,137 +1981,123 @@ You must show the Go Viral App Store listing in your video`)
                       />
                     </div>
 
-                    {/* File Uploader */}
-                    {storageAvailable ? (
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 mb-4">
-                        {resourceFilePreview ? (
-                          <div className="relative">
-                            {resourceFilePreview.startsWith('data:image') ? (
-                              // Image file preview
-                              <img
-                                src={resourceFilePreview}
-                                alt="Resource preview"
-                                className="mx-auto max-h-64 object-contain"
-                              />
-                            ) : (
-                              // Non-image file preview
-                              <div className="mx-auto py-4 text-center">
-                                {resourceFilePreview.startsWith('file-type:application/pdf') && (
-                                  <div className="flex flex-col items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M8.267 14.68c-.184 0-.308.018-.372.036v1.178c.076.018.171.023.302.023.479 0 .774-.242.774-.651 0-.366-.254-.586-.704-.586zm3.487.012c-.2 0-.33.018-.407.036v2.61c.077.018.201.018.313.018.817.006 1.349-.444 1.349-1.396.006-.83-.479-1.268-1.255-1.268z" />
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM9.498 16.19c-.309.29-.765.42-1.296.42a2.23 2.23 0 0 1-.308-.018v1.426H7v-3.936A7.558 7.558 0 0 1 8.219 14c.557 0 .953.106 1.22.319.254.202.426.533.426.923-.001.392-.131.723-.367.948zm3.807 1.355c-.42.349-1.059.515-1.84.515-.468 0-.799-.03-1.024-.06v-3.917A7.947 7.947 0 0 1 11.66 14c.757 0 1.249.136 1.633.426.415.308.675.799.675 1.504 0 .763-.279 1.29-.763 1.615zM17 14.77h-1.532v.911H16.9v.734h-1.432v1.604h-.906V14.03H17v.74zM14 9h-1V4l5 5h-4z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">PDF Document</span>
-                                  </div>
-                                )}
-                                {resourceFilePreview.startsWith('file-type:video/') && (
-                                  <div className="flex flex-col items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
-                                      <path d="m9 17 8-5-8-5z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">Video File</span>
-                                  </div>
-                                )}
-                                {resourceFilePreview.startsWith('file-type:audio/') && (
-                                  <div className="flex flex-col items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-purple-500" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M19.952 1.651a.991.991 0 0 0-1.164.986v14.522c-.87-.703-2.354-1.062-4.137-1.062-1.636 0-3.52.33-4.7 1.505S9 20.147 9 21.428v.893C9 22.705 9.322 23 9.731 23c.4 0 .726-.286.735-.678v-.009l.007-.407c.001-.921.396-1.762 1.465-2.506.957-.662 2.492-1.046 4.313-1.046s3.356.384 4.313 1.046c1.069.744 1.464 1.585 1.465 2.506l.007.407v.009c.009.392.335.678.735.678.409 0 .731-.295.731-.679v-.893c0-1.281-.297-2.45-1.478-3.625S17.172 16.1 15.532 16.1c-.51 0-1.01.036-1.492.103V5.256l5.227-2.783a.996.996 0 0 0 .571-1.173 1.01 1.01 0 0 0-.876-.749zM8.364 6.4a.771.771 0 0 0-.388 0c-.612.13-1.21.332-1.781.6-1.307.619-2.398 1.525-3.182 2.643a1.773 1.773 0 0 0-.3.507c-.435.941-.671 1.969-.671 3.021 0 1.051.236 2.078.671 3.018.141.299.215.421.3.507.784 1.118 1.875 2.026 3.182 2.644.571.271 1.169.473 1.781.603a.771.771 0 0 0 .388 0c.612-.13 1.21-.332 1.781-.603 1.307-.618 2.398-1.526 3.182-2.644.084-.086.158-.208.3-.507.436-.94.671-1.967.671-3.018 0-1.052-.235-2.08-.671-3.021a1.772 1.772 0 0 0-.3-.507c-.784-1.118-1.875-2.024-3.182-2.643-.571-.268-1.169-.47-1.781-.6zm.134 1.728c.419.089.823.219 1.207.39a7.216 7.216 0 0 1 2.12 1.67c.823 1.003 1.305 2.159 1.347 3.35.055 1.522-.464 3.03-1.534 4.303a7.222 7.222 0 0 1-2.327 1.953 5.683 5.683 0 0 1-.813.329 5.686 5.686 0 0 1-.813-.329 7.222 7.222 0 0 1-2.327-1.953c-1.07-1.273-1.589-2.781-1.534-4.303.042-1.191.524-2.347 1.347-3.35a7.217 7.217 0 0 1 2.119-1.67c.384-.171.789-.301 1.208-.39z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">Audio File</span>
-                                  </div>
-                                )}
-                                {resourceFilePreview.startsWith('file-type:application/vnd.openxmlformats-officedocument.') && (
-                                  <div className="flex flex-col items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-green-500" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-                                      <path d="M14 14H8v-2h6v2zm0 3H8v-2h6v2z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">Office Document</span>
-                                  </div>
-                                )}
-                                {/* Default file icon for other file types */}
-                                {!resourceFilePreview.startsWith('file-type:application/pdf') &&
-                                  !resourceFilePreview.startsWith('file-type:video/') &&
-                                  !resourceFilePreview.startsWith('file-type:audio/') &&
-                                  !resourceFilePreview.startsWith('file-type:application/vnd.openxmlformats-officedocument.') && (
-                                    <div className="flex flex-col items-center">
-                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
-                                        <path d="M8 15h8v2H8zm0-4h8v2H8z" />
-                                      </svg>
-                                      <span className="mt-2 font-medium">File</span>
-                                    </div>
-                                  )}
-                              </div>
-                            )}
-                            <div className="mt-2 flex justify-between items-center">
-                              <p className="text-sm text-gray-500">
-                                {resourceFile?.name} · {(resourceFile?.size ? (resourceFile.size / (1024 * 1024)).toFixed(2) : '0')}MB
-                              </p>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={removeResourceFile}
-                                className="text-red-500"
-                              >
-                                <Trash className="h-4 w-4 mr-1" /> Remove
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-center py-6">
-                            <Upload className="h-16 w-16 mx-auto text-gray-400 mb-2" />
-                            <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
-                            <p className="text-xs text-gray-500 mb-4">Max file size: 20MB</p>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => resourceFileRef.current?.click()}
-                            >
-                              <Upload className="h-4 w-4 mr-2" /> Select File
-                            </Button>
-                            <input
-                              type="file"
-                              ref={resourceFileRef}
-                              id="resourceFileInput"
-                              className="hidden"
-                              onChange={handleResourceFileChange}
+                    {/* File Uploader - Exactly like thumbnail uploader */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 mb-4">
+                      {resourceFilePreview ? (
+                        <div className="relative">
+                          {resourceFilePreview.startsWith('data:image') ? (
+                            <img
+                              src={resourceFilePreview}
+                              alt="Resource preview"
+                              className="mx-auto max-h-64 object-contain"
                             />
+                          ) : (
+                            <div className="mx-auto py-4 text-center">
+                              {resourceFilePreview.startsWith('file-type:application/pdf') && (
+                                <div className="flex flex-col items-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M8.267 14.68c-.184 0-.308.018-.372.036v1.178c.076.018.171.023.302.023.479 0 .774-.242.774-.651 0-.366-.254-.586-.704-.586zm3.487.012c-.2 0-.33.018-.407.036v2.61c.077.018.201.018.313.018.817.006 1.349-.444 1.349-1.396.006-.83-.479-1.268-1.255-1.268z" />
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM9.498 16.19c-.309.29-.765.42-1.296.42a2.23 2.23 0 0 1-.308-.018v1.426H7v-3.936A7.558 7.558 0 0 1 8.219 14c.557 0 .953.106 1.22.319.254.202.426.533.426.923-.001.392-.131.723-.367.948zm3.807 1.355c-.42.349-1.059.515-1.84.515-.468 0-.799-.03-1.024-.06v-3.917A7.947 7.947 0 0 1 11.66 14c.757 0 1.249.136 1.633.426.415.308.675.799.675 1.504 0 .763-.279 1.29-.763 1.615zM17 14.77h-1.532v.911H16.9v.734h-1.432v1.604h-.906V14.03H17v.74zM14 9h-1V4l5 5h-4z" />
+                                  </svg>
+                                  <span className="mt-2 font-medium">PDF Document</span>
+                                </div>
+                              )}
+                              {/* Rest of the file type renderers */}
+                              {resourceFilePreview.startsWith('file-type:video/') && (
+                                <div className="flex flex-col items-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
+                                    <path d="m9 17 8-5-8-5z" />
+                                  </svg>
+                                  <span className="mt-2 font-medium">Video File</span>
+                                </div>
+                              )}
+                              {resourceFilePreview.startsWith('file-type:audio/') && (
+                                <div className="flex flex-col items-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-purple-500" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19.952 1.651a.991.991 0 0 0-1.164.986v14.522c-.87-.703-2.354-1.062-4.137-1.062-1.636 0-3.52.33-4.7 1.505S9 20.147 9 21.428v.893C9 22.705 9.322 23 9.731 23c.4 0 .726-.286.735-.678v-.009l.007-.407c.001-.921.396-1.762 1.465-2.506.957-.662 2.492-1.046 4.313-1.046s3.356.384 4.313 1.046c1.069.744 1.464 1.585 1.465 2.506l.007.407v.009c.009.392.335.678.735.678.409 0 .731-.295.731-.679v-.893c0-1.281-.297-2.45-1.478-3.625S17.172 16.1 15.532 16.1c-.51 0-1.01.036-1.492.103V5.256l5.227-2.783a.996.996 0 0 0 .571-1.173 1.01 1.01 0 0 0-.876-.749zM8.364 6.4a.771.771 0 0 0-.388 0c-.612.13-1.21.332-1.781.6-1.307.619-2.398 1.525-3.182 2.643a1.773 1.773 0 0 0-.3.507c-.435.941-.671 1.969-.671 3.021 0 1.051.236 2.078.671 3.018.141.299.215.421.3.507.784 1.118 1.875 2.026 3.182 2.644.571.271 1.169.473 1.781.603a.771.771 0 0 0 .388 0c.612-.13 1.21-.332 1.781-.603 1.307-.618 2.398-1.526 3.182-2.644.084-.086.158-.208.3-.507.436-.94.671-1.967.671-3.018 0-1.052-.235-2.08-.671-3.021a1.772 1.772 0 0 0-.3-.507c-.784-1.118-1.875-2.024-3.182-2.643-.571-.268-1.169-.47-1.781-.6zm.134 1.728c.419.089.823.219 1.207.39a7.216 7.216 0 0 1 2.12 1.67c.823 1.003 1.305 2.159 1.347 3.35.055 1.522-.464 3.03-1.534 4.303a7.222 7.222 0 0 1-2.327 1.953 5.683 5.683 0 0 1-.813.329 5.686 5.686 0 0 1-.813-.329 7.222 7.222 0 0 1-2.327-1.953c-1.07-1.273-1.589-2.781-1.534-4.303.042-1.191.524-2.347 1.347-3.35a7.217 7.217 0 0 1 2.119-1.67c.384-.171.789-.301 1.208-.39z" />
+                                  </svg>
+                                  <span className="mt-2 font-medium">Audio File</span>
+                                </div>
+                              )}
+                              {/* Office document icon */}
+                              {resourceFilePreview.startsWith('file-type:application/vnd.openxmlformats-officedocument.') && (
+                                <div className="flex flex-col items-center">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-green-500" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+                                    <path d="M14 14H8v-2h6v2zm0 3H8v-2h6v2z" />
+                                  </svg>
+                                  <span className="mt-2 font-medium">Office Document</span>
+                                </div>
+                              )}
+                              {/* Default file icon for other file types */}
+                              {!resourceFilePreview.startsWith('file-type:application/pdf') &&
+                                !resourceFilePreview.startsWith('file-type:video/') &&
+                                !resourceFilePreview.startsWith('file-type:audio/') &&
+                                !resourceFilePreview.startsWith('file-type:application/vnd.openxmlformats-officedocument.') && (
+                                  <div className="flex flex-col items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
+                                      <path d="M8 15h8v2H8zm0-4h8v2H8z" />
+                                    </svg>
+                                    <span className="mt-2 font-medium">File</span>
+                                  </div>
+                                )}
+                            </div>
+                          )}
+                          <div className="mt-2 flex justify-between items-center">
+                            <p className="text-sm text-gray-500">
+                              {resourceFile?.name} · {(resourceFile?.size ? (resourceFile.size / (1024 * 1024)).toFixed(2) : '0')}MB
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={removeResourceFile}
+                              className="text-red-500"
+                            >
+                              <Trash className="h-4 w-4 mr-1" /> Remove
+                            </Button>
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="text-amber-600 text-sm mb-4">
-                        <AlertTriangle className="inline w-4 h-4 mr-1" />
-                        Asset upload unavailable. Please use external links.
-                      </div>
-                    )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6">
+                          <Upload className="h-16 w-16 mx-auto text-gray-400 mb-2" />
+                          <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
+                          <p className="text-xs text-gray-500 mb-4">Max file size: 20MB</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => resourceFileRef.current?.click()}
+                          >
+                            <Upload className="h-4 w-4 mr-2" /> Upload
+                          </Button>
+                          <input
+                            type="file"
+                            ref={resourceFileRef}
+                            id="resourceFileInput"
+                            className="hidden"
+                            onChange={handleResourceFileChange}
+                          />
+                        </div>
+                      )}
+                    </div>
 
-                    {/* Upload Button */}
+                    {/* Add Asset Button - Shows when file is selected */}
                     {resourceFile && resourceDescription && (
                       <Button
                         type="button"
                         onClick={addFileResource}
-                        disabled={isLoading}
-                        className="w-full"
+                        className="w-full mt-4"
                       >
-                        {isLoading ? (
-                          <>
-                            Uploading...
-                            <Progress value={resourceUploadProgress || 0} className="ml-2 w-20 h-2" />
-                          </>
-                        ) : (
-                          <>Upload Asset</>
-                        )}
+                        Add Asset
                       </Button>
                     )}
                   </div>
 
-                  {/* External Resource Container */}
-                  <div className="border rounded-lg p-4">
-                    <h4 className="text-md font-medium mb-2">Add External Resource</h4>
+                  {/* External Resource Link - Allow multiple external links */}
+                  <div className="border rounded-lg p-4 mt-6">
+                    <h4 className="text-md font-medium mb-2">Add External Resource Links</h4>
+                    <p className="text-sm text-gray-500 mb-4">You can add any number of external resource links.</p>
 
                     {/* External Resource Description */}
                     <div className="mb-4">
@@ -1788,42 +2133,32 @@ You must show the Go Viral App Store listing in your video`)
                       <ExternalLink className="w-4 h-4 mr-2" />
                       Add External Resource
                     </Button>
-                  </div>
 
-                  {/* Resource file upload error */}
-                  {error && (
-                    <div className="mt-2 text-red-600 text-sm">
-                      <AlertCircle className="inline w-4 h-4 mr-1" />
-                      {error}
-                    </div>
-                  )}
-
-                  {/* Added Resources */}
-                  {resources && Object.keys(resources).length > 0 && (
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium mb-2">Added Resources:</h4>
-                      <div className="space-y-2">
-                        {Object.entries(resources).map(([name, url]) => (
-                          <div key={name} className="flex items-center justify-between p-3 border rounded-md">
-                            <div>
-                              <div className="font-medium">{name}</div>
-                              <div className="text-sm text-gray-600 truncate max-w-xs">
-                                {url}
+                    {/* List of added external resources */}
+                    {Object.entries(resources).length > 0 && (
+                      <div className="mt-4 border-t pt-4">
+                        <h5 className="font-medium mb-2">Added Resources:</h5>
+                        <ul className="space-y-2">
+                          {Object.entries(resources).map(([name, url]) => (
+                            <li key={name} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                              <div>
+                                <p className="font-medium">{name}</p>
+                                <p className="text-sm text-gray-500 truncate max-w-xs">{url}</p>
                               </div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeResource(name)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        ))}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeResource(name)}
+                                className="text-red-500"
+                              >
+                                <Trash className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -1842,7 +2177,14 @@ You must show the Go Viral App Store listing in your video`)
                   onClick={handleSaveDraft}
                   disabled={isLoading}
                 >
-                  {isLoading ? "Saving..." : "Save Draft"}
+                  {isLoading && uploadProgress && uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <span>{uploadProgress}</span>
+                      <Progress value={uploadProgress ? 70 : 0} className="w-10 h-2" />
+                    </div>
+                  ) : (
+                    "Save Draft"
+                  )}
                 </Button>
                 <Button
                   type="button"
@@ -1886,7 +2228,14 @@ You must show the Go Viral App Store listing in your video`)
                   onClick={handleSaveDraft}
                   disabled={isLoading}
                 >
-                  {isLoading ? "Saving..." : "Save Draft"}
+                  {isLoading && uploadProgress && uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <span>{uploadProgress}</span>
+                      <Progress value={uploadProgress ? 70 : 0} className="w-10 h-2" />
+                    </div>
+                  ) : (
+                    "Save Draft"
+                  )}
                 </Button>
                 <Button
                   type="button"
@@ -1894,7 +2243,25 @@ You must show the Go Viral App Store listing in your video`)
                   disabled={isLoading || !startDate || !startTime || !endDate || !endTime}
                   className="bg-rose-600 hover:bg-rose-700 text-white"
                 >
-                  {isLoading ? "Creating..." : "Create Contest"}
+                  {isLoading && uploadProgress && !uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <span>{uploadProgress}</span>
+                      <Progress
+                        value={
+                          uploadProgress.includes("Preparing") ? 15 :
+                            uploadProgress.includes("Validating") ? 25 :
+                              uploadProgress.includes("1/2") ? 40 :
+                                uploadProgress.includes("2/2") ? 60 :
+                                  uploadProgress.includes("Creating") ? 80 :
+                                    uploadProgress.includes("Redirecting") ? 100 :
+                                      10
+                        }
+                        className="w-10 h-2"
+                      />
+                    </div>
+                  ) : (
+                    "Create Contest"
+                  )}
                 </Button>
               </div>
             </CardFooter>

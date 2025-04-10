@@ -2,10 +2,10 @@ export const subscriptionPlans = [
   {
     id: 'bronze',
     name: 'Bronze',
-    price: 100,
+    price: 10000,
     features: {
       maxActiveContests: 5,
-      minContestBudget: 100,
+      minContestBudget: 10000,
       maxWinnersPerContest: 10,
       accessToCreators: true,
       contestBranding: 'Basic Templates',
@@ -16,10 +16,10 @@ export const subscriptionPlans = [
   {
     id: 'silver',
     name: 'Silver',
-    price: 200,
+    price: 20000,
     features: {
       maxActiveContests: 10,
-      minContestBudget: 75,
+      minContestBudget: 7500,
       maxWinnersPerContest: 20,
       accessToCreators: true,
       contestBranding: 'Improved Templates',
@@ -30,10 +30,10 @@ export const subscriptionPlans = [
   {
     id: 'gold',
     name: 'Gold',
-    price: 300,
+    price: 30000,
     features: {
       maxActiveContests: 20,
-      minContestBudget: 50,
+      minContestBudget: 5000,
       maxWinnersPerContest: 30,
       accessToCreators: true,
       contestBranding: 'Advanced Styling',
@@ -44,10 +44,10 @@ export const subscriptionPlans = [
   {
     id: 'platinum',
     name: 'Platinum',
-    price: 400,
+    price: 40000,
     features: {
       maxActiveContests: 30,
-      minContestBudget: 50,
+      minContestBudget: 5000,
       maxWinnersPerContest: 50,
       accessToCreators: true,
       contestBranding: 'Full Brand Styling',
@@ -58,10 +58,10 @@ export const subscriptionPlans = [
   {
     id: 'diamond',
     name: 'Diamond',
-    price: 500,
+    price: 50000,
     features: {
       maxActiveContests: Infinity,
-      minContestBudget: 50,
+      minContestBudget: 5000,
       maxWinnersPerContest: Infinity,
       accessToCreators: true,
       contestBranding: 'Custom Designs by Our Team',
@@ -71,4 +71,4 @@ export const subscriptionPlans = [
   },
 ];
 
-export const MAX_CONTEST_BUDGET = 1000; // Recommend contact for higher budget 
+export const MAX_CONTEST_BUDGET = 100000; // Recommend contact for higher budget 

@@ -191,12 +191,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      // First clear user state
       setUser(null)
-      router.push('/')
+
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error("Sign out error:", error)
+        throw error
+      }
+
+      // Redirect to login page instead of home page
+      window.location.href = '/auth/signin'
     } catch (error: any) {
+      console.error("Sign out failed:", error)
       setError(error.message)
+      // Even if there's an error, we should redirect to login page
+      window.location.href = '/auth/signin'
     } finally {
       setIsLoading(false)
     }

@@ -3,9 +3,15 @@ import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Edit, Plus, Trophy } from "lucide-react"
+import { Edit, Plus, Trophy, DollarSign } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DeleteContestButton } from "@/components/delete-contest-button"
+
+// Add the formatCurrency utility function
+const formatCurrency = (cents: number): string => {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 export default async function ContestsPage() {
   const supabase = createServerSupabaseClient()
@@ -89,6 +95,12 @@ export default async function ContestsPage() {
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/dashboard/contests/${contest.id}`}>View</Link>
                         </Button>
+                        <DeleteContestButton
+                          contestId={contest.id}
+                          contestTitle={contest.title}
+                          isLive={contest.status === "live"}
+                          size="sm"
+                        />
                       </div>
                     </div>
                   ))}
@@ -131,6 +143,12 @@ export default async function ContestsPage() {
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/dashboard/contests/create?draft=${contest.id}`}>Continue</Link>
                         </Button>
+                        <DeleteContestButton
+                          contestId={contest.id}
+                          contestTitle={contest.title || "Untitled Contest"}
+                          isLive={false}
+                          size="sm"
+                        />
                       </div>
                     </div>
                   ))}

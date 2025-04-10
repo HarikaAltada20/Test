@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Image, Trash, Upload } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
+import { toLocalDateTimeStrings, toUTCISOString, formatLocalDateTime } from "@/lib/utils"
 
 type ContestData = {
     id: string
@@ -60,6 +61,22 @@ export default function EditContestPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
+    // Update the constants for prize amounts - convert to cents
+    const MIN_PRIZE_PER_WINNER = 500 // Minimum prize amount per winner in cents ($5)
+    const MAX_PRIZE_PER_WINNER = 100000 // Maximum prize amount per winner in cents ($1000)
+    const DEFAULT_PRIZE_ALLOCATIONS = {
+        1: 50000, // $500.00
+        2: 30000, // $300.00
+        3: 20000, // $200.00
+        4: 10000, // $100.00
+        5: 5000   // $50.00
+    }
+
+    // Add a utility function to convert cents to dollars for display
+    const formatCurrency = (cents: number): string => {
+        return `$${(cents / 100).toFixed(2)}`;
+    }
+
     // Fetch contest data
     useEffect(() => {
         async function fetchContest() {
@@ -102,21 +119,22 @@ export default function EditContestPage() {
                         setRules(data.rules.list.join("\n"))
                     }
 
+                    // Convert UTC dates to local timezone for display
                     if (data.start_date) {
-                        const startDateTime = new Date(data.start_date)
-                        setStartDate(startDateTime.toISOString().split('T')[0])
-                        setStartTime(startDateTime.toISOString().split('T')[1].substring(0, 5))
+                        const { dateString, timeString } = toLocalDateTimeStrings(data.start_date);
+                        setStartDate(dateString);
+                        setStartTime(timeString);
                     }
 
                     if (data.end_date) {
-                        const endDateTime = new Date(data.end_date)
-                        setEndDate(endDateTime.toISOString().split('T')[0])
-                        setEndTime(endDateTime.toISOString().split('T')[1].substring(0, 5))
+                        const { dateString, timeString } = toLocalDateTimeStrings(data.end_date);
+                        setEndDate(dateString);
+                        setEndTime(timeString);
                     }
 
                     if (data.prizes && Array.isArray(data.prizes)) {
                         setWinnerCount(data.prizes.length)
-                        setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount / 100))
+                        setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount))
                     }
 
                     if (data.inspiration_links && Array.isArray(data.inspiration_links)) {
@@ -189,6 +207,18 @@ export default function EditContestPage() {
         setValidationError(null);
         setIsLoading(true);
 
+        // Add timeout tracking to prevent hanging UI
+        let submitTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
+
+        // Add a timeout to prevent hanging in case of unexpected delays
+        submitTimeoutId = setTimeout(() => {
+            if (isLoading) {
+                console.log("Edit submission taking longer than expected...");
+                // Keep the UI responsive by updating state but don't stop the operation
+                setValidationError("Operation is taking longer than expected. Please wait...");
+            }
+        }, 5000);
+
         if (!user) {
             setError("You must be logged in to update a contest");
             setIsLoading(false);
@@ -196,29 +226,44 @@ export default function EditContestPage() {
         }
 
         try {
-            // Validate dates and times
+            // Validate dates and times - use local timezone for validation
             if (startDate && startTime && endDate && endTime) {
-                const startDateTime = new Date(`${startDate}T${startTime}`);
-                const endDateTime = new Date(`${endDate}T${endTime}`);
-                const now = new Date();
+                try {
+                    // Create local date objects in user's timezone
+                    const startDateTime = new Date(`${startDate}T${startTime}`);
+                    const endDateTime = new Date(`${endDate}T${endTime}`);
+                    const now = new Date();
 
-                if (startDateTime < now) {
-                    setValidationError("Contest start time must be in the future");
-                    setIsLoading(false);
-                    return;
-                }
+                    // Make sure dates are valid
+                    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+                        setValidationError("Invalid date or time format. Please check your entries.");
+                        setIsLoading(false);
+                        return;
+                    }
 
-                if (endDateTime <= startDateTime) {
-                    setValidationError("Contest end time must be after the start time");
-                    setIsLoading(false);
-                    return;
-                }
+                    if (startDateTime < now) {
+                        setValidationError("Contest start time must be in the future");
+                        setIsLoading(false);
+                        return;
+                    }
 
-                // Check if duration is at least 1 day (24 hours)
-                const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                const oneDayMs = 24 * 60 * 60 * 1000;
-                if (durationMs < oneDayMs) {
-                    setValidationError("Contest duration must be at least 1 day");
+                    if (endDateTime <= startDateTime) {
+                        setValidationError("Contest end time must be after the start time");
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    // Check if duration is at least 1 day (24 hours)
+                    const durationMs = endDateTime.getTime() - startDateTime.getTime();
+                    const oneDayMs = 24 * 60 * 60 * 1000;
+                    if (durationMs < oneDayMs) {
+                        setValidationError("Contest duration must be at least 1 day");
+                        setIsLoading(false);
+                        return;
+                    }
+                } catch (error) {
+                    console.error("Date validation error:", error);
+                    setValidationError("There was an error with the date/time format. Please check your entries.");
                     setIsLoading(false);
                     return;
                 }
@@ -233,7 +278,7 @@ export default function EditContestPage() {
             for (let i = 0; i < winnerCount; i++) {
                 prizesArray.push({
                     position: i + 1,
-                    amount: (winnerAmounts[i] || 0) * 100 // convert to cents
+                    amount: (winnerAmounts[i] || 0)
                 })
             }
 
@@ -268,6 +313,20 @@ export default function EditContestPage() {
                 }
             }
 
+            // Format dates properly to ensure they're in ISO format (UTC)
+            let formattedStartDate = null
+            let formattedEndDate = null
+
+            if (startDate && startTime) {
+                formattedStartDate = toUTCISOString(startDate, startTime);
+                if (!formattedStartDate) throw new Error("Invalid start date/time format");
+            }
+
+            if (endDate && endTime) {
+                formattedEndDate = toUTCISOString(endDate, endTime);
+                if (!formattedEndDate) throw new Error("Invalid end date/time format");
+            }
+
             // Update contest
             const { error } = await supabase
                 .from("contests")
@@ -277,12 +336,12 @@ export default function EditContestPage() {
                     category,
                     brief,
                     prizes: prizesArray,
-                    total_prize: totalPrize * 100, // convert to cents
+                    total_prize: totalPrize,
                     rules: { list: rules.split("\n") },
                     inspiration_links: inspirationLinks,
                     winner_count: winnerCount,
-                    start_date: startDate && startTime ? `${startDate}T${startTime}` : null,
-                    end_date: endDate && endTime ? `${endDate}T${endTime}` : null
+                    start_date: formattedStartDate, // Use ISO format for UTC
+                    end_date: formattedEndDate // Use ISO format for UTC
                 })
                 .eq("id", contestId)
                 .eq("advertiser_id", user.id)
@@ -290,9 +349,10 @@ export default function EditContestPage() {
             if (error) throw error
 
             router.push(`/dashboard/contests/${contestId}`)
+            if (submitTimeoutId !== undefined) clearTimeout(submitTimeoutId);
         } catch (err: any) {
+            if (submitTimeoutId !== undefined) clearTimeout(submitTimeoutId);
             setError(err.message || "Failed to update contest")
-        } finally {
             setIsLoading(false)
         }
     }
@@ -597,27 +657,113 @@ export default function EditContestPage() {
 
                     {/* Prize Distribution */}
                     <div className="space-y-4">
-                        <h3 className="text-lg font-medium">Prize distribution</h3>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">Prize distribution</h3>
+                            <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
+                                <span className="text-sm font-medium">Total Prize Pool:</span>
+                                <span className="text-lg font-bold">{formatCurrency(winnerAmounts.reduce((sum, amount) => sum + amount, 0))}</span>
+                            </div>
+                        </div>
 
-                        {Array.from({ length: winnerCount }).map((_, i) => (
-                            <div key={i} className="flex items-center gap-4 mb-2">
-                                <Label className="w-48">Winner {i + 1}</Label>
-                                <Input
-                                    type="number"
-                                    value={winnerAmounts[i] || 5}
-                                    onChange={(e) => {
-                                        const newAmounts = [...winnerAmounts]
-                                        newAmounts[i] = parseInt(e.target.value) || 5
-                                        setWinnerAmounts(newAmounts)
-                                    }}
-                                    min={5}
-                                    className="w-48"
-                                />
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <div className="flex items-center gap-4 mb-4">
+                                <Label className="w-48">Number of Winners <span className="text-xs text-gray-500">(Required)</span></Label>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-8 w-8 rounded-full"
+                                        onClick={() => {
+                                            if (winnerCount > 1) {
+                                                const newCount = winnerCount - 1;
+                                                setWinnerCount(newCount);
+                                                const newAmounts = [...winnerAmounts].slice(0, newCount);
+                                                setWinnerAmounts(newAmounts);
+                                            }
+                                        }}
+                                        disabled={winnerCount <= 1}
+                                    >
+                                        -
+                                    </Button>
+                                    <span className="w-8 text-center">{winnerCount}</span>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-8 w-8 rounded-full"
+                                        onClick={() => {
+                                            const newCount = winnerCount + 1;
+                                            if (newCount <= 10) {
+                                                setWinnerCount(newCount);
+                                                const newAmounts = [...winnerAmounts];
+                                                // Use default allocation if available, otherwise use minimum prize
+                                                const position = newCount;
+                                                newAmounts.push(DEFAULT_PRIZE_ALLOCATIONS[position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS] || MIN_PRIZE_PER_WINNER);
+                                                setWinnerAmounts(newAmounts);
+                                            }
+                                        }}
+                                        disabled={winnerCount >= 10}
+                                    >
+                                        +
+                                    </Button>
+                                </div>
                                 <div className="text-sm text-gray-500">
-                                    <span>Min: $5</span>
+                                    <span>Max: 10</span>
                                 </div>
                             </div>
-                        ))}
+
+                            {Array.from({ length: winnerCount }).map((_, i) => (
+                                <div key={i} className="flex items-center gap-4 mb-2">
+                                    <Label className="w-48">Winner {i + 1}</Label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
+                                        onChange={(e) => {
+                                            const inputValue = e.target.value;
+
+                                            // Allow empty input for typing new values
+                                            if (inputValue === '') {
+                                                const newAmounts = [...winnerAmounts];
+                                                newAmounts[i] = 0; // Temporarily set to 0
+                                                setWinnerAmounts(newAmounts);
+                                                return;
+                                            }
+
+                                            // Convert from display dollars to cents for storage
+                                            const dollars = parseFloat(inputValue);
+
+                                            // Only validate if we have a proper number
+                                            if (!isNaN(dollars)) {
+                                                // Convert to cents and round to avoid floating point issues
+                                                const value = Math.round(dollars * 100);
+
+                                                // Always update the value first for responsiveness
+                                                const newAmounts = [...winnerAmounts];
+                                                newAmounts[i] = value;
+                                                setWinnerAmounts(newAmounts);
+
+                                                // Show validation messages after updating
+                                                if (value < MIN_PRIZE_PER_WINNER) {
+                                                    setValidationError(`Prize amount cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
+                                                } else if (value > MAX_PRIZE_PER_WINNER) {
+                                                    setValidationError(`Prize amount cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
+                                                } else {
+                                                    setValidationError(null);
+                                                }
+                                            }
+                                        }}
+                                        min={MIN_PRIZE_PER_WINNER / 100}
+                                        max={MAX_PRIZE_PER_WINNER / 100}
+                                        className="w-48"
+                                    />
+                                    <div className="text-sm text-gray-500">
+                                        <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-between">

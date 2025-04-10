@@ -6,6 +6,12 @@ import Link from "next/link"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowDownToLine, DollarSign, Trophy } from "lucide-react"
 
+// Add the formatCurrency utility function
+// Add this utility function to convert cents to dollars for display
+const formatCurrency = (cents: number): string => {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 export default async function CreatorEarningsPage() {
   const supabase = createServerSupabaseClient()
 
@@ -72,7 +78,7 @@ export default async function CreatorEarningsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${profile?.prize_money_earned ? (profile.prize_money_earned / 100).toFixed(2) : "0.00"}
+              {formatCurrency(profile?.prize_money_earned || 0)}
             </div>
             <p className="text-xs text-muted-foreground">Lifetime earnings</p>
           </CardContent>
@@ -94,8 +100,7 @@ export default async function CreatorEarningsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${earnings.filter((e) => e.status === "pending").reduce((sum, e) => sum + e.amount, 0) / 100}
-              .00
+              {formatCurrency(earnings.filter((e) => e.status === "pending").reduce((sum, e) => sum + e.amount, 0))}
             </div>
             <p className="text-xs text-muted-foreground">Current balance</p>
           </CardContent>
@@ -122,12 +127,11 @@ export default async function CreatorEarningsPage() {
                   <TableRow key={earning.id}>
                     <TableCell>{new Date(earning.date).toLocaleDateString()}</TableCell>
                     <TableCell>{earning.contest}</TableCell>
-                    <TableCell>${(earning.amount / 100).toFixed(2)}</TableCell>
+                    <TableCell>{formatCurrency(earning.amount)}</TableCell>
                     <TableCell>
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          earning.status === "paid" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                        }`}
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${earning.status === "paid" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                          }`}
                       >
                         {earning.status === "paid" ? "Paid" : "Pending"}
                       </span>

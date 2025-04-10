@@ -4,6 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Trophy, Users, BarChart, DollarSign, Plus, Video } from "lucide-react"
+import { formatLocalDateTime } from "@/lib/utils"
+
+// Add this utility function to convert cents to dollars for display
+const formatCurrency = (cents: number): string => {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 export default async function DashboardPage() {
   const supabase = createServerSupabaseClient()
@@ -97,7 +103,7 @@ async function AdvertiserDashboard({ userId }: { userId: string }) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${profile?.total_spent ? (profile.total_spent / 100).toFixed(2) : "0.00"}
+              {formatCurrency(profile?.total_spent || 0)}
             </div>
             <p className="text-xs text-muted-foreground">Total budget</p>
           </CardContent>
@@ -121,9 +127,9 @@ async function AdvertiserDashboard({ userId }: { userId: string }) {
                       </div>
                       <div>
                         <p className="text-sm font-medium">{contest.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Created on {new Date(contest.created_at).toLocaleDateString()}
-                        </p>
+                        <div className="text-xs text-muted-foreground">
+                          Created on {formatLocalDateTime(contest.created_at, { dateStyle: 'medium', timeStyle: 'short' })}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -229,7 +235,7 @@ async function CreatorDashboard({ userId }: { userId: string }) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${profile?.prize_money_earned ? (profile.prize_money_earned / 100).toFixed(2) : "0.00"}
+              {formatCurrency(profile?.prize_money_earned || 0)}
             </div>
             <p className="text-xs text-muted-foreground">From all contests</p>
           </CardContent>
@@ -273,9 +279,9 @@ async function CreatorDashboard({ userId }: { userId: string }) {
                       </div>
                       <div>
                         <p className="text-sm font-medium">{submission.contests?.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Submitted on {new Date(submission.submitted_at).toLocaleDateString()}
-                        </p>
+                        <div className="text-xs text-muted-foreground">
+                          Submitted on {formatLocalDateTime(submission.submitted_at, { dateStyle: 'medium', timeStyle: 'short' })}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">

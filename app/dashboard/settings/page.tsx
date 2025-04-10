@@ -28,7 +28,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!user) return
+      if (!user) {
+        setIsLoading(false)
+        return
+      }
 
       setIsLoading(true)
       setError(null)
@@ -37,7 +40,15 @@ export default function SettingsPage() {
         // Get user data
         const { data: userData, error: userError } = await supabase.from("users").select("*").eq("id", user.id).single()
 
-        if (userError) throw userError
+        if (userError) {
+          console.error("User data fetch error:", userError)
+          throw new Error("Failed to load user data. Please try again.")
+        }
+
+        if (!userData) {
+          setIsLoading(false)
+          throw new Error("No user data found")
+        }
 
         // Get role-specific profile data
         if (userData.role === "advertiser") {
@@ -45,13 +56,16 @@ export default function SettingsPage() {
             .from("advertiser_profiles")
             .select("*")
             .eq("user_id", user.id)
-            .single()
+            .maybeSingle()
 
-          if (advertiserError) throw advertiserError
+          if (advertiserError && !advertiserError.message.includes("No rows found")) {
+            console.error("Advertiser profile fetch error:", advertiserError)
+            throw new Error("Failed to load advertiser profile. Please try again.")
+          }
 
           setProfileData({
             ...userData,
-            ...advertiserData,
+            ...(advertiserData || {}),
             role: "advertiser",
           })
         } else {
@@ -59,17 +73,26 @@ export default function SettingsPage() {
             .from("creator_profiles")
             .select("*")
             .eq("user_id", user.id)
-            .single()
+            .maybeSingle()
 
-          if (creatorError) throw creatorError
+          if (creatorError) {
+            console.error("Creator profile fetch error:", creatorError)
+            // Only throw if it's not a "no rows" error
+            if (!creatorError.message.includes("No rows found") &&
+              !creatorError.code?.includes("PGRST116")) {
+              throw new Error("Failed to load creator profile. Please try again.")
+            }
+          }
 
+          // Even if no creator profile was found, we still proceed with the user data
           setProfileData({
             ...userData,
-            ...creatorData,
+            ...(creatorData || {}),
             role: "creator",
           })
         }
       } catch (err: any) {
+        console.error("Profile fetch error:", err)
         setError(err.message || "Failed to load profile")
       } finally {
         setIsLoading(false)

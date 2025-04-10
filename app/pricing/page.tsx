@@ -16,6 +16,11 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans"
 export default function PricingPage() {
     const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly")
 
+    // Add formatCurrency function for consistent display
+    const formatCurrency = (cents: number): string => {
+        return `$${(cents / 100).toFixed(2)}`;
+    }
+
     const handleBillingCycleChange = (value: string) => {
         setBillingCycle(value as "monthly" | "yearly")
     }
@@ -107,7 +112,7 @@ export default function PricingPage() {
                         <div className="bg-rose-50 border border-rose-100 p-6 rounded-xl mb-8">
                             <div className="flex items-center mb-4">
                                 <Star className="h-6 w-6 text-rose-500 mr-2" />
-                                <h3 className="text-2xl font-bold text-rose-700">$500/month</h3>
+                                <h3 className="text-2xl font-bold text-rose-700">{formatCurrency(50000)}/month</h3>
                             </div>
                             <ul className="space-y-3">
                                 {coreFeatures.map((feature, i) => (
@@ -212,7 +217,7 @@ export default function PricingPage() {
                                 <CardTitle className="text-center">{plan.name}</CardTitle>
                                 <div className="mt-4 text-center">
                                     <span className="text-3xl font-bold">
-                                        ${billingCycle === "monthly" ? plan.price : getDiscountedPrice(plan.price)}
+                                        {formatCurrency(billingCycle === "monthly" ? plan.price : getDiscountedPrice(plan.price))}
                                     </span>
                                     <span className="text-gray-600 ml-1">
                                         /{billingCycle === "monthly" ? "month" : "year"}
@@ -234,7 +239,7 @@ export default function PricingPage() {
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Min. ${plan.features.minContestBudget} per contest</span>
+                                        <span>Min. {formatCurrency(plan.features.minContestBudget)} per contest</span>
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
