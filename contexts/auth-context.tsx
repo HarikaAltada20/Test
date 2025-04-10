@@ -34,12 +34,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getUser = async () => {
       setIsLoading(true)
       try {
+        // First get session
         const { data: { session } } = await supabase.auth.getSession()
-        setUser(session?.user as User || null)
+
+        // Then verify with getUser if session exists
+        if (session) {
+          const { data: { user } } = await supabase.auth.getUser()
+          setUser(user as User || null)
+        }
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
-          (event, session) => {
-            setUser(session?.user as User || null)
+          async (event, session) => {
+            // On auth state change, verify with getUser()
+            if (session) {
+              const { data: { user: verifiedUser } } = await supabase.auth.getUser()
+              setUser(verifiedUser as User || null)
+            } else {
+              setUser(null)
+            }
           }
         )
 

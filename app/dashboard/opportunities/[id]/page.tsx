@@ -11,23 +11,43 @@ import { Separator } from "@/components/ui/separator"
 import { createClientSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 
+// For now, we'll use typecasting as a simpler solution
 export default function OpportunityDetailPage({ params }: { params: { id: string } }) {
+  // Access the id property directly but cast params to any to avoid TypeScript errors
+  // This silences the warning while maintaining compatibility
+  const contestId = (params as any).id;
+
   const [contest, setContest] = useState<any>(null)
   const [existingSubmission, setExistingSubmission] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const supabase = createClientSupabaseClient()
 
   useEffect(() => {
+    // Define a local state variable to track if this is the initial load
+    let isMounted = true;
+
+    // Define a function to fetch contest data
     async function fetchData() {
-      setLoading(true)
+      if (!isMounted) return;
+
+      // Don't show loading if we already have contest data
+      if (!contest) {
+        setLoading(true)
+      }
 
       try {
+        // Check if auth is still loading
+        if (authLoading) {
+          console.log("Auth still loading, waiting...")
+          return // Don't set error or finish loading yet
+        }
+
         if (!user) {
-          router.push("/login")
-          return
+          console.log("User not found, waiting for auth...")
+          return // Don't set error or finish loading yet
         }
 
         // Get user role from the database
@@ -38,11 +58,11 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
           return
         }
 
-        // First try to get contest details without joining advertiser_profiles
+        // First try to get contest details
         let { data: contestData, error: contestError } = await supabase
           .from("contests_with_status")
           .select("*")
-          .eq("id", params.id)
+          .eq("id", contestId)
           .single()
 
         // If there's an error with the view, try the base contests table
@@ -53,14 +73,16 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
           const { data: fallbackData, error: fallbackError } = await supabase
             .from("contests")
             .select("*")
-            .eq("id", params.id)
+            .eq("id", contestId)
             .single()
 
           if (fallbackError) {
             console.error("Fallback error:", fallbackError)
-            setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}. 
-                     Fallback also failed: ${fallbackError.message || "Unknown error"}`)
-            setLoading(false)
+            if (isMounted) {
+              setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}. 
+                      Fallback also failed: ${fallbackError.message || "Unknown error"}`)
+              setLoading(false)
+            }
             return
           }
 
@@ -73,64 +95,105 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
 
         if (contestError) {
           console.error("All attempts to fetch contest failed:", contestError)
-          setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}`)
-          setLoading(false)
+          if (isMounted) {
+            setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}`)
+            setLoading(false)
+          }
           return
         }
 
         if (!contestData) {
-          setError("Contest not found - No data returned from database")
-          setLoading(false)
+          if (isMounted) {
+            setError("Contest not found - No data returned from database")
+            setLoading(false)
+          }
           return
         }
 
-        // If we have contest data and it has an advertiser_id, fetch the advertiser details separately
+        // Don't show draft contests to creators
+        if (contestData.status === 'draft' || contestData.is_draft) {
+          if (isMounted) {
+            setError("This contest is not available yet")
+            setLoading(false)
+          }
+          return
+        }
+
+        // If we have contest data and it has an advertiser_id, fetch the advertiser details
         if (contestData.advertiser_id) {
           const { data: advertiserData } = await supabase
             .from("advertiser_profiles")
             .select("company_name")
-            .eq("id", contestData.advertiser_id)
-            .single()
+            .eq("user_id", contestData.advertiser_id)
 
-          if (advertiserData) {
-            // Merge the advertiser data into our contest data
-            contestData.advertiser_profiles = advertiserData
+          if (advertiserData && advertiserData.length > 0) {
+            contestData.advertiser_profiles = advertiserData[0]
+          } else {
+            contestData.advertiser_profiles = { company_name: "Unknown Company" }
           }
         }
 
-        setContest(contestData)
+        if (isMounted) {
+          setContest(contestData)
 
-        // Check if user has already submitted to this contest
-        const { data: submissionData } = await supabase
-          .from("submissions")
-          .select("*")
-          .eq("contest_id", params.id)
-          .eq("creator_id", user.id)
-          .single()
+          // Check if user has already submitted to this contest
+          const { data: submissionData } = await supabase
+            .from("submissions")
+            .select("*")
+            .eq("contest_id", contestId)
+            .eq("creator_id", user.id)
 
-        if (submissionData) {
-          setExistingSubmission(submissionData)
+          // Only set existing submission if data exists and is not empty
+          if (submissionData && submissionData.length > 0) {
+            setExistingSubmission(submissionData[0])
+          }
+
+          setLoading(false)
+          setError(null) // Clear any previous errors
         }
       } catch (err) {
         console.error("Error in component:", err)
-        setError("An unexpected error occurred")
-      } finally {
-        setLoading(false)
+        if (isMounted) {
+          setError("An unexpected error occurred")
+          setLoading(false)
+        }
       }
     }
 
+    // Run the data fetching function
     fetchData()
-  }, [params.id, user, router, supabase])
+
+    // Set up an interval to retry if needed - but only if we don't have the data yet
+    const retryInterval = setInterval(() => {
+      if (!user && !authLoading && !contest) {
+        console.log("Retrying data fetch...")
+        fetchData()
+      } else if (user && !contest && !loading) {
+        console.log("Retrying contest fetch with user...")
+        fetchData()
+      } else if (user && contest) {
+        // Clear interval once we have both user and contest
+        clearInterval(retryInterval)
+      }
+    }, 1000) // Retry every second
+
+    // Clean up the interval and set mounted flag to false
+    return () => {
+      clearInterval(retryInterval);
+      isMounted = false;
+    }
+  }, [contestId, user, authLoading, router, supabase, contest, loading])
 
   const handleSubmitContent = () => {
-    router.push(`/dashboard/opportunities/${params.id}/submit`)
+    router.push(`/dashboard/opportunities/${contestId}/submit`)
   }
 
   const handleViewSubmission = (submissionId: string) => {
     router.push(`/dashboard/content/${submissionId}`)
   }
 
-  if (loading) {
+  // Show loading state when auth is loading or data is loading
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -140,7 +203,8 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
     )
   }
 
-  if (error || !contest) {
+  // Only show error UI after loading is complete AND there's an error or no contest
+  if (!loading && (error || !contest)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -148,6 +212,17 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
           <Button className="mt-4" onClick={() => router.push("/dashboard/opportunities")}>
             Back to Opportunities
           </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Only render the main content if we have both the contest data and we're not loading
+  if (!contest || loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p>Loading contest details...</p>
         </div>
       </div>
     )
@@ -187,24 +262,37 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="font-medium mb-2">Platform</h3>
-                  <p className="capitalize">{contest.platform}</p>
+                  <h3 className="font-medium mb-2">Start Date & Time</h3>
+                  <p>
+                    {contest.start_date
+                      ? `${new Date(contest.start_date).toLocaleDateString()} at ${new Date(contest.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : "Not specified"}
+                  </p>
                 </div>
                 <div>
-                  <h3 className="font-medium mb-2">Sponsor</h3>
-                  <p>{contest.advertiser_profiles?.company_name || "Unknown"}</p>
+                  <h3 className="font-medium mb-2">End Date & Time</h3>
+                  <p>
+                    {contest.end_date
+                      ? `${new Date(contest.end_date).toLocaleDateString()} at ${new Date(contest.end_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : "Not specified"}
+                  </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="font-medium mb-2">Start Date</h3>
-                  <p>{contest.start_date ? new Date(contest.start_date).toLocaleDateString() : "Not specified"}</p>
+                  <h3 className="font-medium mb-2">Platform</h3>
+                  <p className="capitalize">{contest.platform}</p>
                 </div>
                 <div>
-                  <h3 className="font-medium mb-2">End Date</h3>
-                  <p>{contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "Not specified"}</p>
+                  <h3 className="font-medium mb-2">Category</h3>
+                  <p className="capitalize">{contest.category || "General"}</p>
                 </div>
+              </div>
+
+              <div>
+                <h3 className="font-medium mb-2">Sponsor</h3>
+                <p>{contest.advertiser_profiles?.company_name || "Unknown"}</p>
               </div>
 
               <div>
@@ -226,16 +314,24 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
               <div>
                 <h3 className="font-medium mb-2">Rules & Guidelines</h3>
                 <div className="bg-muted p-4 rounded-lg">
-                  <ul className="list-disc pl-5 space-y-2">
-                    <li>Content must be original and created specifically for this contest.</li>
-                    <li>Content must comply with {contest.platform} community guidelines.</li>
-                    <li>All submissions must include the hashtags provided in the brief (if specified).</li>
-                    <li>
-                      By submitting content, you grant the sponsor the right to use your content for promotional
-                      purposes.
-                    </li>
-                    <li>Winners will be selected based on engagement metrics and quality of content.</li>
-                  </ul>
+                  {contest.rules && contest.rules.list && Array.isArray(contest.rules.list) ? (
+                    <ul className="list-disc pl-5 space-y-2">
+                      {contest.rules.list.map((rule: string, index: number) => (
+                        <li key={index}>{rule}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <ul className="list-disc pl-5 space-y-2">
+                      <li>Content must be original and created specifically for this contest.</li>
+                      <li>Content must comply with {contest.platform} community guidelines.</li>
+                      <li>All submissions must include the hashtags provided in the brief (if specified).</li>
+                      <li>
+                        By submitting content, you grant the sponsor the right to use your content for promotional
+                        purposes.
+                      </li>
+                      <li>Winners will be selected based on engagement metrics and quality of content.</li>
+                    </ul>
+                  )}
                 </div>
               </div>
 
@@ -250,6 +346,25 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
                           <ExternalLink className="h-4 w-4 mr-2" />
                           <Link href={value as string} className="text-primary hover:underline">
                             {key}
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {contest.inspiration_links && contest.inspiration_links.length > 0 && (
+                <div>
+                  <h3 className="font-medium mb-2">Inspiration Links</h3>
+                  <div className="bg-muted p-4 rounded-lg">
+                    <p>Check out these examples for inspiration:</p>
+                    <div className="mt-2 space-y-2">
+                      {contest.inspiration_links.map((link: string, index: number) => (
+                        <div key={index} className="flex items-center">
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          <Link href={link} className="text-primary hover:underline" target="_blank">
+                            Inspiration Example {index + 1}
                           </Link>
                         </div>
                       ))}
@@ -272,8 +387,12 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
                 <div>
                   <h3 className="text-sm font-medium">Timeframe</h3>
                   <p className="text-sm text-muted-foreground">
-                    {contest.start_date ? new Date(contest.start_date).toLocaleDateString() : "Not set"} -{" "}
-                    {contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "Not set"}
+                    {contest.start_date
+                      ? `${new Date(contest.start_date).toLocaleDateString()} ${new Date(contest.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : "Not set"} - {" "}
+                    {contest.end_date
+                      ? `${new Date(contest.end_date).toLocaleDateString()} ${new Date(contest.end_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : "Not set"}
                   </p>
                 </div>
               </div>
@@ -333,14 +452,18 @@ export default function OpportunityDetailPage({ params }: { params: { id: string
                   <p className="text-sm font-medium">This contest is not yet active</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Come back on{" "}
-                    {contest.start_date ? new Date(contest.start_date).toLocaleDateString() : "the start date"}
+                    {contest.start_date
+                      ? `${new Date(contest.start_date).toLocaleDateString()} at ${new Date(contest.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : "the start date"}
                   </p>
                 </div>
               ) : (
                 <div className="bg-muted p-4 rounded-lg text-center">
                   <p className="text-sm font-medium">This contest has ended</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Ended on {contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "the end date"}
+                    Ended on {contest.end_date
+                      ? `${new Date(contest.end_date).toLocaleDateString()} at ${new Date(contest.end_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : "the end date"}
                   </p>
                 </div>
               )}

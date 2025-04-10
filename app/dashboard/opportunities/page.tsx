@@ -38,6 +38,8 @@ export default function OpportunitiesPage() {
       const { data: contests } = await supabase
         .from("contests_with_status")
         .select("*")
+        .not('status', 'eq', 'draft')
+        .in('status', ['live', 'upcoming', 'completed'])
         .order("created_at", { ascending: false })
 
       setAvailableContests(contests || [])

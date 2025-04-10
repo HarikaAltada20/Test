@@ -67,7 +67,7 @@ export default function EditContestPage() {
 
             try {
                 const { data, error } = await supabase
-                    .from("contests_with_status")  // Using contests_with_status view to get status
+                    .from("contests")
                     .select("*")
                     .eq("id", contestId)
                     .eq("advertiser_id", user.id)
@@ -76,8 +76,18 @@ export default function EditContestPage() {
                 if (error) throw error
 
                 if (data) {
+                    // Check if the contest is live or ended based on dates
+                    const now = new Date()
+                    const startDate = data.start_date ? new Date(data.start_date) : null
+                    const endDate = data.end_date ? new Date(data.end_date) : null
+
+                    // Contest is "live" if start date is in the past and end date is in the future
+                    const isLive = startDate && startDate <= now && (!endDate || endDate > now)
+                    // Contest is "ended" if end date is in the past
+                    const isEnded = endDate && endDate <= now
+
                     // Prevent editing if contest is already live or ended
-                    if (data.status === "live" || data.status === "ended") {
+                    if (isLive || isEnded) {
                         setError("This contest is already live or has ended and cannot be edited.")
                         setIsLoading(false)
                         return
@@ -331,7 +341,7 @@ export default function EditContestPage() {
     if (!contest) {
         return (
             <div className="flex flex-col items-center justify-center h-full">
-                <p className="text-red-500 mb-4">Contest not found or you don't have permission to edit it.</p>
+                <p className="text-red-500 mb-4">Contest is live so you can't edit it now</p>
                 <Button asChild>
                     <Link href="/dashboard/contests">Back to Contests</Link>
                 </Button>

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function SettingsPage() {
   const [profileData, setProfileData] = useState<any>(null)
+  const [youtubeAccount, setYoutubeAccount] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const { user } = useAuth()
   const supabase = createClientSupabaseClient()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -76,6 +78,51 @@ export default function SettingsPage() {
 
     fetchProfile()
   }, [user, supabase])
+
+  useEffect(() => {
+    // Check for YouTube connection status from URL parameters
+    const youtubeConnected = searchParams.get('youtube_connected')
+    const youtubeError = searchParams.get('error')
+
+    if (youtubeConnected === 'true') {
+      setSuccess('YouTube account connected successfully!')
+      // Remove the parameter from URL to prevent showing the message on refresh
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('youtube_connected')
+      window.history.replaceState({}, '', newUrl.toString())
+    } else if (youtubeError) {
+      setError('Failed to connect YouTube account. Please try again.')
+      // Remove the parameter from URL
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('error')
+      window.history.replaceState({}, '', newUrl.toString())
+    }
+  }, [searchParams])
+
+  useEffect(() => {
+    // Fetch YouTube account information if user is a creator
+    const fetchYouTubeAccount = async () => {
+      if (!user || profileData?.role !== 'creator') return
+
+      try {
+        const { data, error } = await supabase
+          .from('creator_youtube_accounts')
+          .select('*')
+          .eq('creator_id', user.id)
+          .single()
+
+        if (!error) {
+          setYoutubeAccount(data)
+        }
+      } catch (err) {
+        console.error('Error fetching YouTube account:', err)
+      }
+    }
+
+    if (profileData) {
+      fetchYouTubeAccount()
+    }
+  }, [user, profileData, supabase])
 
   const handleUserUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -137,6 +184,24 @@ export default function SettingsPage() {
     }))
   }
 
+  const handleDisconnectYouTube = async () => {
+    if (!user) return
+
+    try {
+      const { error } = await supabase
+        .from('creator_youtube_accounts')
+        .delete()
+        .eq('creator_id', user.id)
+
+      if (error) throw error
+
+      setYoutubeAccount(null)
+      setSuccess('YouTube account disconnected successfully')
+    } catch (err: any) {
+      setError(err.message || 'Failed to disconnect YouTube account')
+    }
+  }
+
   if (isLoading || !profileData) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -154,6 +219,9 @@ export default function SettingsPage() {
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          {profileData?.role === 'creator' && (
+            <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="profile">
@@ -315,6 +383,59 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {profileData?.role === 'creator' && (
+          <TabsContent value="integrations">
+            <Card>
+              <CardHeader>
+                <CardTitle>YouTube Integration</CardTitle>
+                <CardDescription>
+                  Connect your YouTube account to submit content and track metrics automatically.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                {success && (
+                  <Alert className="bg-green-50 text-green-800">
+                    <AlertDescription>{success}</AlertDescription>
+                  </Alert>
+                )}
+
+                {youtubeAccount ? (
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="font-medium mb-2">Connected YouTube Channel</h3>
+                      <p className="text-sm mb-1"><strong>Channel:</strong> {youtubeAccount.channel_title}</p>
+                      <p className="text-sm mb-1"><strong>Channel ID:</strong> {youtubeAccount.channel_id}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Connected on {new Date(youtubeAccount.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button variant="destructive" onClick={handleDisconnectYouTube}>
+                        Disconnect YouTube Account
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="mb-4">
+                      Connect your YouTube account to automatically verify video ownership and track metrics.
+                    </p>
+                    <Button asChild>
+                      <a href="/api/youtube/auth">Connect YouTube Account</a>
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

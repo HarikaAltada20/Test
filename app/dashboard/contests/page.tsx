@@ -33,15 +33,15 @@ export default async function ContestsPage() {
     .order("created_at", { ascending: false })
 
   // Separate published and draft contests
-  const publishedContests = contests.filter(contest => !contest.is_draft)
-  const draftContests = contests.filter(contest => contest.is_draft)
+  const publishedContests = contests?.filter(contest => !contest.is_draft) || []
+  const draftContests = contests?.filter(contest => contest.is_draft) || []
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">My Contests</h1>
         <Button className="bg-rose-600 hover:bg-rose-700" asChild>
-          <Link href="/dashboard/contests/create">
+          <Link href="/dashboard/contests/create?new=true">
             <Plus className="mr-2 h-4 w-4" /> Create Contest
           </Link>
         </Button>
@@ -129,7 +129,7 @@ export default async function ContestsPage() {
                       <div className="flex items-center gap-2">
                         <Badge className="bg-amber-500">Draft</Badge>
                         <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/contests/create`}>Continue</Link>
+                          <Link href={`/dashboard/contests/create?draft=${contest.id}`}>Continue</Link>
                         </Button>
                       </div>
                     </div>

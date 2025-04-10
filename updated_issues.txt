@@ -1,0 +1,10 @@
+So after you made changes I have reviewed the application again, and I find out these are the things still need to be improved :-
+
+In assets upload part inspite of image if I upload any other thing, either it is a video document or any other fileIt is not showing in preview in ui. Image is shown, but not any other file shown there.So, please fix it .
+
+When we save as a draft something all the values must be stored as draft and when we continue that draft all the values must be pre-filled based on what was stored in draft 
+
+Also check the save draft working on each step and Contest creation button on final step as I see that is not working properly ...
+
+
+Work on these fixes 

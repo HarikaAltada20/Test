@@ -7,8 +7,13 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar, ExternalLink, Trophy, Users } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
+import React from "react"
 
 export default async function ContestDetailPage({ params }: { params: { id: string } }) {
+  // Use the params.id correctly with Next.js async pattern
+  // In Next.js 14+ we can directly use it in server components
+  const contestId = params.id;
+
   const supabase = createServerSupabaseClient()
 
   const {
@@ -27,7 +32,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
   }
 
   // Get contest details
-  const { data: contest } = await supabase.from("contests_with_status").select("*").eq("id", params.id).single()
+  const { data: contest } = await supabase.from("contests_with_status").select("*").eq("id", contestId).single()
 
   if (!contest) {
     redirect("/dashboard/contests")
@@ -37,7 +42,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
   const { data: submissions } = await supabase
     .from("submissions")
     .select("*, creator_profiles(username)")
-    .eq("contest_id", params.id)
+    .eq("contest_id", contestId)
     .order("current_views", { ascending: false })
 
   return (
@@ -179,7 +184,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                                   className="bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700"
                                   asChild
                                 >
-                                  <Link href={`/dashboard/contests/${params.id}/approve/${submission.id}`}>
+                                  <Link href={`/dashboard/contests/${contestId}/approve/${submission.id}`}>
                                     Approve
                                   </Link>
                                 </Button>
@@ -228,9 +233,9 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                       <p className="text-2xl font-bold">
                         {contest.start_date && contest.end_date
                           ? `${Math.ceil(
-                              (new Date(contest.end_date).getTime() - new Date(contest.start_date).getTime()) /
-                                (1000 * 60 * 60 * 24),
-                            )} days`
+                            (new Date(contest.end_date).getTime() - new Date(contest.start_date).getTime()) /
+                            (1000 * 60 * 60 * 24),
+                          )} days`
                           : "N/A"}
                       </p>
                     </div>
@@ -297,10 +302,10 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                 <h3 className="text-sm font-medium mb-2">Quick Actions</h3>
                 <div className="space-y-2">
                   <Button className="w-full" variant="outline" asChild>
-                    <Link href={`/dashboard/contests/${params.id}/edit`}>Edit Contest</Link>
+                    <Link href={`/dashboard/contests/${contestId}/edit`}>Edit Contest</Link>
                   </Button>
                   <Button className="w-full" variant="outline" asChild>
-                    <Link href={`/dashboard/contests/${params.id}/share`}>Share Contest</Link>
+                    <Link href={`/dashboard/contests/${contestId}/share`}>Share Contest</Link>
                   </Button>
                 </div>
               </div>

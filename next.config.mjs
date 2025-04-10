@@ -27,6 +27,27 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  webpack: (config) => {
+    // The 'net', 'http', and other Node.js modules are needed by googleapis
+    // but are not available in the browser, so we need to provide empty equivalents
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      net: false,
+      http: false,
+      https: false,
+      url: false,
+      stream: false,
+      zlib: false,
+      fs: false,
+      path: false,
+      os: false,
+      assert: false,
+      tls: false,
+      crypto: false
+    };
+
+    return config;
+  },
 }
 
 if (userConfig) {
