@@ -4,16 +4,11 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, DollarSign, Filter, Trophy } from "lucide-react"
 import { createClientSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
-
-// Add the formatCurrency utility function at the top of the file
-const formatCurrency = (cents: number): string => {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+import { formatCurrency } from "@/lib/currency-utils"
 
 export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])

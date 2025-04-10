@@ -410,7 +410,7 @@ You must show the Go Viral App Store listing in your video`)
       // Create prize array - store prize amounts in cents
       const prizesArray = Array.from({ length: winnerCount }, (_, i) => ({
         position: i + 1,
-        amount: dollarsToCents(winnerAmounts[i] || 0)
+        amount: (winnerAmounts[i] || 0)
       }))
 
       let thumbnailUrl = thumbnailPreview && !thumbnail ? thumbnailPreview : ""
