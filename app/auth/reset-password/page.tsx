@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CheckCircle, Loader2, Eye, EyeOff } from "lucide-react"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 
@@ -20,7 +20,7 @@ export default function ResetPasswordPage() {
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [isSuccess, setIsSuccess] = useState(false)
-    const supabase = createClientSupabaseClient()
+    const supabase = createSupabaseClient()
     const router = useRouter()
     const { toast } = useToast()
 

@@ -1,5 +1,16 @@
 export const subscriptionPlans = [
   {
+    id: 'free',
+    name: 'Free',
+    price: 10000,
+    features: {
+      maxActiveContests: 1,
+      minContestBudget: 10000,
+      maxWinnersPerContest: 10,
+      commisionPercentage: 40,
+    },
+  },
+  {
     id: 'bronze',
     name: 'Bronze',
     price: 10000,
@@ -7,10 +18,7 @@ export const subscriptionPlans = [
       maxActiveContests: 5,
       minContestBudget: 10000,
       maxWinnersPerContest: 10,
-      accessToCreators: true,
-      contestBranding: 'Basic Templates',
-      analytics: true,
-      support: 'Standard',
+      commisionPercentage: 20,
     },
   },
   {
@@ -21,10 +29,7 @@ export const subscriptionPlans = [
       maxActiveContests: 10,
       minContestBudget: 7500,
       maxWinnersPerContest: 20,
-      accessToCreators: true,
-      contestBranding: 'Improved Templates',
-      analytics: true,
-      support: 'Standard',
+      commisionPercentage: 15,
     },
   },
   {
@@ -35,10 +40,8 @@ export const subscriptionPlans = [
       maxActiveContests: 20,
       minContestBudget: 5000,
       maxWinnersPerContest: 30,
-      accessToCreators: true,
-      contestBranding: 'Advanced Styling',
-      analytics: true,
-      support: 'Standard',
+      commisionPercentage: 12,
+
     },
   },
   {
@@ -49,10 +52,7 @@ export const subscriptionPlans = [
       maxActiveContests: 30,
       minContestBudget: 5000,
       maxWinnersPerContest: 50,
-      accessToCreators: true,
-      contestBranding: 'Full Brand Styling',
-      analytics: true,
-      support: 'Standard',
+      commisionPercentage: 10,
     },
   },
   {
@@ -60,13 +60,10 @@ export const subscriptionPlans = [
     name: 'Diamond',
     price: 50000,
     features: {
-      maxActiveContests: Infinity,
+      maxActiveContests: 100,
       minContestBudget: 5000,
-      maxWinnersPerContest: Infinity,
-      accessToCreators: true,
-      contestBranding: 'Custom Designs by Our Team',
-      analytics: true,
-      support: 'Standard',
+      maxWinnersPerContest: 100,
+      commisionPercentage: 10,
     },
   },
 ];

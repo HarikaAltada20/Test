@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft } from "lucide-react"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -64,7 +64,7 @@ export default function SubmitContentPage({ params }: { params: { id: string } }
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const { user } = useAuth()
-  const supabase = createClientSupabaseClient()
+  const supabase = createSupabaseClient()
 
   // Check if user has connected YouTube account
   useEffect(() => {

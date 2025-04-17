@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -24,7 +24,7 @@ function SettingsContent() {
   const [isSaving, setIsSaving] = useState(false)
   const router = useRouter()
   const { user } = useAuth()
-  const supabase = createClientSupabaseClient()
+  const supabase = createSupabaseClient()
   const searchParams = useSearchParams()
 
   useEffect(() => {

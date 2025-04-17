@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
@@ -11,7 +11,7 @@ const formatCurrency = (cents: number): string => {
 }
 
 export default async function AnalyticsPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   const {
     data: { session },
@@ -158,10 +158,10 @@ export default async function AnalyticsPage() {
                           <h3 className="font-medium">{contest.title}</h3>
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${contest.status === "live"
-                                ? "bg-green-100 text-green-800"
-                                : contest.status === "upcoming"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-gray-100 text-gray-800"
+                              ? "bg-green-100 text-green-800"
+                              : contest.status === "upcoming"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-gray-100 text-gray-800"
                               }`}
                           >
                             {contest.status}

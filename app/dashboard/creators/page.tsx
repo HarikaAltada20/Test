@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Filter, Users } from "lucide-react"
 import Link from "next/link"
 
 export default async function CreatorsPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   const {
     data: { session },
@@ -74,8 +74,8 @@ export default async function CreatorsPage() {
                     {(!creator.linked_platforms ||
                       typeof creator.linked_platforms !== "object" ||
                       Object.keys(creator.linked_platforms).length === 0) && (
-                      <Badge variant="outline">No platforms linked</Badge>
-                    )}
+                        <Badge variant="outline">No platforms linked</Badge>
+                      )}
                   </div>
 
                   <div className="mt-auto flex justify-between items-center">

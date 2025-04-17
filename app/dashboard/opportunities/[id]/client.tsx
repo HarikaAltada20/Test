@@ -8,7 +8,7 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { formatLocalDateTime } from "@/lib/utils"
 
@@ -25,7 +25,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
     const { user, isLoading: authLoading } = useAuth()
-    const supabase = createClientSupabaseClient()
+    const supabase = createSupabaseClient()
 
     useEffect(() => {
         // Define a local state variable to track if this is the initial load

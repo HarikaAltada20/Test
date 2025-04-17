@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { type User as SupabaseUser } from "@supabase/supabase-js"
 
 interface User extends SupabaseUser {
@@ -28,7 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
-  const supabase = createClientSupabaseClient()
+  const supabase = createSupabaseClient()
 
   useEffect(() => {
     const getUser = async () => {

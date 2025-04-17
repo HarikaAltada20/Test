@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ const formatCurrency = (cents: number): string => {
 }
 
 export default async function DashboardPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   const {
     data: { session },
@@ -35,7 +35,7 @@ export default async function DashboardPage() {
 }
 
 async function AdvertiserDashboard({ userId }: { userId: string }) {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   // Get advertiser profile
   const { data: profile } = await supabase.from("advertiser_profiles").select("*").eq("user_id", userId).single()
@@ -183,7 +183,7 @@ async function AdvertiserDashboard({ userId }: { userId: string }) {
 }
 
 async function CreatorDashboard({ userId }: { userId: string }) {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   // Get creator profile
   const { data: profile } = await supabase.from("creator_profiles").select("*").eq("user_id", userId).single()
