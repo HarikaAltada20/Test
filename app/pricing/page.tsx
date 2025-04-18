@@ -224,12 +224,12 @@ export default function PricingPage() {
                                     </span>
                                 </div>
                                 <CardDescription className="text-center mt-2">
-                                    {plan.id === 'free' && "Try it out for free"}
-                                    {plan.id === 'bronze' && "Perfect for getting started"}
-                                    {plan.id === 'silver' && "Best for growing brands"}
-                                    {plan.id === 'gold' && "For established businesses"}
-                                    {plan.id === 'platinum' && "For scaling content strategy"}
-                                    {plan.id === 'diamond' && "Enterprise-grade solution"}
+                                    {plan.name === 'FREE' && "Try it out for free"}
+                                    {plan.name === 'BRONZE' && "Perfect for getting started"}
+                                    {plan.name === 'SILVER' && "Best for growing brands"}
+                                    {plan.name === 'GOLD' && "For established businesses"}
+                                    {plan.name === 'PLATINUM' && "For scaling content strategy"}
+                                    {plan.name === 'DIAMOND' && "Enterprise-grade solution"}
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="flex-grow">
@@ -269,7 +269,7 @@ export default function PricingPage() {
                                     asChild
                                 >
                                     <Link href={`/signup?plan=${plan.id}`}>
-                                        {plan.id === 'diamond' ? 'Start Free Trial' : 'Get Started'}
+                                        {plan.id === 'DIAMOND' ? 'Start Free Trial' : 'Get Started'}
                                     </Link>
                                 </Button>
                             </CardFooter>

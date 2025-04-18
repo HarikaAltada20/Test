@@ -72,3 +72,12 @@ export function toUTCISOString(dateString: string, timeString: string): string |
     return null;
   }
 }
+
+export function formatMoney(cents: number, currencyCode: string = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(cents / 100);
+}

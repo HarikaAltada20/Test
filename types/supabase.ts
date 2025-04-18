@@ -8,92 +8,198 @@ export interface Database {
           id: string
           email: string
           full_name: string | null
-          profile_pic: string | null
-          role: "advertiser" | "creator"
-          wallet_balance: number
-          currency_code: string
+          profile_picture_url: string | null
+          user_type: "advertiser" | "creator"
+          referral_code: string | null
+          referred_by: string | null
+          coins: number
+          advertisers_referred: number
+          creators_referred: number
+          username: string | null
+          is_active: boolean
+          ip_address: string | null
+          email_confirmed_at: string | null
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
           email: string
           full_name?: string | null
-          profile_pic?: string | null
-          role: "advertiser" | "creator"
-          wallet_balance?: number
-          currency_code?: string
+          profile_picture_url?: string | null
+          user_type: "advertiser" | "creator"
+          referral_code?: string | null
+          referred_by?: string | null
+          coins?: number
+          advertisers_referred?: number
+          creators_referred?: number
+          username?: string | null
+          is_active?: boolean
+          ip_address?: string | null
+          email_confirmed_at?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
           email?: string
           full_name?: string | null
-          profile_pic?: string | null
-          role?: "advertiser" | "creator"
-          wallet_balance?: number
-          currency_code?: string
+          profile_picture_url?: string | null
+          user_type?: "advertiser" | "creator"
+          referral_code?: string | null
+          referred_by?: string | null
+          coins?: number
+          advertisers_referred?: number
+          creators_referred?: number
+          username?: string | null
+          is_active?: boolean
+          ip_address?: string | null
+          email_confirmed_at?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       advertiser_profiles: {
         Row: {
-          user_id: string
-          company_name: string
-          logo_url: string | null
-          website: string | null
-          social_media_handles: Json
-          total_contests_organized: number
-          total_spent: number
-          subscription_tier: string | null
+          id: string
+          company_name: string | null
+          website_url: string | null
+          total_money_spent: number
+          total_contests_run: number
+          available_deposit_balance: number
+          withdrawable_balance: number
+          subscription_plan: string
         }
         Insert: {
-          user_id: string
-          company_name: string
-          logo_url?: string | null
-          website?: string | null
-          social_media_handles?: Json
-          total_contests_organized?: number
-          total_spent?: number
-          subscription_tier?: string | null
+          id: string
+          company_name?: string | null
+          website_url?: string | null
+          total_money_spent?: number
+          total_contests_run?: number
+          available_deposit_balance?: number
+          withdrawable_balance?: number
+          subscription_plan?: string
         }
         Update: {
-          user_id?: string
-          company_name?: string
-          logo_url?: string | null
-          website?: string | null
-          social_media_handles?: Json
-          total_contests_organized?: number
-          total_spent?: number
-          subscription_tier?: string | null
+          id?: string
+          company_name?: string | null
+          website_url?: string | null
+          total_money_spent?: number
+          total_contests_run?: number
+          available_deposit_balance?: number
+          withdrawable_balance?: number
+          subscription_plan?: string
         }
       }
       creator_profiles: {
         Row: {
-          user_id: string
-          username: string
+          id: string
           bio: string | null
-          linked_platforms: Json
-          contests_won: number
-          contests_participated: number
-          prize_money_earned: number
+          youtube_account: Json | null
+          instagram_account: Json | null
+          total_contests_participated: number
+          total_contests_won: number
+          total_money_won: number
+          withdrawable_balance: number
+          total_views: number
         }
         Insert: {
-          user_id: string
-          username: string
+          id: string
           bio?: string | null
-          linked_platforms?: Json
-          contests_won?: number
-          contests_participated?: number
-          prize_money_earned?: number
+          youtube_account?: Json | null
+          instagram_account?: Json | null
+          total_contests_participated?: number
+          total_contests_won?: number
+          total_money_won?: number
+          withdrawable_balance?: number
+          total_views?: number
         }
         Update: {
-          user_id?: string
-          username?: string
+          id?: string
           bio?: string | null
-          linked_platforms?: Json
-          contests_won?: number
-          contests_participated?: number
-          prize_money_earned?: number
+          youtube_account?: Json | null
+          instagram_account?: Json | null
+          total_contests_participated?: number
+          total_contests_won?: number
+          total_money_won?: number
+          withdrawable_balance?: number
+          total_views?: number
+        }
+      }
+      subscription_plans: {
+        Row: {
+          id: string
+          name: string
+          price: number
+          json_features: Json
+          stripe_price_id: string | null
+          razorpay_plan_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          price: number
+          json_features: Json
+          stripe_price_id?: string | null
+          razorpay_plan_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          price?: number
+          json_features?: Json
+          stripe_price_id?: string | null
+          razorpay_plan_id?: string | null
+          created_at?: string
+        }
+      }
+      subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          plan_id: string
+          gateway: "stripe" | "razorpay"
+          external_subscription_id: string | null
+          status: string
+          start_date: string
+          expiry_date: string
+          renews_on: string | null
+          cancel_at_period_end: boolean
+          trial_end: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          plan_id: string
+          gateway: "stripe" | "razorpay"
+          external_subscription_id?: string | null
+          status: string
+          start_date: string
+          expiry_date: string
+          renews_on?: string | null
+          cancel_at_period_end?: boolean
+          trial_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          plan_id?: string
+          gateway?: "stripe" | "razorpay"
+          external_subscription_id?: string | null
+          status?: string
+          start_date?: string
+          expiry_date?: string
+          renews_on?: string | null
+          cancel_at_period_end?: boolean
+          trial_end?: string | null
+          created_at?: string
+          updated_at?: string
         }
       }
       contests: {
@@ -101,7 +207,7 @@ export interface Database {
           id: string
           advertiser_id: string
           title: string
-          platform: "youtube" | "instagram"
+          platform: string
           start_date: string | null
           end_date: string | null
           thumbnail_url: string | null
@@ -109,39 +215,19 @@ export interface Database {
           rules: Json
           prizes: Json
           resources: Json
-          created_at: string
-          is_draft: boolean | null
           category: string | null
-          inspiration_links: Json | null
-          price_tier: string | null
-          winner_count: number | null
-          total_prize: number | null
+          inspiration_links: string | null
+          total_prize: number
+          winner_count: number
+          created_at: string
+          is_draft: boolean
+          subscription_plan_of_user: string | null
         }
         Insert: {
           id?: string
           advertiser_id: string
           title: string
-          platform: "youtube" | "instagram"
-          start_date?: string | null
-          end_date?: string | null
-          thumbnail_url?: string | null
-          brief?: string | null
-          rules?: Json
-          prizes: Json
-          resources?: Json
-          created_at?: string
-          is_draft?: boolean | null
-          category?: string | null
-          inspiration_links?: Json | null
-          price_tier?: string | null
-          winner_count?: number | null
-          total_prize?: number | null
-        }
-        Update: {
-          id?: string
-          advertiser_id?: string
-          title?: string
-          platform?: "youtube" | "instagram"
+          platform: string
           start_date?: string | null
           end_date?: string | null
           thumbnail_url?: string | null
@@ -149,13 +235,33 @@ export interface Database {
           rules?: Json
           prizes?: Json
           resources?: Json
-          created_at?: string
-          is_draft?: boolean | null
           category?: string | null
-          inspiration_links?: Json | null
-          price_tier?: string | null
-          winner_count?: number | null
-          total_prize?: number | null
+          inspiration_links?: string | null
+          total_prize?: number
+          winner_count?: number
+          created_at?: string
+          is_draft?: boolean
+          subscription_plan_of_user?: string | null
+        }
+        Update: {
+          id?: string
+          advertiser_id?: string
+          title?: string
+          platform?: string
+          start_date?: string | null
+          end_date?: string | null
+          thumbnail_url?: string | null
+          brief?: string | null
+          rules?: Json
+          prizes?: Json
+          resources?: Json
+          category?: string | null
+          inspiration_links?: string | null
+          total_prize?: number
+          winner_count?: number
+          created_at?: string
+          is_draft?: boolean
+          subscription_plan_of_user?: string | null
         }
       }
       submissions: {
@@ -163,28 +269,95 @@ export interface Database {
           id: string
           contest_id: string
           creator_id: string
-          content_link: string
-          current_views: number
-          status: "pending" | "approved" | "rejected"
-          submitted_at: string
+          video_url: string
+          views: number
+          description: string | null
+          other_stats: Json | null
+          created_at: string
+          status: string
+          earnings: number
         }
         Insert: {
           id?: string
           contest_id: string
           creator_id: string
-          content_link: string
-          current_views?: number
-          status?: "pending" | "approved" | "rejected"
-          submitted_at?: string
+          video_url: string
+          views?: number
+          description?: string | null
+          other_stats?: Json | null
+          created_at?: string
+          status?: string
+          earnings?: number
         }
         Update: {
           id?: string
           contest_id?: string
           creator_id?: string
-          content_link?: string
-          current_views?: number
-          status?: "pending" | "approved" | "rejected"
-          submitted_at?: string
+          video_url?: string
+          views?: number
+          description?: string | null
+          other_stats?: Json | null
+          created_at?: string
+          status?: string
+          earnings?: number
+        }
+      }
+      money_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          type: "withdrawal" | "reward" | "deposit"
+          status: "pending" | "success" | "failed"
+          amount: number
+          description: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: "withdrawal" | "reward" | "deposit"
+          status: "pending" | "success" | "failed"
+          amount: number
+          description: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: "withdrawal" | "reward" | "deposit"
+          status?: "pending" | "success" | "failed"
+          amount?: number
+          description?: string
+          created_at?: string
+        }
+      }
+      coin_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          type: "referral_bonus" | "spent" | "earned"
+          status: "pending" | "success" | "failed"
+          coins: number
+          description: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: "referral_bonus" | "spent" | "earned"
+          status: "pending" | "success" | "failed"
+          coins: number
+          description: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: "referral_bonus" | "spent" | "earned"
+          status?: "pending" | "success" | "failed"
+          coins?: number
+          description?: string
+          created_at?: string
         }
       }
     }
@@ -194,7 +367,7 @@ export interface Database {
           id: string
           advertiser_id: string
           title: string
-          platform: "youtube" | "instagram"
+          platform: string
           start_date: string | null
           end_date: string | null
           thumbnail_url: string | null
@@ -203,13 +376,13 @@ export interface Database {
           prizes: Json
           resources: Json
           created_at: string
-          status: "upcoming" | "live" | "past"
-          is_draft: boolean | null
+          status: "upcoming" | "live" | "past" | "draft"
+          is_draft: boolean
           category: string | null
-          inspiration_links: Json | null
-          price_tier: string | null
-          winner_count: number | null
-          total_prize: number | null
+          inspiration_links: string | null
+          total_prize: number
+          winner_count: number
+          subscription_plan_of_user: string | null
         }
       }
     }

@@ -8,11 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DeleteContestButton } from "@/components/delete-contest-button"
 
-// Add the formatCurrency utility function
-const formatCurrency = (cents: number): string => {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
 export default async function ContestsPage() {
   const supabase = await createSupabaseServerClient()
 
@@ -21,14 +16,15 @@ export default async function ContestsPage() {
   } = await supabase.auth.getSession()
 
   if (!session) {
-    redirect("/login")
+    redirect("/auth/signin")
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  // Get user type from the database
+  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
 
-  if (userData?.role !== "advertiser") {
-    redirect("/dashboard")
+  // Redirect creators to opportunities
+  if (userData?.user_type === "creator") {
+    redirect("/dashboard/opportunities")
   }
 
   // Get all contests for this advertiser

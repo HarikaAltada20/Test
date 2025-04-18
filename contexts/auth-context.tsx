@@ -14,11 +14,13 @@ interface AuthContextValue {
   isLoading: boolean
   user: User | null
   error: string | null
-  signUp: (email: string, password: string, fullName?: string, role?: "advertiser" | "creator") => Promise<{ success: boolean, emailConfirmationRequired: boolean, error: string | null }>
+  needsUsername: boolean
+  signUp: (email: string, password: string, fullName?: string, user_type?: "advertiser" | "creator", referralCode?: string) => Promise<{ success: boolean, emailConfirmationRequired: boolean, error: string | null }>
   signIn: (email: string, password: string) => Promise<{ success: boolean, error: string | null }>
   signOut: () => Promise<void>
   forgotPassword: (email: string) => Promise<void>
   resetPassword: (password: string) => Promise<void>
+  updateUsername: (username: string) => Promise<{ success: boolean, error: string | null }>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const [needsUsername, setNeedsUsername] = useState<boolean>(false)
   const router = useRouter()
   const supabase = createSupabaseClient()
 
@@ -68,7 +71,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getUser()
   }, [supabase.auth])
 
-  const signUp = async (email: string, password: string, fullName?: string, role?: "advertiser" | "creator") => {
+  useEffect(() => {
+    // Check if user needs to set a username
+    const checkUsername = async () => {
+      if (user && !isLoading) {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', user.id)
+            .maybeSingle();  // Use maybeSingle instead of single to avoid the error
+
+          if (error) {
+            console.warn('Error checking username:', error.message);
+            // Don't update state on error during hot reload
+            if (!error.message.includes('JWT') && !error.message.includes('auth')) {
+              setNeedsUsername(false);
+            }
+            return;
+          }
+
+          setNeedsUsername(!data?.username);
+        } catch (err) {
+          console.warn('Unexpected error checking username:', err);
+          // Don't change state on unexpected errors during hot reload
+        }
+      }
+    };
+
+    checkUsername();
+  }, [user, isLoading]);
+
+  const signUp = async (email: string, password: string, fullName?: string, user_type?: "advertiser" | "creator", referralCode?: string) => {
     setIsLoading(true)
     setError(null)
     try {
@@ -84,56 +118,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("An account with this email already exists. Please sign in instead.");
       }
 
+      // If referral code was provided, store it in sessionStorage
+      if (referralCode) {
+        // Check if the referral code exists
+        const { data: referrerCheck, error: referrerError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('referral_code', referralCode)
+          .single();
+
+        if (referrerError || !referrerCheck) {
+          throw new Error("Invalid referral code. Please check and try again.");
+        }
+
+        // Store the referral code in sessionStorage
+        sessionStorage.setItem('referralCode', referralCode);
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: fullName,
-            role: role || 'advertiser',
-          }
+            user_type: user_type || 'creator',
+          },
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       })
 
       if (error) throw error
 
-      // Create user profile after sign up
-      if (data.user) {
-        try {
-          // Insert new user record
-          const { error: userError } = await supabase
-            .from('users')
-            .insert({
-              id: data.user.id,
-              email: data.user.email,
-              full_name: fullName,
-              role: role || 'advertiser',
-              wallet_balance: 0,
-              currency_code: 'USD'
-            })
-
-          if (userError) {
-            // Check if it's a duplicate key error
-            if (userError.message && userError.message.includes("violates unique constraint") &&
-              userError.message.includes("users_email_key")) {
-              throw new Error("An account with this email already exists. Please sign in instead.");
-            }
-            throw userError;
-          }
-        } catch (insertError: any) {
-          // If there was an error creating the user profile, we should also delete the auth user
-          // to prevent orphaned auth accounts
-          await supabase.auth.admin.deleteUser(data.user.id);
-          throw insertError;
-        }
-      }
-
-      // Check if email confirmation is required
-      const emailConfirmationRequired = !data.session;
+      // Redirect to OTP verification page
+      window.location.href = `/verify-otp?email=${encodeURIComponent(email)}`;
 
       return {
         success: true,
-        emailConfirmationRequired,
+        emailConfirmationRequired: true,
         error: null
       };
     } catch (error: any) {
@@ -246,17 +267,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const updateUsername = async (username: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      // Check if username is already taken
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('username', username)
+        .single();
+
+      if (existingUser) {
+        throw new Error("This username is already taken. Please choose another one.");
+      }
+
+      // Update the username
+      const { error } = await supabase
+        .from('users')
+        .update({ username })
+        .eq('id', user?.id);
+
+      if (error) throw error
+
+      // Update the local state
+      setNeedsUsername(false)
+
+      return { success: true, error: null };
+    } catch (error: any) {
+      setError(error.message)
+      return { success: false, error: error.message };
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
         isLoading,
         user,
         error,
+        needsUsername,
         signUp,
         signIn,
         signOut,
         forgotPassword,
         resetPassword,
+        updateUsername,
       }}
     >
       {children}

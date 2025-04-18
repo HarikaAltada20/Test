@@ -10,12 +10,7 @@ import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User } from "lucide-re
 import { Separator } from "@/components/ui/separator"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
-import { formatLocalDateTime } from "@/lib/utils"
-
-// Add this utility function to convert cents to dollars for display
-const formatCurrency = (cents: number): string => {
-    return `$${(cents / 100).toFixed(2)}`;
-}
+import { formatLocalDateTime, formatMoney } from "@/lib/utils"
 
 // Client component that receives contestId as a prop
 export function ContestClientPage({ contestId }: { contestId: string }) {
@@ -53,9 +48,9 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                 }
 
                 // Get user role from the database
-                const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single()
+                const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single()
 
-                if (userData?.role !== "creator") {
+                if (userData?.user_type !== "creator") {
                     router.push("/dashboard")
                     return
                 }
@@ -304,7 +299,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                         contest.prizes.map((prize: any, index: number) => (
                                             <div key={index} className="flex items-center justify-between">
                                                 <span>Position {prize.position || index + 1}</span>
-                                                <span>{formatCurrency(prize.amount)}</span>
+                                                <span>{formatMoney(prize.amount)}</span>
                                             </div>
                                         ))
                                     ) : (
@@ -404,7 +399,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                 <div>
                                     <h3 className="text-sm font-medium">Total Prize Pool</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        {formatCurrency(contest.total_prize)}
+                                        {formatMoney(contest.total_prize)}
                                     </p>
                                 </div>
                             </div>

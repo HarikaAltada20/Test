@@ -10,11 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import React from "react"
 import { DeleteContestButton } from "@/components/delete-contest-button"
 import { formatDate, formatDateRange, calculateDurationDays } from "@/lib/date-utils"
-
-// Add this utility function to convert cents to dollars for display
-const formatCurrency = (cents: number): string => {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+import { formatMoney } from "@/lib/utils"
 
 export default async function ContestDetailPage({ params }: { params: { id: string } }) {
   // Use the params.id correctly with Next.js async pattern
@@ -32,9 +28,9 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
 
-  if (userData?.role !== "advertiser") {
+  if (userData?.user_type !== "advertiser") {
     redirect("/dashboard")
   }
 
@@ -154,7 +150,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                         contest.prizes.map((prize: any, index: number) => (
                           <div key={index} className="flex items-center justify-between">
                             <span>Position {prize.position}</span>
-                            <span>{formatCurrency(prize.amount)}</span>
+                            <span>{formatMoney(prize.amount)}</span>
                           </div>
                         ))}
                     </div>
@@ -399,7 +395,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
               {contest.total_prize && (
                 <div>
                   <h3 className="text-sm font-medium mb-1">Total Prize Pool</h3>
-                  <p className="font-semibold">{formatCurrency(contest.total_prize)}</p>
+                  <p className="font-semibold">{formatMoney(contest.total_prize)}</p>
                 </div>
               )}
 

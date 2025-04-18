@@ -22,9 +22,9 @@ export default async function AnalyticsPage() {
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
 
-  if (userData?.role !== "advertiser") {
+  if (userData?.user_type !== "advertiser") {
     redirect("/dashboard")
   }
 

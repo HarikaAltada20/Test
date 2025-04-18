@@ -1,476 +1,291 @@
 "use client"
 
-import type React from "react"
-
-import { useEffect, useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { createSupabaseClient } from "@/lib/supabase/client"
-import { useAuth } from "@/contexts/auth-context"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { formatMoney } from "@/lib/utils"
+import { User, UserCheck } from "lucide-react"
 
-// Separate the component that uses useSearchParams
-function SettingsContent() {
-  const [profileData, setProfileData] = useState<any>(null)
-  const [youtubeAccount, setYoutubeAccount] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+interface UserData {
+  id: string
+  full_name: string
+  email: string
+  username: string
+  user_type: string
+  referred_by: string | null
+  coins: number
+  advertisers_referred: number
+  creators_referred: number
+  ip_address: string | null
+}
+
+interface CreatorProfile {
+  total_contests_participated: number
+  total_contests_won: number
+  total_money_won: number
+  withdrawable_balance: number
+}
+
+interface AdvertiserProfile {
+  company_name: string | null
+  website_url: string | null
+  total_money_spent: number
+  total_contests_run: number
+  withdrawable_balance: number
+  available_deposit_balance: number
+  subscription_plan: string
+}
+
+export default function SettingsPage() {
+  const [userData, setUserData] = useState<UserData | null>(null)
+  const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null)
+  const [advertiserProfile, setAdvertiserProfile] = useState<AdvertiserProfile | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const router = useRouter()
-  const { user } = useAuth()
+  const [referrer, setReferrer] = useState<string | null>(null)
   const supabase = createSupabaseClient()
-  const searchParams = useSearchParams()
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
+    const fetchUserData = async () => {
+      setIsLoading(true)
+
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
         setIsLoading(false)
         return
       }
 
-      setIsLoading(true)
-      setError(null)
+      // Fetch user data
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single()
 
-      try {
-        // Get user data
-        const { data: userData, error: userError } = await supabase.from("users").select("*").eq("id", user.id).single()
-
-        if (userError) {
-          console.error("User data fetch error:", userError)
-          throw new Error("Failed to load user data. Please try again.")
-        }
-
-        if (!userData) {
-          setIsLoading(false)
-          throw new Error("No user data found")
-        }
-
-        // Get role-specific profile data
-        if (userData.role === "advertiser") {
-          const { data: advertiserData, error: advertiserError } = await supabase
-            .from("advertiser_profiles")
-            .select("*")
-            .eq("user_id", user.id)
-            .maybeSingle()
-
-          if (advertiserError && !advertiserError.message.includes("No rows found")) {
-            console.error("Advertiser profile fetch error:", advertiserError)
-            throw new Error("Failed to load advertiser profile. Please try again.")
-          }
-
-          setProfileData({
-            ...userData,
-            ...(advertiserData || {}),
-            role: "advertiser",
-          })
-        } else {
-          const { data: creatorData, error: creatorError } = await supabase
-            .from("creator_profiles")
-            .select("*")
-            .eq("user_id", user.id)
-            .maybeSingle()
-
-          if (creatorError) {
-            console.error("Creator profile fetch error:", creatorError)
-            // Only throw if it's not a "no rows" error
-            if (!creatorError.message.includes("No rows found") &&
-              !creatorError.code?.includes("PGRST116")) {
-              throw new Error("Failed to load creator profile. Please try again.")
-            }
-          }
-
-          // Even if no creator profile was found, we still proceed with the user data
-          setProfileData({
-            ...userData,
-            ...(creatorData || {}),
-            role: "creator",
-          })
-        }
-      } catch (err: any) {
-        console.error("Profile fetch error:", err)
-        setError(err.message || "Failed to load profile")
-      } finally {
+      if (userError) {
+        console.error("Error fetching user data:", userError)
         setIsLoading(false)
+        return
       }
-    }
 
-    fetchProfile()
-  }, [user, supabase])
+      setUserData(user as UserData)
 
-  useEffect(() => {
-    // Check for YouTube connection status from URL parameters
-    const youtubeConnected = searchParams.get('youtube_connected')
-    const youtubeError = searchParams.get('error')
-
-    if (youtubeConnected === 'true') {
-      setSuccess('YouTube account connected successfully!')
-      // Remove the parameter from URL to prevent showing the message on refresh
-      const newUrl = new URL(window.location.href)
-      newUrl.searchParams.delete('youtube_connected')
-      window.history.replaceState({}, '', newUrl.toString())
-    } else if (youtubeError) {
-      setError('Failed to connect YouTube account. Please try again.')
-      // Remove the parameter from URL
-      const newUrl = new URL(window.location.href)
-      newUrl.searchParams.delete('error')
-      window.history.replaceState({}, '', newUrl.toString())
-    }
-  }, [searchParams])
-
-  useEffect(() => {
-    // Fetch YouTube account information if user is a creator
-    const fetchYouTubeAccount = async () => {
-      if (!user || profileData?.role !== 'creator') return
-
-      try {
-        const { data, error } = await supabase
-          .from('creator_youtube_accounts')
-          .select('*')
-          .eq('creator_id', user.id)
+      // If user has a referral, fetch referrer's username
+      if (user.referred_by) {
+        const { data: referrerData } = await supabase
+          .from('users')
+          .select('username')
+          .eq('referral_code', user.referred_by)
           .single()
 
-        if (!error) {
-          setYoutubeAccount(data)
+        if (referrerData) {
+          setReferrer(referrerData.username)
         }
-      } catch (err) {
-        console.error('Error fetching YouTube account:', err)
-      }
-    }
-
-    if (profileData) {
-      fetchYouTubeAccount()
-    }
-  }, [user, profileData, supabase])
-
-  const handleUserUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
-    setIsSaving(true)
-
-    try {
-      // Update user data
-      const { error: userError } = await supabase
-        .from("users")
-        .update({
-          email: profileData.email,
-          profile_pic: profileData.profile_pic,
-        })
-        .eq("id", user?.id)
-
-      if (userError) throw userError
-
-      // Update role-specific data
-      if (profileData.role === "advertiser") {
-        const { error: advertiserError } = await supabase
-          .from("advertiser_profiles")
-          .update({
-            company_name: profileData.company_name,
-            logo_url: profileData.logo_url,
-            website: profileData.website,
-            social_media_handles: profileData.social_media_handles || {},
-          })
-          .eq("user_id", user?.id)
-
-        if (advertiserError) throw advertiserError
-      } else {
-        const { error: creatorError } = await supabase
-          .from("creator_profiles")
-          .update({
-            username: profileData.username,
-            bio: profileData.bio,
-            linked_platforms: profileData.linked_platforms || {},
-          })
-          .eq("user_id", user?.id)
-
-        if (creatorError) throw creatorError
       }
 
-      setSuccess("Profile updated successfully")
-    } catch (err: any) {
-      setError(err.message || "Failed to update profile")
-    } finally {
-      setIsSaving(false)
+      // Fetch profile based on user type
+      if (user.user_type === 'creator') {
+        const { data: profile, error: profileError } = await supabase
+          .from('creator_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+
+        if (!profileError && profile) {
+          setCreatorProfile(profile as CreatorProfile)
+        }
+      } else if (user.user_type === 'advertiser') {
+        const { data: profile, error: profileError } = await supabase
+          .from('advertiser_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+
+        if (!profileError && profile) {
+          setAdvertiserProfile(profile as AdvertiserProfile)
+        }
+      }
+
+      setIsLoading(false)
     }
-  }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { id, value } = e.target
-    setProfileData((prev: any) => ({
-      ...prev,
-      [id]: value,
-    }))
-  }
+    fetchUserData()
+  }, [supabase])
 
-  const handleDisconnectYouTube = async () => {
-    if (!user) return
-
-    try {
-      const { error } = await supabase
-        .from('creator_youtube_accounts')
-        .delete()
-        .eq('creator_id', user.id)
-
-      if (error) throw error
-
-      setYoutubeAccount(null)
-      setSuccess('YouTube account disconnected successfully')
-    } catch (err: any) {
-      setError(err.message || 'Failed to disconnect YouTube account')
-    }
-  }
-
-  if (isLoading || !profileData) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p>Loading profile...</p>
+      <div className="flex justify-center items-center py-10">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (!userData) {
+    return (
+      <div className="text-center py-10">
+        <p className="text-muted-foreground">User data not available. Please try again.</p>
       </div>
     )
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
-
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          {profileData?.role === 'creator' && (
-            <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Settings</CardTitle>
-              <CardDescription>Update your profile information visible to others on the platform</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleUserUpdate}>
-              <CardContent className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                {success && (
-                  <Alert className="bg-green-50 text-green-800">
-                    <AlertDescription>{success}</AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    value={profileData.email || ""}
-                    onChange={handleInputChange}
-                    disabled
-                    placeholder="email@example.com"
-                  />
-                </div>
-
-                {profileData.role === "advertiser" ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="company_name">Company Name</Label>
-                      <Input
-                        id="company_name"
-                        value={profileData.company_name || ""}
-                        onChange={handleInputChange}
-                        placeholder="Your company name"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="website">Website</Label>
-                      <Input
-                        id="website"
-                        value={profileData.website || ""}
-                        onChange={handleInputChange}
-                        placeholder="https://example.com"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="logo_url">Logo URL</Label>
-                      <Input
-                        id="logo_url"
-                        value={profileData.logo_url || ""}
-                        onChange={handleInputChange}
-                        placeholder="https://example.com/logo.png"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="space-y-2"></div>
-                    <div className="space-y-2">
-                      <Label htmlFor="username">Username</Label>
-                      <Input
-                        id="username"
-                        value={profileData.username || ""}
-                        onChange={handleInputChange}
-                        placeholder="Your username"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="bio">Bio</Label>
-                      <Textarea
-                        id="bio"
-                        value={profileData.bio || ""}
-                        onChange={handleInputChange}
-                        placeholder="Tell us about yourself"
-                        rows={4}
-                      />
-                    </div>
-                  </>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving ? "Saving..." : "Save Changes"}
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="account">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Settings</CardTitle>
-              <CardDescription>Manage your account settings and preferences</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="flex space-x-2">
-                  <Input id="password" type="password" value="••••••••" disabled />
-                  <Button variant="outline">Change</Button>
-                </div>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <User className="h-5 w-5" />
+            <CardTitle>Account Information</CardTitle>
+          </div>
+          <CardDescription>
+            Your basic account details
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Full Name</p>
+              <p>{userData.full_name}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Email</p>
+              <p>{userData.email}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Username / Referral Code</p>
+              <p className="font-medium">{userData.username}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Account Type</p>
+              <p className="capitalize">{userData.user_type}</p>
+            </div>
+            {userData.ip_address && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">IP Address</p>
+                <p>{userData.ip_address}</p>
               </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-              {profileData.role === "creator" && (
-                <div className="space-y-2">
-                  <Label htmlFor="payment">Payment Information</Label>
-                  <div className="flex space-x-2">
-                    <Input id="payment" value="••••••••" disabled />
-                    <Button variant="outline">Update</Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Add or update your payment details to receive payments for contest winnings
-                  </p>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5" />
+            <CardTitle>Referral Information</CardTitle>
+          </div>
+          <CardDescription>
+            Referral statistics and details
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Referred By</p>
+              <p>{referrer || "Not referred"}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Available Coins</p>
+              <p>{userData.coins.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Creators Referred</p>
+              <p>{userData.creators_referred}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Advertisers Referred</p>
+              <p>{userData.advertisers_referred}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {creatorProfile && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Creator Profile</CardTitle>
+            <CardDescription>
+              Your creator statistics
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Contests Participated</p>
+                <p>{creatorProfile.total_contests_participated}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Contests Won</p>
+                <p>{creatorProfile.total_contests_won}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Money Won</p>
+                <p>{formatMoney(creatorProfile.total_money_won)}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Withdrawable Balance</p>
+                <p className="font-medium">{formatMoney(creatorProfile.withdrawable_balance)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {advertiserProfile && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Advertiser Profile</CardTitle>
+            <CardDescription>
+              Your advertiser statistics
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              {advertiserProfile.company_name && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Company Name</p>
+                  <p>{advertiserProfile.company_name}</p>
                 </div>
               )}
-
-              <div className="pt-4">
-                <Button variant="destructive">Delete Account</Button>
+              {advertiserProfile.website_url && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Website</p>
+                  <a
+                    href={advertiserProfile.website_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {advertiserProfile.website_url}
+                  </a>
+                </div>
+              )}
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Subscription Plan</p>
+                <p className="capitalize">{advertiserProfile.subscription_plan}</p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
-              <CardDescription>Configure how you want to be notified</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium">Email Notifications</h3>
-                  <p className="text-sm text-muted-foreground">Receive notifications via email</p>
-                </div>
-                <div>
-                  <Button variant="outline">Configure</Button>
-                </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Contests Run</p>
+                <p>{advertiserProfile.total_contests_run}</p>
               </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium">Push Notifications</h3>
-                  <p className="text-sm text-muted-foreground">Receive notifications in your browser</p>
-                </div>
-                <div>
-                  <Button variant="outline">Configure</Button>
-                </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Money Spent</p>
+                <p>{formatMoney(advertiserProfile.total_money_spent)}</p>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {profileData?.role === 'creator' && (
-          <TabsContent value="integrations">
-            <Card>
-              <CardHeader>
-                <CardTitle>YouTube Integration</CardTitle>
-                <CardDescription>
-                  Connect your YouTube account to submit content and track metrics automatically.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                {success && (
-                  <Alert className="bg-green-50 text-green-800">
-                    <AlertDescription>{success}</AlertDescription>
-                  </Alert>
-                )}
-
-                {youtubeAccount ? (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-medium mb-2">Connected YouTube Channel</h3>
-                      <p className="text-sm mb-1"><strong>Channel:</strong> {youtubeAccount.channel_title}</p>
-                      <p className="text-sm mb-1"><strong>Channel ID:</strong> {youtubeAccount.channel_id}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Connected on {new Date(youtubeAccount.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button variant="destructive" onClick={handleDisconnectYouTube}>
-                        Disconnect YouTube Account
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="mb-4">
-                      Connect your YouTube account to automatically verify video ownership and track metrics.
-                    </p>
-                    <Button asChild>
-                      <a href="/api/youtube/auth">Connect YouTube Account</a>
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </Tabs>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Withdrawable Balance</p>
+                <p>{formatMoney(advertiserProfile.withdrawable_balance)}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Available Deposit Balance</p>
+                <p className="font-medium">{formatMoney(advertiserProfile.available_deposit_balance)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
-}
-
-// Main component with Suspense boundary
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={<div className="p-4 text-center">Loading settings...</div>}>
-      <SettingsContent />
-    </Suspense>
-  );
 }
 

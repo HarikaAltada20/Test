@@ -18,10 +18,19 @@ export default async function DashboardLayout({
     redirect("/auth/signin")
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  // Get user data from the database including username
+  const { data: userData } = await supabase
+    .from("users")
+    .select("user_type, username")
+    .eq("id", session.user.id)
+    .single()
 
-  const userRole = (userData?.role as "advertiser" | "creator") || "advertiser"
+  // If user has no username, redirect to username setup
+  if (!userData?.username) {
+    redirect("/choose-username")
+  }
+
+  const userRole = (userData?.user_type as "advertiser" | "creator") || "advertiser"
 
   return (
     <div className="flex min-h-screen">
