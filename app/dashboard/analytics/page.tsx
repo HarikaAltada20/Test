@@ -32,7 +32,7 @@ export default async function AnalyticsPage() {
   const { data: profile } = await supabase
     .from("advertiser_profiles")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("id", session.user.id)
     .single()
 
   // Get contests

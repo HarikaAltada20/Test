@@ -168,7 +168,7 @@ export default function ChooseUsernamePage() {
                     .from('advertiser_profiles')
                     .insert([{
                         id: userData.id,
-                        subscription_plan: 'FREE',
+                        subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198', // FREE plan ID
                         total_money_spent: 0,
                         total_contests_run: 0,
                         available_deposit_balance: 0,

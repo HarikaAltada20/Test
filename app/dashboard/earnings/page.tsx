@@ -31,7 +31,7 @@ export default async function CreatorEarningsPage() {
   }
 
   // Get creator profile
-  const { data: profile } = await supabase.from("creator_profiles").select("*").eq("user_id", session.user.id).single()
+  const { data: profile } = await supabase.from("creator_profiles").select("*").eq("id", session.user.id).single()
 
   // Get successful submissions (to simulate earnings)
   const { data: submissions } = await supabase

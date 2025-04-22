@@ -28,10 +28,7 @@ type PlanFeatures = {
   maxActiveContests: number;
   minContestBudget: number;
   maxWinnersPerContest: number;
-  accessToCreators: boolean;
-  contestBranding: string;
-  analytics: boolean;
-  support: string;
+  commisionPercentage: number;
 }
 
 // Define type for subscription plan
@@ -68,7 +65,7 @@ You must show the Go Viral App Store listing in your video`)
     "https://www.tiktok.com/@creator2/video/987654321"
   ])
   const [newInspirationLink, setNewInspirationLink] = useState("")
-  const [priceTier, setPriceTier] = useState<"bronze" | "silver" | "gold" | "platinum" | "diamond">("bronze")
+  const [subscriptionPlan, setSubscriptionPlan] = useState<"a28ef5c0-3391-44a1-a9ef-f9b999ff0198" | "0477016e-7751-4049-bc57-19012004a05b" | "4107627f-4ccb-4f1e-ad1a-fdc723e6a5ef" | "0f094792-1ef6-4334-b169-f98d21ca0fbd" | "f7630717-5578-4988-922f-255ca4c985c4" | "79a96d6b-ba5c-453c-bbca-49937ba05ad6">("a28ef5c0-3391-44a1-a9ef-f9b999ff0198")
   const [winnerCount, setWinnerCount] = useState<number>(3)
   const [winnerAmounts, setWinnerAmounts] = useState<number[]>([5000, 3000, 2000])
   const [error, setError] = useState<string | null>(null)
@@ -584,7 +581,7 @@ You must show the Go Viral App Store listing in your video`)
         rules: { list: rules.split("\n") },
         resources,
         inspiration_links: inspirationLinks,
-        subscription_plan: userPlan, // Use subscription_plan instead of price_tier
+        subscription_plan_of_user: userPlan, // Changed from subscription_plan to subscription_plan_of_user
         winner_count: winnerCount,
         is_draft: isDraft, // Mark as draft
         start_date: formattedStartDate, // Use proper ISO format or null
@@ -772,7 +769,7 @@ You must show the Go Viral App Store listing in your video`)
   }
 
   const handleWinnerCountChange = (count: number) => {
-    const planFeatures = getPlanFeatures(userPlan || 'bronze')
+    const planFeatures = getPlanFeatures(userPlan || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198')
 
     if (count > planFeatures.maxWinnersPerContest) {
       setValidationError(`Your ${userPlan || 'current'} plan is limited to ${planFeatures.maxWinnersPerContest} winners per contest. Upgrade your plan for more.`)
@@ -859,22 +856,18 @@ You must show the Go Viral App Store listing in your video`)
         return false;
       }
 
-      // Check if we can access the storage bucket
-      const { data, error } = await supabase.storage.getBucket('contest-assets');
+      // Test storage access by attempting to list files (this is allowed for authenticated users)
+      const { data, error } = await supabase.storage
+        .from('contest-assets')
+        .list();
 
       if (error) {
         console.error("Storage access error:", error);
-
-        // Instead of trying to create the bucket, which requires admin privileges,
-        // just set storage as unavailable
         setStorageAvailable(false);
-
-        // Only log the error instead of attempting to create the bucket
-        console.log("Storage bucket 'contest-assets' is not available. Please contact administrator.");
         return false;
       }
 
-      // Bucket exists
+      // Storage is accessible
       setStorageAvailable(true);
       return true;
     } catch (error) {
@@ -894,87 +887,49 @@ You must show the Go Viral App Store listing in your video`)
 
       if (authError || !authData.user) {
         console.error("Authentication error in getUserPlan:", authError);
-        setUserPlan(null);
+        setUserPlan("a28ef5c0-3391-44a1-a9ef-f9b999ff0198");  // Default to free plan
         return;
       }
 
       const userId = authData.user.id;
 
-      // First try to get the subscription from a dedicated subscriptions table
+      // First check advertiser_profiles
       try {
-        const { data: subscriptionData, error: subscriptionError } = await supabase
-          .from("subscriptions")
-          .select("plan_id, status")
-          .eq("user_id", userId)
-          .eq("status", "active")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
-
-        if (!subscriptionError && subscriptionData?.plan_id) {
-          setUserPlan(subscriptionData.plan_id);
-          return;
-        }
-      } catch (err) {
-        console.error("Error fetching subscription:", err);
-      }
-
-      // If that doesn't work, try the users table
-      try {
-        const { data: userData, error: userError } = await supabase
-          .from("users")
+        const { data: advertiserData, error: advertiserError } = await supabase
+          .from("advertiser_profiles")
           .select("subscription_plan")
           .eq("id", userId)
           .single();
 
-        if (!userError && userData?.subscription_plan) {
-          setUserPlan(userData.subscription_plan);
-          return;
-        }
-      } catch (err) {
-        console.error("Error fetching user subscription plan:", err);
-      }
-
-      // If no plan is found in either table, check advertiser_profiles
-      try {
-        const { data: advertiserData, error: advertiserError } = await supabase
-          .from("advertiser_profiles")
-          .select("subscription_tier")
-          .eq("user_id", userId)
-          .single();
-
-        if (!advertiserError && advertiserData?.subscription_tier) {
-          setUserPlan(advertiserData.subscription_tier);
+        if (!advertiserError && advertiserData?.subscription_plan) {
+          setUserPlan(advertiserData.subscription_plan);
           return;
         }
       } catch (err) {
         console.error("Error fetching advertiser profile:", err);
       }
 
-      // If we couldn't find a subscription anywhere, default to 'bronze'
-      setUserPlan('bronze');
+      // If we couldn't find a subscription anywhere, default to 'free'
+      setUserPlan('a28ef5c0-3391-44a1-a9ef-f9b999ff0198');
     } catch (error) {
       console.error("Error in getUserPlan:", error);
-      setUserPlan('bronze'); // Default to bronze plan on error
+      setUserPlan('a28ef5c0-3391-44a1-a9ef-f9b999ff0198'); // Default to free plan on error
     }
   }
 
   // Get the features for the current plan
   const getPlanFeatures = (planId: string | null): PlanFeatures => {
     if (!planId) {
-      // Return basic features if no plan is found
+      // Return free plan features if no plan is found
       return {
         maxActiveContests: 1,
-        minContestBudget: 0,
-        maxWinnersPerContest: 3,
-        accessToCreators: false,
-        contestBranding: "Branded",
-        analytics: false,
-        support: "Email"
+        minContestBudget: 10000,
+        maxWinnersPerContest: 10,
+        commisionPercentage: 40
       }
     }
     const plan = subscriptionPlans.find((p: SubscriptionPlan) => p.id === planId)
-    return plan?.features || subscriptionPlans[0].features
+    return plan?.features || subscriptionPlans[0].features // Use first plan (free) as default
   }
 
   // Validate if the user can perform certain actions based on their plan
@@ -1085,11 +1040,9 @@ You must show the Go Viral App Store listing in your video`)
       setInspirationLinks(draft.inspiration_links);
     }
 
-    // Set subscription plan if available (check both price_tier and subscription_plan for compatibility)
+    // Set subscription plan if available
     if (draft.subscription_plan) {
-      setPriceTier(draft.subscription_plan as "bronze" | "silver" | "gold" | "platinum" | "diamond");
-    } else if (draft.price_tier) {
-      setPriceTier(draft.price_tier as "bronze" | "silver" | "gold" | "platinum" | "diamond");
+      setSubscriptionPlan(draft.subscription_plan);
     }
 
     // Set winner count and amounts if available
@@ -1321,7 +1274,7 @@ You must show the Go Viral App Store listing in your video`)
   const renderPrizeSection = () => {
     // Get current plan details
     const currentPlan = subscriptionPlans.find(p => p.id === userPlan) || null;
-    const planFeatures = getPlanFeatures(userPlan || 'bronze');
+    const planFeatures = getPlanFeatures(userPlan || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198');
 
     return (
       <>
@@ -1343,22 +1296,24 @@ You must show the Go Viral App Store listing in your video`)
             {currentPlan ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-4">
-                  <div className={`w-14 h-14 rounded-full flex items-center justify-center ${userPlan === 'bronze' ? 'bg-orange-500' :
-                    userPlan === 'silver' ? 'bg-gray-300' :
-                      userPlan === 'gold' ? 'bg-yellow-400' :
-                        userPlan === 'platinum' ? 'bg-indigo-400' : 'bg-blue-300'
+                  <div className={`w-14 h-14 rounded-full flex items-center justify-center ${userPlan === 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198' ? 'bg-gray-300' :
+                    userPlan === '0477016e-7751-4049-bc57-19012004a05b' ? 'bg-orange-500' :
+                      userPlan === '4107627f-4ccb-4f1e-ad1a-fdc723e6a5ef' ? 'bg-gray-300' :
+                        userPlan === '0f094792-1ef6-4334-b169-f98d21ca0fbd' ? 'bg-yellow-400' :
+                          userPlan === 'f7630717-5578-4988-922f-255ca4c985c4' ? 'bg-indigo-400' :
+                            userPlan === '79a96d6b-ba5c-453c-bbca-49937ba05ad6' ? 'bg-blue-300' : 'bg-gray-300'
                     }`}>
                     <Trophy className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h4 className="text-xl font-bold">{currentPlan.name} Plan</h4>
+                    <h4 className="text-xl font-bold">{currentPlan.name || 'FREE'} Plan</h4>
                     <p className="text-sm text-gray-500">{formatCurrency(currentPlan.price)}/month</p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>Max Winners Per Contest:</span>
-                    <span className="font-medium">{planFeatures.maxWinnersPerContest === Infinity ? 'Unlimited' : planFeatures.maxWinnersPerContest}</span>
+                    <span className="font-medium">{planFeatures.maxWinnersPerContest}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Min Budget Per Contest:</span>
@@ -1366,7 +1321,7 @@ You must show the Go Viral App Store listing in your video`)
                   </div>
                   <div className="flex justify-between">
                     <span>Max Active Contests:</span>
-                    <span className="font-medium">{planFeatures.maxActiveContests === Infinity ? 'Unlimited' : planFeatures.maxActiveContests}</span>
+                    <span className="font-medium">{planFeatures.maxActiveContests}</span>
                   </div>
                 </div>
               </div>

@@ -23,36 +23,28 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const supabase = createSupabaseClient()
 
     useEffect(() => {
-        // Define a local state variable to track if this is the initial load
         let isMounted = true;
 
-        // Define a function to fetch contest data
         async function fetchData() {
             if (!isMounted) return;
 
             // Don't show loading if we already have contest data
             if (!contest) {
-                setLoading(true)
+                setLoading(true);
             }
 
             try {
-                // Check if auth is still loading
-                if (authLoading) {
-                    console.log("Auth still loading, waiting...")
-                    return // Don't set error or finish loading yet
-                }
-
-                if (!user) {
-                    console.log("User not found, waiting for auth...")
-                    return // Don't set error or finish loading yet
+                // Check if auth is still loading or no user
+                if (authLoading || !user) {
+                    return;
                 }
 
                 // Get user role from the database
-                const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single()
+                const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single();
 
                 if (userData?.user_type !== "creator") {
-                    router.push("/dashboard")
-                    return
+                    router.push("/dashboard");
+                    return;
                 }
 
                 // First try to get contest details
@@ -60,60 +52,60 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                     .from("contests_with_status")
                     .select("*")
                     .eq("id", contestId)
-                    .single()
+                    .single();
 
                 // If there's an error with the view, try the base contests table
                 if (contestError) {
-                    console.error("Error fetching from contests_with_status:", contestError)
+                    console.error("Error fetching from contests_with_status:", contestError);
 
                     // Try to get data from the base contests table instead
                     const { data: fallbackData, error: fallbackError } = await supabase
                         .from("contests")
                         .select("*")
                         .eq("id", contestId)
-                        .single()
+                        .single();
 
                     if (fallbackError) {
-                        console.error("Fallback error:", fallbackError)
+                        console.error("Fallback error:", fallbackError);
                         if (isMounted) {
                             setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}. 
-                      Fallback also failed: ${fallbackError.message || "Unknown error"}`)
-                            setLoading(false)
+                      Fallback also failed: ${fallbackError.message || "Unknown error"}`);
+                            setLoading(false);
                         }
-                        return
+                        return;
                     }
 
                     if (fallbackData) {
-                        console.log("Using fallback data instead of view")
-                        contestData = fallbackData
-                        contestError = null
+                        console.log("Using fallback data instead of view");
+                        contestData = fallbackData;
+                        contestError = null;
                     }
                 }
 
                 if (contestError) {
-                    console.error("All attempts to fetch contest failed:", contestError)
+                    console.error("All attempts to fetch contest failed:", contestError);
                     if (isMounted) {
-                        setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}`)
-                        setLoading(false)
+                        setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}`);
+                        setLoading(false);
                     }
-                    return
+                    return;
                 }
 
                 if (!contestData) {
                     if (isMounted) {
-                        setError("Contest not found - No data returned from database")
-                        setLoading(false)
+                        setError("Contest not found - No data returned from database");
+                        setLoading(false);
                     }
-                    return
+                    return;
                 }
 
                 // Don't show draft contests to creators
                 if (contestData.status === 'draft' || contestData.is_draft) {
                     if (isMounted) {
-                        setError("This contest is not available yet")
-                        setLoading(false)
+                        setError("This contest is not available yet");
+                        setLoading(false);
                     }
-                    return
+                    return;
                 }
 
                 // If we have contest data and it has an advertiser_id, fetch the advertiser details
@@ -121,65 +113,48 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                     const { data: advertiserData } = await supabase
                         .from("advertiser_profiles")
                         .select("company_name")
-                        .eq("user_id", contestData.advertiser_id)
+                        .eq("id", contestData.advertiser_id);
 
                     if (advertiserData && advertiserData.length > 0) {
-                        contestData.advertiser_profiles = advertiserData[0]
+                        contestData.advertiser_profiles = advertiserData[0];
                     } else {
-                        contestData.advertiser_profiles = { company_name: "Unknown Company" }
+                        contestData.advertiser_profiles = { company_name: "Unknown Company" };
                     }
                 }
 
                 if (isMounted) {
-                    setContest(contestData)
+                    setContest(contestData);
 
                     // Check if user has already submitted to this contest
                     const { data: submissionData } = await supabase
                         .from("submissions")
                         .select("*")
                         .eq("contest_id", contestId)
-                        .eq("creator_id", user.id)
+                        .eq("creator_id", user.id);
 
                     // Only set existing submission if data exists and is not empty
                     if (submissionData && submissionData.length > 0) {
-                        setExistingSubmission(submissionData[0])
+                        setExistingSubmission(submissionData[0]);
                     }
 
-                    setLoading(false)
-                    setError(null) // Clear any previous errors
+                    setLoading(false);
+                    setError(null); // Clear any previous errors
                 }
             } catch (err) {
-                console.error("Error in component:", err)
+                console.error("Error in component:", err);
                 if (isMounted) {
-                    setError("An unexpected error occurred")
-                    setLoading(false)
+                    setError("An unexpected error occurred");
+                    setLoading(false);
                 }
             }
         }
 
-        // Run the data fetching function
-        fetchData()
+        fetchData();
 
-        // Set up an interval to retry if needed - but only if we don't have the data yet
-        const retryInterval = setInterval(() => {
-            if (!user && !authLoading && !contest) {
-                console.log("Retrying data fetch...")
-                fetchData()
-            } else if (user && !contest && !loading) {
-                console.log("Retrying contest fetch with user...")
-                fetchData()
-            } else if (user && contest) {
-                // Clear interval once we have both user and contest
-                clearInterval(retryInterval)
-            }
-        }, 1000) // Retry every second
-
-        // Clean up the interval and set mounted flag to false
         return () => {
-            clearInterval(retryInterval);
             isMounted = false;
-        }
-    }, [contestId, user, authLoading, router, supabase, contest, loading])
+        };
+    }, [contestId, user, authLoading, router, supabase]);
 
     const handleSubmitContent = () => {
         router.push(`/dashboard/opportunities/${contestId}/submit`)
@@ -289,7 +264,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
 
                             <div>
                                 <h3 className="font-medium mb-2">Sponsor</h3>
-                                <p>{contest.advertiser_profiles?.company_name || "Unknown"}</p>
+                                <p>{contest.advertiser_profiles?.company_name || "N/A"}</p>
                             </div>
 
                             <div>
@@ -351,24 +326,36 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                 </div>
                             )}
 
-                            {contest.inspiration_links && contest.inspiration_links.length > 0 && (
-                                <div>
-                                    <h3 className="font-medium mb-2">Inspiration Links</h3>
-                                    <div className="bg-muted p-4 rounded-lg">
-                                        <p>Check out these examples for inspiration:</p>
-                                        <div className="mt-2 space-y-2">
-                                            {contest.inspiration_links.map((link: string, index: number) => (
-                                                <div key={index} className="flex items-center">
-                                                    <ExternalLink className="h-4 w-4 mr-2" />
-                                                    <Link href={link} className="text-primary hover:underline" target="_blank">
-                                                        Inspiration Example {index + 1}
-                                                    </Link>
-                                                </div>
-                                            ))}
+                            {(() => {
+                                // Parse inspiration_links if it's a string
+                                let links = [];
+                                try {
+                                    links = typeof contest.inspiration_links === 'string'
+                                        ? JSON.parse(contest.inspiration_links)
+                                        : contest.inspiration_links || [];
+                                } catch (e) {
+                                    console.error('Error parsing inspiration_links:', e);
+                                }
+
+                                return Array.isArray(links) && links.length > 0 && (
+                                    <div>
+                                        <h3 className="font-medium mb-2">Inspiration Links</h3>
+                                        <div className="bg-muted p-4 rounded-lg">
+                                            <p>Check out these examples for inspiration:</p>
+                                            <div className="mt-2 space-y-2">
+                                                {links.map((link: string, index: number) => (
+                                                    <div key={index} className="flex items-center">
+                                                        <ExternalLink className="h-4 w-4 mr-2" />
+                                                        <Link href={link} className="text-primary hover:underline" target="_blank">
+                                                            Inspiration Example {index + 1}
+                                                        </Link>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                );
+                            })()}
                         </CardContent>
                     </Card>
                 </div>

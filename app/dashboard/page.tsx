@@ -29,21 +29,22 @@ function DashboardPage() {
       try {
         setIsLoading(true)
 
-        // Get user data including coins
-        const { data: userData } = await supabase
+        // Get user type
+        const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("user_type, coins")
+          .select("user_type")
           .eq("id", user.id)
           .single()
 
-        const userType = userData?.user_type
-        setUserCoins(userData?.coins || 0)
+        if (userError) throw userError
 
-        // Fetch profile data based on user type
+        const userType = userData.user_type
+
         if (userType === "advertiser") {
+          // For advertisers, fetch their profile and active subscription
           const { data: advertiserProfile } = await supabase
             .from("advertiser_profiles")
-            .select("*")
+            .select("*, subscription_plan")
             .eq("id", user.id)
             .single()
 
@@ -51,7 +52,7 @@ function DashboardPage() {
 
           // Fetch recent contests for advertisers
           const { data: contests } = await supabase
-            .from("contests_with_status")
+            .from("contests")
             .select("*")
             .eq("advertiser_id", user.id)
             .order("created_at", { ascending: false })

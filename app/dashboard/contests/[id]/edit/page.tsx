@@ -61,8 +61,8 @@ export default function EditContestPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Update the constants for prize amounts - convert to cents
-    const MIN_PRIZE_PER_WINNER = 500 // Minimum prize amount per winner in cents ($5)
+    // Update the constants for prize amounts based on free plan
+    const MIN_PRIZE_PER_WINNER = 10000 // Minimum prize amount per winner in cents ($100)
     const MAX_PRIZE_PER_WINNER = 100000 // Maximum prize amount per winner in cents ($1000)
     const DEFAULT_PRIZE_ALLOCATIONS = {
         1: 50000, // $500.00

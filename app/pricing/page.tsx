@@ -240,11 +240,15 @@ export default function PricingPage() {
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Min. {formatCurrency(plan.features.minContestBudget)} per contest</span>
+                                        <span>Min. amount of contest you can run is {formatCurrency(plan.features.minContestBudget)}</span>
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
                                         <span>Up to {plan.features.maxWinnersPerContest} winners</span>
+                                    </li>
+                                    <li className="flex items-start">
+                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                        <span>Up to {plan.features.commisionPercentage}% commission per contest</span>
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />

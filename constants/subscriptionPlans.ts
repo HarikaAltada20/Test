@@ -1,7 +1,7 @@
 export const subscriptionPlans = [
   {
-    id: 'free',
-    name: 'Free',
+    id: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198',
+    name: 'FREE',
     price: 10000,
     features: {
       maxActiveContests: 1,
@@ -11,8 +11,8 @@ export const subscriptionPlans = [
     },
   },
   {
-    id: 'bronze',
-    name: 'Bronze',
+    id: '0477016e-7751-4049-bc57-19012004a05b',
+    name: 'BRONZE',
     price: 10000,
     features: {
       maxActiveContests: 5,
@@ -22,8 +22,8 @@ export const subscriptionPlans = [
     },
   },
   {
-    id: 'silver',
-    name: 'Silver',
+    id: '4107627f-4ccb-4f1e-ad1a-fdc723e6a5ef',
+    name: 'SILVER',
     price: 20000,
     features: {
       maxActiveContests: 10,
@@ -33,20 +33,19 @@ export const subscriptionPlans = [
     },
   },
   {
-    id: 'gold',
-    name: 'Gold',
+    id: '0f094792-1ef6-4334-b169-f98d21ca0fbd',
+    name: 'GOLD',
     price: 30000,
     features: {
       maxActiveContests: 20,
       minContestBudget: 5000,
       maxWinnersPerContest: 30,
       commisionPercentage: 12,
-
     },
   },
   {
-    id: 'platinum',
-    name: 'Platinum',
+    id: 'f7630717-5578-4988-922f-255ca4c985c4',
+    name: 'PLATINUM',
     price: 40000,
     features: {
       maxActiveContests: 30,
@@ -56,8 +55,8 @@ export const subscriptionPlans = [
     },
   },
   {
-    id: 'diamond',
-    name: 'Diamond',
+    id: '79a96d6b-ba5c-453c-bbca-49937ba05ad6',
+    name: 'DIAMOND',
     price: 50000,
     features: {
       maxActiveContests: 100,

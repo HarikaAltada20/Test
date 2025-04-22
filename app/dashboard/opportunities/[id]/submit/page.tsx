@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { use } from 'react';
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
@@ -51,9 +52,9 @@ function extractYoutubeId(url: string) {
   return match ? match[1] : null;
 }
 
-export default function SubmitContentPage({ params }: { params: { id: string } }) {
-  // Store the ID directly to avoid Next.js warnings
-  const contestId = params.id;
+export default function SubmitContentPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params);
+  const contestId = resolvedParams.id;
 
   const [contentLink, setContentLink] = useState("")
   const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null)

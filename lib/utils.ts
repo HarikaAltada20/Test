@@ -43,13 +43,14 @@ export function formatLocalDateTime(
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'UTC'
   }
 ): string {
   if (!dateValue) return '';
   
   const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-  return date.toLocaleString(undefined, options);
+  return new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
 /**

@@ -49,7 +49,7 @@ export default async function CreatorsPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {creators && creators.length > 0 ? (
               creators.map((creator) => (
-                <div key={creator.user_id} className="border rounded-lg p-4 flex flex-col gap-4">
+                <div key={creator.id} className="border rounded-lg p-4 flex flex-col gap-4">
                   <div className="flex items-center gap-4">
                     <Avatar>
                       <AvatarImage src={(creator.users as any)?.profile_pic || ""} />
@@ -83,7 +83,7 @@ export default async function CreatorsPage() {
                       <span className="text-sm font-medium">{creator.contests_won} wins</span>
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/dashboard/creators/${creator.user_id}`}>View Profile</Link>
+                      <Link href={`/dashboard/creators/${creator.id}`}>View Profile</Link>
                     </Button>
                   </div>
                 </div>

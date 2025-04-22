@@ -40,7 +40,7 @@ export default function OpportunitiesPage() {
         .from("contests_with_status")
         .select("*")
         .not('status', 'eq', 'draft')
-        .in('status', ['live', 'upcoming', 'completed'])
+        .not('status', 'eq', 'incomplete')
         .order("created_at", { ascending: false })
 
       setAvailableContests(contests || [])
