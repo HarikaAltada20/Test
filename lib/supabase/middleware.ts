@@ -1,10 +1,9 @@
-
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 export const updateSession = async (request: NextRequest) => {
   // Create an unmodified response
-  let supabaseResponse = NextResponse.next({
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
@@ -15,22 +14,41 @@ export const updateSession = async (request: NextRequest) => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
+        get(name: string) {
+          return request.cookies.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
+        set(name: string, value: string, options: CookieOptions) {
+          // If the cookie is updated, update the response
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+        },
+        remove(name: string, options: CookieOptions) {
+          // If the cookie is removed, update the response
+          response.cookies.set({
+            name,
+            value: "",
+            ...options,
+          });
         },
       },
-    },
+    }
   );
 
-  return supabaseResponse
+  // Refresh session if expired
+  const { data: { session }, error } = await supabase.auth.getSession();
+  
+  if (error) {
+    // If there's an error with the session, redirect to login
+    response = NextResponse.redirect(new URL('/auth/signin', request.url));
+    // Clear any existing auth cookies
+    response.cookies.delete('sb-access-token');
+    response.cookies.delete('sb-refresh-token');
+    return response;
+  }
+
+  return response;
 };
 

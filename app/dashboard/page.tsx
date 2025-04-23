@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Trophy, DollarSign, Plus, Video } from "lucide-react"
+import { Trophy, DollarSign, Plus, Video, Coins } from "lucide-react"
 import { formatLocalDateTime, formatMoney } from "@/lib/utils"
 import { withUsernameCheck } from "@/components/with-username-check"
 import { createSupabaseClient } from "@/lib/supabase/client"
@@ -32,13 +32,14 @@ function DashboardPage() {
         // Get user type
         const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("user_type")
+          .select("user_type, coins")
           .eq("id", user.id)
           .single()
 
+        const userType = userData?.user_type
+        setUserCoins(userData?.coins || 0)
         if (userError) throw userError
 
-        const userType = userData.user_type
 
         if (userType === "advertiser") {
           // For advertisers, fetch their profile and active subscription
@@ -52,7 +53,7 @@ function DashboardPage() {
 
           // Fetch recent contests for advertisers
           const { data: contests } = await supabase
-            .from("contests")
+            .from("contests_with_status")
             .select("*")
             .eq("advertiser_id", user.id)
             .order("created_at", { ascending: false })
