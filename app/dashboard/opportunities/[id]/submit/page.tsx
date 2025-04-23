@@ -16,6 +16,7 @@ import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { redirect } from "next/navigation"
 
 interface YouTubeVideo {
   id: {
@@ -73,15 +74,15 @@ export default function SubmitContentPage({ params }: { params: Promise<{ id: st
       if (!user) return;
 
       try {
-        const { data } = await supabase
-          .from("creator_youtube_accounts")
-          .select("*")
-          .eq("creator_id", user.id)
+        const { data: profile } = await supabase
+          .from("creator_profiles")
+          .select("youtube_account")
+          .eq("id", user.id)
           .single();
 
-        setYoutubeAccount(data);
+        setYoutubeAccount(profile?.youtube_account);
 
-        if (data) {
+        if (profile?.youtube_account) {
           fetchYouTubeVideos();
         }
       } catch (err) {
@@ -145,22 +146,20 @@ export default function SubmitContentPage({ params }: { params: Promise<{ id: st
   };
 
   useEffect(() => {
-    // Update all instances of params.id to contestId in the useEffect
-
     async function fetchData() {
-      // ... existing code ...
+      if (!user) return;
 
       // First check if user has already submitted
-      if (user) {
-        const { data: existingSubmission } = await supabase
-          .from("submissions")
-          .select("*")
-          .eq("contest_id", contestId)
-          .eq("creator_id", user.id)
-          .single();
-      }
+      const { data: existingSubmission } = await supabase
+        .from("submissions")
+        .select("*")
+        .eq("contest_id", contestId)
+        .eq("creator_id", user.id);
 
-      // ... existing code ...
+      if (existingSubmission && existingSubmission.length > 0) {
+        // User has already submitted
+        redirect(`/dashboard/opportunities/${contestId}?error=already_submitted`);
+      }
 
       // Get contest details
       const { data: contestData, error: contestError } = await supabase
@@ -169,7 +168,10 @@ export default function SubmitContentPage({ params }: { params: Promise<{ id: st
         .eq("id", contestId)
         .single();
 
-      // ... rest of existing code ...
+      if (contestError || !contestData) {
+        console.error("Error fetching contest:", contestError);
+        redirect("/dashboard/opportunities");
+      }
     }
 
     fetchData();
@@ -239,11 +241,27 @@ export default function SubmitContentPage({ params }: { params: Promise<{ id: st
           video_id: videoId,
           video_title: videoTitle,
           video_thumbnail_url: videoThumbnail,
+          description: selectedVideo?.snippet.description || '',
+          views: 0, // Initialize with 0 views
+          other_stats: {
+            publishedAt: selectedVideo?.snippet.publishedAt,
+            thumbnails: selectedVideo?.snippet.thumbnails
+          },
           status: "pending",
+          earnings: 0, // Initialize with 0 earnings
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
         .select();
 
-      if (submitError) throw submitError;
+      if (submitError) {
+        console.error('Submission error details:', submitError);
+        throw new Error(submitError.message || 'Failed to submit video');
+      }
+
+      if (!data) {
+        throw new Error('No data returned from submission');
+      }
 
       router.push(`/dashboard/opportunities/${contestId}`);
     } catch (err: any) {
@@ -276,10 +294,12 @@ export default function SubmitContentPage({ params }: { params: Promise<{ id: st
             <div className="text-center py-8">
               <h3 className="text-lg font-medium mb-4">Connect Your YouTube Account</h3>
               <p className="text-muted-foreground mb-6">
-                To submit content, you need to connect your YouTube account first.
+                To submit content, you need to connect your YouTube account first. This allows us to verify your videos and track their performance.
               </p>
               <Button asChild>
-                <a href="/api/youtube/auth">Connect YouTube Account</a>
+                <Link href={`/api/youtube/auth?returnTo=${encodeURIComponent(`/dashboard/opportunities/${contestId}/submit`)}`}>
+                  Connect YouTube Account
+                </Link>
               </Button>
             </div>
           ) : (

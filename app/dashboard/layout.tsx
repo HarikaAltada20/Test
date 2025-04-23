@@ -10,11 +10,10 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createSupabaseServerClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // Verify user authentication with server
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  if (!session) {
+  if (error || !user) {
     redirect("/auth/signin")
   }
 
@@ -22,7 +21,7 @@ export default async function DashboardLayout({
   const { data: userData } = await supabase
     .from("users")
     .select("user_type, username")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single()
 
   // If user has no username, redirect to username setup

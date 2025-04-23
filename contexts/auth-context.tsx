@@ -37,20 +37,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getUser = async () => {
       setIsLoading(true)
       try {
-        // First get session
-        const { data: { session } } = await supabase.auth.getSession()
+        // Get user directly from server
+        const { data: { user }, error } = await supabase.auth.getUser()
 
-        // Then verify with getUser if session exists
-        if (session) {
-          const { data: { user } } = await supabase.auth.getUser()
-          setUser(user as User || null)
+        if (error) {
+          throw error
+        }
+
+        if (user) {
+          setUser(user as User)
         }
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
           async (event, session) => {
             // On auth state change, verify with getUser()
             if (session) {
-              const { data: { user: verifiedUser } } = await supabase.auth.getUser()
+              const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser()
+              if (userError) {
+                console.error('Error verifying user:', userError)
+                setUser(null)
+                return
+              }
               setUser(verifiedUser as User || null)
             } else {
               setUser(null)
@@ -63,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error: any) {
         setError(error.message)
+        setUser(null)
       } finally {
         setIsLoading(false)
       }

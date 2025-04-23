@@ -13,17 +13,26 @@ const formatCurrency = (cents: number): string => {
 export default async function AnalyticsPage() {
   const supabase = await createSupabaseServerClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // Verify user authentication with server
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  if (!session) {
-    redirect("/login")
+  if (error || !user) {
+    redirect("/auth/signin")
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
+  // Get user data from the database
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("user_type")
+    .eq("id", user.id)
+    .single()
 
+  if (userError) {
+    console.error("Error fetching user data:", userError)
+    redirect("/auth/signin")
+  }
+
+  // Only allow advertisers to access this page
   if (userData?.user_type !== "advertiser") {
     redirect("/dashboard")
   }
@@ -32,21 +41,21 @@ export default async function AnalyticsPage() {
   const { data: profile } = await supabase
     .from("advertiser_profiles")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single()
 
   // Get contests
   const { data: contests } = await supabase
     .from("contests_with_status")
     .select("*")
-    .eq("advertiser_id", session.user.id)
+    .eq("advertiser_id", user.id)
     .order("created_at", { ascending: false })
 
   // Get submissions
   const { data: submissions } = await supabase
     .from("submissions")
     .select("*, contests!inner(*)")
-    .eq("contests.advertiser_id", session.user.id)
+    .eq("contests.advertiser_id", user.id)
 
   // Calculate total views
   const totalViews = submissions?.reduce((sum, sub) => sum + (sub.current_views || 0), 0) || 0

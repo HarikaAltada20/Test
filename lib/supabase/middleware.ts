@@ -37,15 +37,20 @@ export const updateSession = async (request: NextRequest) => {
     }
   );
 
-  // Refresh session if expired
-  const { data: { session }, error } = await supabase.auth.getSession();
+  // Verify user authentication with server
+  const { data: { user }, error } = await supabase.auth.getUser();
   
-  if (error) {
-    // If there's an error with the session, redirect to login
-    response = NextResponse.redirect(new URL('/auth/signin', request.url));
-    // Clear any existing auth cookies
-    response.cookies.delete('sb-access-token');
-    response.cookies.delete('sb-refresh-token');
+  if (error || !user) {
+    // Only redirect to login if we're on a protected route
+    const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
+                           request.nextUrl.pathname.startsWith('/opportunities');
+    
+    if (isProtectedRoute) {
+      response = NextResponse.redirect(new URL('/auth/signin', request.url));
+      // Clear any existing auth cookies
+      response.cookies.delete('sb-access-token');
+      response.cookies.delete('sb-refresh-token');
+    }
     return response;
   }
 
