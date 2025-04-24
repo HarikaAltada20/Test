@@ -29,7 +29,7 @@ export default async function CreatorContentPage() {
     .from("submissions")
     .select("*, contests(title, platform)")
     .eq("creator_id", session.user.id)
-    .order("submitted_at", { ascending: false })
+    .order("created_at", { ascending: false })
 
   return (
     <div>
@@ -61,7 +61,7 @@ export default async function CreatorContentPage() {
                     <div>
                       <p className="text-sm font-medium">{submission.contests?.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        Submitted on {new Date(submission.submitted_at).toLocaleDateString()} |{" "}
+                        Submitted on {new Date(submission.created_at).toLocaleDateString()} |{" "}
                         {submission.contests?.platform}
                       </p>
                     </div>

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User, ListOrdered, ScrollText, Link2, Lightbulb, PlayCircle } from "lucide-react"
+import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User, ListOrdered, ScrollText, Link2, Lightbulb, PlayCircle, CheckCircle } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
@@ -52,6 +52,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const router = useRouter()
     const { user, isLoading: authLoading } = useAuth()
     const supabase = createSupabaseClient()
+    const [hasSubmitted, setHasSubmitted] = useState(false)
 
     // Function to fetch leaderboard data
     const fetchLeaderboard = async () => {
@@ -145,13 +146,22 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                 // Fetch existing submission (only if contest data is valid)
                 let submissionResult = null;
                 if (user?.id) { // Ensure user is available
-                    const { data: submissionData } = await supabase
+                    const { data: submissionData, error: submissionError } = await supabase
                         .from("submissions")
-                        .select("id, submitted_at")
+                        .select("id, created_at")
                         .eq("contest_id", contestId)
                         .eq("creator_id", user.id)
                         .limit(1);
                     submissionResult = submissionData && submissionData.length > 0 ? submissionData[0] : null;
+
+                    if (submissionError) {
+                        console.error("Error checking existing submission:", submissionError);
+                        // Handle error appropriately, maybe show a toast
+                    } else if (submissionResult) {
+                        setHasSubmitted(true);
+                        // Store the timestamp as well if needed, e.g., for display
+                        // setSubmissionTime(submissionResult.created_at);
+                    }
                 }
 
                 // Update state if component is still mounted
@@ -441,12 +451,11 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
 
                             <Card className="bg-secondary/30 border-secondary">
                                 <CardContent className="pt-6">
-                                    {existingSubmission ? (
+                                    {hasSubmitted ? (
                                         <div className="text-center">
-                                            <Info className="h-6 w-6 mx-auto text-blue-500 mb-2" />
-                                            <p className="text-sm font-medium mb-1">You've already submitted</p>
-                                            <p className="text-xs text-muted-foreground mb-4">Submitted {formatTimeAgo(existingSubmission.submitted_at)}</p>
-                                            <Button size="sm" onClick={() => handleViewSubmission(existingSubmission.id)}>View My Submission</Button>
+                                            <CheckCircle className="inline mr-2 h-4 w-4 text-green-500" />
+                                            <p>
+                                                You have already submitted for this opportunity. Submitted {formatTimeAgo(existingSubmission.created_at)}</p>
                                         </div>
                                     ) : (
                                         <div className="text-center">
