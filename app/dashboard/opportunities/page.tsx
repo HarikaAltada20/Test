@@ -14,16 +14,19 @@ export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
 
-      if (!user) {
-        router.push("/auth/signin")
-        return
+      if (authLoading || !user) {
+        if (!authLoading && !user) {
+          router.push("/auth/signin");
+          return;
+        }
+        return;
       }
 
       // Get user type from the database

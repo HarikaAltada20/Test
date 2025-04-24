@@ -42,8 +42,7 @@ export const updateSession = async (request: NextRequest) => {
   
   if (error || !user) {
     // Only redirect to login if we're on a protected route
-    const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
-                           request.nextUrl.pathname.startsWith('/opportunities');
+    const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard');
     
     if (isProtectedRoute) {
       response = NextResponse.redirect(new URL('/auth/signin', request.url));

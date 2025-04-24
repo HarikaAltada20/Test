@@ -9,6 +9,7 @@ import { formatLocalDateTime, formatMoney } from "@/lib/utils"
 import { withUsernameCheck } from "@/components/with-username-check"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
+import { useRouter } from "next/navigation"
 
 // Wrap component with username check
 export default withUsernameCheck(DashboardPage)
@@ -19,64 +20,115 @@ function DashboardPage() {
   const [recentContests, setRecentContests] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [userCoins, setUserCoins] = useState(0)
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
+  const router = useRouter()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
+    let isMounted = true;
+
     async function fetchData() {
-      if (!user) return
+      // Wait for auth to finish loading
+      if (authLoading) return;
+
+      // Check session directly with Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error("Error checking session:", sessionError);
+        return;
+      }
+
+      // If no session, redirect to signin
+      if (!session) {
+        if (isMounted) {
+          router.push("/auth/signin");
+        }
+        return;
+      }
 
       try {
-        setIsLoading(true)
+        if (isMounted) {
+          setIsLoading(true);
+        }
 
         // Get user type
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type, coins")
-          .eq("id", user.id)
+          .eq("id", session.user.id)
           .single()
+
+        if (userError) {
+          console.error("Error fetching user data:", userError);
+          return;
+        }
+
+        if (!isMounted) return;
 
         const userType = userData?.user_type
         setUserCoins(userData?.coins || 0)
-        if (userError) throw userError
-
 
         if (userType === "advertiser") {
           // For advertisers, fetch their profile and active subscription
-          const { data: advertiserProfile } = await supabase
+          const { data: advertiserProfile, error: profileError } = await supabase
             .from("advertiser_profiles")
             .select("*, subscription_plan")
-            .eq("id", user.id)
+            .eq("id", session.user.id)
             .single()
 
+          if (profileError) {
+            console.error("Error fetching advertiser profile:", profileError);
+            return;
+          }
+
+          if (!isMounted) return;
           setProfile(advertiserProfile)
 
           // Fetch recent contests for advertisers
-          const { data: contests } = await supabase
+          const { data: contests, error: contestsError } = await supabase
             .from("contests_with_status")
             .select("*")
-            .eq("advertiser_id", user.id)
+            .eq("advertiser_id", session.user.id)
             .order("created_at", { ascending: false })
             .limit(3)
 
+          if (contestsError) {
+            console.error("Error fetching contests:", contestsError);
+            return;
+          }
+
+          if (!isMounted) return;
           setRecentContests(contests || [])
         } else if (userType === "creator") {
-          const { data: creatorProfile } = await supabase
+          const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
             .select("*")
-            .eq("id", user.id)
+            .eq("id", session.user.id)
             .single()
 
+          if (profileError) {
+            console.error("Error fetching creator profile:", profileError);
+            return;
+          }
+
+          if (!isMounted) return;
           setProfile(creatorProfile)
 
           // For creators, fetch contests they've participated in
-          const { data: submissions } = await supabase
+          const { data: submissions, error: submissionsError } = await supabase
             .from("submissions")
             .select("*, contests(*)")
-            .eq("creator_id", user.id)
+            .eq("creator_id", session.user.id)
             .order("created_at", { ascending: false })
             .limit(3)
 
+          if (submissionsError) {
+            console.error("Error fetching submissions:", submissionsError);
+            return;
+          }
+
+          if (!isMounted) return;
           if (submissions) {
             // Extract contests from submissions
             const contests = submissions.map(sub => sub.contests)
@@ -86,13 +138,25 @@ function DashboardPage() {
       } catch (error) {
         console.error("Error fetching dashboard data:", error)
       } finally {
-        setIsLoading(false)
+        if (isMounted) {
+          setIsLoading(false)
+        }
       }
     }
 
     fetchData()
-  }, [user, supabase])
 
+    return () => {
+      isMounted = false;
+    }
+  }, [user, supabase, router, authLoading])
+
+  // Show nothing while auth is loading
+  if (authLoading) {
+    return null;
+  }
+
+  // Show loading state only when fetching data
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">

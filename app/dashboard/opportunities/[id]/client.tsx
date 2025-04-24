@@ -36,6 +36,10 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
             try {
                 // Check if auth is still loading or no user
                 if (authLoading || !user) {
+                    if (!authLoading && !user) {
+                        router.push("/auth/signin");
+                        return;
+                    }
                     return;
                 }
 

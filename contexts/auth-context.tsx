@@ -37,21 +37,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const getUser = async () => {
       setIsLoading(true)
       try {
-        // Get user directly from server
-        const { data: { user }, error } = await supabase.auth.getUser()
+        // First check session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
-        if (error) {
-          throw error
+        if (sessionError) {
+          throw sessionError
         }
 
-        if (user) {
-          setUser(user as User)
+        if (session) {
+          // If we have a session, get the user
+          const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+          if (userError) {
+            throw userError
+          }
+
+          if (user) {
+            setUser(user as User)
+          }
+        } else {
+          setUser(null)
         }
 
+        // Set up auth state change listener
         const { data: authListener } = supabase.auth.onAuthStateChange(
           async (event, session) => {
-            // On auth state change, verify with getUser()
-            if (session) {
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
               const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser()
               if (userError) {
                 console.error('Error verifying user:', userError)
@@ -59,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return
               }
               setUser(verifiedUser as User || null)
-            } else {
+            } else if (event === 'SIGNED_OUT') {
               setUser(null)
             }
           }
@@ -69,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           authListener.subscription.unsubscribe()
         }
       } catch (error: any) {
+        console.error("Auth error:", error)
         setError(error.message)
         setUser(null)
       } finally {
