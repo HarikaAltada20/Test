@@ -11,7 +11,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { createClientSupabaseClient } from "@/lib/supabase/client";
+import { createSupabaseClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -36,7 +36,7 @@ export function DeleteContestButton({
     const [isDeleting, setIsDeleting] = useState(false);
     const router = useRouter();
     const { toast } = useToast();
-    const supabase = createClientSupabaseClient();
+    const supabase = createSupabaseClient();
 
     // Don't show delete button for live contests
     if (isLive) {

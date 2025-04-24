@@ -1,5 +1,5 @@
 import type React from "react"
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { DashboardSidebar } from "@/components/dashboard-sidebar"
 
@@ -8,20 +8,28 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // Verify user authentication with server
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  if (!session) {
+  if (error || !user) {
     redirect("/auth/signin")
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  // Get user data from the database including username
+  const { data: userData } = await supabase
+    .from("users")
+    .select("user_type, username")
+    .eq("id", user.id)
+    .single()
 
-  const userRole = (userData?.role as "advertiser" | "creator") || "advertiser"
+  // If user has no username, redirect to username setup
+  if (!userData?.username) {
+    redirect("/choose-username")
+  }
+
+  const userRole = (userData?.user_type as "advertiser" | "creator") || "advertiser"
 
   return (
     <div className="flex min-h-screen">

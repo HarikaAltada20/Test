@@ -6,31 +6,35 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, DollarSign, Filter, Trophy } from "lucide-react"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
-import { formatCurrency } from "@/lib/currency-utils"
+import { formatMoney } from "@/lib/utils"
 
 export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-  const { user } = useAuth()
-  const supabase = createClientSupabaseClient()
+  const { user, isLoading: authLoading } = useAuth()
+  const supabase = createSupabaseClient()
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
 
-      if (!user) {
-        router.push("/login")
-        return
+      if (authLoading || !user) {
+        if (!authLoading && !user) {
+          router.push("/auth/signin");
+          return;
+        }
+        return;
       }
 
-      // Get user role from the database
-      const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single()
+      // Get user type from the database
+      const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single()
 
-      if (userData?.role !== "creator") {
-        router.push("/dashboard")
+      // Redirect advertisers to contests
+      if (userData?.user_type === "advertiser") {
+        router.push("/dashboard/contests")
         return
       }
 
@@ -39,7 +43,7 @@ export default function OpportunitiesPage() {
         .from("contests_with_status")
         .select("*")
         .not('status', 'eq', 'draft')
-        .in('status', ['live', 'upcoming', 'completed'])
+        .not('status', 'eq', 'incomplete')
         .order("created_at", { ascending: false })
 
       setAvailableContests(contests || [])
@@ -114,7 +118,7 @@ export default function OpportunitiesPage() {
                   <div className="flex items-center text-sm">
                     <DollarSign className="h-4 w-4 mr-2" />
                     <span>
-                      Prize Pool: {formatCurrency(contest.total_prize || 0)}
+                      Prize Pool: {formatMoney(contest.total_prize || 0)}
                     </span>
                   </div>
                   <div className="pt-2">

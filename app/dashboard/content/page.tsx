@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { ExternalLink, Filter, Video } from "lucide-react"
 
 export default async function CreatorContentPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   const {
     data: { session },
@@ -18,9 +18,9 @@ export default async function CreatorContentPage() {
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
 
-  if (userData?.role !== "creator") {
+  if (userData?.user_type !== "creator") {
     redirect("/dashboard")
   }
 

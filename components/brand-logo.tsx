@@ -1,3 +1,4 @@
+import React, { memo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import brandLogo from '@/public/images/GoViral_transparent_logo.png'
@@ -9,7 +10,37 @@ interface BrandLogoProps {
     href?: string;
 }
 
-export function BrandLogo({
+// Extract LogoContent outside the main component to prevent recreation on every render
+const LogoContent = ({ centered, showText, size, logoWidth, logoHeight }: {
+    centered: boolean;
+    showText: boolean;
+    size: 'sm' | 'md' | 'lg';
+    logoWidth: number;
+    logoHeight: number;
+}) => (
+    <div className={`flex items-center ${centered ? 'justify-center' : ''}`}>
+        <div className="relative">
+            <div className={`rounded-full bg-[#f0fdf4] ${size === 'sm' ? 'p-3' : size === 'md' ? 'p-4' : 'p-6'} flex items-center justify-center`}>
+                {/* You can replace this with your transparent logo image */}
+                <Image
+                    src={brandLogo}
+                    alt="Go Viral"
+                    width={logoWidth}
+                    height={logoHeight}
+                    priority
+                />
+            </div>
+        </div>
+        {showText && (
+            <span className={`font-bold ml-3 ${size === 'sm' ? 'text-lg' : size === 'md' ? 'text-xl' : 'text-2xl'}`}>
+                Go Viral
+            </span>
+        )}
+    </div>
+);
+
+// Memoize the BrandLogo component to prevent unnecessary re-renders
+export const BrandLogo = memo(function BrandLogo({
     centered = false,
     showText = true,
     size = 'md',
@@ -24,35 +55,27 @@ export function BrandLogo({
     const logoWidth = logoSizes[size];
     const logoHeight = logoSizes[size];
 
-    const LogoContent = () => (
-        <div className={`flex items-center ${centered ? 'justify-center' : ''}`}>
-            <div className="relative">
-                <div className={`rounded-full bg-[#f0fdf4] ${size === 'sm' ? 'p-3' : size === 'md' ? 'p-4' : 'p-6'} flex items-center justify-center`}>
-                    {/* You can replace this with your transparent logo image */}
-                    <Image
-                        src={brandLogo}
-                        alt="Go Viral"
-                        width={logoWidth}
-                        height={logoHeight}
-                        priority
-                    />
-                </div>
-            </div>
-            {showText && (
-                <span className={`font-bold ml-3 ${size === 'sm' ? 'text-lg' : size === 'md' ? 'text-xl' : 'text-2xl'}`}>
-                    Go Viral
-                </span>
-            )}
-        </div>
-    );
-
     if (href) {
         return (
             <Link href={href} className="focus:outline-none">
-                <LogoContent />
+                <LogoContent
+                    centered={centered}
+                    showText={showText}
+                    size={size}
+                    logoWidth={logoWidth}
+                    logoHeight={logoHeight}
+                />
             </Link>
         );
     }
 
-    return <LogoContent />;
-} 
+    return (
+        <LogoContent
+            centered={centered}
+            showText={showText}
+            size={size}
+            logoWidth={logoWidth}
+            logoHeight={logoHeight}
+        />
+    );
+}); 

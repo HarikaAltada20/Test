@@ -1,476 +1,420 @@
 "use client"
 
-import type React from "react"
-
-import { useEffect, useState, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Youtube, Instagram, Bell, Mail, Lock, LogOut, Building2, Globe } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { Input } from "@/components/ui/input"
 
-// Separate the component that uses useSearchParams
-function SettingsContent() {
-  const [profileData, setProfileData] = useState<any>(null)
-  const [youtubeAccount, setYoutubeAccount] = useState<any>(null)
+interface SocialAccount {
+  channel_id?: string;
+  channel_title?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: string;
+}
+
+interface CreatorProfile {
+  youtube_account: SocialAccount | null;
+  instagram_account: SocialAccount | null;
+}
+
+interface AdvertiserProfile {
+  company_name: string;
+  website_url: string;
+  subscription_plan: string;
+}
+
+export default function SettingsPage() {
+  const [profile, setProfile] = useState<CreatorProfile | AdvertiserProfile | null>(null)
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [pushNotifications, setPushNotifications] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [userType, setUserType] = useState<"creator" | "advertiser" | null>(null)
   const router = useRouter()
   const { user } = useAuth()
-  const supabase = createClientSupabaseClient()
-  const searchParams = useSearchParams()
+  const supabase = createSupabaseClient()
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
-        setIsLoading(false)
-        return
-      }
-
-      setIsLoading(true)
-      setError(null)
+    async function loadProfile() {
+      if (!user) return;
 
       try {
-        // Get user data
-        const { data: userData, error: userError } = await supabase.from("users").select("*").eq("id", user.id).single()
+        // First get user type
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
 
-        if (userError) {
-          console.error("User data fetch error:", userError)
-          throw new Error("Failed to load user data. Please try again.")
-        }
+        if (userError) throw userError;
+        setUserType(userData.user_type);
 
-        if (!userData) {
-          setIsLoading(false)
-          throw new Error("No user data found")
-        }
-
-        // Get role-specific profile data
-        if (userData.role === "advertiser") {
-          const { data: advertiserData, error: advertiserError } = await supabase
-            .from("advertiser_profiles")
-            .select("*")
-            .eq("user_id", user.id)
-            .maybeSingle()
-
-          if (advertiserError && !advertiserError.message.includes("No rows found")) {
-            console.error("Advertiser profile fetch error:", advertiserError)
-            throw new Error("Failed to load advertiser profile. Please try again.")
-          }
-
-          setProfileData({
-            ...userData,
-            ...(advertiserData || {}),
-            role: "advertiser",
-          })
-        } else {
-          const { data: creatorData, error: creatorError } = await supabase
+        // Then load profile based on user type
+        if (userData.user_type === "creator") {
+          const { data, error } = await supabase
             .from("creator_profiles")
-            .select("*")
-            .eq("user_id", user.id)
-            .maybeSingle()
+            .select("youtube_account, instagram_account")
+            .eq("id", user.id)
+            .single();
 
-          if (creatorError) {
-            console.error("Creator profile fetch error:", creatorError)
-            // Only throw if it's not a "no rows" error
-            if (!creatorError.message.includes("No rows found") &&
-              !creatorError.code?.includes("PGRST116")) {
-              throw new Error("Failed to load creator profile. Please try again.")
-            }
-          }
+          if (error) throw error;
+          setProfile(data);
+        } else {
+          const { data, error } = await supabase
+            .from("advertiser_profiles")
+            .select("company_name, website_url, subscription_plan")
+            .eq("id", user.id)
+            .single();
 
-          // Even if no creator profile was found, we still proceed with the user data
-          setProfileData({
-            ...userData,
-            ...(creatorData || {}),
-            role: "creator",
-          })
-        }
-      } catch (err: any) {
-        console.error("Profile fetch error:", err)
-        setError(err.message || "Failed to load profile")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchProfile()
-  }, [user, supabase])
-
-  useEffect(() => {
-    // Check for YouTube connection status from URL parameters
-    const youtubeConnected = searchParams.get('youtube_connected')
-    const youtubeError = searchParams.get('error')
-
-    if (youtubeConnected === 'true') {
-      setSuccess('YouTube account connected successfully!')
-      // Remove the parameter from URL to prevent showing the message on refresh
-      const newUrl = new URL(window.location.href)
-      newUrl.searchParams.delete('youtube_connected')
-      window.history.replaceState({}, '', newUrl.toString())
-    } else if (youtubeError) {
-      setError('Failed to connect YouTube account. Please try again.')
-      // Remove the parameter from URL
-      const newUrl = new URL(window.location.href)
-      newUrl.searchParams.delete('error')
-      window.history.replaceState({}, '', newUrl.toString())
-    }
-  }, [searchParams])
-
-  useEffect(() => {
-    // Fetch YouTube account information if user is a creator
-    const fetchYouTubeAccount = async () => {
-      if (!user || profileData?.role !== 'creator') return
-
-      try {
-        const { data, error } = await supabase
-          .from('creator_youtube_accounts')
-          .select('*')
-          .eq('creator_id', user.id)
-          .single()
-
-        if (!error) {
-          setYoutubeAccount(data)
+          if (error) throw error;
+          setProfile(data);
         }
       } catch (err) {
-        console.error('Error fetching YouTube account:', err)
+        console.error("Error loading profile:", err);
       }
     }
 
-    if (profileData) {
-      fetchYouTubeAccount()
-    }
-  }, [user, profileData, supabase])
+    loadProfile();
+  }, [user, supabase]);
 
-  const handleUserUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
-    setIsSaving(true)
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
 
     try {
-      // Update user data
-      const { error: userError } = await supabase
-        .from("users")
-        .update({
-          email: profileData.email,
-          profile_pic: profileData.profile_pic,
-        })
-        .eq("id", user?.id)
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
 
-      if (userError) throw userError
+      if (error) throw error;
 
-      // Update role-specific data
-      if (profileData.role === "advertiser") {
-        const { error: advertiserError } = await supabase
-          .from("advertiser_profiles")
-          .update({
-            company_name: profileData.company_name,
-            logo_url: profileData.logo_url,
-            website: profileData.website,
-            social_media_handles: profileData.social_media_handles || {},
-          })
-          .eq("user_id", user?.id)
-
-        if (advertiserError) throw advertiserError
-      } else {
-        const { error: creatorError } = await supabase
-          .from("creator_profiles")
-          .update({
-            username: profileData.username,
-            bio: profileData.bio,
-            linked_platforms: profileData.linked_platforms || {},
-          })
-          .eq("user_id", user?.id)
-
-        if (creatorError) throw creatorError
-      }
-
-      setSuccess("Profile updated successfully")
+      setSuccess("Password updated successfully");
+      setCurrentPassword("");
+      setNewPassword("");
     } catch (err: any) {
-      setError(err.message || "Failed to update profile")
+      setError(err.message || "Failed to update password");
     } finally {
-      setIsSaving(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { id, value } = e.target
-    setProfileData((prev: any) => ({
-      ...prev,
-      [id]: value,
-    }))
-  }
+  const handleNotificationChange = async (type: 'email' | 'push', value: boolean) => {
+    try {
+      if (type === 'email') {
+        setEmailNotifications(value);
+        // Update in database
+      } else {
+        setPushNotifications(value);
+        // Update in database
+      }
+    } catch (err) {
+      console.error(`Error updating ${type} notifications:`, err);
+    }
+  };
 
-  const handleDisconnectYouTube = async () => {
-    if (!user) return
+  const disconnectAccount = async (platform: 'youtube' | 'instagram') => {
+    try {
+      const { error } = await supabase
+        .from('creator_profiles')
+        .update({
+          [`${platform}_account`]: null
+        })
+        .eq('id', user?.id);
+
+      if (error) throw error;
+
+      setProfile(prev => prev ? {
+        ...prev,
+        [`${platform}_account`]: null
+      } : null);
+
+      setSuccess(`${platform.charAt(0).toUpperCase() + platform.slice(1)} account disconnected`);
+    } catch (err: any) {
+      setError(err.message || `Failed to disconnect ${platform} account`);
+    }
+  };
+
+  const updateCompanyProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsLoading(true);
 
     try {
       const { error } = await supabase
-        .from('creator_youtube_accounts')
-        .delete()
-        .eq('creator_id', user.id)
+        .from('advertiser_profiles')
+        .update({
+          company_name: (e.target as any).company_name.value,
+          website_url: (e.target as any).website_url.value,
+        })
+        .eq('id', user?.id);
 
-      if (error) throw error
+      if (error) throw error;
 
-      setYoutubeAccount(null)
-      setSuccess('YouTube account disconnected successfully')
+      setSuccess("Company profile updated successfully");
     } catch (err: any) {
-      setError(err.message || 'Failed to disconnect YouTube account')
+      setError(err.message || "Failed to update company profile");
+    } finally {
+      setIsLoading(false);
     }
-  }
-
-  if (isLoading || !profileData) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p>Loading profile...</p>
-      </div>
-    )
-  }
+  };
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Settings</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="text-muted-foreground">
+          Manage your account settings and preferences
+        </p>
+      </div>
 
-      <Tabs defaultValue="profile" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          {profileData?.role === 'creator' && (
-            <TabsTrigger value="integrations">Integrations</TabsTrigger>
-          )}
-        </TabsList>
-
-        <TabsContent value="profile">
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Settings</CardTitle>
-              <CardDescription>Update your profile information visible to others on the platform</CardDescription>
-            </CardHeader>
-            <form onSubmit={handleUserUpdate}>
-              <CardContent className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
-                {success && (
-                  <Alert className="bg-green-50 text-green-800">
-                    <AlertDescription>{success}</AlertDescription>
-                  </Alert>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    value={profileData.email || ""}
-                    onChange={handleInputChange}
-                    disabled
-                    placeholder="email@example.com"
-                  />
+      {/* Connected Accounts - Only for Creators */}
+      {userType === "creator" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Connected Accounts</CardTitle>
+            <CardDescription>
+              Manage your connected social media accounts
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* YouTube Account */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <Youtube className="h-5 w-5 text-red-600" />
                 </div>
-
-                {profileData.role === "advertiser" ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="company_name">Company Name</Label>
-                      <Input
-                        id="company_name"
-                        value={profileData.company_name || ""}
-                        onChange={handleInputChange}
-                        placeholder="Your company name"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="website">Website</Label>
-                      <Input
-                        id="website"
-                        value={profileData.website || ""}
-                        onChange={handleInputChange}
-                        placeholder="https://example.com"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="logo_url">Logo URL</Label>
-                      <Input
-                        id="logo_url"
-                        value={profileData.logo_url || ""}
-                        onChange={handleInputChange}
-                        placeholder="https://example.com/logo.png"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="space-y-2"></div>
-                    <div className="space-y-2">
-                      <Label htmlFor="username">Username</Label>
-                      <Input
-                        id="username"
-                        value={profileData.username || ""}
-                        onChange={handleInputChange}
-                        placeholder="Your username"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="bio">Bio</Label>
-                      <Textarea
-                        id="bio"
-                        value={profileData.bio || ""}
-                        onChange={handleInputChange}
-                        placeholder="Tell us about yourself"
-                        rows={4}
-                      />
-                    </div>
-                  </>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving ? "Saving..." : "Save Changes"}
-                </Button>
-              </CardFooter>
-            </form>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="account">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Settings</CardTitle>
-              <CardDescription>Manage your account settings and preferences</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="flex space-x-2">
-                  <Input id="password" type="password" value="••••••••" disabled />
-                  <Button variant="outline">Change</Button>
-                </div>
-              </div>
-
-              {profileData.role === "creator" && (
-                <div className="space-y-2">
-                  <Label htmlFor="payment">Payment Information</Label>
-                  <div className="flex space-x-2">
-                    <Input id="payment" value="••••••••" disabled />
-                    <Button variant="outline">Update</Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Add or update your payment details to receive payments for contest winnings
+                <div>
+                  <p className="font-medium">YouTube</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(profile as CreatorProfile)?.youtube_account
+                      ? `Connected as ${(profile as CreatorProfile).youtube_account?.channel_title}`
+                      : "Not connected"}
                   </p>
                 </div>
+              </div>
+              {(profile as CreatorProfile)?.youtube_account ? (
+                <Button
+                  variant="outline"
+                  onClick={() => disconnectAccount('youtube')}
+                >
+                  Disconnect
+                </Button>
+              ) : (
+                <Button asChild>
+                  <a href="/api/youtube/auth?returnTo=/dashboard/settings">Connect YouTube</a>
+                </Button>
+              )}
+            </div>
+
+            {/* Instagram Account */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-2 bg-pink-100 rounded-full">
+                  <Instagram className="h-5 w-5 text-pink-600" />
+                </div>
+                <div>
+                  <p className="font-medium">Instagram</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(profile as CreatorProfile)?.instagram_account
+                      ? `Connected as ${(profile as CreatorProfile).instagram_account?.channel_title}`
+                      : "Not connected"}
+                  </p>
+                </div>
+              </div>
+              {(profile as CreatorProfile)?.instagram_account ? (
+                <Button
+                  variant="outline"
+                  onClick={() => disconnectAccount('instagram')}
+                >
+                  Disconnect
+                </Button>
+              ) : (
+                <Button variant="outline" disabled>
+                  Coming Soon
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Company Profile - Only for Advertisers */}
+      {userType === "advertiser" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Company Profile</CardTitle>
+            <CardDescription>
+              Update your company information
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={updateCompanyProfile} className="space-y-4">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              {success && (
+                <Alert>
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
               )}
 
-              <div className="pt-4">
-                <Button variant="destructive">Delete Account</Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
-              <CardDescription>Configure how you want to be notified</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium">Email Notifications</h3>
-                  <p className="text-sm text-muted-foreground">Receive notifications via email</p>
-                </div>
-                <div>
-                  <Button variant="outline">Configure</Button>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="company_name">Company Name</Label>
+                <Input
+                  id="company_name"
+                  name="company_name"
+                  defaultValue={(profile as AdvertiserProfile)?.company_name}
+                />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium">Push Notifications</h3>
-                  <p className="text-sm text-muted-foreground">Receive notifications in your browser</p>
-                </div>
-                <div>
-                  <Button variant="outline">Configure</Button>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="website_url">Website URL</Label>
+                <Input
+                  id="website_url"
+                  name="website_url"
+                  type="url"
+                  defaultValue={(profile as AdvertiserProfile)?.website_url}
+                />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {profileData?.role === 'creator' && (
-          <TabsContent value="integrations">
-            <Card>
-              <CardHeader>
-                <CardTitle>YouTube Integration</CardTitle>
-                <CardDescription>
-                  Connect your YouTube account to submit content and track metrics automatically.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Updating..." : "Update Profile"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
-                {success && (
-                  <Alert className="bg-green-50 text-green-800">
-                    <AlertDescription>{success}</AlertDescription>
-                  </Alert>
-                )}
+      {/* Notifications */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Notifications</CardTitle>
+          <CardDescription>
+            Choose how you want to receive notifications
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="p-2 bg-gray-100 rounded-full">
+                <Mail className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-medium">Email Notifications</p>
+                <p className="text-sm text-muted-foreground">
+                  Get notified about new opportunities and updates
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={emailNotifications}
+              onCheckedChange={(checked) => handleNotificationChange('email', checked)}
+            />
+          </div>
 
-                {youtubeAccount ? (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-medium mb-2">Connected YouTube Channel</h3>
-                      <p className="text-sm mb-1"><strong>Channel:</strong> {youtubeAccount.channel_title}</p>
-                      <p className="text-sm mb-1"><strong>Channel ID:</strong> {youtubeAccount.channel_id}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Connected on {new Date(youtubeAccount.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button variant="destructive" onClick={handleDisconnectYouTube}>
-                        Disconnect YouTube Account
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="mb-4">
-                      Connect your YouTube account to automatically verify video ownership and track metrics.
-                    </p>
-                    <Button asChild>
-                      <a href="/api/youtube/auth">Connect YouTube Account</a>
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </Tabs>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="p-2 bg-gray-100 rounded-full">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="font-medium">Push Notifications</p>
+                <p className="text-sm text-muted-foreground">
+                  Receive push notifications in your browser
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={pushNotifications}
+              onCheckedChange={(checked) => handleNotificationChange('push', checked)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Security */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Security</CardTitle>
+          <CardDescription>
+            Update your password and security settings
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handlePasswordChange} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {success && (
+              <Alert>
+                <AlertDescription>{success}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New Password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Updating..." : "Update Password"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Danger Zone */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-red-600">Danger Zone</CardTitle>
+          <CardDescription>
+            Irreversible and destructive actions
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="destructive" className="w-full">
+            <LogOut className="h-4 w-4 mr-2" />
+            Delete Account
+          </Button>
+        </CardContent>
+      </Card>
     </div>
-  )
-}
-
-// Main component with Suspense boundary
-export default function SettingsPage() {
-  return (
-    <Suspense fallback={<div className="p-4 text-center">Loading settings...</div>}>
-      <SettingsContent />
-    </Suspense>
   );
 }
 

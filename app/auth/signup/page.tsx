@@ -19,9 +19,10 @@ export default function SignupPage() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
-    const [role, setRole] = useState<"advertiser" | "creator">("advertiser")
+    const [user_type, Setuser_type] = useState<"advertiser" | "creator">("advertiser")
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
+    const [referralCode, setReferralCode] = useState("")
     const { signUp } = useAuth()
     const router = useRouter()
     const { toast } = useToast()
@@ -46,30 +47,15 @@ export default function SignupPage() {
 
         try {
             const fullName = `${firstName} ${lastName}`.trim()
-            const result = await signUp(email, password, fullName, role)
+            const result = await signUp(email, password, fullName, user_type, referralCode || undefined)
 
             if (result.success) {
-                if (result.emailConfirmationRequired) {
-                    toast({
-                        title: "Account created!",
-                        description: "A verification email has been sent to your email address. Please verify your email before signing in.",
-                        duration: 10000, // 10 seconds so they have time to read it
-                    })
-                    // Redirect to signin page with a verification message
-                    setTimeout(() => {
-                        router.push("/auth/signin?verification=pending")
-                    }, 2000)
-                } else {
-                    toast({
-                        title: "Account created!",
-                        description: "Your account has been created successfully.",
-                        duration: 3000,
-                    })
-                    // Delay navigation to dashboard to ensure toast is visible
-                    setTimeout(() => {
-                        router.push("/dashboard")
-                    }, 500)
-                }
+                // For OTP flow, the redirect is handled in auth-context.tsx
+                toast({
+                    title: "Verification code sent!",
+                    description: "We've sent a verification code to your email address. Please check your inbox.",
+                    duration: 5000,
+                })
             } else {
                 const isDuplicateEmailError = result.error &&
                     (result.error.includes("already exists") ||
@@ -140,7 +126,7 @@ export default function SignupPage() {
                             </Alert>
                         )}
 
-                        <Tabs defaultValue="advertiser" onValueChange={(value) => setRole(value as "advertiser" | "creator")}>
+                        <Tabs defaultValue="advertiser" onValueChange={(value) => Setuser_type(value as "advertiser" | "creator")}>
                             <TabsList className="grid w-full grid-cols-2">
                                 <TabsTrigger value="advertiser">I'm a Brand</TabsTrigger>
                                 <TabsTrigger value="creator">I'm a Creator</TabsTrigger>
@@ -209,6 +195,18 @@ export default function SignupPage() {
                                     )}
                                 </button>
                             </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="referralCode">Referral code (optional)</Label>
+                            <Input
+                                id="referralCode"
+                                type="text"
+                                placeholder="Enter referral code"
+                                value={referralCode}
+                                onChange={(e) => setReferralCode(e.target.value)}
+                                className="h-11"
+                            />
                         </div>
 
                         <Button type="submit" className="w-full h-11 bg-rose-600 hover:bg-rose-700" disabled={isLoading}>

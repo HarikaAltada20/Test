@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Filter, Users } from "lucide-react"
 import Link from "next/link"
 
 export default async function CreatorsPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   const {
     data: { session },
@@ -19,9 +19,9 @@ export default async function CreatorsPage() {
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
 
-  if (userData?.role !== "advertiser") {
+  if (userData?.user_type !== "advertiser") {
     redirect("/dashboard")
   }
 
@@ -49,7 +49,7 @@ export default async function CreatorsPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {creators && creators.length > 0 ? (
               creators.map((creator) => (
-                <div key={creator.user_id} className="border rounded-lg p-4 flex flex-col gap-4">
+                <div key={creator.id} className="border rounded-lg p-4 flex flex-col gap-4">
                   <div className="flex items-center gap-4">
                     <Avatar>
                       <AvatarImage src={(creator.users as any)?.profile_pic || ""} />
@@ -74,8 +74,8 @@ export default async function CreatorsPage() {
                     {(!creator.linked_platforms ||
                       typeof creator.linked_platforms !== "object" ||
                       Object.keys(creator.linked_platforms).length === 0) && (
-                      <Badge variant="outline">No platforms linked</Badge>
-                    )}
+                        <Badge variant="outline">No platforms linked</Badge>
+                      )}
                   </div>
 
                   <div className="mt-auto flex justify-between items-center">
@@ -83,7 +83,7 @@ export default async function CreatorsPage() {
                       <span className="text-sm font-medium">{creator.contests_won} wins</span>
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/dashboard/creators/${creator.user_id}`}>View Profile</Link>
+                      <Link href={`/dashboard/creators/${creator.id}`}>View Profile</Link>
                     </Button>
                   </div>
                 </div>

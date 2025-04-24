@@ -224,43 +224,44 @@ export default function PricingPage() {
                                     </span>
                                 </div>
                                 <CardDescription className="text-center mt-2">
-                                    {plan.id === 'bronze' && "Perfect for getting started"}
-                                    {plan.id === 'silver' && "Best for growing brands"}
-                                    {plan.id === 'gold' && "For established businesses"}
-                                    {plan.id === 'platinum' && "For scaling content strategy"}
-                                    {plan.id === 'diamond' && "Enterprise-grade solution"}
+                                    {plan.name === 'FREE' && "Try it out for free"}
+                                    {plan.name === 'BRONZE' && "Perfect for getting started"}
+                                    {plan.name === 'SILVER' && "Best for growing brands"}
+                                    {plan.name === 'GOLD' && "For established businesses"}
+                                    {plan.name === 'PLATINUM' && "For scaling content strategy"}
+                                    {plan.name === 'DIAMOND' && "Enterprise-grade solution"}
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="flex-grow">
                                 <ul className="space-y-2">
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>{plan.features.maxActiveContests === Infinity ? 'Unlimited' : plan.features.maxActiveContests} active contests</span>
+                                        <span>{plan.features.maxActiveContests} active contests</span>
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Min. {formatCurrency(plan.features.minContestBudget)} per contest</span>
+                                        <span>Min. amount of contest you can run is {formatCurrency(plan.features.minContestBudget)}</span>
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Up to {plan.features.maxWinnersPerContest === Infinity ? 'unlimited' : plan.features.maxWinnersPerContest} winners</span>
+                                        <span>Up to {plan.features.maxWinnersPerContest} winners</span>
+                                    </li>
+                                    <li className="flex items-start">
+                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                        <span>Up to {plan.features.commisionPercentage}% commission per contest</span>
                                     </li>
                                     <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
                                         <span>Access to 5,000+ creators</span>
                                     </li>
-                                    <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>{plan.features.contestBranding}</span>
-                                    </li>
-                                    <li className="flex items-start">
+                                    {/* <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
                                         <span>Analytics dashboard</span>
-                                    </li>
-                                    <li className="flex items-start">
+                                    </li> */}
+                                    {/* <li className="flex items-start">
                                         <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
                                         <span>{plan.features.support} support</span>
-                                    </li>
+                                    </li> */}
                                 </ul>
                             </CardContent>
                             <CardFooter className="pt-6">
@@ -272,7 +273,7 @@ export default function PricingPage() {
                                     asChild
                                 >
                                     <Link href={`/signup?plan=${plan.id}`}>
-                                        {plan.id === 'diamond' ? 'Start Free Trial' : 'Get Started'}
+                                        {plan.id === 'DIAMOND' ? 'Start Free Trial' : 'Get Started'}
                                     </Link>
                                 </Button>
                             </CardFooter>

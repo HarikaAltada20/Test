@@ -1,125 +1,277 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
+"use client"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Trophy, Users, BarChart, DollarSign, Plus, Video } from "lucide-react"
-import { formatLocalDateTime } from "@/lib/utils"
+import { Trophy, DollarSign, Plus, Video, Coins } from "lucide-react"
+import { formatLocalDateTime, formatMoney } from "@/lib/utils"
+import { withUsernameCheck } from "@/components/with-username-check"
+import { createSupabaseClient } from "@/lib/supabase/client"
+import { useAuth } from "@/contexts/auth-context"
+import { useRouter } from "next/navigation"
 
-// Add this utility function to convert cents to dollars for display
-const formatCurrency = (cents: number): string => {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+// Wrap component with username check
+export default withUsernameCheck(DashboardPage)
 
-export default async function DashboardPage() {
-  const supabase = createServerSupabaseClient()
+// Client component version
+function DashboardPage() {
+  const [profile, setProfile] = useState<any>(null)
+  const [recentContests, setRecentContests] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [userCoins, setUserCoins] = useState(0)
+  const { user, isLoading: authLoading } = useAuth()
+  const router = useRouter()
+  const supabase = createSupabaseClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  useEffect(() => {
+    let isMounted = true;
 
-  if (!session) {
-    redirect("/login")
+    async function fetchData() {
+      // Wait for auth to finish loading
+      if (authLoading) return;
+
+      // Check session directly with Supabase
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error("Error checking session:", sessionError);
+        return;
+      }
+
+      // If no session, redirect to signin
+      if (!session) {
+        if (isMounted) {
+          router.push("/auth/signin");
+        }
+        return;
+      }
+
+      try {
+        if (isMounted) {
+          setIsLoading(true);
+        }
+
+        // Get user type
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("user_type, coins")
+          .eq("id", session.user.id)
+          .single()
+
+        if (userError) {
+          console.error("Error fetching user data:", userError);
+          return;
+        }
+
+        if (!isMounted) return;
+
+        const userType = userData?.user_type
+        setUserCoins(userData?.coins || 0)
+
+        if (userType === "advertiser") {
+          // For advertisers, fetch their profile and active subscription
+          const { data: advertiserProfile, error: profileError } = await supabase
+            .from("advertiser_profiles")
+            .select("*, subscription_plan")
+            .eq("id", session.user.id)
+            .single()
+
+          if (profileError) {
+            console.error("Error fetching advertiser profile:", profileError);
+            return;
+          }
+
+          if (!isMounted) return;
+          setProfile(advertiserProfile)
+
+          // Fetch recent contests for advertisers
+          const { data: contests, error: contestsError } = await supabase
+            .from("contests_with_status")
+            .select("*")
+            .eq("advertiser_id", session.user.id)
+            .order("created_at", { ascending: false })
+            .limit(3)
+
+          if (contestsError) {
+            console.error("Error fetching contests:", contestsError);
+            return;
+          }
+
+          if (!isMounted) return;
+          setRecentContests(contests || [])
+        } else if (userType === "creator") {
+          const { data: creatorProfile, error: profileError } = await supabase
+            .from("creator_profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single()
+
+          if (profileError) {
+            console.error("Error fetching creator profile:", profileError);
+            return;
+          }
+
+          if (!isMounted) return;
+          setProfile(creatorProfile)
+
+          // For creators, fetch contests they've participated in
+          const { data: submissions, error: submissionsError } = await supabase
+            .from("submissions")
+            .select("*, contests(*)")
+            .eq("creator_id", session.user.id)
+            .order("created_at", { ascending: false })
+            .limit(3)
+
+          if (submissionsError) {
+            console.error("Error fetching submissions:", submissionsError);
+            return;
+          }
+
+          if (!isMounted) return;
+          if (submissions) {
+            // Extract contests from submissions
+            const contests = submissions.map(sub => sub.contests)
+            setRecentContests(contests || [])
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error)
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    fetchData()
+
+    return () => {
+      isMounted = false;
+    }
+  }, [user, supabase, router, authLoading])
+
+  // Show nothing while auth is loading
+  if (authLoading) {
+    return null;
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
-
-  const userRole = (userData?.role as "advertiser" | "creator") || "advertiser"
-
-  if (userRole === "advertiser") {
-    return <AdvertiserDashboard userId={session.user.id} />
-  } else {
-    return <CreatorDashboard userId={session.user.id} />
+  // Show loading state only when fetching data
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p>Loading dashboard...</p>
+      </div>
+    )
   }
-}
 
-async function AdvertiserDashboard({ userId }: { userId: string }) {
-  const supabase = createServerSupabaseClient()
-
-  // Get advertiser profile
-  const { data: profile } = await supabase.from("advertiser_profiles").select("*").eq("user_id", userId).single()
-
-  // Get contests
-  const { data: contests } = await supabase
-    .from("contests_with_status")
-    .select("*")
-    .eq("advertiser_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(3)
-
-  // Get total submissions
-  const { count: submissionsCount } = await supabase
-    .from("submissions")
-    .select("*", { count: "exact", head: true })
-    .in("contest_id", contests?.map((contest) => contest.id) || [])
+  // Check if user is advertiser or creator based on profile
+  const isAdvertiser = profile && "company_name" in profile
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Brand Dashboard</h1>
-        <Button className="bg-rose-600 hover:bg-rose-700" asChild>
-          <Link href="/dashboard/contests/create">
-            <Plus className="mr-2 h-4 w-4" /> Create Contest
-          </Link>
-        </Button>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+        {isAdvertiser && (
+          <Button className="bg-rose-600 hover:bg-rose-700" asChild>
+            <Link href="/dashboard/contests/create">
+              <Plus className="mr-2 h-4 w-4" /> Create Contest
+            </Link>
+          </Button>
+        )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {isAdvertiser ? (
+          // Advertiser stats
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatMoney(profile?.total_money_spent || 0)}</div>
+                <p className="text-xs text-muted-foreground">Total money spent on contests</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Contests</CardTitle>
+                <Trophy className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{profile?.total_contests_run || 0}</div>
+                <p className="text-xs text-muted-foreground">Contests created</p>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          // Creator stats
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatMoney(profile?.total_money_won || 0)}</div>
+                <p className="text-xs text-muted-foreground">Total money earned from contests</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Contests Won</CardTitle>
+                <Trophy className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{profile?.total_contests_won || 0}</div>
+                <p className="text-xs text-muted-foreground">Out of {profile?.total_contests_participated || 0} participated</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* Common stats for both roles */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Contests</CardTitle>
-            <Trophy className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Views</CardTitle>
+            <Video className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{contests?.filter((c) => c.status === "live").length || 0}</div>
-            <p className="text-xs text-muted-foreground">Total: {contests?.length || 0}</p>
+            <div className="text-2xl font-bold">{profile?.total_views || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {isAdvertiser ? "Views on your contest content" : "Views on your content"}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Creators</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Available Coins</CardTitle>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-muted-foreground">
+              <circle cx="12" cy="12" r="8" />
+              <path d="M12 8v4l2 2" />
+            </svg>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-muted-foreground">Across all contests</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Submissions</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{submissionsCount || 0}</div>
-            <p className="text-xs text-muted-foreground">Across all contests</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Budget Spent</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(profile?.total_spent || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">Total budget</p>
+            <div className="text-2xl font-bold">{userCoins}</div>
+            <p className="text-xs text-muted-foreground">Coins to redeem or use</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="col-span-2">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Recent Contests</CardTitle>
-            <CardDescription>Your most recent creator contests</CardDescription>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>
+              {isAdvertiser ? "Your recent contests" : "Contests you've participated in recently"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {contests && contests.length > 0 ? (
+            {recentContests && recentContests.length > 0 ? (
               <div className="space-y-4">
-                {contests.map((contest) => (
+                {recentContests.map((contest) => (
                   <div key={contest.id} className="flex items-center justify-between border-b pb-4">
                     <div className="flex items-center space-x-4">
                       <div className="rounded-full bg-gray-100 p-2">
@@ -127,211 +279,42 @@ async function AdvertiserDashboard({ userId }: { userId: string }) {
                       </div>
                       <div>
                         <p className="text-sm font-medium">{contest.title}</p>
-                        <div className="text-xs text-muted-foreground">
-                          Created on {formatLocalDateTime(contest.created_at, { dateStyle: 'medium', timeStyle: 'short' })}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="text-sm text-right">
-                        <p className="font-medium">Status: {contest.status}</p>
                         <p className="text-xs text-muted-foreground">
-                          {contest.status === "live" &&
-                            contest.end_date &&
-                            `Ends: ${new Date(contest.end_date).toLocaleDateString()}`}
+                          {contest.platform} | {formatLocalDateTime(contest.created_at, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
                         </p>
                       </div>
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={`/dashboard/contests/${contest.id}`}>View</Link>
-                      </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No contests yet</p>
-                <Button className="mt-4" asChild>
-                  <Link href="/dashboard/contests/create">Create your first contest</Link>
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common tasks and shortcuts</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full" asChild>
-              <Link href="/dashboard/contests/create">
-                <Plus className="mr-2 h-4 w-4" /> Create New Contest
-              </Link>
-            </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/dashboard/contests">View All Contests</Link>
-            </Button>
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/dashboard/analytics">View Analytics</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  )
-}
-
-async function CreatorDashboard({ userId }: { userId: string }) {
-  const supabase = createServerSupabaseClient()
-
-  // Get creator profile
-  const { data: profile } = await supabase.from("creator_profiles").select("*").eq("user_id", userId).single()
-
-  // Get submissions
-  const { data: submissions } = await supabase
-    .from("submissions")
-    .select("*, contests(*)")
-    .eq("creator_id", userId)
-    .order("submitted_at", { ascending: false })
-    .limit(5)
-
-  // Get available contests
-  const { data: availableContests } = await supabase
-    .from("contests_with_status")
-    .select("*")
-    .eq("status", "live")
-    .order("created_at", { ascending: false })
-    .limit(3)
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Creator Dashboard</h1>
-        <Button className="bg-rose-600 hover:bg-rose-700" asChild>
-          <Link href="/dashboard/opportunities">
-            <Plus className="mr-2 h-4 w-4" /> Find Opportunities
-          </Link>
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Views</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {submissions?.reduce((sum, sub) => sum + (sub.current_views || 0), 0).toLocaleString() || "0"}
-            </div>
-            <p className="text-xs text-muted-foreground">Across all submissions</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(profile?.prize_money_earned || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">From all contests</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Contests</CardTitle>
-            <Trophy className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{availableContests?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Available to join</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Submissions</CardTitle>
-            <Video className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{submissions?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Total submissions</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="col-span-2">
-          <CardHeader>
-            <CardTitle>Recent Submissions</CardTitle>
-            <CardDescription>Your recent content submissions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {submissions && submissions.length > 0 ? (
-              <div className="space-y-4">
-                {submissions.map((submission) => (
-                  <div key={submission.id} className="flex items-center justify-between border-b pb-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="rounded-full bg-gray-100 p-2">
-                        <Video className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{submission.contests?.title}</p>
-                        <div className="text-xs text-muted-foreground">
-                          Submitted on {formatLocalDateTime(submission.submitted_at, { dateStyle: 'medium', timeStyle: 'short' })}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="text-sm text-right">
-                        <p className="font-medium">{submission.current_views.toLocaleString()} views</p>
-                        <p className="text-xs text-muted-foreground">Status: {submission.status}</p>
-                      </div>
-                      <Button variant="outline" size="sm" asChild>
-                        <Link href={submission.content_link} target="_blank" rel="noopener noreferrer">
-                          View
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No submissions yet</p>
-                <Button className="mt-4" asChild>
-                  <Link href="/dashboard/opportunities">Find opportunities</Link>
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Available Contests</CardTitle>
-            <CardDescription>Contests you can join now</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {availableContests && availableContests.length > 0 ? (
-              <div className="space-y-4">
-                {availableContests.map((contest) => (
-                  <div key={contest.id} className="flex flex-col space-y-2 border-b pb-4">
-                    <p className="font-medium">{contest.title}</p>
-                    <p className="text-xs text-muted-foreground">Platform: {contest.platform}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Ends: {contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "N/A"}
-                    </p>
-                    <Button size="sm" className="mt-2" asChild>
-                      <Link href={`/dashboard/opportunities/${contest.id}`}>View Details</Link>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/contests/${contest.id}`}>View</Link>
                     </Button>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-center py-8 text-muted-foreground">No active contests available</p>
+              <div className="flex h-40 items-center justify-center border rounded">
+                <p className="text-sm text-muted-foreground">
+                  {isAdvertiser ? "No contests created yet" : "No contest activity yet"}
+                </p>
+              </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Analytics Overview</CardTitle>
+            <CardDescription>
+              Performance insights for your {isAdvertiser ? "contests" : "content"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex h-40 items-center justify-center border rounded">
+              <p className="text-sm text-muted-foreground">Detailed analytics available soon</p>
+            </div>
           </CardContent>
         </Card>
       </div>

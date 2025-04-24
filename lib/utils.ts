@@ -43,13 +43,14 @@ export function formatLocalDateTime(
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: 'UTC'
   }
 ): string {
   if (!dateValue) return '';
   
   const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-  return date.toLocaleString(undefined, options);
+  return new Intl.DateTimeFormat(undefined, options).format(date);
 }
 
 /**
@@ -71,4 +72,13 @@ export function toUTCISOString(dateString: string, timeString: string): string |
     console.error('Error converting to UTC:', error);
     return null;
   }
+}
+
+export function formatMoney(cents: number, currencyCode: string = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currencyCode,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(cents / 100);
 }

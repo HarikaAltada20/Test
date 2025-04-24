@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
@@ -11,20 +11,29 @@ const formatCurrency = (cents: number): string => {
 }
 
 export default async function AnalyticsPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // Verify user authentication with server
+  const { data: { user }, error } = await supabase.auth.getUser()
 
-  if (!session) {
-    redirect("/login")
+  if (error || !user) {
+    redirect("/auth/signin")
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  // Get user data from the database
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("user_type")
+    .eq("id", user.id)
+    .single()
 
-  if (userData?.role !== "advertiser") {
+  if (userError) {
+    console.error("Error fetching user data:", userError)
+    redirect("/auth/signin")
+  }
+
+  // Only allow advertisers to access this page
+  if (userData?.user_type !== "advertiser") {
     redirect("/dashboard")
   }
 
@@ -32,21 +41,21 @@ export default async function AnalyticsPage() {
   const { data: profile } = await supabase
     .from("advertiser_profiles")
     .select("*")
-    .eq("user_id", session.user.id)
+    .eq("id", user.id)
     .single()
 
   // Get contests
   const { data: contests } = await supabase
     .from("contests_with_status")
     .select("*")
-    .eq("advertiser_id", session.user.id)
+    .eq("advertiser_id", user.id)
     .order("created_at", { ascending: false })
 
   // Get submissions
   const { data: submissions } = await supabase
     .from("submissions")
     .select("*, contests!inner(*)")
-    .eq("contests.advertiser_id", session.user.id)
+    .eq("contests.advertiser_id", user.id)
 
   // Calculate total views
   const totalViews = submissions?.reduce((sum, sub) => sum + (sub.current_views || 0), 0) || 0
@@ -158,10 +167,10 @@ export default async function AnalyticsPage() {
                           <h3 className="font-medium">{contest.title}</h3>
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${contest.status === "live"
-                                ? "bg-green-100 text-green-800"
-                                : contest.status === "upcoming"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-gray-100 text-gray-800"
+                              ? "bg-green-100 text-green-800"
+                              : contest.status === "upcoming"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-gray-100 text-gray-800"
                               }`}
                           >
                             {contest.status}

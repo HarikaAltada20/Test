@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClientSupabaseClient } from "@/lib/supabase/client"
+import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Image, Trash, Upload } from "lucide-react"
@@ -38,7 +38,7 @@ export default function EditContestPage() {
     const contestId = params.id as string
     const router = useRouter()
     const { user } = useAuth()
-    const supabase = createClientSupabaseClient()
+    const supabase = createSupabaseClient()
 
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -61,8 +61,8 @@ export default function EditContestPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Update the constants for prize amounts - convert to cents
-    const MIN_PRIZE_PER_WINNER = 500 // Minimum prize amount per winner in cents ($5)
+    // Update the constants for prize amounts based on free plan
+    const MIN_PRIZE_PER_WINNER = 10000 // Minimum prize amount per winner in cents ($100)
     const MAX_PRIZE_PER_WINNER = 100000 // Maximum prize amount per winner in cents ($1000)
     const DEFAULT_PRIZE_ALLOCATIONS = {
         1: 50000, // $500.00

@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server"
+import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ const formatCurrency = (cents: number): string => {
 }
 
 export default async function CreatorEarningsPage() {
-  const supabase = createServerSupabaseClient()
+  const supabase = await createSupabaseServerClient()
 
   const {
     data: { session },
@@ -24,14 +24,14 @@ export default async function CreatorEarningsPage() {
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("role").eq("id", session.user.id).single()
+  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
 
-  if (userData?.role !== "creator") {
+  if (userData?.user_type !== "creator") {
     redirect("/dashboard")
   }
 
   // Get creator profile
-  const { data: profile } = await supabase.from("creator_profiles").select("*").eq("user_id", session.user.id).single()
+  const { data: profile } = await supabase.from("creator_profiles").select("*").eq("id", session.user.id).single()
 
   // Get successful submissions (to simulate earnings)
   const { data: submissions } = await supabase

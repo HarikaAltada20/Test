@@ -1,8 +1,6 @@
 import { HeroSection } from "@/components/hero-section"
 import { Button } from "@/components/ui/button"
-import Image from "next/image"
 import Link from "next/link"
-import logo from "@/public/images/GoViral_transparent_logo.png"
 
 export default function Home() {
   return (
