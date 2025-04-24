@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { getUserVideos } from '@/lib/youtube-api';
+import { getUserVideos, refreshAccessToken } from '@/lib/youtube-api';
 
 export async function GET() {
   try {
@@ -42,12 +42,39 @@ export async function GET() {
       return NextResponse.json({ error: 'No YouTube account connected' }, { status: 404 });
     }
 
-    // Check if token is expired
+    let accessToken = profile.youtube_account.access_token;
+
+    // Check if token is expired and try to refresh it
     if (profile.youtube_account.expires_at && new Date(profile.youtube_account.expires_at) <= new Date()) {
-      return NextResponse.json({ error: 'YouTube token expired' }, { status: 401 });
+      try {
+        const newTokens = await refreshAccessToken(profile.youtube_account.refresh_token);
+        
+        // Update the tokens in the database
+        const { error: updateError } = await supabase
+          .from('creator_profiles')
+          .update({
+            youtube_account: {
+              ...profile.youtube_account,
+              access_token: newTokens.access_token,
+              expires_at: newTokens.expires_at,
+              updated_at: new Date().toISOString()
+            }
+          })
+          .eq('id', user.id);
+
+        if (updateError) {
+          console.error('Error updating tokens:', updateError);
+          return NextResponse.json({ error: 'Failed to refresh YouTube token' }, { status: 500 });
+        }
+
+        accessToken = newTokens.access_token;
+      } catch (refreshError) {
+        console.error('Error refreshing token:', refreshError);
+        return NextResponse.json({ error: 'YouTube token expired and refresh failed' }, { status: 401 });
+      }
     }
 
-    const videos = await getUserVideos(profile.youtube_account.access_token);
+    const videos = await getUserVideos(accessToken);
     
     if (!videos) {
       return NextResponse.json({ error: 'Failed to fetch videos' }, { status: 500 });

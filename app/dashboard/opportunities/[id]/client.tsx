@@ -2,36 +2,89 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User } from "lucide-react"
+import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User, ListOrdered, ScrollText, Link2, Lightbulb, PlayCircle } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { formatLocalDateTime, formatMoney } from "@/lib/utils"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Define type for prize objects globally within the file
+type PrizeInfo = {
+    position: number;
+    amount: number;
+};
+
+// Adjust LeaderboardEntry type globally
+type LeaderboardEntry = {
+    id: string;
+    creator_id: string;
+    video_title: string;
+    video_thumbnail_url: string;
+    views: number;
+    earnings: number;
+    status: string;
+    created_at: string;
+    content_link: string;
+    users: {
+        id: string;
+        username: string;
+        profile_picture_url: string;
+        full_name: string;
+    } | null;
+};
 
 // Client component that receives contestId as a prop
 export function ContestClientPage({ contestId }: { contestId: string }) {
     const [contest, setContest] = useState<any>(null)
     const [existingSubmission, setExistingSubmission] = useState<any>(null)
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+    const [lastUpdated, setLastUpdated] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
+    const [loadingLeaderboard, setLoadingLeaderboard] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
     const { user, isLoading: authLoading } = useAuth()
     const supabase = createSupabaseClient()
 
-    useEffect(() => {
-        let isMounted = true;
+    // Function to fetch leaderboard data
+    const fetchLeaderboard = async () => {
+        if (!isMounted) return;
+        setLoadingLeaderboard(true);
+        let leaderboardFetchError = null;
+        try {
+            const response = await fetch(`/api/leaderboard/${contestId}`);
+            const data = await response.json();
+            if (!response.ok) {
+                leaderboardFetchError = data.error || 'Failed to fetch leaderboard';
+                throw new Error(leaderboardFetchError);
+            }
+            if (isMounted) {
+                setLeaderboard(data.leaderboard || []);
+                setLastUpdated(data.lastUpdated);
+            }
+        } catch (err: any) {
+            console.error("Error fetching leaderboard:", err);
+            if (isMounted && !error) setError(leaderboardFetchError || err.message);
+        } finally {
+            if (isMounted) setLoadingLeaderboard(false);
+        }
+    };
 
+    let isMounted = true; // Flag to track component mount status
+
+    useEffect(() => {
+        isMounted = true;
         async function fetchData() {
             if (!isMounted) return;
-
-            // Don't show loading if we already have contest data
-            if (!contest) {
-                setLoading(true);
-            }
+            setLoading(true);
+            setError(null);
 
             try {
                 // Check if auth is still loading or no user
@@ -51,103 +104,68 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                     return;
                 }
 
-                // First try to get contest details
-                let { data: contestData, error: contestError } = await supabase
-                    .from("contests_with_status")
-                    .select("*")
+                // Fetch contest details using maybeSingle()
+                const { data: contestData, error: contestError } = await supabase
+                    .from("contests_with_status") // Use the view
+                    .select(`
+                        *,
+                        advertiser_profiles ( company_name )
+                    `)
                     .eq("id", contestId)
-                    .single();
+                    .maybeSingle(); // Handles not found gracefully
 
-                // If there's an error with the view, try the base contests table
+                // Handle potential errors during fetch
                 if (contestError) {
-                    console.error("Error fetching from contests_with_status:", contestError);
-
-                    // Try to get data from the base contests table instead
-                    const { data: fallbackData, error: fallbackError } = await supabase
-                        .from("contests")
-                        .select("*")
-                        .eq("id", contestId)
-                        .single();
-
-                    if (fallbackError) {
-                        console.error("Fallback error:", fallbackError);
-                        if (isMounted) {
-                            setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}. 
-                      Fallback also failed: ${fallbackError.message || "Unknown error"}`);
-                            setLoading(false);
-                        }
-                        return;
-                    }
-
-                    if (fallbackData) {
-                        console.log("Using fallback data instead of view");
-                        contestData = fallbackData;
-                        contestError = null;
-                    }
-                }
-
-                if (contestError) {
-                    console.error("All attempts to fetch contest failed:", contestError);
+                    console.error("Error fetching contest details:", contestError);
                     if (isMounted) {
-                        setError(`Contest error: ${contestError.message || contestError.code || "Unknown database error"}`);
+                        setError(`Contest fetch error: ${contestError.message}`);
                         setLoading(false);
                     }
-                    return;
+                    return; // Stop execution if there was a DB error
                 }
 
+                // Handle case where contest is not found (maybeSingle returns null data)
                 if (!contestData) {
                     if (isMounted) {
-                        setError("Contest not found - No data returned from database");
+                        setError("Contest not found.");
                         setLoading(false);
                     }
-                    return;
+                    return; // Stop execution if contest not found
                 }
 
-                // Don't show draft contests to creators
-                if (contestData.status === 'draft' || contestData.is_draft) {
+                // Check contest status
+                if (['draft', 'incomplete'].includes(contestData.status) || contestData.is_draft) {
                     if (isMounted) {
-                        setError("This contest is not available yet");
+                        setError("This contest is not available.");
                         setLoading(false);
                     }
                     return;
                 }
 
-                // If we have contest data and it has an advertiser_id, fetch the advertiser details
-                if (contestData.advertiser_id) {
-                    const { data: advertiserData } = await supabase
-                        .from("advertiser_profiles")
-                        .select("company_name")
-                        .eq("id", contestData.advertiser_id);
-
-                    if (advertiserData && advertiserData.length > 0) {
-                        contestData.advertiser_profiles = advertiserData[0];
-                    } else {
-                        contestData.advertiser_profiles = { company_name: "Unknown Company" };
-                    }
-                }
-
-                if (isMounted) {
-                    setContest(contestData);
-
-                    // Check if user has already submitted to this contest
+                // Fetch existing submission (only if contest data is valid)
+                let submissionResult = null;
+                if (user?.id) { // Ensure user is available
                     const { data: submissionData } = await supabase
                         .from("submissions")
-                        .select("*")
+                        .select("id, submitted_at")
                         .eq("contest_id", contestId)
-                        .eq("creator_id", user.id);
-
-                    // Only set existing submission if data exists and is not empty
-                    if (submissionData && submissionData.length > 0) {
-                        setExistingSubmission(submissionData[0]);
-                    }
-
-                    setLoading(false);
-                    setError(null); // Clear any previous errors
+                        .eq("creator_id", user.id)
+                        .limit(1);
+                    submissionResult = submissionData && submissionData.length > 0 ? submissionData[0] : null;
                 }
-            } catch (err) {
-                console.error("Error in component:", err);
+
+                // Update state if component is still mounted
                 if (isMounted) {
-                    setError("An unexpected error occurred");
+                    setContest(contestData);
+                    setExistingSubmission(submissionResult);
+                    setLoading(false);
+                    fetchLeaderboard(); // Fetch leaderboard after contest details are confirmed
+                }
+
+            } catch (err: any) {
+                console.error("Error fetching contest data:", err);
+                if (isMounted) {
+                    setError(err.message || "An unexpected error occurred during contest fetch");
                     setLoading(false);
                 }
             }
@@ -155,8 +173,20 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
 
         fetchData();
 
+        // Set up auto-refresh for leaderboard every 5 minutes
+        const intervalId = setInterval(() => {
+            if (isMounted && lastUpdated && !loadingLeaderboard) {
+                const lastUpdateTime = new Date(lastUpdated).getTime();
+                const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+                if (lastUpdateTime < fiveMinutesAgo) {
+                    fetchLeaderboard();
+                }
+            }
+        }, 60 * 1000); // Check every minute if refresh is needed
+
         return () => {
             isMounted = false;
+            clearInterval(intervalId);
         };
     }, [contestId, user, authLoading, router, supabase]);
 
@@ -167,6 +197,21 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const handleViewSubmission = (submissionId: string) => {
         router.push(`/dashboard/content/${submissionId}`)
     }
+
+    // Helper to format time ago
+    const formatTimeAgo = (timestamp: string | null): string => {
+        if (!timestamp) return 'never';
+        const now = new Date();
+        const past = new Date(timestamp);
+        const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+        const diffInMinutes = Math.floor(diffInSeconds / 60);
+        const diffInHours = Math.floor(diffInMinutes / 60);
+
+        if (diffInMinutes < 1) return 'just now';
+        if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+        if (diffInHours < 24) return `${diffInHours}h ago`;
+        return past.toLocaleDateString();
+    };
 
     // Show loading state when auth is loading or data is loading
     if (authLoading || loading) {
@@ -205,8 +250,8 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     }
 
     return (
-        <div>
-            <div className="flex items-center gap-2 mb-6">
+        <div className="container mx-auto py-8">
+            <div className="flex items-center gap-2 mb-4">
                 <Button variant="ghost" size="icon" onClick={() => router.push("/dashboard/opportunities")}>
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
@@ -224,236 +269,285 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                 </Badge>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Contest Details</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div>
-                                <h3 className="font-medium mb-2">Brief</h3>
-                                <p className="text-muted-foreground">{contest.brief || "No brief provided"}</p>
-                            </div>
+            {contest.thumbnail_url && (
+                <div className="mb-6 aspect-video w-full max-w-4xl mx-auto relative overflow-hidden rounded-lg bg-gray-100">
+                    <Image
+                        src={contest.thumbnail_url}
+                        alt={`${contest.title} thumbnail`}
+                        fill
+                        style={{ objectFit: 'contain' }}
+                        priority
+                    />
+                </div>
+            )}
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <h3 className="font-medium mb-2">Start Date & Time</h3>
-                                    <p>
-                                        {contest.start_date
-                                            ? formatLocalDateTime(contest.start_date)
-                                            : "Not specified"}
-                                    </p>
-                                </div>
-                                <div>
-                                    <h3 className="font-medium mb-2">End Date & Time</h3>
-                                    <p>
-                                        {contest.end_date
-                                            ? formatLocalDateTime(contest.end_date)
-                                            : "Not specified"}
-                                    </p>
-                                </div>
-                            </div>
+            <Tabs defaultValue="details" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-6">
+                    <TabsTrigger value="details">Contest Details</TabsTrigger>
+                    <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
+                </TabsList>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <h3 className="font-medium mb-2">Platform</h3>
-                                    <p className="capitalize">{contest.platform}</p>
-                                </div>
-                                <div>
-                                    <h3 className="font-medium mb-2">Category</h3>
-                                    <p className="capitalize">{contest.category || "General"}</p>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 className="font-medium mb-2">Sponsor</h3>
-                                <p>{contest.advertiser_profiles?.company_name || "N/A"}</p>
-                            </div>
-
-                            <div>
-                                <h3 className="font-medium mb-2">Prize Structure</h3>
-                                <div className="space-y-2">
-                                    {Array.isArray(contest.prizes) && contest.prizes.length > 0 ? (
-                                        contest.prizes.map((prize: any, index: number) => (
-                                            <div key={index} className="flex items-center justify-between">
-                                                <span>Position {prize.position || index + 1}</span>
-                                                <span>{formatMoney(prize.amount)}</span>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <p className="text-gray-500 italic">Prize structure not available</p>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div>
-                                <h3 className="font-medium mb-2">Rules & Guidelines</h3>
-                                <div className="bg-muted p-4 rounded-lg">
-                                    {contest.rules && contest.rules.list && Array.isArray(contest.rules.list) ? (
-                                        <ul className="list-disc pl-5 space-y-2">
-                                            {contest.rules.list.map((rule: string, index: number) => (
-                                                <li key={index}>{rule}</li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <ul className="list-disc pl-5 space-y-2">
-                                            <li>Content must be original and created specifically for this contest.</li>
-                                            <li>Content must comply with {contest.platform} community guidelines.</li>
-                                            <li>All submissions must include the hashtags provided in the brief (if specified).</li>
-                                            <li>
-                                                By submitting content, you grant the sponsor the right to use your content for promotional
-                                                purposes.
-                                            </li>
-                                            <li>Winners will be selected based on engagement metrics and quality of content.</li>
-                                        </ul>
-                                    )}
-                                </div>
-                            </div>
-
-                            {contest.resources && Object.keys(contest.resources).length > 0 && (
-                                <div>
-                                    <h3 className="font-medium mb-2">Resources</h3>
-                                    <div className="bg-muted p-4 rounded-lg">
-                                        <p>The sponsor has provided these resources to help with your submission:</p>
-                                        <div className="mt-2 space-y-2">
-                                            {Object.entries(contest.resources).map(([key, value]) => (
-                                                <div key={key} className="flex items-center">
-                                                    <ExternalLink className="h-4 w-4 mr-2" />
-                                                    <Link href={value as string} className="text-primary hover:underline">
-                                                        {key}
-                                                    </Link>
-                                                </div>
-                                            ))}
+                <TabsContent value="details">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Contest Details</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    <div>
+                                        <h3 className="font-semibold mb-2">Brief</h3>
+                                        <p className="text-muted-foreground text-sm">{contest.brief || "No brief provided"}</p>
+                                    </div>
+                                    <Separator />
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <h3 className="font-semibold mb-1">Start Date & Time</h3>
+                                            <p className="text-sm text-muted-foreground">{contest.start_date ? formatLocalDateTime(contest.start_date) : "Not specified"}</p>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold mb-1">End Date & Time</h3>
+                                            <p className="text-sm text-muted-foreground">{contest.end_date ? formatLocalDateTime(contest.end_date) : "Not specified"}</p>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold mb-1">Platform</h3>
+                                            <p className="text-sm text-muted-foreground">{contest.platform || "Not specified"}</p>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold mb-1">Category</h3>
+                                            <p className="text-sm text-muted-foreground">{contest.category || "Not specified"}</p>
+                                        </div>
+                                        <div>
+                                            <h3 className="font-semibold mb-1">Sponsor</h3>
+                                            <p className="text-sm text-muted-foreground">{contest.advertiser_profiles?.company_name || "Not specified"}</p>
                                         </div>
                                     </div>
-                                </div>
-                            )}
-
-                            {(() => {
-                                // Parse inspiration_links if it's a string
-                                let links = [];
-                                try {
-                                    links = typeof contest.inspiration_links === 'string'
-                                        ? JSON.parse(contest.inspiration_links)
-                                        : contest.inspiration_links || [];
-                                } catch (e) {
-                                    console.error('Error parsing inspiration_links:', e);
-                                }
-
-                                return Array.isArray(links) && links.length > 0 && (
+                                    <Separator />
                                     <div>
-                                        <h3 className="font-medium mb-2">Inspiration Links</h3>
-                                        <div className="bg-muted p-4 rounded-lg">
-                                            <p>Check out these examples for inspiration:</p>
-                                            <div className="mt-2 space-y-2">
-                                                {links.map((link: string, index: number) => (
-                                                    <div key={index} className="flex items-center">
-                                                        <ExternalLink className="h-4 w-4 mr-2" />
-                                                        <Link href={link} className="text-primary hover:underline" target="_blank">
-                                                            Inspiration Example {index + 1}
+                                        <h3 className="font-semibold mb-2">Prize Structure</h3>
+                                        {Array.isArray(contest.prizes) && contest.prizes.length > 0 ? (
+                                            <ul className="space-y-1 list-disc list-inside text-sm text-muted-foreground">
+                                                {[...(contest.prizes as PrizeInfo[])].sort((a, b) => a.position - b.position).map((prize) => (
+                                                    <li key={prize.position}>Position {prize.position}: {formatMoney(prize.amount)}</li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground">No prize structure defined.</p>
+                                        )}
+                                    </div>
+                                    {/* Rules Section */}
+                                    {(contest.rules || contest.rules_description) && <Separator />}
+                                    {(contest.rules || contest.rules_description) && (
+                                        <div>
+                                            <h3 className="font-semibold mb-2 flex items-center gap-2"><ScrollText className="h-4 w-4" /> Rules & Guidelines</h3>
+                                            <div className="prose prose-sm text-muted-foreground max-w-none">
+                                                {contest.rules_description ? (
+                                                    <p>{contest.rules_description}</p>
+                                                ) : contest.rules && typeof contest.rules === 'object' && contest.rules.list && Array.isArray(contest.rules.list) ? (
+                                                    <ul className="list-disc pl-5 space-y-1">
+                                                        {contest.rules.list.map((rule: string, index: number) => (
+                                                            <li key={index}>{rule}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p>No specific rules provided.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Resources Section */}
+                                    {contest.resources && typeof contest.resources === 'object' && Object.keys(contest.resources).length > 0 && <Separator />}
+                                    {contest.resources && typeof contest.resources === 'object' && Object.keys(contest.resources).length > 0 && (
+                                        <div>
+                                            <h3 className="font-semibold mb-2 flex items-center gap-2"><Link2 className="h-4 w-4" /> Resources</h3>
+                                            <div className="space-y-2">
+                                                {Object.entries(contest.resources).map(([key, value]) => (
+                                                    <Button key={key} variant="outline" size="sm" asChild>
+                                                        <Link href={value as string} target="_blank" rel="noopener noreferrer">
+                                                            <ExternalLink className="h-4 w-4 mr-2" />
+                                                            {key}
                                                         </Link>
-                                                    </div>
+                                                    </Button>
                                                 ))}
                                             </div>
                                         </div>
-                                    </div>
-                                );
-                            })()}
-                        </CardContent>
-                    </Card>
-                </div>
+                                    )}
 
-                <div className="space-y-6">
+                                    {/* Inspiration Links Section */}
+                                    {(() => {
+                                        let links = [];
+                                        try {
+                                            links = typeof contest.inspiration_links === 'string'
+                                                ? JSON.parse(contest.inspiration_links)
+                                                : Array.isArray(contest.inspiration_links) ? contest.inspiration_links : [];
+                                        } catch (e) {
+                                            console.error('Error parsing inspiration_links:', e);
+                                        }
+                                        return links.length > 0 ? (
+                                            <>
+                                                <Separator />
+                                                <div>
+                                                    <h3 className="font-semibold mb-2 flex items-center gap-2"><Lightbulb className="h-4 w-4" /> Inspiration Links</h3>
+                                                    <div className="space-y-2">
+                                                        {links.map((link: string, index: number) => (
+                                                            <Button key={index} variant="ghost" size="sm" asChild className="text-primary hover:underline p-0 h-auto justify-start">
+                                                                <Link href={link} target="_blank" rel="noopener noreferrer">
+                                                                    <ExternalLink className="h-3 w-3 mr-1.5" />
+                                                                    Inspiration Example {index + 1}
+                                                                </Link>
+                                                            </Button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : null;
+                                    })()}
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        <div className="lg:col-span-1 space-y-6">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Contest Summary</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="text-sm font-medium">Timeframe</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {contest.start_date ? formatLocalDateTime(contest.start_date, { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'} - {contest.end_date ? formatLocalDateTime(contest.end_date, { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Trophy className="h-5 w-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="text-sm font-medium">Total Prize Pool</p>
+                                            <p className="text-xs text-muted-foreground">{formatMoney(contest.total_prize || 0)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <User className="h-5 w-5 text-muted-foreground" />
+                                        <div>
+                                            <p className="text-sm font-medium">Sponsor</p>
+                                            <p className="text-xs text-muted-foreground">{contest.advertiser_profiles?.company_name || "Not specified"}</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="bg-secondary/30 border-secondary">
+                                <CardContent className="pt-6">
+                                    {existingSubmission ? (
+                                        <div className="text-center">
+                                            <Info className="h-6 w-6 mx-auto text-blue-500 mb-2" />
+                                            <p className="text-sm font-medium mb-1">You've already submitted</p>
+                                            <p className="text-xs text-muted-foreground mb-4">Submitted {formatTimeAgo(existingSubmission.submitted_at)}</p>
+                                            <Button size="sm" onClick={() => handleViewSubmission(existingSubmission.id)}>View My Submission</Button>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center">
+                                            <p className="text-sm font-medium mb-4">Ready to submit your content?</p>
+                                            <Button size="sm" onClick={handleSubmitContent} disabled={contest.status !== 'live'}>
+                                                {contest.status === 'upcoming' ? 'Contest Not Started' : contest.status === 'ended' || contest.status === 'completed' ? 'Contest Ended' : 'Submit Content'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="leaderboard">
                     <Card>
-                        <CardHeader>
-                            <CardTitle>Contest Summary</CardTitle>
+                        <CardHeader className="flex flex-row items-center justify-between">
+                            <CardTitle>Leaderboard</CardTitle>
+                            <div className="text-right">
+                                <p className="text-xs text-muted-foreground">Last updated: {formatTimeAgo(lastUpdated)}</p>
+                                {loadingLeaderboard && <p className="text-xs text-blue-500 animate-pulse">Updating...</p>}
+                            </div>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="flex items-center gap-2">
-                                <Calendar className="h-5 w-5 text-muted-foreground" />
-                                <div>
-                                    <h3 className="text-sm font-medium">Timeframe</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {contest.start_date
-                                            ? `${formatLocalDateTime(contest.start_date)}`
-                                            : "Not set"} - {" "}
-                                        {contest.end_date
-                                            ? `${formatLocalDateTime(contest.end_date)}`
-                                            : "Not set"}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <Trophy className="h-5 w-5 text-muted-foreground" />
-                                <div>
-                                    <h3 className="text-sm font-medium">Total Prize Pool</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {formatMoney(contest.total_prize)}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <User className="h-5 w-5 text-muted-foreground" />
-                                <div>
-                                    <h3 className="text-sm font-medium">Sponsor</h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        {contest.advertiser_profiles?.company_name || "Unknown"}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <Separator />
-
-                            {existingSubmission ? (
-                                <div>
-                                    <div className="bg-muted p-4 rounded-lg text-center mb-4">
-                                        <Info className="h-5 w-5 mx-auto mb-2" />
-                                        <p className="text-sm font-medium">You've already submitted to this contest</p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            You submitted on {formatLocalDateTime(existingSubmission.submitted_at)}
-                                        </p>
-                                    </div>
-                                    <Button
-                                        className="w-full"
-                                        onClick={() => handleViewSubmission(existingSubmission.id)}
-                                    >
-                                        View My Submission
-                                    </Button>
-                                </div>
-                            ) : contest.status === "live" ? (
-                                <Button
-                                    className="w-full"
-                                    onClick={handleSubmitContent}
-                                >
-                                    Submit Content
-                                </Button>
-                            ) : contest.status === "upcoming" ? (
-                                <div className="bg-muted p-4 rounded-lg text-center">
-                                    <p className="text-sm font-medium">This contest is not yet active</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Come back on{" "}
-                                        {contest.start_date
-                                            ? `${formatLocalDateTime(contest.start_date)}`
-                                            : "the start date"}
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="bg-muted p-4 rounded-lg text-center">
-                                    <p className="text-sm font-medium">This contest has ended</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Ended on {contest.end_date
-                                            ? `${formatLocalDateTime(contest.end_date)}`
-                                            : "the end date"}
-                                    </p>
-                                </div>
+                        <CardContent>
+                            {/* Handle overall fetch error affecting leaderboard */}
+                            {error && !loadingLeaderboard && leaderboard.length === 0 && (
+                                <Alert variant="destructive" className="mb-4">
+                                    <AlertDescription>Error loading leaderboard: {error}</AlertDescription>
+                                </Alert>
                             )}
+                            {loadingLeaderboard && leaderboard.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground">Loading leaderboard...</div>
+                            ) : !error && leaderboard.length === 0 ? (
+                                <div className="text-center py-8 text-muted-foreground">No submissions yet. Be the first!</div>
+                            ) : leaderboard.length > 0 ? (
+                                <div className="space-y-3">
+                                    {leaderboard.map((entry, index) => {
+                                        const rank = index + 1;
+                                        const prizeInfo = Array.isArray(contest.prizes)
+                                            ? (contest.prizes as PrizeInfo[]).find(p => p.position === rank)
+                                            : null;
+                                        const prizeAmount = prizeInfo ? prizeInfo.amount : null;
+                                        const profile = entry.users;
+                                        const videoUrl = entry.content_link || '#';
+                                        const displayName = profile?.full_name || profile?.username || 'Unknown Creator';
+
+                                        return (
+                                            <div key={entry.id} className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors">
+                                                {/* Rank */}
+                                                <span className={`font-bold text-lg w-8 text-center flex-shrink-0 ${prizeAmount ? 'text-primary' : 'text-muted-foreground'}`}>{rank}</span>
+
+                                                {/* Avatar */}
+                                                <div className="relative h-10 w-10 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
+                                                    {profile?.profile_picture_url ? (
+                                                        <Image
+                                                            src={profile.profile_picture_url}
+                                                            alt={displayName}
+                                                            fill sizes="40px" style={{ objectFit: 'cover' }} className="bg-white"
+                                                        />
+                                                    ) : (
+                                                        <User className="h-6 w-6 text-gray-400" />
+                                                    )}
+                                                </div>
+
+                                                {/* Creator Info (Name/Username) */}
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-sm truncate" title={displayName}>{displayName}</p>
+                                                    {profile?.full_name && profile?.username && profile.full_name !== profile.username && (
+                                                        <p className="text-xs text-muted-foreground truncate">@{profile.username}</p>
+                                                    )}
+                                                </div>
+
+                                                {/* Right Aligned Section: Play Button -> Views -> Prize */}
+                                                <div className="flex items-center gap-3 ml-auto pl-2 flex-shrink-0">
+                                                    {/* Play Button */}
+                                                    <Link href={videoUrl} target="_blank" rel="noopener noreferrer" title="Watch Video">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
+                                                            <PlayCircle className="h-5 w-5" />
+                                                        </Button>
+                                                    </Link>
+
+                                                    {/* Views & Prize */}
+                                                    <div className="text-right w-24 space-y-0.5">
+                                                        <p className="font-semibold text-sm truncate">{entry.views?.toLocaleString() || 0} views</p>
+                                                        {prizeAmount && (
+                                                            <Badge variant="secondary" className="text-xs font-medium bg-green-100 text-green-700 border-green-200 px-1.5 py-0.5 whitespace-nowrap">
+                                                                Winning Zone: {formatMoney(prizeAmount)}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : null /* Should be covered by loading/error/empty states */}
                         </CardContent>
                     </Card>
-                </div>
-            </div>
+                </TabsContent>
+            </Tabs>
         </div>
     )
 } 
