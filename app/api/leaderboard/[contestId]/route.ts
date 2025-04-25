@@ -1,17 +1,30 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'; // Revert to basic client
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic'; // Force dynamic rendering
 
 // Revalidate data every 60 seconds
-export const revalidate = 60;
-
 export async function GET(
-  request: Request,
-  { params }: { params: { contestId: string } }
+  request: Request
 ) {
-  const contestId = params.contestId;
-  const cookieStore = cookies(); 
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+  const cookieStore = cookies();
+
+  // Extract contestId from URL
+  const url = new URL(request.url);
+  const pathSegments = url.pathname.split('/');
+  const contestId = pathSegments[pathSegments.length - 1]; // Assumes ID is the last segment
+
+  console.log('(Using Anon Client) Extracted contestId from URL:', contestId);
+
+  // Revert to basic Anon client for diagnosis
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+     console.error('Supabase URL or Anon Key missing');
+     return NextResponse.json({ error: 'Server config error' }, { status: 500 });
+   }
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   if (!contestId) {
     return NextResponse.json({ error: 'Contest ID is required' }, { status: 400 });
@@ -37,7 +50,7 @@ export async function GET(
       .order('created_at', { ascending: true });
 
     if (submissionsError) {
-      console.error('Error fetching submissions:', submissionsError);
+      console.error('(Anon Client) Error fetching submissions:', submissionsError);
       throw new Error(`Failed to fetch submissions: ${submissionsError.message}`);
     }
 
@@ -59,8 +72,7 @@ export async function GET(
         .in('id', creatorIds);
 
      if (usersError) {
-        console.error('Error fetching users:', usersError);
-        // Log error but continue
+        console.error('(Anon Client) Error fetching users data:', usersError);
      }
 
     // 4. Create user lookup map
@@ -82,7 +94,7 @@ export async function GET(
     });
 
   } catch (error: any) {
-    console.error('Error in leaderboard endpoint:', error);
+    console.error('(Anon Client) Error in leaderboard endpoint:', error);
     return NextResponse.json(
       { error: `Failed to fetch leaderboard: ${error.message || 'Unknown error'}` },
       { status: 500 }

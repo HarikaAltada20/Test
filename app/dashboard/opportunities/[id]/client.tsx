@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User, ListOrdered, ScrollText, Link2, Lightbulb, PlayCircle } from "lucide-react"
+import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User, ListOrdered, ScrollText, Link2, Lightbulb, PlayCircle, CheckCircle } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
@@ -21,22 +21,23 @@ type PrizeInfo = {
     amount: number;
 };
 
-// Adjust LeaderboardEntry type globally
+// LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
+    // Submission fields
     id: string;
     creator_id: string;
     video_title: string;
-    video_thumbnail_url: string;
     views: number;
     earnings: number;
     status: string;
     created_at: string;
     content_link: string;
+    // Added 'users' field containing data from the joined users table
     users: {
         id: string;
         username: string;
-        profile_picture_url: string;
-        full_name: string;
+        profile_picture_url: string | null; // It can be null
+        full_name: string | null; // It can be null
     } | null;
 };
 
@@ -52,6 +53,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const router = useRouter()
     const { user, isLoading: authLoading } = useAuth()
     const supabase = createSupabaseClient()
+    const [hasSubmitted, setHasSubmitted] = useState(false)
 
     // Function to fetch leaderboard data
     const fetchLeaderboard = async () => {
@@ -145,13 +147,22 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                 // Fetch existing submission (only if contest data is valid)
                 let submissionResult = null;
                 if (user?.id) { // Ensure user is available
-                    const { data: submissionData } = await supabase
+                    const { data: submissionData, error: submissionError } = await supabase
                         .from("submissions")
-                        .select("id, submitted_at")
+                        .select("id, created_at")
                         .eq("contest_id", contestId)
                         .eq("creator_id", user.id)
                         .limit(1);
                     submissionResult = submissionData && submissionData.length > 0 ? submissionData[0] : null;
+
+                    if (submissionError) {
+                        console.error("Error checking existing submission:", submissionError);
+                        // Handle error appropriately, maybe show a toast
+                    } else if (submissionResult) {
+                        setHasSubmitted(true);
+                        // Store the timestamp as well if needed, e.g., for display
+                        // setSubmissionTime(submissionResult.created_at);
+                    }
                 }
 
                 // Update state if component is still mounted
@@ -325,11 +336,13 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                     <Separator />
                                     <div>
                                         <h3 className="font-semibold mb-2">Prize Structure</h3>
-                                        {Array.isArray(contest.prizes) && contest.prizes.length > 0 ? (
+                                        {Array.isArray(contest?.prizes) && contest.prizes.length > 0 ? (
                                             <ul className="space-y-1 list-disc list-inside text-sm text-muted-foreground">
-                                                {[...(contest.prizes as PrizeInfo[])].sort((a, b) => a.position - b.position).map((prize) => (
-                                                    <li key={prize.position}>Position {prize.position}: {formatMoney(prize.amount)}</li>
-                                                ))}
+                                                {[...(contest.prizes as PrizeInfo[])]
+                                                    .sort((a, b) => a.position - b.position)
+                                                    .map((prize) => (
+                                                        <li key={prize.position}>Position {prize.position}: {formatMoney(prize.amount)}</li>
+                                                    ))}
                                             </ul>
                                         ) : (
                                             <p className="text-sm text-muted-foreground">No prize structure defined.</p>
@@ -441,12 +454,11 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
 
                             <Card className="bg-secondary/30 border-secondary">
                                 <CardContent className="pt-6">
-                                    {existingSubmission ? (
+                                    {hasSubmitted ? (
                                         <div className="text-center">
-                                            <Info className="h-6 w-6 mx-auto text-blue-500 mb-2" />
-                                            <p className="text-sm font-medium mb-1">You've already submitted</p>
-                                            <p className="text-xs text-muted-foreground mb-4">Submitted {formatTimeAgo(existingSubmission.submitted_at)}</p>
-                                            <Button size="sm" onClick={() => handleViewSubmission(existingSubmission.id)}>View My Submission</Button>
+                                            <CheckCircle className="inline mr-2 h-4 w-4 text-green-500" />
+                                            <p>
+                                                You have already submitted for this opportunity. Submitted {formatTimeAgo(existingSubmission.created_at)}</p>
                                         </div>
                                     ) : (
                                         <div className="text-center">
@@ -486,24 +498,25 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                 <div className="space-y-3">
                                     {leaderboard.map((entry, index) => {
                                         const rank = index + 1;
-                                        const prizeInfo = Array.isArray(contest.prizes)
+                                        // Use contest.prizes for prize lookup
+                                        const prizeInfo = Array.isArray(contest?.prizes)
                                             ? (contest.prizes as PrizeInfo[]).find(p => p.position === rank)
                                             : null;
                                         const prizeAmount = prizeInfo ? prizeInfo.amount : null;
-                                        const profile = entry.users;
+                                        const userData = entry.users; // Use entry.users
                                         const videoUrl = entry.content_link || '#';
-                                        const displayName = profile?.full_name || profile?.username || 'Unknown Creator';
+                                        const displayName = userData?.full_name || userData?.username || 'Unknown Creator';
+                                        const avatarUrl = userData?.profile_picture_url;
 
                                         return (
                                             <div key={entry.id} className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors">
                                                 {/* Rank */}
                                                 <span className={`font-bold text-lg w-8 text-center flex-shrink-0 ${prizeAmount ? 'text-primary' : 'text-muted-foreground'}`}>{rank}</span>
-
-                                                {/* Avatar */}
+                                                {/* Avatar using profile_picture_url */}
                                                 <div className="relative h-10 w-10 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
-                                                    {profile?.profile_picture_url ? (
+                                                    {avatarUrl ? (
                                                         <Image
-                                                            src={profile.profile_picture_url}
+                                                            src={avatarUrl}
                                                             alt={displayName}
                                                             fill sizes="40px" style={{ objectFit: 'cover' }} className="bg-white"
                                                         />
@@ -511,16 +524,14 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                                         <User className="h-6 w-6 text-gray-400" />
                                                     )}
                                                 </div>
-
-                                                {/* Creator Info (Name/Username) */}
+                                                {/* Info using full_name / username */}
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-semibold text-sm truncate" title={displayName}>{displayName}</p>
-                                                    {profile?.full_name && profile?.username && profile.full_name !== profile.username && (
-                                                        <p className="text-xs text-muted-foreground truncate">@{profile.username}</p>
+                                                    {userData?.full_name && userData?.username && userData.full_name !== userData.username && (
+                                                        <p className="text-xs text-muted-foreground truncate">@{userData.username}</p>
                                                     )}
                                                 </div>
-
-                                                {/* Right Aligned Section: Play Button -> Views -> Prize */}
+                                                {/* Right Aligned Section */}
                                                 <div className="flex items-center gap-3 ml-auto pl-2 flex-shrink-0">
                                                     {/* Play Button */}
                                                     <Link href={videoUrl} target="_blank" rel="noopener noreferrer" title="Watch Video">

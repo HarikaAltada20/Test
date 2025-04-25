@@ -39,7 +39,7 @@ export default async function CreatorEarningsPage() {
     .select("*, contests(title, prizes)")
     .eq("creator_id", session.user.id)
     .eq("status", "approved")
-    .order("submitted_at", { ascending: false })
+    .order("created_at", { ascending: false });
 
   // Mock earnings data
   const earnings = [

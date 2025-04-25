@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
@@ -245,8 +245,8 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                               <p className="text-sm font-medium">
                                 {submission.creator_profiles?.username || "Creator"}
                               </p>
-                              <p className="text-xs text-muted-foreground">
-                                Submitted on {formatDate(submission.submitted_at, "short")}
+                              <p className="text-sm text-muted-foreground">
+                                Submitted on {formatDate(submission.created_at, "short")}
                               </p>
                             </div>
                           </div>

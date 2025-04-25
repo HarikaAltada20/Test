@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/update-youtube-metrics",
+      "schedule": "${YOUTUBE_METRICS_CRON_SCHEDULE:-0 * * * *}" 
+    }
+  ]
+} 
