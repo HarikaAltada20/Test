@@ -44,7 +44,7 @@ export function formatLocalDateTime(
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'UTC'
+    hour12: true
   }
 ): string {
   if (!dateValue) return '';
@@ -61,13 +61,20 @@ export function formatLocalDateTime(
  */
 export function toUTCISOString(dateString: string, timeString: string): string | null {
   if (!dateString || !timeString) return null;
-  
+
   try {
-    // Create date object in local timezone
-    const localDate = new Date(`${dateString}T${timeString}`);
-    
-    // Convert to ISO string (which is UTC)
+    // Step 1: Create a Date object in local time
+    const [year, month, day] = dateString.split('-').map(Number);
+    const [hours, minutes] = timeString.split(':').map(Number);
+
+    // Step 2: Create a new Date with local timezone parts
+    const localDate = new Date(year, month - 1, day, hours, minutes, 0); 
+
+    // Step 3: Return the ISO String (which is always in UTC)
+    console.log("localDate", localDate);
+    console.log("localDate.toISOString()", localDate.toISOString());
     return localDate.toISOString();
+    
   } catch (error) {
     console.error('Error converting to UTC:', error);
     return null;

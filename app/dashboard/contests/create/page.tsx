@@ -16,12 +16,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, ArrowRight, Check, Image, Info, Trash, Trophy, Upload, AlertTriangle, AlertCircle, Trash2, ExternalLink, X } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { subscriptionPlans, MAX_CONTEST_BUDGET } from "@/constants/subscriptionPlans"
 import { Progress } from "@/components/ui/progress"
 import { toLocalDateTimeStrings, toUTCISOString, formatLocalDateTime } from "@/lib/utils"
-import { formatCurrency, dollarsToCents } from "@/lib/currency-utils"
+import { formatCurrency } from "@/lib/currency-utils"
+
+// Re-added constants that were accidentally removed
+import { subscriptionPlans, MIN_PRIZE_PER_WINNER, MAX_PRIZE_PER_WINNER, DEFAULT_PRIZE_ALLOCATIONS, HIGH_BUDGET_THRESHOLD } from "@/constants/subscriptionPlans"
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -92,27 +92,16 @@ You must show the Go Viral App Store listing in your video`)
   // Add resourceUploadProgress to state variables
   const [resourceUploadProgress, setResourceUploadProgress] = useState<number>(0)
 
-  // Constants
-  const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
-  const MAX_PRIZE_PER_WINNER = 100000  // $1,000.00 in cents
-  const DEFAULT_PRIZE_ALLOCATIONS = {
-    1: 50000, // $500.00
-    2: 30000, // $300.00
-    3: 20000, // $200.00
-    4: 10000, // $100.00
-    5: 5000   // $50.00
-  }
-
-  // High budget threshold
-  const HIGH_BUDGET_THRESHOLD = 100000  // $1,000 in cents
-
-
   // Add draft ID state for tracking loaded drafts
   const [draftId, setDraftId] = useState<string | null>(null)
   const [draftLoaded, setDraftLoaded] = useState(false)
 
   // Add this to the state declarations
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>({});
+
+  // State for fetched subscription plans
+  const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<SubscriptionPlan[]>([])
+  const [isPlansLoading, setIsPlansLoading] = useState(true) // Start as true
 
   // Add this function for handling resource file uploads
   const handleResourceFileUpload = async (name: string, file: File) => {
@@ -919,17 +908,31 @@ You must show the Go Viral App Store listing in your video`)
 
   // Get the features for the current plan
   const getPlanFeatures = (planId: string | null): PlanFeatures => {
-    if (!planId) {
-      // Return free plan features if no plan is found
-      return {
-        maxActiveContests: 1,
-        minContestBudget: 10000,
-        maxWinnersPerContest: 10,
-        commisionPercentage: 40
-      }
+    // Define a default free plan structure in case DB fetch fails or planId is null
+    const defaultFreePlanFeatures: PlanFeatures = subscriptionPlans[0].features;
+
+    if (isPlansLoading) {
+      // Return defaults while loading
+      console.log("Subscription plans are loading, using default features.");
+      return defaultFreePlanFeatures;
     }
-    const plan = subscriptionPlans.find((p: SubscriptionPlan) => p.id === planId)
-    return plan?.features || subscriptionPlans[0].features // Use first plan (free) as default
+
+    if (!planId || dbSubscriptionPlans.length === 0) {
+      // Return defaults if no planId or DB fetch failed/returned empty
+      console.log("No planId or failed to fetch plans, using default features.");
+      return defaultFreePlanFeatures;
+    }
+
+    const plan = dbSubscriptionPlans.find((p: SubscriptionPlan) => p.id === planId);
+
+    if (!plan) {
+      console.warn(`Plan with ID ${planId} not found in fetched plans. Using default features.`);
+      // Attempt to find the 'free' plan by name if ID fails, or use the first available plan, or default
+      const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free');
+      return freePlan?.features || dbSubscriptionPlans[0]?.features || defaultFreePlanFeatures;
+    }
+
+    return plan.features;
   }
 
   // Validate if the user can perform certain actions based on their plan
@@ -1080,11 +1083,55 @@ You must show the Go Viral App Store listing in your video`)
 
   // Call this once when component mounts
   useEffect(() => {
+    // Function to fetch subscription plans from the database
+    const fetchSubscriptionPlans = async () => {
+      setIsPlansLoading(true);
+      setError(null); // Clear previous errors
+      try {
+        const { data: plansData, error: plansError } = await supabase
+          .from("subscription_plans")
+          .select("id, name, price, json_features");
+
+        if (plansError) {
+          throw plansError;
+        }
+
+        if (plansData) {
+          // Map the data from the DB to the SubscriptionPlan structure
+          const mappedPlans: SubscriptionPlan[] = plansData.map((plan: any) => ({
+            id: plan.id,
+            name: plan.name,
+            price: plan.price, // Assuming price is stored correctly (e.g., in cents)
+            features: {
+              // Safely access nested properties from json_features
+              // Provide default values if properties are missing
+              maxActiveContests: plan.json_features?.maxActiveContests ?? subscriptionPlans[0].features.maxActiveContests,
+              minContestBudget: plan.json_features?.minContestBudget ?? subscriptionPlans[0].features.minContestBudget,
+              maxWinnersPerContest: plan.json_features?.maxWinnersPerContest ?? subscriptionPlans[0].features.maxWinnersPerContest,
+              commisionPercentage: plan.json_features?.commisionPercentage ?? subscriptionPlans[0].features.commisionPercentage, // Check DB for actual key name
+            }
+          }));
+          setDbSubscriptionPlans(mappedPlans);
+        } else {
+          setDbSubscriptionPlans([]); // Set to empty array if no data
+        }
+      } catch (error: any) {
+        console.error("Error fetching subscription plans:", error);
+        setError(`Failed to load subscription plans: ${error.message}. Using defaults.`);
+        // Optionally set default plans or handle the error appropriately
+        setDbSubscriptionPlans([]); // Clear plans on error
+      } finally {
+        setIsPlansLoading(false);
+      }
+    };
+
     // Modified to handle storage errors more gracefully
     const initializeData = async () => {
       try {
+        setIsPlansLoading(true); // Ensure loading state is set initially
+        await fetchSubscriptionPlans(); // Fetch plans first
         await checkStorageAvailability();
-        await getUserPlan();
+        await getUserPlan(); // getUserPlan might depend on fetched plans if defaults change
         await loadDraftData();
 
         // Set initial default prize allocations for the default 3 winners
@@ -1215,7 +1262,7 @@ You must show the Go Viral App Store listing in your video`)
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white p-6 rounded-lg max-w-md w-full">
           <h3 className="text-xl font-bold mb-4">High Budget Contest</h3>
-          <p className="mb-4">For contests with budgets over {formatCurrency(MAX_CONTEST_BUDGET)}, we recommend speaking with our team for personalized guidance and support.</p>
+          <p className="mb-4">For contests with budgets over {formatCurrency(HIGH_BUDGET_THRESHOLD)}, we recommend speaking with our team for personalized guidance and support.</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowContactModal(false)}>Cancel</Button>
             <Button
@@ -1273,8 +1320,31 @@ You must show the Go Viral App Store listing in your video`)
   // Prize section
   const renderPrizeSection = () => {
     // Get current plan details
-    const currentPlan = subscriptionPlans.find(p => p.id === userPlan) || null;
-    const planFeatures = getPlanFeatures(userPlan || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198');
+    // Find the plan from the fetched DB plans
+    const currentPlan = dbSubscriptionPlans.find(p => p.id === userPlan) || null;
+    // Use getPlanFeatures which handles loading/missing plans
+    const planFeatures = getPlanFeatures(userPlan);
+
+    // Handle loading state for plans
+    if (isPlansLoading) {
+      return (
+        <CardContent className="space-y-6">
+          <div className="text-center py-6">Loading plan details...</div>
+        </CardContent>
+      );
+    }
+
+    // Handle error state (optional, if you want specific UI for plan fetch errors)
+    // if (error && error.includes("subscription plans")) {
+    //   return (
+    //     <CardContent className="space-y-6">
+    //       <Alert variant="destructive">
+    //          <AlertDescription>{error}</AlertDescription>
+    //       </Alert>
+    //       {/* Optionally allow user to proceed with defaults or retry */}
+    //     </CardContent>
+    //   );
+    // }
 
     return (
       <>
@@ -1322,6 +1392,10 @@ You must show the Go Viral App Store listing in your video`)
                   <div className="flex justify-between">
                     <span>Max Active Contests:</span>
                     <span className="font-medium">{planFeatures.maxActiveContests}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Commission Percentage on Total Prize Pool:</span>
+                    <span className="font-medium">{planFeatures.commisionPercentage}%</span>
                   </div>
                 </div>
               </div>
@@ -1444,13 +1518,13 @@ You must show the Go Viral App Store listing in your video`)
                     size="icon"
                     className="h-8 w-8 rounded-full"
                     onClick={() => handleWinnerCountChange(winnerCount + 1)}
-                    disabled={winnerCount >= planFeatures.maxWinnersPerContest || winnerCount >= 10}
+                    disabled={winnerCount >= planFeatures.maxWinnersPerContest || winnerCount >= 10} // Use fetched features
                   >
                     +
                   </Button>
                 </div>
                 <div className="text-sm text-gray-500">
-                  <span>Allowed: {planFeatures.maxWinnersPerContest === Infinity ? 'Unlimited' : planFeatures.maxWinnersPerContest}</span>
+                  <span>Allowed: {planFeatures.maxWinnersPerContest === Infinity ? 'Unlimited' : planFeatures.maxWinnersPerContest}</span> {/* Use fetched features */}
                 </div>
               </div>
 
@@ -1462,8 +1536,8 @@ You must show the Go Viral App Store listing in your video`)
                     step="0.01"
                     value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
                     onChange={(e) => handleWinnerAmountChange(i, e.target.value)}
-                    min={MIN_PRIZE_PER_WINNER / 100}
-                    max={MAX_PRIZE_PER_WINNER / 100}
+                    min={formatCurrency(MIN_PRIZE_PER_WINNER)}
+                    max={formatCurrency(MAX_PRIZE_PER_WINNER)}
                     className="w-48"
                   />
                   <div className="text-sm text-gray-500">
@@ -1476,7 +1550,7 @@ You must show the Go Viral App Store listing in your video`)
             {totalPrizePool < planFeatures.minContestBudget && (
               <Alert className="mt-2">
                 <AlertDescription>
-                  The minimum prize pool for your {userPlan || 'current'} plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase your prize amounts.
+                  The minimum prize pool for your {currentPlan?.name || 'current'} plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase your prize amounts. {/* Use fetched features */}
                 </AlertDescription>
               </Alert>
             )}

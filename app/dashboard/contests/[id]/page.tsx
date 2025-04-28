@@ -9,8 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import React from "react"
 import { DeleteContestButton } from "@/components/delete-contest-button"
-import { formatDate, formatDateRange, calculateDurationDays } from "@/lib/date-utils"
-import { formatMoney } from "@/lib/utils"
+import { formatMoney, toLocalDateTimeStrings, formatLocalDateTime } from "@/lib/utils"
 
 export default async function ContestDetailPage({ params }: { params: { id: string } }) {
   // Use the params.id correctly with Next.js async pattern
@@ -51,7 +50,20 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
   // Check if contest is live
   const isLive = contest.status === "live";
 
-  // Calculate duration in days
+  // Calculate duration in days (using simple Date difference)
+  const calculateDurationDays = (start: string | null, end: string | null): number | null => {
+    if (!start || !end) return null;
+    try {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch (error) {
+      console.error("Error calculating duration:", error);
+      return null;
+    }
+  }
   const durationDays = calculateDurationDays(contest.start_date, contest.end_date);
 
   return (
@@ -132,13 +144,13 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                     <div>
                       <h3 className="font-medium mb-2">Start Date & Time</h3>
                       <p>
-                        {formatDate(contest.start_date, "medium")}
+                        {formatLocalDateTime(contest.start_date)}
                       </p>
                     </div>
                     <div>
                       <h3 className="font-medium mb-2">End Date & Time</h3>
                       <p>
-                        {formatDate(contest.end_date, "medium")}
+                        {formatLocalDateTime(contest.end_date)}
                       </p>
                     </div>
                   </div>
@@ -246,7 +258,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
                                 {submission.creator_profiles?.username || "Creator"}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                Submitted on {formatDate(submission.created_at, "short")}
+                                Submitted on {formatLocalDateTime(submission.created_at)}
                               </p>
                             </div>
                           </div>
@@ -389,7 +401,7 @@ export default async function ContestDetailPage({ params }: { params: { id: stri
 
               <div>
                 <h3 className="text-sm font-medium mb-1">Date Range</h3>
-                <p>{formatDateRange(contest.start_date, contest.end_date)}</p>
+                <p>{formatLocalDateTime(contest.start_date)} - {formatLocalDateTime(contest.end_date)}</p>
               </div>
 
               {contest.total_prize && (
