@@ -51,7 +51,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const [loadingLeaderboard, setLoadingLeaderboard] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
-    const { user, isLoading: authLoading } = useAuth()
+    const { user } = useAuth()
     const supabase = createSupabaseClient()
     const [hasSubmitted, setHasSubmitted] = useState(false)
 
@@ -83,25 +83,31 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
 
     useEffect(() => {
         isMounted = true;
+
+        // Only run fetch logic if the user object is available
+        if (!user) {
+            // Keep showing the initial loading state
+            setLoading(true);
+            return;
+        }
+
+        // User object exists, proceed to fetch data
         async function fetchData() {
             if (!isMounted) return;
             setLoading(true);
             setError(null);
 
             try {
-                // Check if auth is still loading or no user
-                if (authLoading || !user) {
-                    if (!authLoading && !user) {
-                        router.push("/auth/signin");
-                        return;
-                    }
-                    return;
+                // Explicit check inside try block, though outer check should suffice
+                if (!user) {
+                    throw new Error("User not available for fetching data.");
                 }
 
                 // Get user role from the database
-                const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single();
+                const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single(); // Can remove assertion now
 
                 if (userData?.user_type !== "creator") {
+                    // Keep redirect for wrong user type
                     router.push("/dashboard");
                     return;
                 }
@@ -146,23 +152,22 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
 
                 // Fetch existing submission (only if contest data is valid)
                 let submissionResult = null;
-                if (user?.id) { // Ensure user is available
-                    const { data: submissionData, error: submissionError } = await supabase
-                        .from("submissions")
-                        .select("id, created_at")
-                        .eq("contest_id", contestId)
-                        .eq("creator_id", user.id)
-                        .limit(1);
-                    submissionResult = submissionData && submissionData.length > 0 ? submissionData[0] : null;
+                // Ensure user.id is accessed safely (already handled by initial !user check)
+                const { data: submissionData, error: submissionError } = await supabase
+                    .from("submissions")
+                    .select("id, created_at")
+                    .eq("contest_id", contestId)
+                    .eq("creator_id", user.id) // user is guaranteed non-null here
+                    .limit(1);
+                submissionResult = submissionData && submissionData.length > 0 ? submissionData[0] : null;
 
-                    if (submissionError) {
-                        console.error("Error checking existing submission:", submissionError);
-                        // Handle error appropriately, maybe show a toast
-                    } else if (submissionResult) {
-                        setHasSubmitted(true);
-                        // Store the timestamp as well if needed, e.g., for display
-                        // setSubmissionTime(submissionResult.created_at);
-                    }
+                if (submissionError) {
+                    console.error("Error checking existing submission:", submissionError);
+                    // Handle error appropriately, maybe show a toast
+                } else if (submissionResult) {
+                    setHasSubmitted(true);
+                    // Store the timestamp as well if needed, e.g., for display
+                    // setSubmissionTime(submissionResult.created_at);
                 }
 
                 // Update state if component is still mounted
@@ -199,7 +204,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
             isMounted = false;
             clearInterval(intervalId);
         };
-    }, [contestId, user, authLoading, router, supabase]);
+    }, [contestId, user, router, supabase]);
 
     const handleSubmitContent = () => {
         router.push(`/dashboard/opportunities/${contestId}/submit`)
@@ -224,8 +229,8 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
         return past.toLocaleDateString();
     };
 
-    // Show loading state when auth is loading or data is loading
-    if (authLoading || loading) {
+    // Show loading state ONLY when fetching data (loading state)
+    if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="text-center">
@@ -235,7 +240,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
         )
     }
 
-    // Only show error UI after loading is complete AND there's an error or no contest
+    // Error UI handling (check error or missing contest AFTER loading is false)
     if (!loading && (error || !contest)) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -249,17 +254,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
         )
     }
 
-    // Only render the main content if we have both the contest data and we're not loading
-    if (!contest || loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-center">
-                    <p>Loading contest details...</p>
-                </div>
-            </div>
-        )
-    }
-
+    // Render main content
     return (
         <div className="container mx-auto py-8">
             <div className="flex items-center gap-2 mb-4">

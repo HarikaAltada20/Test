@@ -14,18 +14,12 @@ export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const router = useRouter()
-  const { user, isLoading: authLoading } = useAuth()
+  const { user } = useAuth()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
-    if (authLoading) {
-      setLoading(true)
-      return
-    }
-
     if (!user) {
-      console.error("Opportunities page loaded without user after auth check.")
-      setLoading(false)
+      setLoading(true)
       return
     }
 
@@ -51,17 +45,17 @@ export default function OpportunitiesPage() {
     }
 
     fetchData()
-  }, [user, authLoading, router, supabase])
+  }, [user, router, supabase])
 
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`)
   }
 
-  if (loading || authLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p>Loading...</p>
+          <p>Loading opportunities...</p>
         </div>
       </div>
     )
