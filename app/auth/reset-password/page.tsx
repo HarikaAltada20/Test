@@ -153,6 +153,7 @@ export default function ResetPasswordPage() {
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
                                         className="h-11 pr-10"
+                                        autoComplete="new-password"
                                     />
                                     <button
                                         type="button"
@@ -178,6 +179,7 @@ export default function ResetPasswordPage() {
                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                         required
                                         className="h-11 pr-10"
+                                        autoComplete="new-password"
                                     />
                                     <button
                                         type="button"

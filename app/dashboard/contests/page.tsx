@@ -7,6 +7,7 @@ import { Edit, Plus, Trophy, DollarSign } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DeleteContestButton } from "@/components/delete-contest-button"
+import { formatLocalDateTime } from "@/lib/utils"
 
 export default async function ContestsPage() {
   const supabase = await createSupabaseServerClient()
@@ -72,7 +73,7 @@ export default async function ContestsPage() {
                         <div>
                           <p className="text-sm font-medium">{contest.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            Platform: {contest.platform} | Created: {new Date(contest.created_at).toLocaleDateString()}
+                            Platform: {contest.platform} | Created: {formatLocalDateTime(contest.created_at)}
                           </p>
                         </div>
                       </div>
@@ -130,7 +131,7 @@ export default async function ContestsPage() {
                         <div>
                           <p className="text-sm font-medium">{contest.title || "Untitled Contest"}</p>
                           <p className="text-xs text-muted-foreground">
-                            Created: {new Date(contest.created_at).toLocaleDateString()}
+                            Created: {formatLocalDateTime(contest.created_at)}
                           </p>
                         </div>
                       </div>

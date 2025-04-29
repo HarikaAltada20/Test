@@ -2,12 +2,12 @@ export const subscriptionPlans = [
   {
     id: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198',
     name: 'FREE',
-    price: 10000,
+    price: 0,
     features: {
       maxActiveContests: 1,
       minContestBudget: 10000,
-      maxWinnersPerContest: 10,
-      commisionPercentage: 40,
+      maxWinnersPerContest: 3,
+      commisionPercentage: 50,
     },
   },
   {
@@ -67,4 +67,12 @@ export const subscriptionPlans = [
   },
 ];
 
-export const MAX_CONTEST_BUDGET = 100000; // Recommend contact for higher budget 
+export const HIGH_BUDGET_THRESHOLD = 100000; // Recommend contact for higher budget 
+export const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
+export const MAX_PRIZE_PER_WINNER = 100000  // $1,000.00 in cents
+export const DEFAULT_PRIZE_ALLOCATIONS = {
+    1: 5000, // $50.00
+    2: 3000, // $30.00
+    3: 2000, // $20.00
+
+  }

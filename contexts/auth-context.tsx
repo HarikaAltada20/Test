@@ -80,9 +80,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           authListener.subscription.unsubscribe()
         }
       } catch (error: any) {
-        console.error("Auth error:", error)
-        setError(error.message)
-        setUser(null)
+        console.error("Auth initialization error:", error)
+
+        // Check if the error indicates the user associated with the token doesn't exist
+        if (error?.code === 'user_not_found' || (error?.message && error.message.includes('User not found'))) {
+          console.warn("User from token not found in Supabase. Signing out.");
+          // Clear the invalid session by signing out
+          await supabase.auth.signOut(); // Don't need to handle signOut errors here, just clear the local session
+          setUser(null); // Ensure user state is cleared
+        } else {
+          // For other errors, set the error state
+          setError(error.message);
+          setUser(null);
+        }
       } finally {
         setIsLoading(false)
       }
@@ -126,28 +136,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      // First check if user already exists in the users table
+      // Remove the pre-check for existing user by email
+      /*
       const { data: existingUserCheck, error: checkError } = await supabase
         .from('users')
         .select('id')
         .eq('email', email)
         .single();
 
-      // If the user already exists in our database, show a friendly error
       if (existingUserCheck) {
         throw new Error("An account with this email already exists. Please sign in instead.");
       }
+      */
 
       // If referral code was provided, store it in sessionStorage
       if (referralCode) {
-        // Check if the referral code exists
+        // Check if the referral code exists using maybeSingle()
         const { data: referrerCheck, error: referrerError } = await supabase
           .from('users')
           .select('id')
           .eq('referral_code', referralCode)
-          .single();
+          .maybeSingle(); // <-- Changed to maybeSingle()
 
-        if (referrerError || !referrerCheck) {
+        // Handle error checking referrer (ignoring null data)
+        if (referrerError) {
+          console.error("Error checking referral code:", referrerError);
+          // Optionally, decide if this error should prevent signup or just log
+          // For now, let's throw a generic error, but you might adjust this
+          throw new Error("Could not verify referral code. Please try again later.");
+        }
+
+        // If referrerCheck is null, the code is invalid
+        if (!referrerCheck) {
           throw new Error("Invalid referral code. Please check and try again.");
         }
 

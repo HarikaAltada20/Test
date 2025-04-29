@@ -11,10 +11,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Image, Trash, Upload } from "lucide-react"
+import { ArrowLeft, Image, Trash, Upload, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
-import { toLocalDateTimeStrings, toUTCISOString, formatLocalDateTime } from "@/lib/utils"
+import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
+import { formatCurrency } from "@/lib/currency-utils"
+import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans } from "@/constants/subscriptionPlans"
+
+type PlanFeatures = {
+    maxActiveContests: number;
+    minContestBudget: number;
+    maxWinnersPerContest: number;
+    commisionPercentage: number; // Make sure this matches your DB json_features key
+}
+
+type SubscriptionPlan = {
+    id: string;
+    name: string;
+    price: number;
+    features: PlanFeatures;
+}
 
 type ContestData = {
     id: string
@@ -41,9 +57,16 @@ export default function EditContestPage() {
     const supabase = createSupabaseClient()
 
     const [isLoading, setIsLoading] = useState(true)
+    const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
     const [error, setError] = useState<string | null>(null)
     const [validationError, setValidationError] = useState<string | null>(null)
     const [contest, setContest] = useState<ContestData | null>(null)
+
+    // State for subscription plans and user plan
+    const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<SubscriptionPlan[]>([])
+    const [isPlansLoading, setIsPlansLoading] = useState(true)
+    const [userPlan, setUserPlan] = useState<string | null>(null)
+    const [isUserPlanLoading, setIsUserPlanLoading] = useState(true);
 
     const [title, setTitle] = useState("")
     const [category, setCategory] = useState<string>("technology")
@@ -61,99 +84,183 @@ export default function EditContestPage() {
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Update the constants for prize amounts based on free plan
-    const MIN_PRIZE_PER_WINNER = 10000 // Minimum prize amount per winner in cents ($100)
-    const MAX_PRIZE_PER_WINNER = 100000 // Maximum prize amount per winner in cents ($1000)
-    const DEFAULT_PRIZE_ALLOCATIONS = {
-        1: 50000, // $500.00
-        2: 30000, // $300.00
-        3: 20000, // $200.00
-        4: 10000, // $100.00
-        5: 5000   // $50.00
-    }
+    // Fetch subscription plans from the database
+    const fetchSubscriptionPlans = async () => {
+        setIsPlansLoading(true);
+        setError(null);
+        try {
+            const { data: plansData, error: plansError } = await supabase
+                .from("subscription_plans")
+                .select("id, name, price, json_features");
 
-    // Add a utility function to convert cents to dollars for display
-    const formatCurrency = (cents: number): string => {
-        return `$${(cents / 100).toFixed(2)}`;
-    }
+            if (plansError) throw plansError;
 
-    // Fetch contest data
+            if (plansData) {
+                const mappedPlans: SubscriptionPlan[] = plansData.map((plan: any, index: number) => ({
+                    id: plan.id,
+                    name: plan.name,
+                    price: plan.price,
+                    features: {
+                        maxActiveContests: plan.json_features?.maxActiveContests,
+                        minContestBudget: plan.json_features?.minContestBudget,
+                        maxWinnersPerContest: plan.json_features?.maxWinnersPerContest,
+                        commisionPercentage: plan.json_features?.commisionPercentage
+                    }
+                }));
+                setDbSubscriptionPlans(mappedPlans);
+            } else {
+                setDbSubscriptionPlans([]);
+            }
+        } catch (error: any) {
+            console.error("Error fetching subscription plans:", error);
+            setError(`Failed to load subscription plans: ${error.message}. Using defaults.`);
+            setDbSubscriptionPlans([]);
+        } finally {
+            setIsPlansLoading(false);
+        }
+    };
+
+    // Fetch the current user's subscription plan
+    const getUserPlan = async () => {
+        if (!user) return;
+        setIsUserPlanLoading(true);
+        try {
+            const { data: authData, error: authError } = await supabase.auth.getUser();
+            if (authError || !authData.user) {
+                throw new Error("Authentication error");
+            }
+            const userId = authData.user.id;
+
+            const { data: advertiserData, error: advertiserError } = await supabase
+                .from("advertiser_profiles")
+                .select("subscription_plan")
+                .eq("id", userId)
+                .single();
+
+            if (!advertiserError && advertiserData?.subscription_plan) {
+                setUserPlan(advertiserData.subscription_plan);
+            } else {
+                // Default to free plan if not found or error (assuming ID exists)
+                const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free')?.id || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198'; // Fallback hardcoded ID
+                setUserPlan(freePlanId);
+                if (advertiserError && advertiserError.code !== 'PGRST116') { // Ignore 'single row not found'
+                    console.error("Error fetching advertiser profile:", advertiserError);
+                }
+            }
+        } catch (error) {
+            console.error("Error in getUserPlan:", error);
+            const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free')?.id || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198'; // Fallback hardcoded ID
+            setUserPlan(freePlanId); // Default to free plan on error
+        } finally {
+            setIsUserPlanLoading(false);
+        }
+    };
+
+    // Get features for a given plan ID
+    const getPlanFeatures = (planId: string | null): PlanFeatures => {
+        const defaultFreePlanFeatures: PlanFeatures = subscriptionPlans[0].features
+
+        if (isPlansLoading || dbSubscriptionPlans.length === 0) {
+            return defaultFreePlanFeatures;
+        }
+
+        if (!planId) {
+            // Find free plan by name if planId is null
+            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free');
+            return freePlan?.features || defaultFreePlanFeatures;
+        }
+
+        const plan = dbSubscriptionPlans.find((p: SubscriptionPlan) => p.id === planId);
+
+        if (!plan) {
+            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free');
+            return freePlan?.features || dbSubscriptionPlans[0]?.features || defaultFreePlanFeatures;
+        }
+        return plan.features;
+    };
+
+    // Fetch contest data and plan data
     useEffect(() => {
-        async function fetchContest() {
-            if (!user) return
+        async function fetchInitialData() {
+            setIsLoading(true); // General loading state for the page
+            await fetchSubscriptionPlans(); // Fetch plans first
 
+            if (!user) {
+                setIsLoading(false); // Stop loading if no user
+                setError("Please log in to edit contests.");
+                return;
+            }
+
+            // Fetch user plan *after* plans are loaded to find default free plan ID if needed
+            await getUserPlan();
+
+            // Now fetch contest data
             try {
-                const { data, error } = await supabase
+                const { data, error: contestError } = await supabase
                     .from("contests")
                     .select("*")
                     .eq("id", contestId)
                     .eq("advertiser_id", user.id)
-                    .single()
+                    .single();
 
-                if (error) throw error
+                if (contestError) throw contestError;
 
                 if (data) {
-                    // Check if the contest is live or ended based on dates
-                    const now = new Date()
-                    const startDate = data.start_date ? new Date(data.start_date) : null
-                    const endDate = data.end_date ? new Date(data.end_date) : null
+                    const now = new Date();
+                    const startDate = data.start_date ? new Date(data.start_date) : null;
+                    const endDate = data.end_date ? new Date(data.end_date) : null;
+                    const isLive = startDate && startDate <= now && (!endDate || endDate > now);
+                    const isEnded = endDate && endDate <= now;
 
-                    // Contest is "live" if start date is in the past and end date is in the future
-                    const isLive = startDate && startDate <= now && (!endDate || endDate > now)
-                    // Contest is "ended" if end date is in the past
-                    const isEnded = endDate && endDate <= now
-
-                    // Prevent editing if contest is already live or ended
                     if (isLive || isEnded) {
-                        setError("This contest is already live or has ended and cannot be edited.")
-                        setIsLoading(false)
-                        return
-                    }
+                        setError("This contest is already live or has ended and cannot be edited.");
+                        // Don't set contest data if editing is disallowed
+                    } else {
+                        setContest(data as ContestData);
+                        setTitle(data.title || "");
+                        setCategory(data.category || "technology");
+                        setBrief(data.brief || "");
+                        setRules(data.rules?.list?.join("\n") || "");
 
-                    setContest(data as ContestData)
-                    setTitle(data.title || "")
-                    setCategory(data.category || "technology")
-                    setBrief(data.brief || "")
-
-                    if (data.rules && data.rules.list) {
-                        setRules(data.rules.list.join("\n"))
+                        if (data.start_date) {
+                            const { dateString, timeString } = toLocalDateTimeStrings(data.start_date);
+                            setStartDate(dateString);
+                            setStartTime(timeString);
+                        }
+                        if (data.end_date) {
+                            const { dateString, timeString } = toLocalDateTimeStrings(data.end_date);
+                            setEndDate(dateString);
+                            setEndTime(timeString);
+                        }
+                        if (data.prizes && Array.isArray(data.prizes)) {
+                            setWinnerCount(data.prizes.length);
+                            setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount));
+                        } else {
+                            // Set defaults if no prize data exists
+                            setWinnerCount(3);
+                            setWinnerAmounts([5000, 3000, 2000]); // Example defaults
+                        }
+                        // Ensure inspiration_links is always an array
+                        setInspirationLinks(Array.isArray(data.inspiration_links) ? data.inspiration_links : []);
+                        setThumbnailPreview(data.thumbnail_url || null);
                     }
-
-                    // Convert UTC dates to local timezone for display
-                    if (data.start_date) {
-                        const { dateString, timeString } = toLocalDateTimeStrings(data.start_date);
-                        setStartDate(dateString);
-                        setStartTime(timeString);
-                    }
-
-                    if (data.end_date) {
-                        const { dateString, timeString } = toLocalDateTimeStrings(data.end_date);
-                        setEndDate(dateString);
-                        setEndTime(timeString);
-                    }
-
-                    if (data.prizes && Array.isArray(data.prizes)) {
-                        setWinnerCount(data.prizes.length)
-                        setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount))
-                    }
-
-                    if (data.inspiration_links && Array.isArray(data.inspiration_links)) {
-                        setInspirationLinks(data.inspiration_links)
-                    }
-
-                    if (data.thumbnail_url) {
-                        setThumbnailPreview(data.thumbnail_url)
-                    }
+                } else {
+                    setError("Contest not found or you don't have permission to edit it.");
                 }
             } catch (error: any) {
-                setError(error.message)
+                if (error.code === 'PGRST116') { // Handle case where contest ID doesn't exist
+                    setError("Contest not found.");
+                } else {
+                    setError(`Failed to load contest: ${error.message}`);
+                }
+                setContest(null); // Ensure contest is null on error
             } finally {
-                setIsLoading(false)
+                setIsLoading(false); // Stop general loading
             }
         }
 
-        fetchContest()
-    }, [contestId, user, supabase])
+        fetchInitialData();
+    }, [contestId, user, supabase]); // Rerun if user or contestId changes
 
     // Get minimum allowed start date and time (current date/time)
     const getMinDateTime = () => {
@@ -205,9 +312,8 @@ export default function EditContestPage() {
     const handleSubmit = async () => {
         setError(null);
         setValidationError(null);
-        setIsLoading(true);
+        setIsSubmitting(true); // Use separate submitting state
 
-        // Add timeout tracking to prevent hanging UI
         let submitTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
         // Add a timeout to prevent hanging in case of unexpected delays
@@ -221,11 +327,46 @@ export default function EditContestPage() {
 
         if (!user) {
             setError("You must be logged in to update a contest");
-            setIsLoading(false);
+            setIsSubmitting(false);
             return;
         }
 
+        if (!contest) {
+            setError("Contest data not loaded. Cannot save changes.");
+            setIsSubmitting(false);
+            return;
+        }
+
+        // Get current plan features for validation
+        const planFeatures = getPlanFeatures(userPlan);
+        const totalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+
         try {
+            // Validate against plan limits
+            if (winnerCount > planFeatures.maxWinnersPerContest) {
+                setValidationError(`Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
+                setIsSubmitting(false);
+                return;
+            }
+            if (totalPrizePool < planFeatures.minContestBudget) {
+                setValidationError(`Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`);
+                setIsSubmitting(false);
+                return;
+            }
+            // Validate individual prize amounts (min $5)
+            for (let i = 0; i < winnerCount; i++) {
+                if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+                    setValidationError(`Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
+                    setIsSubmitting(false);
+                    return;
+                }
+                if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+                    setValidationError(`Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
+                    setIsSubmitting(false);
+                    return;
+                }
+            }
+
             // Validate dates and times - use local timezone for validation
             if (startDate && startTime && endDate && endTime) {
                 try {
@@ -237,19 +378,19 @@ export default function EditContestPage() {
                     // Make sure dates are valid
                     if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
                         setValidationError("Invalid date or time format. Please check your entries.");
-                        setIsLoading(false);
+                        setIsSubmitting(false);
                         return;
                     }
 
                     if (startDateTime < now) {
                         setValidationError("Contest start time must be in the future");
-                        setIsLoading(false);
+                        setIsSubmitting(false);
                         return;
                     }
 
                     if (endDateTime <= startDateTime) {
                         setValidationError("Contest end time must be after the start time");
-                        setIsLoading(false);
+                        setIsSubmitting(false);
                         return;
                     }
 
@@ -258,18 +399,18 @@ export default function EditContestPage() {
                     const oneDayMs = 24 * 60 * 60 * 1000;
                     if (durationMs < oneDayMs) {
                         setValidationError("Contest duration must be at least 1 day");
-                        setIsLoading(false);
+                        setIsSubmitting(false);
                         return;
                     }
                 } catch (error) {
                     console.error("Date validation error:", error);
                     setValidationError("There was an error with the date/time format. Please check your entries.");
-                    setIsLoading(false);
+                    setIsSubmitting(false);
                     return;
                 }
             } else {
                 setValidationError("Contest start and end dates/times are required");
-                setIsLoading(false);
+                setIsSubmitting(false);
                 return;
             }
 
@@ -289,7 +430,7 @@ export default function EditContestPage() {
             }
 
             // Upload new thumbnail if present
-            let thumbnailUrl = contest?.thumbnail_url || null
+            let thumbnailUrl = contest.thumbnail_url // Use loaded contest data
             if (thumbnail) {
                 try {
                     const fileName = `contest_thumbnails/${user.id}_${Date.now()}`
@@ -308,7 +449,7 @@ export default function EditContestPage() {
                     thumbnailUrl = publicUrlData.publicUrl
                 } catch (error: any) {
                     setError(`Thumbnail upload failed: ${error.message}`)
-                    setIsLoading(false)
+                    setIsSubmitting(false)
                     return
                 }
             }
@@ -353,7 +494,8 @@ export default function EditContestPage() {
         } catch (err: any) {
             if (submitTimeoutId !== undefined) clearTimeout(submitTimeoutId);
             setError(err.message || "Failed to update contest")
-            setIsLoading(false)
+        } finally {
+            setIsSubmitting(false) // Ensure submitting state is always reset
         }
     }
 
@@ -390,7 +532,7 @@ export default function EditContestPage() {
         setInspirationLinks(inspirationLinks.filter(l => l !== link))
     }
 
-    if (isLoading) {
+    if (isLoading || isPlansLoading || isUserPlanLoading) { // Check all loading states
         return (
             <div className="flex items-center justify-center h-full">
                 <p>Loading contest data...</p>
@@ -398,44 +540,61 @@ export default function EditContestPage() {
         )
     }
 
-    if (!contest) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full">
-                <p className="text-red-500 mb-4">Contest is live so you can't edit it now</p>
-                <Button asChild>
-                    <Link href="/dashboard/contests">Back to Contests</Link>
-                </Button>
-            </div>
-        )
-    }
-
-    if (error && error.includes("already live or has ended")) {
+    // Use the error state to display issues loading contest or plans
+    if (error) {
         return (
             <div className="container mx-auto py-8">
                 <div className="flex items-center gap-2 mb-6">
                     <Button variant="ghost" size="icon" asChild>
-                        <Link href={`/dashboard/contests/${contestId}`}>
+                        {/* Link back to contests list if contest ID is problematic */}
+                        <Link href={contestId ? `/dashboard/contests/${contestId}` : "/dashboard/contests"}>
                             <ArrowLeft className="h-5 w-5" />
                         </Link>
                     </Button>
                     <h1 className="text-2xl font-bold">Edit Contest</h1>
                 </div>
-
                 <Alert variant="destructive" className="mb-6">
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
-
                 <div className="flex justify-center">
                     <Button
-                        onClick={() => router.push(`/dashboard/contests/${contestId}`)}
+                        onClick={() => router.push(contestId ? `/dashboard/contests/${contestId}` : "/dashboard/contests")}
                         className="bg-rose-600 hover:bg-rose-700 text-white"
                     >
-                        Return to Contest
+                        {error.includes("live or has ended") ? "Return to Contest" : "Back to Contests"}
                     </Button>
                 </div>
             </div>
         )
     }
+
+    // Specific check if contest data itself failed to load after loading states are false
+    if (!contest) {
+        return (
+            <div className="container mx-auto py-8">
+                <div className="flex items-center gap-2 mb-6">
+                    <Button variant="ghost" size="icon" asChild>
+                        <Link href="/dashboard/contests">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Link>
+                    </Button>
+                    <h1 className="text-2xl font-bold">Edit Contest</h1>
+                </div>
+                <Alert variant="destructive" className="mb-6">
+                    <AlertDescription>Failed to load contest data. Please try again or go back.</AlertDescription>
+                </Alert>
+                <div className="flex justify-center">
+                    <Button onClick={() => router.push("/dashboard/contests")} className="bg-rose-600 hover:bg-rose-700 text-white">
+                        Back to Contests
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    // Get plan features for the current user for UI elements
+    const planFeatures = getPlanFeatures(userPlan);
+    const totalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
 
     return (
         <div className="container mx-auto py-8">
@@ -560,31 +719,41 @@ export default function EditContestPage() {
                     </div>
 
                     <div className="space-y-4">
-                        <h3 className="text-lg font-medium">Inspiration Content:</h3>
-                        <ul className="list-disc pl-5 space-y-2">
-                            {inspirationLinks.map((link, index) => (
-                                <li key={index} className="flex items-center justify-between">
-                                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-rose-600 underline">
-                                        {link}
-                                    </a>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => removeInspirationLink(link)}
-                                        className="text-red-500 h-6 w-6 p-0"
-                                    >
-                                        <Trash className="h-4 w-4" />
-                                    </Button>
-                                </li>
-                            ))}
-                        </ul>
-                        <div className="flex gap-2">
-                            <Input
-                                placeholder="Add TikTok inspiration link"
-                                value={newInspirationLink}
-                                onChange={(e) => setNewInspirationLink(e.target.value)}
-                            />
-                            <Button onClick={addInspirationLink} disabled={!newInspirationLink}>Add</Button>
+                        <h3 className="text-lg font-medium mb-2">Inspiration Links</h3>
+                        <div className="border rounded-md p-4 bg-gray-50">
+                            {inspirationLinks.length > 0 && (
+                                <ul className="space-y-2 mb-4">
+                                    {inspirationLinks.map((link, index) => (
+                                        <li key={index} className="flex items-center justify-between text-sm">
+                                            <a
+                                                href={link}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-blue-600 hover:underline flex items-center mr-2"
+                                            >
+                                                <ExternalLink className="h-3 w-3 mr-1 flex-shrink-0" />
+                                                <span className="truncate">{link}</span>
+                                            </a>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => removeInspirationLink(link)}
+                                                className="text-red-500 h-6 w-6 p-0 flex-shrink-0"
+                                            >
+                                                <Trash className="h-4 w-4" />
+                                            </Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                            <div className="flex gap-2">
+                                <Input
+                                    placeholder="Add inspiration link (e.g., TikTok, YouTube)"
+                                    value={newInspirationLink}
+                                    onChange={(e) => setNewInspirationLink(e.target.value)}
+                                />
+                                <Button onClick={addInspirationLink} disabled={!newInspirationLink}>Add</Button>
+                            </div>
                         </div>
                     </div>
 
@@ -661,7 +830,7 @@ export default function EditContestPage() {
                             <h3 className="text-lg font-medium">Prize distribution</h3>
                             <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                                 <span className="text-sm font-medium">Total Prize Pool:</span>
-                                <span className="text-lg font-bold">{formatCurrency(winnerAmounts.reduce((sum, amount) => sum + amount, 0))}</span>
+                                <span className="text-lg font-bold">{formatCurrency(totalPrizePool)}</span>
                             </div>
                         </div>
 
@@ -694,22 +863,28 @@ export default function EditContestPage() {
                                         className="h-8 w-8 rounded-full"
                                         onClick={() => {
                                             const newCount = winnerCount + 1;
-                                            if (newCount <= 10) {
+                                            // Use planFeatures limit
+                                            if (newCount <= planFeatures.maxWinnersPerContest) {
                                                 setWinnerCount(newCount);
                                                 const newAmounts = [...winnerAmounts];
-                                                // Use default allocation if available, otherwise use minimum prize
                                                 const position = newCount;
                                                 newAmounts.push(DEFAULT_PRIZE_ALLOCATIONS[position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS] || MIN_PRIZE_PER_WINNER);
                                                 setWinnerAmounts(newAmounts);
+                                                setValidationError(null); // Clear potential previous errors
+                                            } else {
+                                                // Optionally show a temporary message or rely on validationError state
+                                                setValidationError(`Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
                                             }
                                         }}
-                                        disabled={winnerCount >= 10}
+                                        // Disable based on planFeatures limit
+                                        disabled={winnerCount >= planFeatures.maxWinnersPerContest}
                                     >
                                         +
                                     </Button>
                                 </div>
                                 <div className="text-sm text-gray-500">
-                                    <span>Max: 10</span>
+                                    {/* Display planFeatures limit */}
+                                    <span>Max: {planFeatures.maxWinnersPerContest}</span>
                                 </div>
                             </div>
 
@@ -764,23 +939,31 @@ export default function EditContestPage() {
                                 </div>
                             ))}
                         </div>
+                        {/* Add validation message for minimum total prize pool */}
+                        {totalPrizePool < planFeatures.minContestBudget && (
+                            <Alert variant="destructive" className="mt-4">
+                                <AlertDescription>
+                                    The minimum prize pool for your current plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase prize amounts.
+                                </AlertDescription>
+                            </Alert>
+                        )}
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-between">
                     <Button
                         variant="outline"
                         onClick={() => router.back()}
-                        disabled={isLoading}
+                        disabled={isSubmitting} // Disable during submission
                     >
                         Cancel
                     </Button>
 
                     <Button
                         onClick={handleSubmit}
-                        disabled={isLoading}
+                        disabled={isSubmitting || !!validationError} // Disable during submission or if validation errors exist
                         className="bg-rose-600 hover:bg-rose-700 text-white"
                     >
-                        {isLoading ? "Saving..." : "Save Changes"}
+                        {isSubmitting ? "Saving..." : "Save Changes"}
                     </Button>
                 </CardFooter>
             </Card>

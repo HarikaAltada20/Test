@@ -119,6 +119,7 @@ function SignInForm() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
+                        autoComplete="current-password"
                         className="h-11 pr-10"
                     />
                     <button

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Check, Info, Trophy, Star } from "lucide-react"
@@ -9,15 +9,83 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { subscriptionPlans } from "@/constants/subscriptionPlans"
+import { createSupabaseClient } from "@/lib/supabase/client"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+
+// Define PlanFeatures and SubscriptionPlan types (ensure consistency)
+type PlanFeatures = {
+    maxActiveContests: number;
+    minContestBudget: number;
+    maxWinnersPerContest: number;
+    commisionPercentage: number;
+}
+
+type SubscriptionPlan = {
+    id: string;
+    name: string;
+    price: number; // Assuming price is stored in cents
+    features: PlanFeatures;
+}
 
 export default function PricingPage() {
     const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly")
+    const supabase = createSupabaseClient(); // Initialize Supabase client
+
+    // State for fetched plans, loading, and error
+    const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<SubscriptionPlan[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    // Fetch subscription plans on component mount
+    useEffect(() => {
+        const fetchSubscriptionPlans = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                // Fetch plans ordered by price (optional, but good for display)
+                const { data: plansData, error: plansError } = await supabase
+                    .from("subscription_plans")
+                    .select("id, name, price, json_features")
+                    .order('price', { ascending: true }); // Order by price
+
+                if (plansError) {
+                    throw plansError;
+                }
+
+                if (plansData) {
+                    const mappedPlans: SubscriptionPlan[] = plansData.map((plan: any) => ({
+                        id: plan.id,
+                        name: plan.name,
+                        price: plan.price, // Use price directly from DB (assume cents)
+                        features: {
+                            // Safely access nested properties, provide defaults
+                            maxActiveContests: plan.json_features?.maxActiveContests ?? 1,
+                            minContestBudget: plan.json_features?.minContestBudget ?? 10000,
+                            maxWinnersPerContest: plan.json_features?.maxWinnersPerContest ?? 10,
+                            commisionPercentage: plan.json_features?.commisionPercentage ?? 40,
+                        }
+                    }));
+                    setDbSubscriptionPlans(mappedPlans);
+                } else {
+                    setDbSubscriptionPlans([]);
+                    setError("No subscription plans found."); // Inform user if no plans are configured
+                }
+            } catch (error: any) {
+                console.error("Error fetching subscription plans:", error);
+                setError(`Failed to load pricing plans: ${error.message}`);
+                setDbSubscriptionPlans([]); // Ensure state is empty on error
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchSubscriptionPlans();
+    }, [supabase]); // Dependency array includes supabase client
 
     // Add formatCurrency function for consistent display
-    const formatCurrency = (cents: number): string => {
+    const formatCurrency = (cents: number | undefined): string => {
+        if (typeof cents !== 'number') return '$0.00'; // Handle undefined price
         return `$${(cents / 100).toFixed(2)}`;
     }
 
@@ -29,9 +97,6 @@ export default function PricingPage() {
     const getDiscountedPrice = (price: number) => {
         return Math.round(price * 12 * 0.8)
     }
-
-    // Featured plan - Diamond plan
-    const featuredPlan = subscriptionPlans.find(plan => plan.id === 'diamond')
 
     // Core features shown in the hero section
     const coreFeatures = [
@@ -189,97 +254,124 @@ export default function PricingPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-16">
-                    {subscriptionPlans.map((plan) => (
-                        <Card
-                            key={plan.id}
-                            className={`flex flex-col border-2 ${plan.id === 'diamond'
-                                ? 'border-rose-500 relative shadow-lg'
-                                : 'border-gray-200'
-                                }`}
-                        >
-                            {plan.id === 'diamond' && (
-                                <div className="absolute -top-4 left-0 right-0 mx-auto w-fit px-3 py-1 bg-rose-600 text-white text-sm font-medium rounded">
-                                    Most Popular
-                                </div>
-                            )}
-                            <CardHeader>
-                                <div className="flex justify-center mb-4">
-                                    <div className={`w-14 h-14 rounded-full flex items-center justify-center ${plan.id === 'bronze' ? 'bg-orange-500' :
-                                        plan.id === 'silver' ? 'bg-gray-300' :
-                                            plan.id === 'gold' ? 'bg-yellow-400' :
-                                                plan.id === 'platinum' ? 'bg-indigo-400' :
-                                                    'bg-blue-300'
-                                        }`}>
-                                        <Trophy className="h-6 w-6 text-white" />
-                                    </div>
-                                </div>
-                                <CardTitle className="text-center">{plan.name}</CardTitle>
-                                <div className="mt-4 text-center">
-                                    <span className="text-3xl font-bold">
-                                        {formatCurrency(billingCycle === "monthly" ? plan.price : getDiscountedPrice(plan.price))}
-                                    </span>
-                                    <span className="text-gray-600 ml-1">
-                                        /{billingCycle === "monthly" ? "month" : "year"}
-                                    </span>
-                                </div>
-                                <CardDescription className="text-center mt-2">
-                                    {plan.name === 'FREE' && "Try it out for free"}
-                                    {plan.name === 'BRONZE' && "Perfect for getting started"}
-                                    {plan.name === 'SILVER' && "Best for growing brands"}
-                                    {plan.name === 'GOLD' && "For established businesses"}
-                                    {plan.name === 'PLATINUM' && "For scaling content strategy"}
-                                    {plan.name === 'DIAMOND' && "Enterprise-grade solution"}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex-grow">
-                                <ul className="space-y-2">
-                                    <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>{plan.features.maxActiveContests} active contests</span>
-                                    </li>
-                                    <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Min. amount of contest you can run is {formatCurrency(plan.features.minContestBudget)}</span>
-                                    </li>
-                                    <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Up to {plan.features.maxWinnersPerContest} winners</span>
-                                    </li>
-                                    <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Up to {plan.features.commisionPercentage}% commission per contest</span>
-                                    </li>
-                                    <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Access to 5,000+ creators</span>
-                                    </li>
-                                    {/* <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>Analytics dashboard</span>
-                                    </li> */}
-                                    {/* <li className="flex items-start">
-                                        <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                        <span>{plan.features.support} support</span>
-                                    </li> */}
-                                </ul>
-                            </CardContent>
-                            <CardFooter className="pt-6">
-                                <Button
-                                    className={`w-full ${plan.id === 'diamond'
-                                        ? 'bg-rose-600 hover:bg-rose-700'
-                                        : ''
+                {/* Loading State */}
+                {isLoading && (
+                    <div className="text-center py-10">
+                        <p>Loading pricing plans...</p>
+                        {/* Optional: Add a spinner */}
+                    </div>
+                )}
+
+                {/* Error State */}
+                {error && !isLoading && (
+                    <Alert variant="destructive" className="mb-16">
+                        <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                )}
+
+                {/* Display Plans only if not loading and no error */}
+                {!isLoading && !error && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-16">
+                        {dbSubscriptionPlans.map((plan) => {
+                            // Determine if this plan is the 'most popular' (e.g., by name or a specific ID)
+                            const isMostPopular = plan.name.toUpperCase() === 'DIAMOND'; // Example logic
+
+                            // Determine background color based on plan name/id
+                            const getPlanBgColor = (planName: string) => {
+                                const nameUpper = planName.toUpperCase();
+                                if (nameUpper === 'BRONZE') return 'bg-orange-500';
+                                if (nameUpper === 'SILVER') return 'bg-gray-300';
+                                if (nameUpper === 'GOLD') return 'bg-yellow-400';
+                                if (nameUpper === 'PLATINUM') return 'bg-indigo-400';
+                                if (nameUpper === 'DIAMOND') return 'bg-blue-300';
+                                return 'bg-gray-400'; // Default for FREE or others
+                            };
+
+                            return (
+                                <Card
+                                    key={plan.id}
+                                    className={`flex flex-col border-2 ${isMostPopular
+                                        ? 'border-rose-500 relative shadow-lg'
+                                        : 'border-gray-200'
                                         }`}
-                                    asChild
                                 >
-                                    <Link href={`/signup?plan=${plan.id}`}>
-                                        {plan.id === 'DIAMOND' ? 'Start Free Trial' : 'Get Started'}
-                                    </Link>
-                                </Button>
-                            </CardFooter>
-                        </Card>
-                    ))}
-                </div>
+                                    {isMostPopular && (
+                                        <div className="absolute -top-4 left-0 right-0 mx-auto w-fit px-3 py-1 bg-rose-600 text-white text-sm font-medium rounded">
+                                            Most Popular
+                                        </div>
+                                    )}
+                                    <CardHeader>
+                                        <div className="flex justify-center mb-4">
+                                            <div className={`w-14 h-14 rounded-full flex items-center justify-center ${getPlanBgColor(plan.name)}`}>
+                                                <Trophy className="h-6 w-6 text-white" />
+                                            </div>
+                                        </div>
+                                        <CardTitle className="text-center">{plan.name}</CardTitle>
+                                        <div className="mt-4 text-center">
+                                            <span className="text-3xl font-bold">
+                                                {formatCurrency(billingCycle === "monthly" ? plan.price : getDiscountedPrice(plan.price))}
+                                            </span>
+                                            <span className="text-gray-600 ml-1">
+                                                /{billingCycle === "monthly" ? "month" : "year"}
+                                            </span>
+                                        </div>
+                                        <CardDescription className="text-center mt-2 h-10"> {/* Added fixed height */}
+                                            {/* You might want dynamic descriptions or fallbacks */}
+                                            {plan.name.toUpperCase() === 'FREE' && "Get started for free"}
+                                            {plan.name.toUpperCase() === 'BRONZE' && "Perfect for getting started"}
+                                            {plan.name.toUpperCase() === 'SILVER' && "Best for growing brands"}
+                                            {plan.name.toUpperCase() === 'GOLD' && "For established businesses"}
+                                            {plan.name.toUpperCase() === 'PLATINUM' && "For scaling content strategy"}
+                                            {plan.name.toUpperCase() === 'DIAMOND' && "Enterprise-grade solution"}
+                                            {/* Add a default description if needed */}
+                                            {!['FREE', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'].includes(plan.name.toUpperCase()) && "Custom plan features"}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="flex-grow">
+                                        <ul className="space-y-2">
+                                            <li className="flex items-start">
+                                                <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                                <span>{plan.features.maxActiveContests} active contest{plan.features.maxActiveContests !== 1 ? 's' : ''}</span>
+                                            </li>
+                                            <li className="flex items-start">
+                                                <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                                <span>Min. budget {formatCurrency(plan.features.minContestBudget)}</span>
+                                            </li>
+                                            <li className="flex items-start">
+                                                <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                                <span>Up to {plan.features.maxWinnersPerContest} winner{plan.features.maxWinnersPerContest !== 1 ? 's' : ''}</span>
+                                            </li>
+                                            <li className="flex items-start">
+                                                <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                                <span>{plan.features.commisionPercentage}% commission</span>
+                                            </li>
+                                            <li className="flex items-start">
+                                                <Check className="h-5 w-5 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                                <span>Access to 5,000+ creators</span>
+                                            </li>
+                                            {/* Add other features as needed based on your json_features */}
+                                        </ul>
+                                    </CardContent>
+                                    <CardFooter className="pt-6">
+                                        <Button
+                                            className={`w-full ${isMostPopular
+                                                ? 'bg-rose-600 hover:bg-rose-700'
+                                                : ''
+                                                }`}
+                                            asChild
+                                        >
+                                            {/* Ensure plan.id is a string for the URL */}
+                                            <Link href={`/signup?plan=${String(plan.id)}`}>
+                                                {isMostPopular ? 'Start Free Trial' : 'Get Started'}
+                                            </Link>
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+                            )
+                        })
+                        }
+                    </div>
+                )}
             </div>
 
             {/* Book a Demo Section */}
