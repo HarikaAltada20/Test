@@ -13,7 +13,7 @@ import {
 import { AvatarImage, AvatarFallback, Avatar } from "@/components/ui/avatar"
 // import { ModeToggle } from "@/components/mode-toggle"
 import { Logo } from "./logo"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
 import logo from "@/public/images/GoViral_transparent_logo.png"
@@ -78,16 +78,10 @@ export function Nav() {
                                     </div>
                                 </div>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem asChild>
-                                    <Link href="/dashboard">Dashboard</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
-                                    <Link href="/dashboard/contests">My Contests</Link>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
+                                <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link href="/dashboard/profile">Profile</Link>
                                 </DropdownMenuItem>
-                                <DropdownMenuItem asChild>
+                                <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link href="/dashboard/settings">Settings</Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
@@ -114,7 +108,10 @@ export function Nav() {
                             </Button>
                         </SheetTrigger>
                         <SheetContent side="right">
-                            <Link href="/" className="flex items-center gap-2">
+                            <SheetHeader>
+                                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+                            </SheetHeader>
+                            <Link href="/" className="flex items-center gap-2 mb-4">
                                 <Logo />
                             </Link>
                             <nav className="mt-8 flex flex-col gap-4">
@@ -145,6 +142,24 @@ export function Nav() {
                                             className="text-sm font-medium transition-colors hover:text-primary"
                                         >
                                             Dashboard
+                                        </Link>
+                                        <Link
+                                            href="/dashboard/content"
+                                            className="text-sm font-medium transition-colors hover:text-primary"
+                                        >
+                                            My Content
+                                        </Link>
+                                        <Link
+                                            href="/dashboard/opportunities"
+                                            className="text-sm font-medium transition-colors hover:text-primary"
+                                        >
+                                            Opportunities
+                                        </Link>
+                                        <Link
+                                            href="/dashboard/earnings"
+                                            className="text-sm font-medium transition-colors hover:text-primary"
+                                        >
+                                            Earnings
                                         </Link>
                                         <Link
                                             href="/dashboard/profile"

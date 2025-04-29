@@ -68,7 +68,7 @@ export default async function CreatorContentPage() {
                   </div>
                   <div className="flex items-center space-x-4">
                     <div className="text-sm text-right">
-                      <p className="font-medium">{submission.current_views.toLocaleString()} views</p>
+                      <p className="font-medium">{(submission.current_views ?? 0).toLocaleString()} views</p>
                       <Badge
                         className={
                           submission.status === "approved"
