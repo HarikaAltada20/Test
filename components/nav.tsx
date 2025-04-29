@@ -61,7 +61,7 @@ export function Nav() {
                             <DropdownMenuTrigger asChild>
                                 <Button className="relative h-8 w-8 rounded-full">
                                     <Avatar className="h-8 w-8">
-                                        <AvatarImage src={user.avatar_url || undefined} alt={user.full_name || "User"} />
+                                        <AvatarImage src={user.avatar_url || `https://api.dicebear.com/8.x/bottts-neutral/svg?seed=${encodeURIComponent(user.email || 'default')}`} alt={user.full_name || "User"} />
                                         <AvatarFallback>{user.full_name?.[0] || user.email?.[0] || "U"}</AvatarFallback>
                                     </Avatar>
                                 </Button>

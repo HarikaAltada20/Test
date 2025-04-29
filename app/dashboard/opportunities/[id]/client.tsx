@@ -39,6 +39,15 @@ type LeaderboardEntry = {
         profile_picture_url: string | null; // It can be null
         full_name: string | null; // It can be null
     } | null;
+    // Added creator_profile data
+    creator_profile: {
+        id: string;
+        youtube_account: {
+            channel_thumbnail?: string; // Added optional youtube thumbnail
+            // Add other fields from youtube_account if needed
+        } | null;
+        // Add other creator_profile fields if needed
+    } | null;
 };
 
 // Client component that receives contestId as a prop
@@ -499,15 +508,17 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                             : null;
                                         const prizeAmount = prizeInfo ? prizeInfo.amount : null;
                                         const userData = entry.users; // Use entry.users
+                                        const creatorProfileData = entry.creator_profile;
                                         const videoUrl = entry.content_link || '#';
                                         const displayName = userData?.full_name || userData?.username || 'Unknown Creator';
-                                        const avatarUrl = userData?.profile_picture_url;
+                                        // Prioritize YouTube thumbnail, then user profile pic
+                                        const avatarUrl = creatorProfileData?.youtube_account?.channel_thumbnail || userData?.profile_picture_url;
 
                                         return (
                                             <div key={entry.id} className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors">
                                                 {/* Rank */}
                                                 <span className={`font-bold text-lg w-8 text-center flex-shrink-0 ${prizeAmount ? 'text-primary' : 'text-muted-foreground'}`}>{rank}</span>
-                                                {/* Avatar using profile_picture_url */}
+                                                {/* Avatar using youtube thumbnail or profile_picture_url */}
                                                 <div className="relative h-10 w-10 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
                                                     {avatarUrl ? (
                                                         <Image
