@@ -38,51 +38,60 @@ export default function SettingsPage() {
   const [pushNotifications, setPushNotifications] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false)
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(null)
+  const [pageLoading, setPageLoading] = useState(true)
   const router = useRouter()
   const { user } = useAuth()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
-    async function loadProfile() {
-      if (!user) return;
+    if (!user) {
+      setPageLoading(true)
+      return;
+    }
 
+    async function loadProfile() {
+      setPageLoading(true);
       try {
-        // First get user type
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type")
-          .eq("id", user.id)
+          .eq("id", user!.id)
           .single();
 
         if (userError) throw userError;
         setUserType(userData.user_type);
 
-        // Then load profile based on user type
         if (userData.user_type === "creator") {
           const { data, error } = await supabase
             .from("creator_profiles")
             .select("youtube_account, instagram_account")
-            .eq("id", user.id)
+            .eq("id", user!.id)
+            .single();
+
+          if (error) throw error;
+          setProfile(data);
+        } else if (userData.user_type === "advertiser") {
+          const { data, error } = await supabase
+            .from("advertiser_profiles")
+            .select("company_name, website_url, subscription_plan")
+            .eq("id", user!.id)
             .single();
 
           if (error) throw error;
           setProfile(data);
         } else {
-          const { data, error } = await supabase
-            .from("advertiser_profiles")
-            .select("company_name, website_url, subscription_plan")
-            .eq("id", user.id)
-            .single();
-
-          if (error) throw error;
-          setProfile(data);
+          console.error("Unknown user type:", userData.user_type);
+          setError("Unknown user type encountered.");
         }
       } catch (err) {
         console.error("Error loading profile:", err);
+        setError("Failed to load profile information.");
+      } finally {
+        setPageLoading(false);
       }
     }
 
@@ -93,7 +102,7 @@ export default function SettingsPage() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
-    setIsLoading(true);
+    setPasswordChangeLoading(true);
 
     try {
       const { error } = await supabase.auth.updateUser({
@@ -108,7 +117,7 @@ export default function SettingsPage() {
     } catch (err: any) {
       setError(err.message || "Failed to update password");
     } finally {
-      setIsLoading(false);
+      setPasswordChangeLoading(false);
     }
   };
 
@@ -150,28 +159,71 @@ export default function SettingsPage() {
 
   const updateCompanyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("updateCompanyProfile: Starting");
     setError(null);
     setSuccess(null);
-    setIsLoading(true);
+    setPasswordChangeLoading(true);
+
+    // Use the main component's Supabase client again
+    const supabaseClient = supabase;
 
     try {
-      const { error } = await supabase
-        .from('advertiser_profiles')
-        .update({
-          company_name: (e.target as any).company_name.value,
-          website_url: (e.target as any).website_url.value,
-        })
-        .eq('id', user?.id);
+      // Log values right before the update attempt
+      const companyName = (e.target as any).company_name.value;
+      const websiteUrl = (e.target as any).website_url.value;
+      const currentUserId = user?.id;
+      console.log(`updateCompanyProfile: Values - Name: ${companyName}, URL: ${websiteUrl}, UserID: ${currentUserId}`);
 
-      if (error) throw error;
+      if (!currentUserId) {
+        throw new Error("User ID is not available for update.");
+      }
+
+      // Nested try/catch specifically for the Supabase call
+      let updateResult = null;
+      try {
+        console.log("updateCompanyProfile: INNER TRY - Attempting Supabase update");
+        updateResult = await supabaseClient // Use main client
+          .from('advertiser_profiles')
+          .update({
+            company_name: companyName,
+            website_url: websiteUrl,
+          })
+          .eq('id', currentUserId) // Use logged user ID
+          .select();
+        console.log("updateCompanyProfile: INNER TRY - Supabase update finished.");
+      } catch (innerError: any) {
+        console.error("updateCompanyProfile: INNER CATCH - Error during Supabase call:", innerError);
+        throw innerError; // Re-throw to be caught by outer catch
+      }
+
+      // Process the result from the inner try
+      const { data, error } = updateResult || { data: null, error: new Error("Update call failed silently") }; // Handle null result just in case
+      console.log("updateCompanyProfile: Result data:", data);
+      console.log("updateCompanyProfile: Result error:", error);
+
+      if (error) {
+        console.error("updateCompanyProfile: Error object exists:", error);
+        throw error;
+      }
 
       setSuccess("Company profile updated successfully");
+      console.log("updateCompanyProfile: Set success message");
     } catch (err: any) {
+      console.error("updateCompanyProfile: OUTER CATCH - Error caught:", err);
       setError(err.message || "Failed to update company profile");
     } finally {
-      setIsLoading(false);
+      console.log("updateCompanyProfile: Reached finally block");
+      setPasswordChangeLoading(false);
     }
   };
+
+  if (pageLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p>Loading settings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -294,8 +346,8 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Updating..." : "Update Profile"}
+              <Button type="submit" disabled={passwordChangeLoading}>
+                {passwordChangeLoading ? "Updating..." : "Update Profile"}
               </Button>
             </form>
           </CardContent>
@@ -377,6 +429,7 @@ export default function SettingsPage() {
               <Input
                 id="current-password"
                 type="password"
+                autoComplete="current-password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
               />
@@ -387,13 +440,14 @@ export default function SettingsPage() {
               <Input
                 id="new-password"
                 type="password"
+                autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
             </div>
 
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Updating..." : "Update Password"}
+            <Button type="submit" disabled={passwordChangeLoading}>
+              {passwordChangeLoading ? "Updating..." : "Update Password"}
             </Button>
           </form>
         </CardContent>

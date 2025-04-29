@@ -90,14 +90,16 @@ function SignInForm() {
             )}
 
             <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                     id="email"
                     type="email"
+                    name="email"
                     placeholder="name@example.com"
+                    autoComplete="email"
+                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    required
                     className="h-11"
                 />
             </div>
