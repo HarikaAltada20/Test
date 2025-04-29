@@ -18,27 +18,27 @@ export default function OpportunitiesPage() {
   const supabase = createSupabaseClient()
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true)
+      return
+    }
+
+    if (!user) {
+      console.error("Opportunities page loaded without user after auth check.")
+      setLoading(false)
+      return
+    }
+
     async function fetchData() {
       setLoading(true)
 
-      if (authLoading || !user) {
-        if (!authLoading && !user) {
-          router.push("/auth/signin");
-          return;
-        }
-        return;
-      }
+      const { data: userData } = await supabase.from("users").select("user_type").eq("id", user!.id).single()
 
-      // Get user type from the database
-      const { data: userData } = await supabase.from("users").select("user_type").eq("id", user.id).single()
-
-      // Redirect advertisers to contests
       if (userData?.user_type === "advertiser") {
         router.push("/dashboard/contests")
         return
       }
 
-      // Get available contests
       const { data: contests } = await supabase
         .from("contests_with_status")
         .select("*")
@@ -51,17 +51,17 @@ export default function OpportunitiesPage() {
     }
 
     fetchData()
-  }, [user, router, supabase])
+  }, [user, authLoading, router, supabase])
 
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`)
   }
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p>Loading opportunities...</p>
+          <p>Loading...</p>
         </div>
       </div>
     )
