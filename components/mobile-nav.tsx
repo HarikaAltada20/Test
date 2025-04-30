@@ -5,7 +5,14 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger
+} from "@/components/ui/sheet"
 import { useAuth } from "@/contexts/auth-context"
 
 export function MobileNav() {
@@ -26,6 +33,12 @@ export function MobileNav() {
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="md:hidden">
+        <SheetHeader>
+          <SheetTitle className="sr-only">Mobile Navigation Menu</SheetTitle>
+          <SheetDescription className="sr-only">
+            Links to navigate the site. Only visible on small screens.
+          </SheetDescription>
+        </SheetHeader>
         <nav className="flex flex-col gap-4 mt-8">
           <Link href="/" onClick={handleLinkClick} className={pathname === "/" ? "font-bold" : ""}>
             Home

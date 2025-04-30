@@ -13,7 +13,14 @@ import {
 import { AvatarImage, AvatarFallback, Avatar } from "@/components/ui/avatar"
 // import { ModeToggle } from "@/components/mode-toggle"
 import { Logo } from "./logo"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import {
+    Sheet,
+    SheetContent,
+    SheetHeader,
+    SheetTitle,
+    SheetDescription,
+    SheetTrigger
+} from "@/components/ui/sheet"
 import { Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
 import logo from "@/public/images/GoViral_transparent_logo.png"
@@ -110,6 +117,9 @@ export function Nav() {
                         <SheetContent side="right">
                             <SheetHeader>
                                 <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+                                <SheetDescription className="sr-only">
+                                    Main navigation links for the site and user dashboard access.
+                                </SheetDescription>
                             </SheetHeader>
                             <Link href="/" className="flex items-center gap-2 mb-4">
                                 <Logo />

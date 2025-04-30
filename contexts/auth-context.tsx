@@ -42,9 +42,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { user }, error: userError } = await supabase.auth.getUser();
 
         if (userError) {
-          console.error("Auth initialization - getUser error:", userError.message);
-          setUser(null);
+          // Check if the error is the expected "no session" case
+          if (userError.message === 'Auth session missing!') {
+            // It's expected when not logged in, log info or nothing
+            console.info("Auth initialization: No active session found."); // Use info instead of error
+            setUser(null);
+          } else {
+            // It's a different, unexpected error - log as error
+            console.error("Auth initialization - unexpected getUser error:", userError.message, userError);
+            setUser(null);
+            // Optionally set a generic error state for unexpected issues
+            setError("Error initializing authentication.");
+          }
         } else {
+          // If getUser succeeds, set the user
           setUser(user as User);
         }
 
@@ -82,7 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
 
       } catch (error: any) {
-        console.error("Unexpected error during Auth initialization:", error);
+        // Catch any totally unexpected errors during the setup process (outside getUser itself)
+        console.error("Unexpected error during Auth initialization setup:", error);
         setError("Failed to initialize authentication.");
         setUser(null);
       } finally {
@@ -128,18 +140,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      // Remove the pre-check for existing user by email
-      /*
+      // Check if user already exists
       const { data: existingUserCheck, error: checkError } = await supabase
-        .from('users')
+        .from('users') // Assuming your public users table is named 'users'
         .select('id')
-        .eq('email', email)
-        .single();
+        .eq('email', email.toLowerCase().trim()) // Ensure consistent email format
+        .maybeSingle(); // Use maybeSingle to handle no user found gracefully
 
+      // Handle potential errors during the check itself
+      if (checkError && checkError.code !== 'PGRST116') { // Ignore 'PGRST116' (No rows found)
+        console.error("Error checking existing email:", checkError);
+        throw new Error("Could not verify email. Please try again later.");
+      }
+
+      // If a user was found, throw the specific error
       if (existingUserCheck) {
         throw new Error("An account with this email already exists. Please sign in instead.");
       }
-      */
 
       // If referral code was provided, store it in sessionStorage
       if (referralCode) {
@@ -197,6 +214,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         errorMessage = "An account with this email already exists. Please sign in instead.";
       } else if (errorMessage.includes("User already registered")) {
         errorMessage = "An account with this email already exists. Please sign in instead.";
+      } else if (errorMessage === "An account with this email already exists. Please sign in instead.") {
+        // Keep the message as is
       }
 
       setError(errorMessage);
