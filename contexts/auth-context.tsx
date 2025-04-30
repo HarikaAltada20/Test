@@ -273,13 +273,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
 
-      // Redirect to login page instead of home page
-      window.location.href = '/auth/signin'
+      // Redirect to login page using Next.js router
+      router.push('/auth/signin')
     } catch (error: any) {
       console.error("Sign out failed:", error)
       setError(error.message)
       // Even if there's an error, we should redirect to login page
-      window.location.href = '/auth/signin'
+      router.push('/auth/signin') // Use router here too
     } finally {
       setIsLoading(false)
     }

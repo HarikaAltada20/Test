@@ -12,51 +12,88 @@ import { formatMoney } from "@/lib/utils"
 
 export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [isFetchingData, setIsFetchingData] = useState(true)
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading: isAuthLoading } = useAuth()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
+    if (isAuthLoading) {
+      setIsFetchingData(true)
+      return
+    }
+
     if (!user) {
-      setLoading(true)
+      console.log("OpportunitiesPage: No user found after auth load, redirecting to signin.")
+      router.push("/auth/signin")
       return
     }
 
     async function fetchData() {
-      setLoading(true)
+      setIsFetchingData(true)
 
-      const { data: userData } = await supabase.from("users").select("user_type").eq("id", user!.id).single()
+      try {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user!.id)
+          .single()
 
-      if (userData?.user_type === "advertiser") {
-        router.push("/dashboard/contests")
-        return
+        if (userError) {
+          console.error("Error fetching user type:", userError)
+          setIsFetchingData(false)
+          setAvailableContests([])
+          return
+        }
+
+        if (userData?.user_type === "advertiser") {
+          console.log("OpportunitiesPage: Advertiser detected, redirecting to contests.")
+          router.push("/dashboard/contests")
+          return
+        }
+
+        const { data: contests, error: contestError } = await supabase
+          .from("contests_with_status")
+          .select("*")
+          .not('status', 'eq', 'draft')
+          .not('status', 'eq', 'incomplete')
+          .order("created_at", { ascending: false })
+
+        if (contestError) {
+          console.error("Error fetching contests:", contestError)
+          setAvailableContests([])
+        } else {
+          setAvailableContests(contests || [])
+        }
+      } catch (error) {
+        console.error("Unexpected error in fetchData:", error)
+        setAvailableContests([])
+      } finally {
+        setIsFetchingData(false)
       }
-
-      const { data: contests } = await supabase
-        .from("contests_with_status")
-        .select("*")
-        .not('status', 'eq', 'draft')
-        .not('status', 'eq', 'incomplete')
-        .order("created_at", { ascending: false })
-
-      setAvailableContests(contests || [])
-      setLoading(false)
     }
 
     fetchData()
-  }, [user, router, supabase])
+  }, [user, isAuthLoading, router, supabase])
 
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`)
   }
 
-  if (loading) {
+  if (isAuthLoading || isFetchingData) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <p>Loading opportunities...</p>
         </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">You need to be logged in to view opportunities.</p>
       </div>
     )
   }
