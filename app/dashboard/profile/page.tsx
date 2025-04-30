@@ -36,7 +36,7 @@ interface AdvertiserProfile {
   subscription_plan: string
 }
 
-export default function SettingsPage() {
+export default function profilePage() {
   const [userData, setUserData] = useState<UserData | null>(null)
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null)
   const [advertiserProfile, setAdvertiserProfile] = useState<AdvertiserProfile | null>(null)

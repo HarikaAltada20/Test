@@ -72,17 +72,31 @@ export async function GET(
         .in('id', creatorIds);
 
      if (usersError) {
+        // Log but don't throw, allow leaderboard to potentially show partial data
         console.error('(Anon Client) Error fetching users data:', usersError);
      }
+     
+    // 3b. Fetch corresponding creator profiles from 'creator_profiles'
+    const { data: creatorProfilesData, error: creatorProfilesError } = await supabase
+        .from('creator_profiles')
+        .select('id, youtube_account') // Select youtube_account JSONB
+        .in('id', creatorIds);
 
-    // 4. Create user lookup map
+    if (creatorProfilesError) {
+        // Log but don't throw
+        console.error('(Anon Client) Error fetching creator profiles data:', creatorProfilesError);
+    }
+
+    // 4. Create lookup maps
     const usersMap = new Map(usersData?.map(user => [user.id, user]) || []);
+    const creatorProfilesMap = new Map(creatorProfilesData?.map(profile => [profile.id, profile]) || []);
 
-    // 5. Combine submissions with user data
+
+    // 5. Combine submissions with user and creator profile data
     const leaderboardData = submissions.map(submission => ({
         ...submission,
-        // Use 'users' field, default to null
-        users: usersMap.get(submission.creator_id) || null 
+        users: usersMap.get(submission.creator_id) || null, // Keep existing user data
+        creator_profile: creatorProfilesMap.get(submission.creator_id) || null // Add creator profile data
     }));
 
     // Data is already sorted by views from the first query
