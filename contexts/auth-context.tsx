@@ -34,72 +34,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = createSupabaseClient()
 
   useEffect(() => {
-    const getUser = async () => {
-      setIsLoading(true)
+    const initializeAuth = async () => {
+      setIsLoading(true);
+      setError(null);
+
       try {
-        // First check session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-        if (sessionError) {
-          throw sessionError
-        }
-
-        if (session) {
-          // If we have a session, get the user
-          const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-          if (userError) {
-            throw userError
-          }
-
-          if (user) {
-            setUser(user as User)
-          }
+        if (userError) {
+          console.error("Auth initialization - getUser error:", userError.message);
+          setUser(null);
         } else {
-          setUser(null)
+          setUser(user as User);
         }
 
-        // Set up auth state change listener
         const { data: authListener } = supabase.auth.onAuthStateChange(
           async (event, session) => {
+            console.log("Auth State Change:", event);
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-              const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser()
-              if (userError) {
-                console.error('Error verifying user:', userError)
-                setUser(null)
-                return
+              const { data: { user: verifiedUser }, error: verifyError } = await supabase.auth.getUser();
+              if (verifyError) {
+                console.error('onAuthStateChange - Error verifying user:', verifyError.message);
+                setUser(null);
+              } else {
+                console.log("onAuthStateChange - Setting user:", verifiedUser?.id);
+                setUser(verifiedUser as User || null);
               }
-              setUser(verifiedUser as User || null)
             } else if (event === 'SIGNED_OUT') {
-              setUser(null)
+              console.log("onAuthStateChange - Setting user null due to SIGNED_OUT");
+              setUser(null);
+            } else if (event === 'PASSWORD_RECOVERY') {
+              console.log("onAuthStateChange - Password recovery event");
+            } else if (event === 'USER_UPDATED') {
+              console.log("onAuthStateChange - User updated event, re-fetching user");
+              const { data: { user: updatedUser }, error: updateUserError } = await supabase.auth.getUser();
+              if (!updateUserError && updatedUser) {
+                setUser(updatedUser as User);
+              }
             }
           }
-        )
+        );
 
         return () => {
-          authListener.subscription.unsubscribe()
-        }
+          if (authListener?.subscription) {
+            authListener.subscription.unsubscribe();
+          }
+        };
+
       } catch (error: any) {
-        console.error("Auth initialization error:", error)
-
-        // Check if the error indicates the user associated with the token doesn't exist
-        if (error?.code === 'user_not_found' || (error?.message && error.message.includes('User not found'))) {
-          console.warn("User from token not found in Supabase. Signing out.");
-          // Clear the invalid session by signing out
-          await supabase.auth.signOut(); // Don't need to handle signOut errors here, just clear the local session
-          setUser(null); // Ensure user state is cleared
-        } else {
-          // For other errors, set the error state
-          setError(error.message);
-          setUser(null);
-        }
+        console.error("Unexpected error during Auth initialization:", error);
+        setError("Failed to initialize authentication.");
+        setUser(null);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    getUser()
-  }, [supabase.auth])
+    initializeAuth();
+  }, [supabase.auth]);
 
   useEffect(() => {
     // Check if user needs to set a username
