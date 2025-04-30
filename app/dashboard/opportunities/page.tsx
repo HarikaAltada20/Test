@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, DollarSign, Filter, Trophy } from "lucide-react"
+import { User } from "@supabase/supabase-js"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { formatMoney } from "@/lib/utils"
@@ -13,8 +14,8 @@ import { formatMoney } from "@/lib/utils"
 export default function OpportunitiesPage() {
   const [availableContests, setAvailableContests] = useState<any[]>([])
   const [isFetchingData, setIsFetchingData] = useState(true)
-  const router = useRouter()
   const { user, isLoading: isAuthLoading } = useAuth()
+  const router = useRouter()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
@@ -29,14 +30,14 @@ export default function OpportunitiesPage() {
       return
     }
 
-    async function fetchData() {
+    async function fetchData(currentUser: User) {
       setIsFetchingData(true)
 
       try {
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type")
-          .eq("id", user!.id)
+          .eq("id", currentUser.id)
           .single()
 
         if (userError) {
@@ -73,7 +74,7 @@ export default function OpportunitiesPage() {
       }
     }
 
-    fetchData()
+    fetchData(user)
   }, [user, isAuthLoading, router, supabase])
 
   const handleViewDetails = (id: string) => {
