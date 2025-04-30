@@ -12,15 +12,15 @@ import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 
 // Wrap component with username check
-export default withUsernameCheck(DashboardPage)
+// export default withUsernameCheck(DashboardPage) // Temporarily disable HOC
 
 // Client component version
 function DashboardPage() {
   const [profile, setProfile] = useState<any>(null)
   const [recentContests, setRecentContests] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isFetchingData, setIsFetchingData] = useState(true)
   const [userCoins, setUserCoins] = useState(0)
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: isAuthLoading } = useAuth()
   const router = useRouter()
   const supabase = createSupabaseClient()
 
@@ -28,145 +28,130 @@ function DashboardPage() {
     let isMounted = true;
 
     async function fetchData() {
-      // Wait for auth to finish loading
-      if (authLoading) return;
-
-      // Check session directly with Supabase
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError) {
-        console.error("Error checking session:", sessionError);
+      if (!user) {
+        console.warn("DashboardPage: Fetch attempt skipped, no user found.");
+        if (isMounted) setIsFetchingData(false);
         return;
       }
 
-      // If no session, redirect to signin
-      if (!session) {
-        if (isMounted) {
-          router.push("/auth/signin");
-        }
-        return;
-      }
+      if (isMounted) setIsFetchingData(true);
 
       try {
-        if (isMounted) {
-          setIsLoading(true);
-        }
-
-        // Get user type
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type, coins")
-          .eq("id", session.user.id)
-          .single()
-
-        if (userError) {
-          console.error("Error fetching user data:", userError);
-          return;
-        }
+          .eq("id", user.id)
+          .single();
 
         if (!isMounted) return;
 
-        const userType = userData?.user_type
-        setUserCoins(userData?.coins || 0)
+        if (userError) {
+          console.error("Error fetching user data:", userError);
+          if (isMounted) setIsFetchingData(false);
+          return;
+        }
+
+        const userType = userData?.user_type;
+        setUserCoins(userData?.coins || 0);
 
         if (userType === "advertiser") {
-          // For advertisers, fetch their profile and active subscription
           const { data: advertiserProfile, error: profileError } = await supabase
             .from("advertiser_profiles")
             .select("*, subscription_plan")
-            .eq("id", session.user.id)
-            .single()
-
-          if (profileError) {
-            console.error("Error fetching advertiser profile:", profileError);
-            return;
-          }
+            .eq("id", user.id)
+            .single();
 
           if (!isMounted) return;
-          setProfile(advertiserProfile)
+          if (profileError) {
+            console.error("Error fetching advertiser profile:", profileError);
+          } else {
+            setProfile(advertiserProfile);
+          }
 
-          // Fetch recent contests for advertisers
           const { data: contests, error: contestsError } = await supabase
             .from("contests_with_status")
             .select("*")
-            .eq("advertiser_id", session.user.id)
+            .eq("advertiser_id", user.id)
             .order("created_at", { ascending: false })
-            .limit(3)
-
-          if (contestsError) {
-            console.error("Error fetching contests:", contestsError);
-            return;
-          }
+            .limit(3);
 
           if (!isMounted) return;
-          setRecentContests(contests || [])
+          if (contestsError) {
+            console.error("Error fetching contests:", contestsError);
+          } else {
+            setRecentContests(contests || []);
+          }
+
         } else if (userType === "creator") {
           const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
             .select("*")
-            .eq("id", session.user.id)
-            .single()
-
-          if (profileError) {
-            console.error("Error fetching creator profile:", profileError);
-            return;
-          }
+            .eq("id", user.id)
+            .single();
 
           if (!isMounted) return;
-          setProfile(creatorProfile)
+          if (profileError) {
+            console.error("Error fetching creator profile:", profileError);
+          } else {
+            setProfile(creatorProfile);
+          }
 
-          // For creators, fetch contests they've participated in
           const { data: submissions, error: submissionsError } = await supabase
             .from("submissions")
             .select("*, contests(*)")
-            .eq("creator_id", session.user.id)
+            .eq("creator_id", user.id)
             .order("created_at", { ascending: false })
-            .limit(3)
-
-          if (submissionsError) {
-            console.error("Error fetching submissions:", submissionsError);
-            return;
-          }
+            .limit(3);
 
           if (!isMounted) return;
-          if (submissions) {
-            // Extract contests from submissions
-            const contests = submissions.map(sub => sub.contests)
-            setRecentContests(contests || [])
+          if (submissionsError) {
+            console.error("Error fetching submissions:", submissionsError);
+          } else if (submissions) {
+            const contests = submissions.map(sub => sub.contests).filter(Boolean);
+            setRecentContests(contests || []);
           }
         }
       } catch (error) {
-        console.error("Error fetching dashboard data:", error)
+        console.error("Error fetching dashboard data:", error);
       } finally {
         if (isMounted) {
-          setIsLoading(false)
+          setIsFetchingData(false);
         }
       }
     }
 
-    fetchData()
+    if (isAuthLoading) {
+      if (isMounted) setIsFetchingData(true);
+      return;
+    }
+
+    if (!user) {
+      console.log("DashboardPage: No user found after auth load, redirecting.");
+      if (isMounted) router.push("/auth/signin");
+      if (isMounted) setIsFetchingData(false);
+      return;
+    }
+
+    fetchData();
 
     return () => {
       isMounted = false;
-    }
-  }, [user, supabase, router, authLoading])
+    };
+  }, [user, isAuthLoading, supabase, router]);
 
-  // Show nothing while auth is loading
-  if (authLoading) {
-    return null;
-  }
-
-  // Show loading state only when fetching data
-  if (isLoading) {
+  if (isAuthLoading || isFetchingData) {
     return (
       <div className="flex items-center justify-center h-64">
         <p>Loading dashboard...</p>
       </div>
-    )
+    );
   }
 
-  // Check if user is advertiser or creator based on profile
-  const isAdvertiser = profile && "company_name" in profile
+  if (!user) {
+    return <div className="text-center p-8">Please sign in to view the dashboard.</div>;
+  }
+
+  const isAdvertiser = profile && "company_name" in profile;
 
   return (
     <div className="space-y-8">
@@ -183,7 +168,6 @@ function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {isAdvertiser ? (
-          // Advertiser stats
           <>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -207,7 +191,6 @@ function DashboardPage() {
             </Card>
           </>
         ) : (
-          // Creator stats
           <>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -232,7 +215,6 @@ function DashboardPage() {
           </>
         )}
 
-        {/* Common stats for both roles */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Views</CardTitle>
@@ -321,4 +303,6 @@ function DashboardPage() {
     </div>
   )
 }
+
+export default DashboardPage; // Export directly
 
