@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
     const scopes = [
       'https://www.googleapis.com/auth/youtube.readonly',      // Read access to YouTube data
       'https://www.googleapis.com/auth/youtube.force-ssl',     // SSL access
+    ];
       // 'https://www.googleapis.com/auth/youtubepartner',        // Access to YouTube Content Owner features
       // 'https://www.googleapis.com/auth/youtube.channel-memberships.creator', // Access to channel memberships
       // 'https://www.googleapis.com/auth/youtube.upload'         // Upload access (if needed in future)
-    ];
 
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',           // Get refresh token for long-term access
