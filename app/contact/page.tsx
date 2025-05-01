@@ -48,7 +48,7 @@ export default function ContactPage() {
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold mb-4">Contact Us</h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Have questions about Go Viral? Get in touch with our team and we'll be happy to help.
+            Have questions about Game Of Creators? Get in touch with our team and we'll be happy to help.
           </p>
         </div>
 
@@ -131,7 +131,7 @@ export default function ContactPage() {
                 </div>
                 <div>
                   <h3 className="font-medium">Email Us</h3>
-                  <p className="text-muted-foreground">hello@goviral.com</p>
+                  <p className="text-muted-foreground">hello@gameofcreators.com</p>
                   <p className="text-sm text-muted-foreground mt-1">We aim to respond within 24 hours</p>
                 </div>
               </div>

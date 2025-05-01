@@ -26,7 +26,7 @@ export default function OpportunitiesPage() {
 
     if (!user) {
       console.log("OpportunitiesPage: No user found after auth load, redirecting to signin.")
-      router.push("/auth/signin")
+      router.push("/")
       return
     }
 

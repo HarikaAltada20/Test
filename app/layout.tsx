@@ -9,7 +9,7 @@ import ClientLayout from "./client-layout"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Go Viral",
+  title: "Game Of Creators",
   description: "Connect brands with content creators for viral marketing campaigns",
 }
 

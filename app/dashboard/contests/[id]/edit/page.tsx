@@ -630,7 +630,7 @@ export default function EditContestPage() {
                             id="title"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            placeholder="Go Viral! Get Paid to Create"
+                            placeholder="Game Of Creators! Get Paid to Create"
                             required
                         />
                     </div>
@@ -713,7 +713,7 @@ export default function EditContestPage() {
                             id="brief"
                             value={brief}
                             onChange={(e) => setBrief(e.target.value)}
-                            placeholder="Go Viral is the app that pays creators! We help creators connect with brands & get paid to create content!"
+                            placeholder="Game Of Creators is the app that pays creators! We help creators connect with brands & get paid to create content!"
                             rows={6}
                         />
                     </div>

@@ -8,7 +8,7 @@ export default function PrivacyPolicyPage() {
 
                 <h2 className="text-2xl font-bold mt-8 mb-4">1. Introduction</h2>
                 <p>
-                    Welcome to Go Viral. We respect your privacy and are committed to protecting your personal data.
+                    Welcome to Game Of Creators. We respect your privacy and are committed to protecting your personal data.
                     This privacy policy will inform you about how we look after your personal data when you visit our website
                     and tell you about your privacy rights and how the law protects you.
                 </p>
@@ -62,7 +62,7 @@ export default function PrivacyPolicyPage() {
                     If you have any questions about this privacy policy or our privacy practices, please contact us at:
                 </p>
                 <p className="mt-2">
-                    Email: privacy@goviral.com<br />
+                    Email: privacy@gameofcreators.com.com<br />
                     Address: 123 Innovation Way, San Francisco, CA 94105
                 </p>
             </div>

@@ -118,7 +118,7 @@ export default function PricingPage() {
             answer: "Creators are incentivized to promote their content because views = prizes. This means they actively push their posts to friends, followers, and beyond to maximize reach. It's like having a motivated marketing team built in. If results fall short, we can help you optimize your brief or strategy for next time—at no extra cost."
         },
         {
-            question: "How many creators are on Go Viral?",
+            question: "How many creators are on Game Of Creators?",
             answer: "We have a fast-growing network of 5,000+ active creators across various niches. When you launch a contest, it goes live to all eligible creators through our dashboard and email system—ensuring visibility and participation."
         },
         {
@@ -168,7 +168,7 @@ export default function PricingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
                     <div>
                         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6">
-                            Go Viral with Creator-Generated Content
+                            Game Of Creators with Creator-Generated Content
                         </h1>
                         <p className="text-xl text-gray-600 mb-8">
                             Launch creator contests, get authentic content that performs, and own all rights to winning submissions.
@@ -379,14 +379,14 @@ export default function PricingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-gray-50 p-8 rounded-xl">
                     <div>
                         <h2 className="text-3xl font-bold mb-4">Not sure which plan is right for you?</h2>
-                        <h3 className="text-2xl font-medium mb-6">Book a demo with Vishesh, Founder of Go Viral</h3>
+                        <h3 className="text-2xl font-medium mb-6">Book a demo with Vishesh, Founder of Game Of Creators</h3>
                         <p className="text-gray-600 mb-6">
-                            Join hundreds of businesses driving success with Go Viral! Book your free consultation today to get all your
+                            Join hundreds of businesses driving success with Game Of Creators! Book your free consultation today to get all your
                             questions answered and start launching impactful campaigns.
                         </p>
                         <p className="text-gray-600 mb-8">
                             Discover how Vishesh scaled his mobile app to over 800,000 users using the same winning strategies that
-                            Go Viral delivers.
+                            Game Of Creators delivers.
                         </p>
                         <Button size="lg" className="bg-rose-600 hover:bg-rose-700">
                             Book a Demo
@@ -420,7 +420,7 @@ export default function PricingPage() {
 
             {/* CTA Section */}
             <div className="text-center mb-12">
-                <h2 className="text-3xl font-bold mb-4">Ready to go viral?</h2>
+                <h2 className="text-3xl font-bold mb-4">Ready to Game Of Creators?</h2>
                 <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
                     Join thousands of brands leveraging creator contests to generate authentic, high-performing content
                 </p>

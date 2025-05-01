@@ -13,7 +13,7 @@ export function SiteHeader() {
 
         {/* Left: Logo */}
         <Link href="/" className="flex items-center space-x-2">
-          <Image className="ml-8" src={logo} alt="Go Viral Logo" width={80} height={80} />
+          <Image className="ml-8" src={logo} alt="Game Of Creators Logo" width={80} height={80} />
         </Link>
 
         {/* Center: Brands & Creators */}

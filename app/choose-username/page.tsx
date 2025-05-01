@@ -132,7 +132,7 @@ export default function ChooseUsernamePage() {
                     type: 'earned',
                     status: 'success',
                     coins: 100,
-                    description: `Welcome bonus for joining GoViral`
+                    description: `Welcome bonus for joining Game Of Creators`
                 }])
             } else {
                 // User exists, update their info

@@ -39,7 +39,7 @@ export default function Home() {
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Why it Works</h2>
             <p className="text-lg text-gray-600">
-              Generating fresh content ideas and managing creators can be challenging. With Go Viral, creators compete
+              Generating fresh content ideas and managing creators can be challenging. With Game Of Creators, creators compete
               to craft the most viral content for your brand, hassle free.
             </p>
           </div>
@@ -48,7 +48,7 @@ export default function Home() {
             <div className="bg-blue-50 rounded-lg p-8">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Organic content at scale</h3>
               <p className="text-gray-600">
-                With Go Viral, you generate a high volume of diverse, high-quality content without the hassle of
+                With Game Of Creators, you generate a high volume of diverse, high-quality content without the hassle of
                 sourcing, negotiating, or managing creators manually.
               </p>
             </div>
@@ -56,7 +56,7 @@ export default function Home() {
             <div className="bg-purple-50 rounded-lg p-8">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Supply and Demand based platform</h3>
               <p className="text-gray-600">
-                Go Viral operates on a supply and demand model. Creators compete, allowing the best ideas to surface
+                Game Of Creators operates on a supply and demand model. Creators compete, allowing the best ideas to surface
                 organically. This competition drives higher engagement, better content quality, and increased reach as
                 creators share their work.
               </p>
