@@ -33,7 +33,7 @@ export function Logo({ centered = false, showText = true }: LogoProps) {
                     </svg>
                 </div>
             </div>
-            {showText && <span className="font-bold text-xl ml-3">Go Viral</span>}
+            {showText && <span className="font-bold text-xl ml-3">Game Of Creators</span>}
         </div>
     )
 } 

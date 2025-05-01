@@ -36,7 +36,7 @@ export default async function DashboardLayout({
       <aside className="hidden w-64 border-r bg-background md:block">
         <div className="flex h-full flex-col">
           <div className="flex h-14 items-center border-b px-4">
-            <span className="font-semibold">Go Viral</span>
+            <span className="font-semibold">Game Of Creators</span>
           </div>
           <DashboardSidebar userRole={userRole} />
         </div>

@@ -50,9 +50,9 @@ export default function CreateContestPage() {
   const [brief, setBrief] = useState("")
   const [rules, setRules] = useState(`Content must be in English
 Content must be similar in style to the inspiration content from the brief
-If you have earnings on Go Viral, please show your total earnings as well
-You must include a call to action encouraging viewers to download the Go Viral App to get Paid
-You must show the Go Viral App Store listing in your video`)
+If you have earnings on Game Of Creators, please show your total earnings as well
+You must include a call to action encouraging viewers to download the Game Of Creators App to get Paid
+You must show the Game Of Creators App Store listing in your video`)
   const [resources, setResources] = useState<Record<string, string>>({})
   const [newResourceUrl, setNewResourceUrl] = useState("")
   const [resourceFile, setResourceFile] = useState<File | null>(null)
@@ -1296,7 +1296,7 @@ You must show the Go Viral App Store listing in your video`)
               onClick={() => {
                 setShowHighBudgetPrompt(false)
                 // Logic to contact the team could be added here
-                window.open('mailto:support@goviral.ai', '_blank');
+                window.open('mailto:support@gameofcreators.com', '_blank');
               }}
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
@@ -1740,7 +1740,7 @@ You must show the Go Viral App Store listing in your video`)
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Go Viral! Get Paid to Create"
+                  placeholder="Game Of Creators! Get Paid to Create"
                   required
                 />
               </div>
@@ -1877,7 +1877,7 @@ You must show the Go Viral App Store listing in your video`)
                   <Textarea
                     value={brief}
                     onChange={(e) => setBrief(e.target.value)}
-                    placeholder="Go Viral is the app that pays creators! We help creators connect with brands & get paid to create content!"
+                    placeholder="Game Of Creators is the app that pays creators! We help creators connect with brands & get paid to create content!"
                     rows={8}
                     className="border-none resize-none focus-visible:ring-0 p-0"
                   />

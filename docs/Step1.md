@@ -1,6 +1,6 @@
-# GoViral: Full Integration Guide for Cursor (Step-by-Step)
+# gameofcreators.com: Full Integration Guide for Cursor (Step-by-Step)
 
-> This document outlines the step-by-step technical instructions Cursor should follow to implement the GoViral platform features using the new Supabase schema and buckets already created.
+> This document outlines the step-by-step technical instructions Cursor should follow to implement the gameofcreators.com platform features using the new Supabase schema and buckets already created.
 
 ---
 

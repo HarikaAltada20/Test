@@ -25,7 +25,7 @@ export default function BrandsPage() {
       {/* Benefits section */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Why Brands Choose Go Viral</h2>
+          <h2 className="text-3xl font-bold text-center mb-12">Why Brands Choose Game Of Creators</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <Card>
               <CardContent className="pt-6">
@@ -141,7 +141,7 @@ export default function BrandsPage() {
                     <Award className="h-5 w-5 text-yellow-500" />
                   </div>
                   <p className="italic">
-                    "Go Viral revolutionized our content strategy. We received over 50 unique content pieces in just two
+                    "Game Of Creators revolutionized our content strategy. We received over 50 unique content pieces in just two
                     weeks, and our engagement rates went through the roof."
                   </p>
                   <div className="mt-4">
@@ -182,7 +182,7 @@ export default function BrandsPage() {
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-6">Ready to Transform Your Content Strategy?</h2>
             <p className="text-xl mb-8">
-              Join hundreds of brands already using Go Viral to create authentic content that resonates with their
+              Join hundreds of brands already using Game Of Creators to create authentic content that resonates with their
               audience.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">

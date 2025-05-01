@@ -1,4 +1,4 @@
-# Go Viral Platform Issues Fixed
+# Game Of Creators Platform Issues Fixed
 
 ## Issue 1: Asset Upload UI Improvements
 

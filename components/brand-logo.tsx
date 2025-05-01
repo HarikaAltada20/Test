@@ -24,7 +24,7 @@ const LogoContent = ({ centered, showText, size, logoWidth, logoHeight }: {
                 {/* You can replace this with your transparent logo image */}
                 <Image
                     src={brandLogo}
-                    alt="Go Viral"
+                    alt="Game Of Creators"
                     width={logoWidth}
                     height={logoHeight}
                     priority
@@ -33,7 +33,7 @@ const LogoContent = ({ centered, showText, size, logoWidth, logoHeight }: {
         </div>
         {showText && (
             <span className={`font-bold ml-3 ${size === 'sm' ? 'text-lg' : size === 'md' ? 'text-xl' : 'text-2xl'}`}>
-                Go Viral
+                Game Of Creators
             </span>
         )}
     </div>

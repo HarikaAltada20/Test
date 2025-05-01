@@ -1,11 +1,11 @@
-Go Viral – FAQ
+Game Of Creators – FAQ
 1. Do I own the content?
 Yes, once a contest ends and winners are announced, you get full rights to download and repurpose all winning content for your brand's marketing use—including ads, social posts, website use, etc.
 
 Non-winning content may still be available upon request or with creator permission, depending on your use case.
 
-2. How can Go Viral help me find content-market fit?
-Go Viral helps you test different content styles, creator personalities, and messaging angles at scale and with real audiences. By running contests with multiple submissions, you’ll quickly discover what resonates:
+2. How can Game Of Creators help me find content-market fit?
+Game Of Creators helps you test different content styles, creator personalities, and messaging angles at scale and with real audiences. By running contests with multiple submissions, you’ll quickly discover what resonates:
 
 Which creators bring in the most engagement?
 
@@ -34,7 +34,7 @@ You can specify preferred platforms in your contest brief. All content is organi
 5. How are creators paid?
 Creators are only paid if they win the contest, based on the prize structure you set up.
 
-Once a contest ends and winners are selected (usually based on performance metrics like views), Go Viral handles secure payouts to creators—so you don’t have to worry about managing money or chasing down users. It’s all taken care of via our platform.
+Once a contest ends and winners are selected (usually based on performance metrics like views), Game Of Creators handles secure payouts to creators—so you don’t have to worry about managing money or chasing down users. It’s all taken care of via our platform.
 
 6. How are the creator payouts / prizes structured?
 You control how the prize pool is split. For example:
@@ -50,7 +50,7 @@ Creators are incentivized to promote their content because views = prizes. This 
 
 If results fall short, we can help you optimize your brief or strategy for next time—at no extra cost.
 
-8. How many creators are on Go Viral?
+8. How many creators are on Game Of Creators?
 We have a fast-growing network of 5,000+ active creators across various niches. When you launch a contest, it goes live to all eligible creators through our dashboard and email system—ensuring visibility and participation.
 
 9. How much should I run a contest for?

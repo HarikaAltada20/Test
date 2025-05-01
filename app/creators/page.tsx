@@ -12,7 +12,7 @@ export default function CreatorsPage() {
           <div className="max-w-3xl mx-auto text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-6">Turn Your Creativity Into Income</h1>
             <p className="text-xl mb-8">
-              Join Go Viral to find creative opportunities, collaborate with brands, and get paid for your content.
+              Join Game Of Creators to find creative opportunities, collaborate with brands, and get paid for your content.
             </p>
             <Button size="lg" asChild>
               <Link href="/auth/signup">Start Creating Today</Link>
@@ -148,7 +148,7 @@ export default function CreatorsPage() {
               <CardContent className="pt-6">
                 <div className="flex flex-col gap-4">
                   <p className="italic">
-                    "Go Viral opened doors to collaborations with brands I've always dreamed of working with. The
+                    "Game Of Creators opened doors to collaborations with brands I've always dreamed of working with. The
                     contests helped me earn extra income while building my portfolio."
                   </p>
                   <div className="mt-4">
@@ -162,7 +162,7 @@ export default function CreatorsPage() {
               <CardContent className="pt-6">
                 <div className="flex flex-col gap-4">
                   <p className="italic">
-                    "I started as a small creator, but after winning a few contests on Go Viral, brands started reaching
+                    "I started as a small creator, but after winning a few contests on Game Of Creators, brands started reaching
                     out to me directly. It's been a game-changer for my creative career."
                   </p>
                   <div className="mt-4">
@@ -182,7 +182,7 @@ export default function CreatorsPage() {
           <div className="max-w-4xl mx-auto text-center">
             <h2 className="text-3xl font-bold mb-6">Ready to Start Earning From Your Creativity?</h2>
             <p className="text-xl mb-8">
-              Join thousands of creators already using Go Viral to turn their passion into profit.
+              Join thousands of creators already using Game Of Creators to turn their passion into profit.
             </p>
             <Button size="lg" variant="secondary" asChild>
               <Link href="/auth/signup">

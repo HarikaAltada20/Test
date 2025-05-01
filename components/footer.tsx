@@ -11,7 +11,7 @@ export function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                     <div className="space-y-4">
                         <div className="flex items-center space-x-2">
-                            <Image src={logo} alt="Go Viral Logo" width={80} height={80} />
+                            <Image src={logo} alt="Game Of Creators Logo" width={80} height={80} />
                         </div>
                         <p className="text-sm">
                             The ultimate platform connecting brands with creators for authentic marketing campaigns.
@@ -84,7 +84,7 @@ export function Footer() {
                     </div>
                 </div>
                 <div className="mt-8 pt-8 border-t border-gray-800 text-center text-sm">
-                    <p>© {new Date().getFullYear()} Go Viral. All rights reserved.</p>
+                    <p>© {new Date().getFullYear()} Game Of Creators. All rights reserved.</p>
                 </div>
             </div>
         </footer>

@@ -40,7 +40,7 @@ export function Nav() {
             <div className="flex h-16 items-center">
                 <div className="flex items-center">
                     <Link href="/" className="flex items-center">
-                        <Image src={logo} alt="Go Viral Logo" width={80} height={80} />
+                        <Image src={logo} alt="Game Of Creators Logo" width={80} height={80} />
                     </Link>
                 </div>
 

@@ -10,17 +10,17 @@ export default function AboutPage() {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl md:text-5xl font-bold mb-6">About Go Viral</h1>
+        <h1 className="text-4xl md:text-5xl font-bold mb-6">About Game Of Creators</h1>
 
         <div className="prose dark:prose-invert max-w-none">
           <p className="text-xl mb-8">
-            Go Viral connects brands with content creators through a unique contest-based platform, helping brands
+            Game Of Creators connects brands with content creators through a unique contest-based platform, helping brands
             generate authentic content at scale while giving creators opportunities to earn and grow.
           </p>
 
           <h2 className="text-2xl font-bold mt-10 mb-4">Our Story</h2>
           <p>
-            Founded in 2023, Go Viral was born from a simple observation: brands struggle to consistently create
+            Founded in 2023, Game Of Creators was born from a simple observation: brands struggle to consistently create
             engaging content that resonates with audiences, while creators are looking for meaningful opportunities to
             collaborate with brands they love.
           </p>

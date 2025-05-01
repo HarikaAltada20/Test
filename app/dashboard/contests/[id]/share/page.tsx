@@ -93,7 +93,7 @@ export default function ShareContestPage() {
         // LinkedIn allows some customization with title, summary and source parameters
         const title = encodeURIComponent(`Creator Contest: ${contest?.title}`)
         const summary = encodeURIComponent(`Submit your content to win prizes in this creator contest!`)
-        const source = encodeURIComponent('Go Viral')
+        const source = encodeURIComponent('Game Of Creators')
         const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(contestPublicUrl)}&title=${title}&summary=${summary}&source=${source}`
         window.open(url, '_blank')
     }
