@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
-import { Youtube, Instagram, Bell, Mail, Lock, LogOut, Building2, Globe } from "lucide-react"
+import { Bell, Mail, Lock, LogOut, Building2, Globe } from "lucide-react"
+import { SiYoutube, SiInstagram } from "react-icons/si"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -44,7 +45,7 @@ export default function SettingsPage() {
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading: isAuthLoading } = useAuth()
   const supabase = createSupabaseClient()
 
   useEffect(() => {
@@ -217,10 +218,18 @@ export default function SettingsPage() {
     }
   };
 
-  if (pageLoading) {
+  if (isAuthLoading || pageLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <p>Loading settings...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p>Not logged in</p>
       </div>
     );
   }
@@ -248,7 +257,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-red-100 rounded-full">
-                  <Youtube className="h-5 w-5 text-red-600" />
+                  <SiYoutube className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
                   <p className="font-medium">YouTube</p>
@@ -257,6 +266,12 @@ export default function SettingsPage() {
                       ? `Connected as ${(profile as CreatorProfile).youtube_account?.channel_title}`
                       : "Not connected"}
                   </p>
+                  {!(profile as CreatorProfile)?.youtube_account && (
+                    <p className="text-xs text-muted-foreground mt-1 max-w-md">
+                      Connect to allow Game Of Creators to view basic channel info (name, subscribers) and list your videos for opportunities.
+                      We only request <span className="font-medium">read-only access</span> and <span className="font-medium">cannot</span> upload, modify, or change settings.
+                    </p>
+                  )}
                 </div>
               </div>
               {(profile as CreatorProfile)?.youtube_account ? (
@@ -277,7 +292,7 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-pink-100 rounded-full">
-                  <Instagram className="h-5 w-5 text-pink-600" />
+                  <SiInstagram className="h-5 w-5 text-pink-600" />
                 </div>
                 <div>
                   <p className="font-medium">Instagram</p>
