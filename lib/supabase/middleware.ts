@@ -53,6 +53,7 @@ export const updateSession = async (request: NextRequest) => {
 
   // If the user is not authenticated and the request is for a protected route, redirect to sign-in.
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    console.log("Middleware: User is not authenticated and the request is for a protected route, redirecting to sign-in.");
     const redirectUrl = new URL('/auth/signin', request.url);
     console.log(`Redirecting unauthenticated user from ${request.nextUrl.pathname} to ${redirectUrl.pathname}`);
     // No need to manually delete cookies here; Supabase handles invalid sessions.

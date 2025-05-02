@@ -6,6 +6,7 @@ export async function middleware(request: NextRequest) {
     return await updateSession(request)
   } catch (error) {
     // If there's an error with the session, redirect to login
+    console.error('Middleware Error:', error)
     const response = NextResponse.redirect(new URL('/auth/signin', request.url))
     // Clear any existing auth cookies
     response.cookies.delete('sb-access-token')

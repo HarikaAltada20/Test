@@ -335,6 +335,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Redirect to login page using Next.js router
+      console.log("AuthContext: Signing out, redirecting to login page.");
       router.push('/auth/signin')
     } catch (error: any) {
       console.error("Sign out failed:", error)
@@ -371,6 +372,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error
 
       // Redirect to sign in page
+      console.log("AuthContext: Reset password successful, redirecting to sign in page.");
       router.push('/auth/signin')
     } catch (error: any) {
       setError(error.message)

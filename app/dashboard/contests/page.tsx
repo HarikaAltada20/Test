@@ -17,6 +17,7 @@ export default async function ContestsPage() {
   } = await supabase.auth.getSession()
 
   if (!session) {
+    console.log("ContestsPage: No session found, redirecting to signin.")
     redirect("/auth/signin")
   }
 
