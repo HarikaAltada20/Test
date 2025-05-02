@@ -62,16 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // --- Reverted useEffect Structure for Initial Load --- 
+  // --- Effect 1: Initial Load Check ONLY --- 
   useEffect(() => {
     let isMounted = true;
-    console.log("AuthContext: useEffect START (initial load check)");
+    console.log("AuthContext: Effect 1 START (Initial Load)");
     setIsLoading(true);
 
-    // Check initial user status directly
     supabase.auth.getUser().then(async ({ data: { user: coreAuthUser }, error: coreAuthError }) => {
       console.log("AuthContext: Initial getUser() completed.", { coreAuthUser: !!coreAuthUser, coreAuthError: coreAuthError?.message });
-      if (!isMounted) return; // Check mount status after async
+      if (!isMounted) return;
 
       if (coreAuthError) {
         if (coreAuthError.message !== 'Auth session missing!') {
@@ -79,7 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setUser(null);
       } else if (coreAuthUser) {
-        // If core user exists initially, fetch full data
         console.log("AuthContext Initial Load: Core user found, fetching full data...");
         const fullUserData = await fetchAndSetFullUserData(coreAuthUser);
         if (isMounted) setUser(fullUserData);
@@ -92,56 +90,109 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (isMounted) setUser(null);
     }).finally(() => {
       console.log("AuthContext Initial Load: FINALLY block, setting isLoading=false");
+      // Only set isLoading to false here. Listener attaches in Effect 2.
       if (isMounted) setIsLoading(false);
     });
 
-    // Setup listener for SUBSEQUENT changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // No need to check isLoading here anymore, as this only handles subsequent events
-        if (!isMounted) return;
+    // Cleanup for Effect 1
+    return () => {
+      console.log("AuthContext: Effect 1 END (Initial Load Cleanup)");
+      isMounted = false;
+    };
+    // Run only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [supabase.auth]); // Dependency needed if supabase client can change
 
-        console.log("Auth State Change Event (Listener):", event);
-        let userToSet: User | null = null;
+  // --- Effect 2: Attach Listener AFTER Initial Load --- 
+  useEffect(() => {
+    let isMounted = true;
+    let subscription: any = null; // To hold the subscription
 
-        try {
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-            const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
-            if (coreAuthError || !coreAuthUser) {
-              if (coreAuthError) console.error('AuthContext Listener: Error getting core user:', coreAuthError.message);
+    // Only attach listener if initial loading is complete AND component is mounted
+    if (!isLoading) {
+      console.log("AuthContext: Effect 2 Attaching Auth Listener (isLoading is false).");
+      const { data: authListener } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!isMounted || isLoading) return; // Ignore if unmounted or initial load active
+
+          console.log("Auth State Change Event (Listener):", event);
+          let userToSet: User | null = null;
+          let performSetUser = false; // Flag to control setUser call
+
+          try {
+            if (event === 'USER_UPDATED') {
+              // Always refetch on USER_UPDATED
+              console.log("AuthContext Listener: USER_UPDATED event, fetching full data...");
+              const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
+              if (coreAuthError || !coreAuthUser) {
+                if (coreAuthError) console.error('AuthContext Listener: Error getting core user on USER_UPDATED:', coreAuthError.message);
+                userToSet = null;
+              } else {
+                userToSet = await fetchAndSetFullUserData(coreAuthUser);
+              }
+              performSetUser = true; // Allow setting state after update fetch
+            } else if (event === 'SIGNED_OUT') {
+              console.log("AuthContext Listener: SIGNED_OUT event.");
               userToSet = null;
-            } else {
-              // Fetch full data on subsequent events too
-              console.log(`AuthContext Listener: Fetching full data for user ${coreAuthUser.id}, event: ${event}`);
-              userToSet = await fetchAndSetFullUserData(coreAuthUser);
+              performSetUser = true; // Allow setting state to null
+            } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+              // Fetch user data, but only update state if necessary
+              console.log(`AuthContext Listener: Received ${event}. Checking if update needed.`);
+              const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
+
+              if (coreAuthError) {
+                console.error(`AuthContext Listener: Error getting core user on ${event}:`, coreAuthError.message);
+                userToSet = null; // Potentially clear user on error?
+                performSetUser = true; // Allow setting to null if error occurred
+              } else if (!coreAuthUser) {
+                // Should not happen for SIGNED_IN/TOKEN_REFRESHED, but handle defensively
+                console.warn(`AuthContext Listener: No core user found during ${event}.`);
+                userToSet = null;
+                performSetUser = true;
+              } else {
+                // Check if user state needs to be populated or refreshed
+                if (!user || user.id !== coreAuthUser.id) {
+                  console.log(`AuthContext Listener: User state is null or ID changed (${user?.id} -> ${coreAuthUser.id}). Fetching full data for ${event}.`);
+                  userToSet = await fetchAndSetFullUserData(coreAuthUser);
+                  performSetUser = true; // Allow setting the new/updated user data
+                } else {
+                  console.log(`AuthContext Listener: User state already populated and ID matches for ${event}. No state update needed.`);
+                  performSetUser = false; // Do not update state if user is already correct
+                }
+              }
             }
-          } else if (event === 'SIGNED_OUT') {
-            userToSet = null;
-          } else {
-            return; // Ignore other events like PASSWORD_RECOVERY
-          }
+            // Ignore other events like PASSWORD_RECOVERY
 
-          // Set state only if truly different
-          if (user?.id !== userToSet?.id ||
-            (user as User | null)?.full_name !== userToSet?.full_name ||
-            (user as User | null)?.profile_picture_url !== userToSet?.profile_picture_url) {
-            console.log("AuthContext Listener: Updating user state.");
-            setUser(userToSet);
-          }
+            if (performSetUser &&
+              (user?.id !== userToSet?.id ||
+                (user as User | null)?.full_name !== userToSet?.full_name ||
+                (user as User | null)?.profile_picture_url !== userToSet?.profile_picture_url)) {
+              console.log("AuthContext Listener: Updating user state.");
+              setUser(userToSet);
+            }
 
-        } catch (error) {
-          console.error("AuthContext: Unexpected error processing auth event:", event, error);
+          } catch (error) {
+            console.error("AuthContext: Unexpected error processing auth event:", event, error);
+          }
         }
-      }
-    );
+      );
+      subscription = authListener?.subscription; // Store the subscription
+    } else {
+      console.log("AuthContext: Effect 2 Skipping Listener Attachment (isLoading is true).");
+    }
 
-    // Cleanup
+    // Cleanup for Effect 2
     return () => {
       isMounted = false;
-      console.log("AuthContext: useEffect END (unmounting listener)");
-      authListener?.subscription.unsubscribe();
+      if (subscription) {
+        console.log("AuthContext: Effect 2 END (Unsubscribing listener)");
+        subscription.unsubscribe();
+      } else {
+        console.log("AuthContext: Effect 2 END (No listener was attached)");
+      }
     };
-  }, [supabase.auth]);
+    // Depend on isLoading to re-run when loading finishes. Also supabase.auth.
+  }, [isLoading, supabase.auth]);
 
   // --- Username Check Effect --- 
   useEffect(() => {
