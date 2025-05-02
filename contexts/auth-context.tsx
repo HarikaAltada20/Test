@@ -8,6 +8,7 @@ import { type User as SupabaseUser } from "@supabase/supabase-js"
 interface User extends SupabaseUser {
   avatar_url?: string;
   full_name?: string;
+  profile_picture_url?: string | null;
 }
 
 interface AuthContextValue {
@@ -21,6 +22,7 @@ interface AuthContextValue {
   forgotPassword: (email: string) => Promise<void>
   resetPassword: (password: string) => Promise<void>
   updateUsername: (username: string) => Promise<{ success: boolean, error: string | null }>
+  refreshUserData: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -33,78 +35,116 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const supabase = createSupabaseClient()
 
+  // Function to fetch full user data (Core Auth + Public Table)
+  const fetchAndSetFullUserData = async (coreAuthUser: SupabaseUser): Promise<User | null> => {
+    try {
+      const { data: publicUserData, error: publicUserError } = await supabase
+        .from('users')
+        .select('full_name, profile_picture_url')
+        .eq('id', coreAuthUser.id)
+        .maybeSingle();
+
+      if (publicUserError) {
+        console.warn('AuthContext: Could not fetch details from users table during refresh/load:', publicUserError.message);
+        // Fallback to core data
+        return { ...coreAuthUser } as User;
+      } else {
+        // Merge
+        return {
+          ...coreAuthUser,
+          full_name: publicUserData?.full_name,
+          profile_picture_url: publicUserData?.profile_picture_url,
+        } as User;
+      }
+    } catch (error) {
+      console.error("AuthContext: Error in fetchAndSetFullUserData:", error);
+      // Fallback to core data on unexpected errors
+      return { ...coreAuthUser } as User;
+    }
+  };
+
+  // --- Auth Initialization and State Change Listener --- 
   useEffect(() => {
+    let isMounted = true; // Prevent state updates on unmounted component
+
+    // Function for initial auth check
     const initializeAuth = async () => {
       setIsLoading(true);
-      setError(null);
-
       try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
 
-        if (userError) {
-          // Check if the error is the expected "no session" case
-          if (userError.message === 'Auth session missing!') {
-            // It's expected when not logged in, log info or nothing
-            console.info("Auth initialization: No active session found."); // Use info instead of error
-            setUser(null);
+        if (coreAuthError) {
+          // Check if it's the expected "not logged in" error
+          if (coreAuthError.message === 'Auth session missing!') {
+            console.info("AuthContext Initial Load: No active session found."); // Use info, not error
           } else {
-            // It's a different, unexpected error - log as error
-            console.error("Auth initialization - unexpected getUser error:", userError.message, userError);
-            setUser(null);
-            // Optionally set a generic error state for unexpected issues
-            setError("Error initializing authentication.");
+            // Log other, unexpected errors
+            console.error("AuthContext Initial Load: Error getting core user:", coreAuthError.message);
           }
+          if (isMounted) setUser(null); // Set user null in either error case
+        } else if (coreAuthUser) {
+          console.log("AuthContext Initial Load: Core user found, fetching full data...");
+          const fullUserData = await fetchAndSetFullUserData(coreAuthUser);
+          if (isMounted) setUser(fullUserData);
         } else {
-          // If getUser succeeds, set the user
-          setUser(user as User);
+          // No active session found initially
+          if (isMounted) setUser(null);
         }
-
-        const { data: authListener } = supabase.auth.onAuthStateChange(
-          async (event, session) => {
-            console.log("Auth State Change:", event);
-            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-              const { data: { user: verifiedUser }, error: verifyError } = await supabase.auth.getUser();
-              if (verifyError) {
-                console.error('onAuthStateChange - Error verifying user:', verifyError.message);
-                setUser(null);
-              } else {
-                console.log("onAuthStateChange - Setting user:", verifiedUser?.id);
-                setUser(verifiedUser as User || null);
-              }
-            } else if (event === 'SIGNED_OUT') {
-              console.log("onAuthStateChange - Setting user null due to SIGNED_OUT");
-              setUser(null);
-            } else if (event === 'PASSWORD_RECOVERY') {
-              console.log("onAuthStateChange - Password recovery event");
-            } else if (event === 'USER_UPDATED') {
-              console.log("onAuthStateChange - User updated event, re-fetching user");
-              const { data: { user: updatedUser }, error: updateUserError } = await supabase.auth.getUser();
-              if (!updateUserError && updatedUser) {
-                setUser(updatedUser as User);
-              }
-            }
-          }
-        );
-
-        return () => {
-          if (authListener?.subscription) {
-            authListener.subscription.unsubscribe();
-          }
-        };
-
-      } catch (error: any) {
-        // Catch any totally unexpected errors during the setup process (outside getUser itself)
-        console.error("Unexpected error during Auth initialization setup:", error);
-        setError("Failed to initialize authentication.");
-        setUser(null);
+      } catch (err) {
+        console.error("AuthContext Initial Load: Unexpected error:", err);
+        if (isMounted) setUser(null); // Clear user on unexpected error
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false); // Set loading false after initial check
       }
     };
 
+    // Run initial check
     initializeAuth();
-  }, [supabase.auth]);
 
+    // Set up the listener for subsequent changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!isMounted) return; // Prevent updates if unmounted
+
+        console.log("Auth State Change Event:", event);
+        let userToSet: User | null = null;
+
+        // Reuse the same logic as initial load for consistency on relevant events
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
+          if (coreAuthError || !coreAuthUser) {
+            if (coreAuthError) console.error('AuthContext Listener: Error getting core user:', coreAuthError.message);
+            userToSet = null;
+          } else {
+            userToSet = await fetchAndSetFullUserData(coreAuthUser);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          userToSet = null;
+        } else {
+          // For other events like PASSWORD_RECOVERY, don't change the user state via listener
+          // Let specific actions handle state if needed. We return here to avoid the final setUser call.
+          return;
+        }
+
+        // Set state only if needed 
+        // Simple check: if the user ID is different (covers null transitions)
+        // More complex check could involve comparing profile URLs etc. if needed
+        if (user?.id !== userToSet?.id) {
+          console.log("AuthContext Listener: Updating user state.");
+          setUser(userToSet);
+        }
+      }
+    );
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      authListener?.subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase.auth]); // Dependency on supabase.auth to re-run if client changes (unlikely but correct)
+
+  // --- Username Check Effect --- 
   useEffect(() => {
     // Check if user needs to set a username
     const checkUsername = async () => {
@@ -233,19 +273,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      // 1. Check if user exists first
+      const { data: userCheck, error: userCheckError } = await supabase
+        .from('users') // Ensure this is your public users table name
+        .select('id')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle();
+
+      // Handle potential errors during the check itself (excluding not found)
+      if (userCheckError && userCheckError.code !== 'PGRST116') { // PGRST116 means no rows found, which is expected if user doesn't exist
+        console.error("Error checking user existence during sign in:", userCheckError);
+        throw new Error("Could not verify your account information. Please try again later.");
+      }
+
+      // 2. If user doesn't exist, throw specific error
+      if (!userCheck) {
+        throw new Error("Account not found. Please register first.");
+      }
+
+      // 3. User exists, now attempt sign in
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        // Handle specific error types and provide more user-friendly messages
-        let errorMessage = error.message;
-        if (error.message.includes("Invalid login credentials")) {
-          errorMessage = "The email or password you entered is incorrect";
-        } else if (error.message.includes("Email not confirmed")) {
-          errorMessage = "Please confirm your email address before signing in";
+      if (signInError) {
+        // Handle specific sign-in errors
+        let errorMessage = signInError.message;
+        if (signInError.message.includes("Invalid login credentials")) {
+          // Since we know the user exists, this must mean the password is wrong
+          errorMessage = "The password that you've entered is incorrect.";
+        } else if (signInError.message.includes("Email not confirmed")) {
+          errorMessage = "Please confirm your email address before signing in.";
         }
+        // Add more specific Supabase error checks here if needed
 
         throw new Error(errorMessage);
       }
@@ -353,6 +414,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // --- Implement refreshUserData --- 
+  const refreshUserData = async () => {
+    console.log("AuthContext: Manual refreshUserData triggered.");
+    const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
+    if (coreAuthError || !coreAuthUser) {
+      if (coreAuthError) console.error('AuthContext: Error getting core user during refresh:', coreAuthError.message);
+      // Decide if you want to set user to null if refresh fails while logged in
+      // Maybe only update if fetch is successful?
+      return;
+    }
+    // Fetch full data and update state
+    const freshUserData = await fetchAndSetFullUserData(coreAuthUser);
+    if (JSON.stringify(user) !== JSON.stringify(freshUserData)) {
+      console.log("AuthContext: Updating user state via manual refresh.");
+      setUser(freshUserData);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -366,6 +445,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         forgotPassword,
         resetPassword,
         updateUsername,
+        refreshUserData,
       }}
     >
       {children}

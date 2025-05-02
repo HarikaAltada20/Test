@@ -30,8 +30,9 @@ export function Nav() {
     const { user, signOut } = useAuth()
     const pathname = usePathname()
 
+
     // Don't show nav on auth pages
-    if (pathname === "/auth/signin" || pathname === "/auth/signup" || pathname === "/auth/forgot-password" || pathname === "/auth/reset-password") {
+    if (pathname === "/auth/signin" || pathname === "/auth/signup" || pathname === "/auth/forgot-password" || pathname === "/auth/reset-password" || pathname === "/verify-otp") {
         return null
     }
 
@@ -68,8 +69,8 @@ export function Nav() {
                             <DropdownMenuTrigger asChild>
                                 <Button className="relative h-8 w-8 rounded-full">
                                     <Avatar className="h-8 w-8">
-                                        <AvatarImage src={user.avatar_url || `https://api.dicebear.com/8.x/bottts-neutral/svg?seed=${encodeURIComponent(user.email || 'default')}`} alt={user.full_name || "User"} />
-                                        <AvatarFallback>{user.full_name?.[0] || user.email?.[0] || "U"}</AvatarFallback>
+                                        <AvatarImage src={user.profile_picture_url || undefined} alt={user.full_name || "User"} />
+                                        <AvatarFallback>{user.full_name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U"}</AvatarFallback>
                                     </Avatar>
                                 </Button>
                             </DropdownMenuTrigger>
@@ -85,6 +86,9 @@ export function Nav() {
                                     </div>
                                 </div>
                                 <DropdownMenuSeparator />
+                                <DropdownMenuItem asChild className="cursor-pointer">
+                                    <Link href="/dashboard">Dashboard</Link>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link href="/dashboard/profile">Profile</Link>
                                 </DropdownMenuItem>

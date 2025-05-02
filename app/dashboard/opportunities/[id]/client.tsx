@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/auth-context"
 import { formatLocalDateTime, formatMoney } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // Define type for prize objects globally within the file
 type PrizeInfo = {
@@ -511,25 +512,24 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
                                         const creatorProfileData = entry.creator_profile;
                                         const videoUrl = entry.content_link || '#';
                                         const displayName = userData?.full_name || userData?.username || 'Unknown Creator';
-                                        // Prioritize YouTube thumbnail, then user profile pic
-                                        const avatarUrl = creatorProfileData?.youtube_account?.channel_thumbnail || userData?.profile_picture_url;
+                                        // Prioritize profile_picture_url, then youtube thumbnail
+                                        const profilePicUrl = userData?.profile_picture_url;
+                                        const youtubeThumbnail = creatorProfileData?.youtube_account?.channel_thumbnail;
 
                                         return (
                                             <div key={entry.id} className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors">
                                                 {/* Rank */}
                                                 <span className={`font-bold text-lg w-8 text-center flex-shrink-0 ${prizeAmount ? 'text-primary' : 'text-muted-foreground'}`}>{rank}</span>
-                                                {/* Avatar using youtube thumbnail or profile_picture_url */}
-                                                <div className="relative h-10 w-10 rounded-full overflow-hidden bg-gray-200 flex-shrink-0 flex items-center justify-center">
-                                                    {avatarUrl ? (
-                                                        <Image
-                                                            src={avatarUrl}
-                                                            alt={displayName}
-                                                            fill sizes="40px" style={{ objectFit: 'cover' }} className="bg-white"
-                                                        />
-                                                    ) : (
-                                                        <User className="h-6 w-6 text-gray-400" />
-                                                    )}
-                                                </div>
+
+                                                {/* --- Use Avatar Component --- */}
+                                                <Avatar className="h-10 w-10 rounded-full flex-shrink-0 border">
+                                                    <AvatarImage src={profilePicUrl || youtubeThumbnail || undefined} alt={displayName} />
+                                                    <AvatarFallback>{
+                                                        displayName?.[0]?.toUpperCase() || 'U'
+                                                    }</AvatarFallback>
+                                                </Avatar>
+                                                {/* --- End Avatar Component --- */}
+
                                                 {/* Info using full_name / username */}
                                                 <div className="flex-1 min-w-0">
                                                     <p className="font-semibold text-sm truncate" title={displayName}>{displayName}</p>

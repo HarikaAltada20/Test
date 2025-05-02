@@ -258,16 +258,17 @@ export default function ChooseUsernamePage() {
 
             // Clear sessionStorage
             sessionStorage.removeItem('signupUserData')
+            sessionStorage.removeItem('referralCode') // Also clear referral code if stored
 
             // Show success message
             toast({
                 title: "Account setup complete!",
-                description: "Your username and profile have been created successfully.",
-                duration: 3000,
+                description: "Welcome aboard!",
+                duration: 4000,
             })
 
-            // Redirect to login page
-            router.push("/auth/signin?setup=complete")
+            // Redirect to dashboard
+            router.push("/dashboard")
         } catch (err: any) {
             setError(err.message || "Failed to set up your account")
             toast({
