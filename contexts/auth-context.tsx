@@ -361,9 +361,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(errorMessage);
       }
 
+      // **** NEW: Fetch and set user immediately after successful sign in ****
+      console.log("AuthContext Sign In: Successful Supabase sign in, fetching user data...");
+      const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
+
+      if (coreAuthError || !coreAuthUser) {
+        console.error("AuthContext Sign In: Error getting user immediately after sign in:", coreAuthError?.message);
+        // Decide how to handle this - maybe still return success but log warning?
+        // For now, let's throw an error to make it clear sign-in didn't fully complete state update.
+        throw new Error("Sign in succeeded but failed to retrieve user data immediately.");
+      }
+
+      const fullUserData = await fetchAndSetFullUserData(coreAuthUser);
+      if (fullUserData) {
+        console.log("AuthContext Sign In: Setting user state directly.");
+        setUser(fullUserData);
+        // Since we set the user here, also ensure needsUsername check is potentially triggered
+        // (Though the useEffect dependency on 'user' should handle this)
+      } else {
+        // This case shouldn't happen if fetchAndSetFullUserData handles errors gracefully
+        console.warn("AuthContext Sign In: fetchAndSetFullUserData returned null/undefined.");
+        setUser(null); // Ensure user is null if fetch failed
+      }
+      // *********************************************************************
+
       return { success: true, error: null };
     } catch (error: any) {
       setError(error.message)
+      setUser(null); // Ensure user is null on sign-in failure
       return { success: false, error: error.message };
     } finally {
       setIsLoading(false)
