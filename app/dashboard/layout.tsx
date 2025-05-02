@@ -14,6 +14,7 @@ export default async function DashboardLayout({
   const { data: { user }, error } = await supabase.auth.getUser()
 
   if (error || !user) {
+    console.log("User is not authenticated, redirecting to signin, :1")
     redirect("/auth/signin")
   }
 

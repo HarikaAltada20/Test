@@ -17,6 +17,7 @@ export default async function AnalyticsPage() {
   const { data: { user }, error } = await supabase.auth.getUser()
 
   if (error || !user) {
+    console.log("AnalyticsPage: User is not authenticated, redirecting to signin, :2")
     redirect("/auth/signin")
   }
 
