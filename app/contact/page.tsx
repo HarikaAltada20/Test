@@ -140,11 +140,11 @@ export default function ContactPage() {
                 <div className="bg-primary/10 p-3 rounded-full">
                   <Phone className="h-6 w-6 text-primary" />
                 </div>
-                <div>
+                {/* <div>
                   <h3 className="font-medium">Call Us</h3>
                   <p className="text-muted-foreground">(555) 123-4567</p>
                   <p className="text-sm text-muted-foreground mt-1">Monday-Friday, 9AM-5PM EST</p>
-                </div>
+                </div> */}
               </div>
 
               <div className="flex items-start gap-4">
@@ -154,9 +154,9 @@ export default function ContactPage() {
                 <div>
                   <h3 className="font-medium">Office Location</h3>
                   <p className="text-muted-foreground">
-                    123 Innovation Way
+                    6425 Weidlake Dr,
                     <br />
-                    San Francisco, CA 94105
+                    Los Angeles, California 90068, US
                   </p>
                 </div>
               </div>

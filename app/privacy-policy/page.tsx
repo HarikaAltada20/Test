@@ -62,8 +62,8 @@ export default function PrivacyPolicyPage() {
                     If you have any questions about this privacy policy or our privacy practices, please contact us at:
                 </p>
                 <p className="mt-2">
-                    Email: privacy@gameofcreators.com.com<br />
-                    Address: 123 Innovation Way, San Francisco, CA 94105
+                    Email: support@gameofcreators.com<br />
+                    Address: 6425 Weidlake Dr, Los Angeles, California 90068, US
                 </p>
             </div>
         </div>
