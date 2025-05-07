@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createSupabaseClient } from "@/lib/supabase/client"
 import { type User as SupabaseUser } from "@supabase/supabase-js"
+import { completeLogout } from "@/lib/auth-utils"
 
 interface User extends SupabaseUser {
   avatar_url?: string;
@@ -323,73 +324,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      // 1. Check if user exists first
-      const { data: userCheck, error: userCheckError } = await supabase
-        .from('users') // Ensure this is your public users table name
-        .select('id')
-        .eq('email', email.toLowerCase().trim())
-        .maybeSingle();
-
-      // Handle potential errors during the check itself (excluding not found)
-      if (userCheckError && userCheckError.code !== 'PGRST116') { // PGRST116 means no rows found, which is expected if user doesn't exist
-        console.error("Error checking user existence during sign in:", userCheckError);
-        throw new Error("Could not verify your account information. Please try again later.");
-      }
-
-      // 2. If user doesn't exist, throw specific error
-      if (!userCheck) {
-        throw new Error("Account not found. Please register first.");
-      }
-
-      // 3. User exists, now attempt sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (signInError) {
-        // Handle specific sign-in errors
-        let errorMessage = signInError.message;
-        if (signInError.message.includes("Invalid login credentials")) {
-          // Since we know the user exists, this must mean the password is wrong
-          errorMessage = "The password that you've entered is incorrect.";
-        } else if (signInError.message.includes("Email not confirmed")) {
-          errorMessage = "Please confirm your email address before signing in.";
+      if (error) {
+        // Check if the error is about the account not found
+        if (error.message.includes("Invalid login credentials")) {
+          // Let's check if the email exists to provide a more specific error
+          const { data: emailCheck } = await supabase
+            .from('users')
+            .select('id')
+            .eq('email', email.toLowerCase().trim())
+            .maybeSingle();
+
+          if (!emailCheck) {
+            throw new Error("Account not found. Please register first.");
+          } else {
+            throw new Error("Incorrect password.");
+          }
+        } else {
+          throw error;
         }
-        // Add more specific Supabase error checks here if needed
-
-        throw new Error(errorMessage);
       }
 
-      // **** NEW: Fetch and set user immediately after successful sign in ****
-      console.log("AuthContext Sign In: Successful Supabase sign in, fetching user data...");
-      const { data: { user: coreAuthUser }, error: coreAuthError } = await supabase.auth.getUser();
+      // Add a small delay to ensure cookies are properly set before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (coreAuthError || !coreAuthUser) {
-        console.error("AuthContext Sign In: Error getting user immediately after sign in:", coreAuthError?.message);
-        // Decide how to handle this - maybe still return success but log warning?
-        // For now, let's throw an error to make it clear sign-in didn't fully complete state update.
-        throw new Error("Sign in succeeded but failed to retrieve user data immediately.");
+      // Validate the session is established before returning success
+      const { data: sessionCheck, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !sessionCheck.session) {
+        console.error("Session not established after login:", sessionError);
+        throw new Error("Failed to establish session. Please try again.");
       }
 
-      const fullUserData = await fetchAndSetFullUserData(coreAuthUser);
-      if (fullUserData) {
-        console.log("AuthContext Sign In: Setting user state directly.");
-        setUser(fullUserData);
-        // Since we set the user here, also ensure needsUsername check is potentially triggered
-        // (Though the useEffect dependency on 'user' should handle this)
-      } else {
-        // This case shouldn't happen if fetchAndSetFullUserData handles errors gracefully
-        console.warn("AuthContext Sign In: fetchAndSetFullUserData returned null/undefined.");
-        setUser(null); // Ensure user is null if fetch failed
-      }
-      // *********************************************************************
+      // Session is valid, fetch the full user data
+      await refreshUserData();
 
-      return { success: true, error: null };
-    } catch (error: any) {
-      setError(error.message)
-      setUser(null); // Ensure user is null on sign-in failure
-      return { success: false, error: error.message };
+      return { success: true, error: null }
+    } catch (e: any) {
+      setError(e.message)
+      return { success: false, error: e.message }
     } finally {
       setIsLoading(false)
     }
@@ -399,24 +376,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true)
     setError(null)
     try {
-      // First clear user state
+      // First clear state in the context
       setUser(null)
 
-      // Then sign out from Supabase
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error("Sign out error:", error)
-        throw error
-      }
-
-      // Redirect to login page using Next.js router
-      console.log("AuthContext: Signing out, redirecting to login page.");
-      router.push('/auth/signin')
+      // Use the utility function to handle complete logout
+      await completeLogout()
     } catch (error: any) {
       console.error("Sign out failed:", error)
       setError(error.message)
-      // Even if there's an error, we should redirect to login page
-      router.push('/auth/signin') // Use router here too
+      // Try to redirect anyway
+      window.location.href = '/auth/signin'
     } finally {
       setIsLoading(false)
     }

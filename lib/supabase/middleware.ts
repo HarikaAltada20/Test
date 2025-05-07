@@ -48,17 +48,37 @@ export const updateSession = async (request: NextRequest) => {
 
   // Log the specific error for debugging
   if (error) {
-    console.error("Supabase auth error in middleware:", error.message, error.code, error.status);
+    // Check if this is a critical error or a temporary one
+    const isCriticalError = error.status === 401 || 
+                            error.message.includes("invalid token") ||
+                            error.message.includes("JWT expired");
+                            
+    if (isCriticalError) {
+      console.error("Supabase critical auth error in middleware:", error.message, error.code, error.status);
+    } else {
+      // For non-critical errors, log but don't take action
+      console.warn("Supabase temporary auth error in middleware:", error.message, error.code, error.status);
+    }
   }
 
   // If the user is not authenticated and the request is for a protected route, redirect to sign-in.
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    // Add a verification to avoid false negative auth check due to temporary issues
+    // Check if cookies exist but user fetch failed - could be a temporary issue
+    const accessToken = request.cookies.get('sb-access-token')?.value;
+    const refreshToken = request.cookies.get('sb-refresh-token')?.value;
+    
+    // If both tokens exist but user is null, it might be a temporary issue
+    if (accessToken && refreshToken && error && 
+        !error.message.includes("invalid token") && 
+        !error.message.includes("JWT expired")) {
+      console.log("Middleware: Auth tokens exist but user fetch failed. Possible temporary issue. Allowing request to proceed.");
+      return response;
+    }
+    
     console.log("Middleware: User is not authenticated and the request is for a protected route, redirecting to sign-in.");
     const redirectUrl = new URL('/auth/signin', request.url);
     console.log(`Redirecting unauthenticated user from ${request.nextUrl.pathname} to ${redirectUrl.pathname}`);
-    // No need to manually delete cookies here; Supabase handles invalid sessions.
-    // If the session was truly invalid, Supabase's getUser/refresh attempt would likely have cleared them already via the 'remove' cookie handler.
-    // If it was just a temporary issue, clearing them manually could log the user out unnecessarily.
     return NextResponse.redirect(redirectUrl);
   }
 

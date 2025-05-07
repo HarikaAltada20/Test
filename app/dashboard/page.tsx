@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Trophy, DollarSign, Plus, Video, Coins } from "lucide-react"
 import { formatLocalDateTime, formatMoney } from "@/lib/utils"
-import { withUsernameCheck } from "@/components/with-username-check"
 import { createSupabaseClient } from "@/lib/supabase/client"
-import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
+import { useClientAuth } from "@/hooks/use-client-auth"
 
 // Wrap component with username check
 // export default withUsernameCheck(DashboardPage) // Temporarily disable HOC
@@ -20,7 +19,9 @@ function DashboardPage() {
   const [recentContests, setRecentContests] = useState<any[]>([])
   const [isFetchingData, setIsFetchingData] = useState(true)
   const [userCoins, setUserCoins] = useState(0)
-  const { user, isLoading: isAuthLoading } = useAuth()
+  const { user, isLoading: isAuthLoading, isAuthenticated } = useClientAuth({
+    redirectTo: '/auth/signin'
+  })
   const router = useRouter()
   const supabase = createSupabaseClient()
 
@@ -120,24 +121,16 @@ function DashboardPage() {
       }
     }
 
-    if (isAuthLoading) {
-      if (isMounted) setIsFetchingData(true);
-      return;
+    if (isAuthenticated && !isAuthLoading) {
+      fetchData();
+    } else if (!isAuthLoading && !isAuthenticated) {
+      setIsFetchingData(false);
     }
-
-    if (!user) {
-      console.log("DashboardPage: No user found after auth load, redirecting.");
-      if (isMounted) router.push("/auth/signin");
-      if (isMounted) setIsFetchingData(false);
-      return;
-    }
-
-    fetchData();
 
     return () => {
       isMounted = false;
     };
-  }, [user, isAuthLoading, supabase, router]);
+  }, [user, isAuthLoading, isAuthenticated, supabase, router]);
 
   if (isAuthLoading || isFetchingData) {
     return (
@@ -147,7 +140,7 @@ function DashboardPage() {
     );
   }
 
-  if (!user) {
+  if (!isAuthenticated || !user) {
     return <div className="text-center p-8">Please sign in to view the dashboard.</div>;
   }
 

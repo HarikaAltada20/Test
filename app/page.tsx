@@ -2,6 +2,9 @@ import { HeroSection } from "@/components/hero-section"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 
+// Add export const for static page generation
+export const revalidate = 3600 // Revalidate every hour
+
 export default function Home() {
   return (
     <div>
