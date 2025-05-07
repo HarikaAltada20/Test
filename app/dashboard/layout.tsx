@@ -30,7 +30,7 @@ export default async function DashboardLayout({
     redirect("/choose-username")
   }
 
-  const userRole = (userData?.user_type as "advertiser" | "creator") || "advertiser"
+  const userRole = (userData?.user_type as "advertiser" | "creator") || null
 
   return (
     <div className="flex min-h-screen">
@@ -39,7 +39,7 @@ export default async function DashboardLayout({
           <div className="flex h-14 items-center border-b px-4">
             <span className="font-semibold">Game Of Creators</span>
           </div>
-          <DashboardSidebar userRole={userRole} />
+          {userRole && <DashboardSidebar userRole={userRole} />}
         </div>
       </aside>
       <div className="flex flex-1 flex-col">
