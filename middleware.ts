@@ -5,7 +5,7 @@ export async function middleware(request: NextRequest) {
   try {
     return await updateSession(request)
   } catch (error) {
-    console.error('Error in middleware:', error)
+    console.error('Error in middlewaree:', error)
     return NextResponse.next()
   }
 }
