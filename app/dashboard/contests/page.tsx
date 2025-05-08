@@ -13,10 +13,10 @@ export default async function ContestsPage() {
   const supabase = await createClient();
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     console.log("ContestsPage: No session found, redirecting to signin.");
     redirect("/auth/signin");
   }
@@ -25,7 +25,7 @@ export default async function ContestsPage() {
   const { data: userData } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   // Redirect creators to opportunities
@@ -37,7 +37,7 @@ export default async function ContestsPage() {
   const { data: contests = [] } = await supabase
     .from("contests_with_status")
     .select("*")
-    .eq("advertiser_id", session.user.id)
+    .eq("advertiser_id", user.id)
     .order("created_at", { ascending: false });
 
   // Separate published and draft contests

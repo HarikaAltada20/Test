@@ -1,7 +1,7 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { createOAuthClient, getChannelInfo } from '@/lib/youtube-api';
+import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { createOAuthClient, getChannelInfo } from '@/lib/youtube-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,48 +21,38 @@ export async function GET(request: NextRequest) {
     const errorUrl = new URL('/dashboard/settings?error=state_mismatch', request.url);
     const response = NextResponse.redirect(errorUrl);
     response.cookies.set({
-        name: 'youtube_oauth_state',
-        value: '',
-        maxAge: 0,
-        path: '/'
+      name: 'youtube_oauth_state',
+      value: '',
+      maxAge: 0,
+      path: '/'
     });
     return response;
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
+  const supabase = await createClient()
 
   let response: NextResponse;
 
   try {
     console.log('Callback invoked - using createServerClient (get only)');
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { user }, error: sessionError } = await supabase.auth.getUser();
 
     if (sessionError) {
-      console.error('Session error during getSession:', sessionError);
+      console.error('Session error during User:', sessionError);
       response = NextResponse.redirect(new URL('/auth/signin?error=session_error', request.url));
       response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
       return response;
     }
 
-    if (!session?.user) {
-      console.error('No session found during YouTube callback AFTER getSession');
+    if (!user) {
+      console.error('No session found during YouTube callback AFTER User');
       response = NextResponse.redirect(new URL('/auth/signin?error=no_session', request.url));
       response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
       return response;
     }
 
-    console.log('Session found during callback for user:', session.user.id);
-    
+    console.log('Session found during callback for user:', user.id);
+
     if (!code) {
       console.log('No code found, redirecting');
       response = NextResponse.redirect(new URL('/dashboard/settings?error=no_code', request.url));
@@ -72,21 +62,21 @@ export async function GET(request: NextRequest) {
 
     const oauth2Client = await createOAuthClient();
     const { tokens } = await oauth2Client.getToken(code);
-    
+
     console.log('Received YouTube tokens');
 
     const channelInfo = await getChannelInfo(tokens.access_token!);
-    
+
     if (!channelInfo) {
       console.error('Failed to fetch channel info with token');
       throw new Error('Failed to fetch channel information');
     }
-    
+
     console.log('Fetched channel info:', channelInfo.snippet?.title);
 
     const expiresIn = tokens.expiry_date ? Math.floor((tokens.expiry_date - Date.now()) / 1000) : 3600;
     const expiresAt = new Date(Date.now() + (expiresIn * 1000)).toISOString();
-    
+
     const youtubeAccount = {
       channel_id: channelInfo.id,
       channel_title: channelInfo.snippet?.title,
@@ -104,13 +94,13 @@ export async function GET(request: NextRequest) {
       updated_at: new Date().toISOString()
     };
 
-    console.log('Updating creator profile for user:', session.user.id);
+    console.log('Updating creator profile for user:', user.id);
     const { error: updateError } = await supabase
       .from('creator_profiles')
       .update({
         youtube_account: youtubeAccount
       })
-      .eq('id', session.user.id);
+      .eq('id', user.id);
 
     if (updateError) {
       console.error('Error updating creator profile:', updateError);

@@ -23,10 +23,10 @@ export default async function CreatorEarningsPage() {
   const supabase = await createClient();
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
@@ -34,7 +34,7 @@ export default async function CreatorEarningsPage() {
   const { data: userData } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (userData?.user_type !== "creator") {
@@ -45,14 +45,14 @@ export default async function CreatorEarningsPage() {
   const { data: profile } = await supabase
     .from("creator_profiles")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   // Get successful submissions (to simulate earnings)
   const { data: submissions } = await supabase
     .from("submissions")
     .select("*, contests(title, prizes)")
-    .eq("creator_id", session.user.id)
+    .eq("creator_id", user.id)
     .eq("status", "approved")
     .order("created_at", { ascending: false });
 

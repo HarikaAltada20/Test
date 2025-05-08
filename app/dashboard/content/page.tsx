@@ -10,10 +10,10 @@ export default async function CreatorContentPage() {
   const supabase = await createClient();
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
@@ -21,7 +21,7 @@ export default async function CreatorContentPage() {
   const { data: userData } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (userData?.user_type !== "creator") {
@@ -32,7 +32,7 @@ export default async function CreatorContentPage() {
   const { data: submissions } = await supabase
     .from("submissions")
     .select("*, contests(title, platform)")
-    .eq("creator_id", session.user.id)
+    .eq("creator_id", user.id)
     .order("created_at", { ascending: false });
 
   return (

@@ -1,23 +1,10 @@
 import { createClient } from "@/utils/supabase/client"
 
-/**
- * Performs a complete logout clearing all session and cache data
- * To be used for client-side rendering
- */
 export async function completeLogout() {
-  // Create a supabase client
   const supabase = createClient()
-
-  // Clear all local storage
   localStorage.clear()
-
-  // Clear all session storage
   sessionStorage.clear()
-
-  // Sign out from Supabase to remove server-side session
   await supabase.auth.signOut()
-
-  // Redirect to sign-in page
   window.location.href = '/auth/signin'
 }
 
@@ -29,7 +16,7 @@ export async function checkClientAuth() {
   const supabase = createClient()
 
   try {
-    const { data, error } = await supabase.auth.getSession()
+    const { data, error } = await supabase.auth.getUser()
 
     if (error) {
       console.error("Auth check error:", error)
@@ -37,8 +24,8 @@ export async function checkClientAuth() {
     }
 
     return {
-      isAuthenticated: !!data.session,
-      user: data.session?.user || null,
+      isAuthenticated: !!data.user,
+      user: data.user || null,
       error: null
     }
   } catch (err) {

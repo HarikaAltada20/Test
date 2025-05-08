@@ -103,18 +103,18 @@ export default function ProfilePage({
       setAvatarPreview(null);
 
       const {
-        data: { session },
-      } = await supabase.auth.getSession();
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      if (!session) {
+      if (!user) {
         setIsLoading(false);
         return;
       }
 
-      const { data: user, error: userError } = await supabase
+      const { data: userData, error: userError } = await supabase
         .from("users")
         .select("*, profile_picture_url")
-        .eq("id", session.user.id)
+        .eq("id", user.id)
         .single();
 
       if (userError) {
@@ -123,16 +123,16 @@ export default function ProfilePage({
         return;
       }
 
-      setUserData(user as UserData);
-      setEditedFullName(user.full_name);
+      setUserData(userData as UserData);
+      setEditedFullName(userData.full_name);
 
-      setAvatarPreview(user.profile_picture_url || null);
+      setAvatarPreview(userData.profile_picture_url || null);
 
-      if (user.referred_by) {
+      if (userData.referred_by) {
         const { data: referrerData } = await supabase
           .from("users")
           .select("username")
-          .eq("referral_code", user.referred_by)
+          .eq("referral_code", userData.referred_by)
           .single();
 
         if (referrerData) {
@@ -140,21 +140,21 @@ export default function ProfilePage({
         }
       }
 
-      if (user.user_type === "creator") {
+      if (userData.user_type === "creator") {
         const { data: profile, error: profileError } = await supabase
           .from("creator_profiles")
           .select("*")
-          .eq("id", session.user.id)
+          .eq("id", userData.id)
           .single();
 
         if (!profileError && profile) {
           setCreatorProfile(profile as CreatorProfile);
         }
-      } else if (user.user_type === "advertiser") {
+      } else if (userData.user_type === "advertiser") {
         const { data: profile, error: profileError } = await supabase
           .from("advertiser_profiles")
           .select("*")
-          .eq("id", session.user.id)
+          .eq("id", userData.id)
           .single();
 
         if (!profileError && profile) {

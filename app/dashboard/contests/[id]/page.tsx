@@ -1,25 +1,14 @@
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, ExternalLink, Trophy, Users } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
-import React from "react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
-import {
-  formatMoney,
-  toLocalDateTimeStrings,
-  formatLocalDateTime,
-} from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatLocalDateTime, formatMoney } from "@/lib/utils";
+import { createClient } from "@/utils/supabase/server";
+import { ArrowLeft, Calendar, ExternalLink, Trophy, Users } from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export default async function ContestDetailPage({
   params,
@@ -33,10 +22,10 @@ export default async function ContestDetailPage({
   const supabase = await createClient();
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     redirect("/login");
   }
 
@@ -44,7 +33,7 @@ export default async function ContestDetailPage({
   const { data: userData } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (userData?.user_type !== "advertiser") {
