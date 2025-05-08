@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { formatMoney } from "@/lib/utils"
 import { User, UserCheck, Pencil, Save, X, Upload, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
+import { createClient } from "@/utils/supabase/client"
 
 interface UserData {
   id: string
@@ -56,7 +56,7 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [referrer, setReferrer] = useState<string | null>(null)
-  const supabase = createSupabaseClient()
+  const supabase = createClient()
   const { toast } = useToast()
   const { refreshUserData } = useAuth()
 

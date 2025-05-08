@@ -1,37 +1,52 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowDownToLine, DollarSign, Trophy } from "lucide-react"
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ArrowDownToLine, DollarSign, Trophy } from "lucide-react";
 
 // Add the formatCurrency utility function
 // Add this utility function to convert cents to dollars for display
 const formatCurrency = (cents: number): string => {
   return `$${(cents / 100).toFixed(2)}`;
-}
+};
 
 export default async function CreatorEarningsPage() {
-  const supabase = await createSupabaseServerClient()
+  const supabase = await createClient();
 
   const {
     data: { session },
-  } = await supabase.auth.getSession()
+  } = await supabase.auth.getSession();
 
   if (!session) {
-    redirect("/login")
+    redirect("/login");
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
+  const { data: userData } = await supabase
+    .from("users")
+    .select("user_type")
+    .eq("id", session.user.id)
+    .single();
 
   if (userData?.user_type !== "creator") {
-    redirect("/dashboard")
+    redirect("/dashboard");
   }
 
   // Get creator profile
-  const { data: profile } = await supabase.from("creator_profiles").select("*").eq("id", session.user.id).single()
+  const { data: profile } = await supabase
+    .from("creator_profiles")
+    .select("*")
+    .eq("id", session.user.id)
+    .single();
 
   // Get successful submissions (to simulate earnings)
   const { data: submissions } = await supabase
@@ -57,7 +72,7 @@ export default async function CreatorEarningsPage() {
       amount: 10000,
       status: "pending",
     },
-  ]
+  ];
 
   return (
     <div>
@@ -73,7 +88,9 @@ export default async function CreatorEarningsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Earnings
+            </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -89,18 +106,28 @@ export default async function CreatorEarningsPage() {
             <Trophy className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{profile?.contests_won || 0}</div>
-            <p className="text-xs text-muted-foreground">Total contest victories</p>
+            <div className="text-2xl font-bold">
+              {profile?.contests_won || 0}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total contest victories
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Available for Withdrawal</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Available for Withdrawal
+            </CardTitle>
             <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(earnings.filter((e) => e.status === "pending").reduce((sum, e) => sum + e.amount, 0))}
+              {formatCurrency(
+                earnings
+                  .filter((e) => e.status === "pending")
+                  .reduce((sum, e) => sum + e.amount, 0)
+              )}
             </div>
             <p className="text-xs text-muted-foreground">Current balance</p>
           </CardContent>
@@ -125,13 +152,18 @@ export default async function CreatorEarningsPage() {
               {earnings.length > 0 ? (
                 earnings.map((earning) => (
                   <TableRow key={earning.id}>
-                    <TableCell>{new Date(earning.date).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {new Date(earning.date).toLocaleDateString()}
+                    </TableCell>
                     <TableCell>{earning.contest}</TableCell>
                     <TableCell>{formatCurrency(earning.amount)}</TableCell>
                     <TableCell>
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${earning.status === "paid" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                          }`}
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          earning.status === "paid"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
                       >
                         {earning.status === "paid" ? "Paid" : "Pending"}
                       </span>
@@ -140,7 +172,10 @@ export default async function CreatorEarningsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
+                  <TableCell
+                    colSpan={4}
+                    className="text-center py-4 text-muted-foreground"
+                  >
                     No earnings yet
                   </TableCell>
                 </TableRow>
@@ -150,6 +185,5 @@ export default async function CreatorEarningsPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

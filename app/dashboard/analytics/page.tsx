@@ -1,8 +1,9 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server"
+
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { createClient } from "@/utils/supabase/server"
 
 // Add the formatCurrency utility function
 // Add this utility function to convert cents to dollars for display
@@ -11,7 +12,7 @@ const formatCurrency = (cents: number): string => {
 }
 
 export default async function AnalyticsPage() {
-  const supabase = await createSupabaseServerClient()
+  const supabase = await createClient()
 
   // Verify user authentication with server
   const { data: { user }, error } = await supabase.auth.getUser()

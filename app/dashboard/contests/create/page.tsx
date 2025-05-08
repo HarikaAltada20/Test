@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, ArrowRight, Check, Image, Info, Trash, Trophy, Upload, AlertTriangle, AlertCircle, Trash2, ExternalLink, X } from "lucide-react"
@@ -22,6 +21,7 @@ import { formatCurrency } from "@/lib/currency-utils"
 
 // Re-added constants that were accidentally removed
 import { subscriptionPlans, MIN_PRIZE_PER_WINNER, MAX_PRIZE_PER_WINNER, DEFAULT_PRIZE_ALLOCATIONS, HIGH_BUDGET_THRESHOLD } from "@/constants/subscriptionPlans"
+import { createClient } from "@/utils/supabase/client"
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -74,7 +74,7 @@ You must show the Game Of Creators App Store listing in your video`)
   const resourceFileRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const { user } = useAuth()
-  const supabase = createSupabaseClient()
+  const supabase = createClient()
   const [userPlan, setUserPlan] = useState<string | null>(null)
   const [showContactModal, setShowContactModal] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)

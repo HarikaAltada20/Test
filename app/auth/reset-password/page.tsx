@@ -8,21 +8,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CheckCircle, Loader2, Eye, EyeOff } from "lucide-react"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
+import { createClient } from "@/utils/supabase/client"
 
 export default function ResetPasswordPage() {
     const [password, setPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const [isLoading, setIsLoading] = useState(false)
-    const [isSuccess, setIsSuccess] = useState(false)
-    const supabase = createSupabaseClient()
-    const router = useRouter()
-    const { toast } = useToast()
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const supabase = createClient();
+  const router = useRouter();
+  const { toast } = useToast();
 
     useEffect(() => {
         // Check if we have a hash fragment in the URL (from Supabase auth redirect)

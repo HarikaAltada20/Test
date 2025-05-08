@@ -12,11 +12,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, RefreshCw } from "lucide-react"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { redirect } from "next/navigation"
+import { createClient } from "@/utils/supabase/client";
 
 interface YouTubeVideo {
   id: {
@@ -67,7 +67,7 @@ export default function SubmitContentPage({ params }: { params: Promise<{ id: st
   const [isTokenExpired, setIsTokenExpired] = useState(false)
   const router = useRouter()
   const { user } = useAuth()
-  const supabase = createSupabaseClient()
+  const supabase = createClient()
   const [isFetchingVideo, setIsFetchingVideo] = useState(false)
   const [videoPreview, setVideoPreview] = useState<YouTubeVideo | null>(null)
 

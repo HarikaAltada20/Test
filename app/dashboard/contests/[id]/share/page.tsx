@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Badge, Check, Copy, Facebook, Linkedin, Share2, Twitter } from "lucide-react"
@@ -12,6 +11,7 @@ import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { createClient } from "@/utils/supabase/client"
 
 type ContestData = {
     id: string
@@ -26,7 +26,7 @@ export default function ShareContestPage() {
     const contestId = params.id as string
     const router = useRouter()
     const { user } = useAuth()
-    const supabase = createSupabaseClient()
+    const supabase = createClient()
 
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)

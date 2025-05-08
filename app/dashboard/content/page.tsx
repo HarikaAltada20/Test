@@ -1,27 +1,31 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
-import { ExternalLink, Filter, Video } from "lucide-react"
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { ExternalLink, Filter, Video } from "lucide-react";
 
 export default async function CreatorContentPage() {
-  const supabase = await createSupabaseServerClient()
+  const supabase = await createClient();
 
   const {
     data: { session },
-  } = await supabase.auth.getSession()
+  } = await supabase.auth.getSession();
 
   if (!session) {
-    redirect("/login")
+    redirect("/login");
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
+  const { data: userData } = await supabase
+    .from("users")
+    .select("user_type")
+    .eq("id", session.user.id)
+    .single();
 
   if (userData?.user_type !== "creator") {
-    redirect("/dashboard")
+    redirect("/dashboard");
   }
 
   // Get submissions for this creator
@@ -29,7 +33,7 @@ export default async function CreatorContentPage() {
     .from("submissions")
     .select("*, contests(title, platform)")
     .eq("creator_id", session.user.id)
-    .order("created_at", { ascending: false })
+    .order("created_at", { ascending: false });
 
   return (
     <div>
@@ -53,29 +57,37 @@ export default async function CreatorContentPage() {
           {submissions && submissions.length > 0 ? (
             <div className="space-y-4">
               {submissions.map((submission) => (
-                <div key={submission.id} className="flex items-center justify-between border-b pb-4">
+                <div
+                  key={submission.id}
+                  className="flex items-center justify-between border-b pb-4"
+                >
                   <div className="flex items-center space-x-4">
                     <div className="rounded-full bg-gray-100 p-2">
                       <Video className="h-4 w-4" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{submission.contests?.title}</p>
+                      <p className="text-sm font-medium">
+                        {submission.contests?.title}
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        Submitted on {new Date(submission.created_at).toLocaleDateString()} |{" "}
+                        Submitted on{" "}
+                        {new Date(submission.created_at).toLocaleDateString()} |{" "}
                         {submission.contests?.platform}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center space-x-4">
                     <div className="text-sm text-right">
-                      <p className="font-medium">{(submission.current_views ?? 0).toLocaleString()} views</p>
+                      <p className="font-medium">
+                        {(submission.current_views ?? 0).toLocaleString()} views
+                      </p>
                       <Badge
                         className={
                           submission.status === "approved"
                             ? "bg-green-500"
                             : submission.status === "pending"
-                              ? "bg-yellow-500"
-                              : "bg-red-500"
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
                         }
                       >
                         {submission.status}
@@ -83,12 +95,18 @@ export default async function CreatorContentPage() {
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={submission.content_link} target="_blank" rel="noopener noreferrer">
+                        <Link
+                          href={submission.content_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
                           <ExternalLink className="h-4 w-4 mr-1" /> View
                         </Link>
                       </Button>
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={`/dashboard/content/${submission.id}`}>Details</Link>
+                        <Link href={`/dashboard/content/${submission.id}`}>
+                          Details
+                        </Link>
                       </Button>
                     </div>
                   </div>
@@ -106,6 +124,5 @@ export default async function CreatorContentPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { DollarSign } from "lucide-react"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import { formatMoney } from "@/lib/utils"
+import { createClient } from "@/utils/supabase/client"
 
 interface MoneyTransaction {
     id: string
@@ -20,9 +20,9 @@ interface MoneyTransaction {
 }
 
 export default function MoneyTransactionsPage() {
-    const [transactions, setTransactions] = useState<MoneyTransaction[]>([])
-    const [isLoading, setIsLoading] = useState(true)
-    const supabase = createSupabaseClient()
+    const [transactions, setTransactions] = useState<MoneyTransaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const supabase = createClient();
 
     useEffect(() => {
         const fetchTransactions = async () => {

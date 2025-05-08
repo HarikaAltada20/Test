@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Image, Trash, Upload, ExternalLink } from "lucide-react"
@@ -17,6 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
 import { formatCurrency } from "@/lib/currency-utils"
 import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans } from "@/constants/subscriptionPlans"
+import { createClient } from "@/utils/supabase/client"
 
 type PlanFeatures = {
     maxActiveContests: number;
@@ -54,7 +54,7 @@ export default function EditContestPage() {
     const contestId = params.id as string
     const router = useRouter()
     const { user } = useAuth()
-    const supabase = createSupabaseClient()
+    const supabase = createClient()
 
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading

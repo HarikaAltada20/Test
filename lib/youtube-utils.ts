@@ -23,8 +23,8 @@ export async function refreshYouTubeToken() {
 }
 
 export async function getYouTubeAccount() {
-  const supabase = createSupabaseClient();
-  
+  const supabase = createClient()
+
   try {
     const { data: profile, error } = await supabase
       .from('creator_profiles')

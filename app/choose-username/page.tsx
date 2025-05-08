@@ -9,7 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
-import { createSupabaseClient } from "@/lib/supabase/client"
+import { createClient } from "@/utils/supabase/client"
+
 
 export default function ChooseUsernamePage() {
     const [username, setUsername] = useState("")
@@ -20,7 +21,7 @@ export default function ChooseUsernamePage() {
     const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
     const router = useRouter()
     const { toast } = useToast()
-    const supabase = createSupabaseClient()
+    const supabase = createClient()
 
     useEffect(() => {
         // Get user data from sessionStorage

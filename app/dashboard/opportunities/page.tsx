@@ -1,85 +1,89 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Calendar, DollarSign, Filter, Trophy } from "lucide-react"
-import { User } from "@supabase/supabase-js"
-import { createSupabaseClient } from "@/lib/supabase/client"
-import { useAuth } from "@/contexts/auth-context"
-import { formatMoney } from "@/lib/utils"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Calendar, DollarSign, Filter, Trophy } from "lucide-react";
+import { User } from "@supabase/supabase-js";
+import { useAuth } from "@/contexts/auth-context";
+import { formatMoney } from "@/lib/utils";
+import { createClient } from "@/utils/supabase/client";
 
 export default function OpportunitiesPage() {
-  const [availableContests, setAvailableContests] = useState<any[]>([])
-  const [isFetchingData, setIsFetchingData] = useState(true)
-  const { user, isLoading: isAuthLoading } = useAuth()
-  const router = useRouter()
-  const supabase = createSupabaseClient()
+  const [availableContests, setAvailableContests] = useState<any[]>([]);
+  const [isFetchingData, setIsFetchingData] = useState(true);
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const router = useRouter();
+  const supabase = createClient();
 
   useEffect(() => {
     if (isAuthLoading) {
-      setIsFetchingData(true)
-      return
+      setIsFetchingData(true);
+      return;
     }
 
     if (!user) {
-      console.log("OpportunitiesPage: No user found after auth load, redirecting to signin.")
-      router.push("/")
-      return
+      console.log(
+        "OpportunitiesPage: No user found after auth load, redirecting to signin."
+      );
+      router.push("/");
+      return;
     }
 
     async function fetchData(currentUser: User) {
-      setIsFetchingData(true)
+      setIsFetchingData(true);
 
       try {
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type")
           .eq("id", currentUser.id)
-          .single()
+          .single();
 
         if (userError) {
-          console.error("Error fetching user type:", userError)
-          setIsFetchingData(false)
-          setAvailableContests([])
-          return
+          console.error("Error fetching user type:", userError);
+          setIsFetchingData(false);
+          setAvailableContests([]);
+          return;
         }
 
         if (userData?.user_type === "advertiser") {
-          console.log("OpportunitiesPage: Advertiser detected, redirecting to contests.")
-          router.push("/dashboard/contests")
-          return
+          console.log(
+            "OpportunitiesPage: Advertiser detected, redirecting to contests."
+          );
+          router.push("/dashboard/contests");
+          return;
         }
 
         const { data: contests, error: contestError } = await supabase
           .from("contests_with_status")
           .select("*")
-          .not('status', 'eq', 'draft')
-          .not('status', 'eq', 'incomplete')
-          .order("created_at", { ascending: false })
+          .not("status", "eq", "draft")
+          .not("status", "eq", "incomplete")
+          .order("created_at", { ascending: false });
 
         if (contestError) {
-          console.error("Error fetching contests:", contestError)
-          setAvailableContests([])
+          console.error("Error fetching contests:", contestError);
+          setAvailableContests([]);
         } else {
-          setAvailableContests(contests || [])
+          setAvailableContests(contests || []);
         }
       } catch (error) {
-        console.error("Unexpected error in fetchData:", error)
-        setAvailableContests([])
+        console.error("Unexpected error in fetchData:", error);
+        setAvailableContests([]);
       } finally {
-        setIsFetchingData(false)
+        setIsFetchingData(false);
       }
     }
 
-    fetchData(user)
-  }, [user, isAuthLoading, router, supabase])
+    fetchData(user);
+  }, [user, isAuthLoading, router, supabase]);
 
   const handleViewDetails = (id: string) => {
-    router.push(`/dashboard/opportunities/${id}`)
-  }
+    router.push(`/dashboard/opportunities/${id}`);
+  };
 
   if (isAuthLoading || isFetchingData) {
     return (
@@ -88,15 +92,17 @@ export default function OpportunitiesPage() {
           <p>Loading opportunities...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!user) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted-foreground">You need to be logged in to view opportunities.</p>
+        <p className="text-muted-foreground">
+          You need to be logged in to view opportunities.
+        </p>
       </div>
-    )
+    );
   }
 
   return (
@@ -131,8 +137,8 @@ export default function OpportunitiesPage() {
                       contest.status === "live"
                         ? "bg-green-500"
                         : contest.status === "upcoming"
-                          ? "bg-blue-500"
-                          : "bg-gray-500"
+                        ? "bg-blue-500"
+                        : "bg-gray-500"
                     }
                   >
                     {contest.status}
@@ -144,7 +150,11 @@ export default function OpportunitiesPage() {
                   <div className="flex items-center text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4 mr-2" />
                     <span>
-                      {contest.end_date ? `Ends ${new Date(contest.end_date).toLocaleDateString()}` : "No end date"}
+                      {contest.end_date
+                        ? `Ends ${new Date(
+                            contest.end_date
+                          ).toLocaleDateString()}`
+                        : "No end date"}
                     </span>
                   </div>
                   <div className="flex items-center text-sm">
@@ -154,7 +164,10 @@ export default function OpportunitiesPage() {
                     </span>
                   </div>
                   <div className="pt-2">
-                    <Button className="w-full" onClick={() => handleViewDetails(contest.id)}>
+                    <Button
+                      className="w-full"
+                      onClick={() => handleViewDetails(contest.id)}
+                    >
                       View Details
                     </Button>
                   </div>
@@ -166,11 +179,12 @@ export default function OpportunitiesPage() {
           <div className="col-span-full text-center py-12">
             <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h2 className="text-xl font-medium mb-2">No contests available</h2>
-            <p className="text-muted-foreground mb-4">Check back later for new opportunities</p>
+            <p className="text-muted-foreground mb-4">
+              Check back later for new opportunities
+            </p>
           </div>
         )}
       </div>
     </div>
-  )
+  );
 }
-

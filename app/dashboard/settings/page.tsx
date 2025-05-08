@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { Bell, Mail, Lock, LogOut, Building2, Globe } from "lucide-react"
 import { SiYoutube, SiInstagram } from "react-icons/si"
@@ -13,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
+import { createClient } from "@/utils/supabase/client"
 
 interface SocialAccount {
   channel_id?: string;
@@ -46,7 +46,7 @@ export default function SettingsPage() {
   const [pageLoading, setPageLoading] = useState(true)
   const router = useRouter()
   const { user, isLoading: isAuthLoading } = useAuth()
-  const supabase = createSupabaseClient()
+  const supabase = createClient()
 
   useEffect(() => {
     if (!user) {

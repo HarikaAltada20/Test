@@ -1,28 +1,32 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { redirect } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { Filter, Users } from "lucide-react"
-import Link from "next/link"
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Filter, Users } from "lucide-react";
+import Link from "next/link";
 
 export default async function CreatorsPage() {
-  const supabase = await createSupabaseServerClient()
+  const supabase = await createClient();
 
   const {
     data: { session },
-  } = await supabase.auth.getSession()
+  } = await supabase.auth.getSession();
 
   if (!session) {
-    redirect("/login")
+    redirect("/login");
   }
 
   // Get user role from the database
-  const { data: userData } = await supabase.from("users").select("user_type").eq("id", session.user.id).single()
+  const { data: userData } = await supabase
+    .from("users")
+    .select("user_type")
+    .eq("id", session.user.id)
+    .single();
 
   if (userData?.user_type !== "advertiser") {
-    redirect("/dashboard")
+    redirect("/dashboard");
   }
 
   // Get creator profiles with submissions
@@ -30,7 +34,7 @@ export default async function CreatorsPage() {
     .from("creator_profiles")
     .select("*, users(email, profile_pic)")
     .order("contests_won", { ascending: false })
-    .limit(20)
+    .limit(20);
 
   return (
     <div>
@@ -49,11 +53,18 @@ export default async function CreatorsPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {creators && creators.length > 0 ? (
               creators.map((creator) => (
-                <div key={creator.id} className="border rounded-lg p-4 flex flex-col gap-4">
+                <div
+                  key={creator.id}
+                  className="border rounded-lg p-4 flex flex-col gap-4"
+                >
                   <div className="flex items-center gap-4">
                     <Avatar>
-                      <AvatarImage src={(creator.users as any)?.profile_pic || ""} />
-                      <AvatarFallback>{creator.username[0]?.toUpperCase()}</AvatarFallback>
+                      <AvatarImage
+                        src={(creator.users as any)?.profile_pic || ""}
+                      />
+                      <AvatarFallback>
+                        {creator.username[0]?.toUpperCase()}
+                      </AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="font-medium">{creator.username}</h3>
@@ -66,24 +77,34 @@ export default async function CreatorsPage() {
                   <div className="flex gap-2 flex-wrap">
                     {creator.linked_platforms &&
                       typeof creator.linked_platforms === "object" &&
-                      Object.entries(creator.linked_platforms).map(([platform, _]) => (
-                        <Badge key={platform} variant="outline" className="capitalize">
-                          {platform}
-                        </Badge>
-                      ))}
+                      Object.entries(creator.linked_platforms).map(
+                        ([platform, _]) => (
+                          <Badge
+                            key={platform}
+                            variant="outline"
+                            className="capitalize"
+                          >
+                            {platform}
+                          </Badge>
+                        )
+                      )}
                     {(!creator.linked_platforms ||
                       typeof creator.linked_platforms !== "object" ||
                       Object.keys(creator.linked_platforms).length === 0) && (
-                        <Badge variant="outline">No platforms linked</Badge>
-                      )}
+                      <Badge variant="outline">No platforms linked</Badge>
+                    )}
                   </div>
 
                   <div className="mt-auto flex justify-between items-center">
                     <div>
-                      <span className="text-sm font-medium">{creator.contests_won} wins</span>
+                      <span className="text-sm font-medium">
+                        {creator.contests_won} wins
+                      </span>
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <Link href={`/dashboard/creators/${creator.id}`}>View Profile</Link>
+                      <Link href={`/dashboard/creators/${creator.id}`}>
+                        View Profile
+                      </Link>
                     </Button>
                   </div>
                 </div>
@@ -98,6 +119,5 @@ export default async function CreatorsPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
-

@@ -9,12 +9,12 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calendar, ExternalLink, Info, Trophy, User, ListOrdered, ScrollText, Link2, Lightbulb, PlayCircle, CheckCircle } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
-import { createSupabaseClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
 import { formatLocalDateTime, formatMoney } from "@/lib/utils"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { createClient } from "@/utils/supabase/client"
 
 // Define type for prize objects globally within the file
 type PrizeInfo = {
@@ -62,7 +62,7 @@ export function ContestClientPage({ contestId }: { contestId: string }) {
     const [error, setError] = useState<string | null>(null)
     const router = useRouter()
     const { user } = useAuth()
-    const supabase = createSupabaseClient()
+    const supabase = createClient()
     const [hasSubmitted, setHasSubmitted] = useState(false)
 
     // Function to fetch leaderboard data
