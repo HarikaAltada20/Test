@@ -28,7 +28,6 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 
 export function Nav({ user }: { user: UserResponse["data"]["user"] }) {
-  console.log(user);
 
   const pathname = usePathname();
   const supabase = createClient();
