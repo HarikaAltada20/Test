@@ -19,7 +19,7 @@ export default function SignupPage() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
-    const [user_type, Setuser_type] = useState<"advertiser" | "creator">("advertiser")
+    const [user_type, Setuser_type] = useState<"advertiser" | "creator">("creator")
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [referralCode, setReferralCode] = useState("")
@@ -126,7 +126,7 @@ export default function SignupPage() {
                             </Alert>
                         )}
 
-                        <Tabs defaultValue="advertiser" onValueChange={(value) => Setuser_type(value as "advertiser" | "creator")}>
+                        <Tabs defaultValue="creator" onValueChange={(value) => Setuser_type(value as "advertiser" | "creator")}>
                             <TabsList className="grid w-full grid-cols-2">
                                 <TabsTrigger value="advertiser">I'm a Brand</TabsTrigger>
                                 <TabsTrigger value="creator">I'm a Creator</TabsTrigger>
