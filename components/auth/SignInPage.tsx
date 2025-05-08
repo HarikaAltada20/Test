@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-function SignInForm() {
+function SignInForm({ verification }: { verification: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -21,21 +21,18 @@ function SignInForm() {
   const router = useRouter();
   const { toast } = useToast();
   const supabase = createClient();
-  // Check if user was redirected after verification
-  //   useEffect(() => {
-  //     const verification = searchParams.get("verification");
-  //     if (verification === "pending") {
-  //       toast({
-  //         title: "Verification Email Sent",
-  //         description:
-  //           "Please check your email and verify your account before signing in.",
-  //         duration: 6000, // 6 seconds
-  //       });
-  //     }
-  //   }, [searchParams, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (verification === "pending") {
+      toast({
+        title: "Verification Email Sent",
+        description:
+          "Please check your email and verify your account before signing in.",
+        duration: 6000, // 6 seconds
+      });
+    }
     setError(null);
     setIsLoading(true);
 
@@ -55,6 +52,7 @@ function SignInForm() {
         // Delay navigation to dashboard to ensure toast is visible
         setTimeout(() => {
           router.push("/dashboard");
+          router.refresh();
         }, 500);
       } else {
         setError(error?.message || "Failed to sign in");
@@ -159,7 +157,7 @@ function SignInForm() {
   );
 }
 
-export default function SignInPage() {
+export default function SignInPage({ verification }: { verification: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
       <div className="w-full max-w-md">
@@ -183,7 +181,7 @@ export default function SignInPage() {
             </p>
           </div>
 
-          <SignInForm />
+          <SignInForm verification={verification} />
         </div>
       </div>
     </div>

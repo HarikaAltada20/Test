@@ -7,17 +7,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Loader2, CheckCircle } from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
-
+import { createClient } from "@/utils/supabase/client"
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("")
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [isSuccess, setIsSuccess] = useState(false)
-    const { forgotPassword } = useAuth()
     const { toast } = useToast()
+    const supabase = createClient()
+    
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -25,7 +25,9 @@ export default function ForgotPasswordPage() {
         setIsLoading(true)
 
         try {
-            await forgotPassword(email)
+            await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`
+            })
             setIsSuccess(true)
             toast({
                 title: "Reset link sent",

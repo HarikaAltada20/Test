@@ -1,20 +1,33 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { useAuth } from "@/contexts/auth-context"
-import { LayoutDashboard, Trophy, Users, BarChart, Settings, LogOut, Video, DollarSign } from "lucide-react"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  LayoutDashboard,
+  Trophy,
+  Users,
+  BarChart,
+  Settings,
+  LogOut,
+  Video,
+  DollarSign,
+} from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 interface DashboardSidebarProps {
-  userRole?: "advertiser" | "creator"
+  userRole?: "advertiser" | "creator";
 }
 
-export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarProps) {
-  const pathname = usePathname()
-  const { signOut } = useAuth()
-
+export function DashboardSidebar({
+  userRole = "advertiser",
+}: DashboardSidebarProps) {
+  const pathname = usePathname();
+  const supabase = createClient();
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
   const advertiserLinks = [
     {
       name: "Dashboard",
@@ -41,7 +54,7 @@ export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarPr
       href: "/dashboard/settings",
       icon: Settings,
     },
-  ]
+  ];
 
   const creatorLinks = [
     {
@@ -69,9 +82,9 @@ export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarPr
       href: "/dashboard/settings",
       icon: Settings,
     },
-  ]
+  ];
 
-  const links = userRole === "advertiser" ? advertiserLinks : creatorLinks
+  const links = userRole === "advertiser" ? advertiserLinks : creatorLinks;
 
   return (
     <div className="flex flex-col h-full">
@@ -82,7 +95,9 @@ export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarPr
             href={link.href}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all hover:bg-accent",
-              pathname === link.href ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+              pathname === link.href
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground"
             )}
           >
             <link.icon className="h-4 w-4" />
@@ -96,7 +111,7 @@ export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarPr
           className="w-full justify-start gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-all hover:bg-accent"
           onClick={() => {
             try {
-              signOut();
+              handleSignOut();
               console.log("Sign out initiated");
             } catch (error) {
               console.error("Sign out error in sidebar:", error);
@@ -108,6 +123,5 @@ export function DashboardSidebar({ userRole = "advertiser" }: DashboardSidebarPr
         </Button>
       </div>
     </div>
-  )
+  );
 }
-
