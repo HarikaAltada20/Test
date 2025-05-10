@@ -11,12 +11,22 @@ import { useToast } from "@/hooks/use-toast"
 import { BrandLogo } from "@/components/brand-logo"
 import { createClient } from "@/utils/supabase/client"
 
+// Define a type for the user data we expect to fetch and use
+interface UserProfileData {
+    id: string;
+    email: string | undefined;
+    fullName: string;
+    userType: 'creator' | 'advertiser';
+    referred_by_code: string | null; // The code this user was referred BY during signup
+    // Add other fields from public.users if needed by this page
+}
 
 export default function ChooseUsernamePage() {
     const [username, setUsername] = useState("")
-    const [userData, setUserData] = useState<any>(null)
+    const [userData, setUserData] = useState<UserProfileData | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
+    const [isLoadingProfile, setIsLoadingProfile] = useState(true)
     const [isCheckingUsername, setIsCheckingUsername] = useState(false)
     const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
     const router = useRouter()
@@ -24,26 +34,62 @@ export default function ChooseUsernamePage() {
     const supabase = createClient()
 
     useEffect(() => {
-        // Get user data from sessionStorage
-        const storedUserData = sessionStorage.getItem('signupUserData')
-        if (!storedUserData) {
-            router.push("/auth/signup")
-            toast({
-                variant: "destructive",
-                title: "Session Expired",
-                description: "Your signup session has expired. Please sign up again.",
-                duration: 5000,
+        const fetchProfileAndRedirect = async () => {
+            setIsLoadingProfile(true)
+            const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+
+            if (authError || !authUser) {
+                console.error("ChooseUsernamePage: Not authenticated or error fetching auth user", authError)
+                toast({ variant: "destructive", title: "Not Authenticated", description: "Please sign in to continue.", duration: 5000 })
+                router.push("/auth/signin")
+
+                return
+            }
+
+            // Fetch user details from public.users table
+            // Assuming 'referred_by_code' is the column storing the referral code they used at signup
+            const { data: profileData, error: profileFetchError } = await supabase
+                .from('users')
+                .select('id, email, full_name, user_type, username, referred_by')
+                .eq('id', authUser.id)
+                .single() // User profile MUST exist here as OTP verification should have created it
+
+            if (profileFetchError) {
+                console.error("ChooseUsernamePage: Error fetching user profile from DB:", profileFetchError)
+                setError("Could not load your profile. Please try refreshing or contact support.")
+                toast({ variant: "destructive", title: "Profile Load Failed", description: profileFetchError.message, duration: 5000 })
+                setIsLoadingProfile(false)
+                return
+            }
+
+            if (!profileData) { // Should not happen with .single() unless DB is out of sync with auth.users
+                console.error("ChooseUsernamePage: Profile data is null for authenticated user:", authUser.id)
+                setError("Your profile data is missing. Please contact support.")
+                toast({ variant: "destructive", title: "Profile Missing", description: "Critical error: profile not found.", duration: 5000 })
+                router.push("/auth/signin") // Or an error page
+                return
+            }
+
+            // If username is already set, redirect to dashboard (middleware should also catch this)
+            if (profileData.username) {
+                toast({ title: "Setup Complete", description: "Your username is already set.", duration: 3000 })
+                router.push("/dashboard")
+                router.refresh()
+                return
+            }
+
+            setUserData({
+                id: profileData.id,
+                email: profileData.email, // Email from public.users
+                fullName: profileData.full_name || "",
+                userType: profileData.user_type || "creator",
+                referred_by_code: profileData.referred_by || null,
             })
-            return
+            setIsLoadingProfile(false)
         }
 
-        try {
-            const parsedUserData = JSON.parse(storedUserData)
-            setUserData(parsedUserData)
-        } catch (err) {
-            router.push("/auth/signup")
-        }
-    }, [router, toast])
+        fetchProfileAndRedirect()
+    }, [router, supabase, toast])
 
     // Check username availability with debounce
     useEffect(() => {
@@ -80,6 +126,12 @@ export default function ChooseUsernamePage() {
         setError(null)
         setIsLoading(true)
 
+        if (!userData || !userData.id) {
+            toast({ variant: "destructive", title: "Session Error", description: "User data not loaded. Please refresh.", duration: 5000 })
+            setIsLoading(false)
+            return
+        }
+
         // Basic validation
         if (username.length < 3) {
             setError("Username must be at least 3 characters")
@@ -94,174 +146,59 @@ export default function ChooseUsernamePage() {
         }
 
         try {
-            // Ensure we have userData
-            if (!userData) throw new Error("User data not found")
-
-            // Check if user already exists in the users table
-            const { data: existingUser, error: checkError } = await supabase
+            // Step 1: Update the existing user in public.users table
+            const { error: updateUserError } = await supabase
                 .from('users')
-                .select('id')
+                .update({
+                    username: username,
+                    referral_code: username, // User's own referral code is their username
+                })
                 .eq('id', userData.id)
-                .maybeSingle()
 
-            if (checkError) {
-                console.error("Error checking if user exists:", checkError)
+            if (updateUserError) {
+                console.error("Error updating user with username:", updateUserError)
+                throw new Error(updateUserError.message || "Failed to set your username. Please try again.")
             }
 
-            // Create or update user in custom users table
-            if (!existingUser) {
-                // User doesn't exist in custom table yet, create them
-                const { error: insertError } = await supabase
-                    .from('users')
-                    .insert({
-                        id: userData.id,
-                        email: userData.email,
-                        full_name: userData.fullName,
-                        user_type: userData.userType,
-                        username: username,
-                        referral_code: username,
-                        coins: 100, // Give 100 welcome coins to all users
-                        advertisers_referred: 0,
-                        creators_referred: 0
-                    })
-
-                if (insertError) throw insertError
-
-                // Create welcome bonus transaction
-                await supabase.from('coin_transactions').insert([{
-                    user_id: userData.id,
-                    type: 'earned',
-                    status: 'success',
-                    coins: 100,
-                    description: `Welcome bonus for joining Game Of Creators`
-                }])
-            } else {
-                // User exists, update their info
-                const { error: updateError } = await supabase
-                    .from('users')
-                    .update({
-                        username: username,
-                        referral_code: username,
-                        full_name: userData.fullName,
-                        user_type: userData.userType,
-                    })
-                    .eq('id', userData.id)
-
-                if (updateError) throw updateError
-            }
-
-            // Initialize the appropriate profile based on user type
-            if (userData.userType === 'creator') {
-                const { error: profileError } = await supabase
-                    .from('creator_profiles')
-                    .insert([{
-                        id: userData.id,
-                        total_contests_participated: 0,
-                        total_contests_won: 0,
-                        total_money_won: 0,
-                        withdrawable_balance: 0,
-                        total_views: 0
-                    }])
-
-                if (profileError) throw profileError
-            } else if (userData.userType === 'advertiser') {
-                const { error: profileError } = await supabase
-                    .from('advertiser_profiles')
-                    .insert([{
-                        id: userData.id,
-                        subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198', // FREE plan ID
-                        total_money_spent: 0,
-                        total_contests_run: 0,
-                        available_deposit_balance: 0,
-                        withdrawable_balance: 0
-                    }])
-
-                if (profileError) throw profileError
-            }
-
-            // If a referral code was provided, process it
-            if (userData.referralCode) {
-                // Check if referral code exists
+            // Step 2: If a referral code was used during signup (now userData.referred_by_code),
+            // process it to give bonus to the REFERRER.
+            if (userData.referred_by_code) {
                 const { data: referrer, error: referrerError } = await supabase
                     .from('users')
-                    .select('id, coins, user_type')
-                    .eq('referral_code', userData.referralCode)
+                    .select('id, coins, user_type, creators_referred, advertisers_referred')
+                    .eq('referral_code', userData.referred_by_code) // Find referrer by their referral_code
                     .single()
 
                 if (referrerError) {
-                    console.error("Error finding referrer:", referrerError)
+                    console.error("Error finding referrer by code:", userData.referred_by_code, referrerError)
+                    toast({ variant: "default", title: "Referral Note", description: "Could not process the original sign-up referral bonus for the referrer.", duration: 7000 })
                 } else if (referrer) {
                     try {
-                        // Call the handle_referral function with correct parameter names
-                        // Note: parameter is now ref_code instead of referral_code
-                        const { error: procError } = await supabase.rpc('handle_referral', {
-                            referrer_id: referrer.id,
-                            referred_id: userData.id,
-                            ref_code: userData.referralCode,  // Changed parameter name
-                            referred_type: userData.userType
-                        });
-
-                        if (procError) {
-                            console.error("Referral function error:", procError);
-                            console.warn("Server-side referral processing failed, falling back to client-side processing");
-
-                            // Fallback to client-side processing if the server function fails
-                            // Add 100 more coins to the new user for using a referral
-                            await supabase.from('users').update({
-                                coins: 200, // 100 welcome + 100 referral
-                                referred_by: userData.referralCode
-                            }).eq('id', userData.id)
-
-                            // Record referral bonus transaction for new user
-                            await supabase.from('coin_transactions').insert([{
-                                user_id: userData.id,
-                                type: 'referral_bonus',
-                                status: 'success',
-                                coins: 100,
-                                description: `Bonus for using referral code ${userData.referralCode}`
-                            }])
-
-                            // First update the coin balance for referrer
-                            await supabase.from('users').update({
-                                coins: referrer.coins + 100
-                            }).eq('id', referrer.id)
-
-                            // Then update the appropriate referral count
-                            if (userData.userType === 'creator') {
-                                const { data: creatorProfile } = await supabase
-                                    .from('users')
-                                    .select('creators_referred')
-                                    .eq('id', referrer.id)
-                                    .single();
-
-                                await supabase.from('users').update({
-                                    creators_referred: (creatorProfile?.creators_referred || 0) + 1
-                                }).eq('id', referrer.id)
-                            } else {
-                                const { data: advertiserProfile } = await supabase
-                                    .from('users')
-                                    .select('advertisers_referred')
-                                    .eq('id', referrer.id)
-                                    .single();
-
-                                await supabase.from('users').update({
-                                    advertisers_referred: (advertiserProfile?.advertisers_referred || 0) + 1
-                                }).eq('id', referrer.id)
-                            }
+                        // Parameters for your handle_referral RPC
+                        const { error: rpcError } = await supabase.rpc('handle_referral', {
+                            referrer_id: referrer.id,       // Assuming this is the name in your RPC
+                            referred_id: userData.id,       // Assuming this is the name in your RPC
+                            ref_code: userData.referred_by_code, // The code used
+                            referred_type: userData.userType  // Assuming this is the name in your RPC
+                        })
+                        if (rpcError) {
+                            console.error("Error calling handle_referral RPC:", rpcError)
+                            toast({ variant: "destructive", title: "Referral Issue", description: "Could not automatically process bonus for the referrer.", duration: 7000 })
                         } else {
-                            console.log("Successfully processed referral using server function");
+                            console.log("Successfully processed referral for referrer:", referrer.id)
+                            toast({ title: "Referral Applied!", description: "Referral bonus processed for the referrer.", duration: 5000 })
                         }
-                    } catch (err) {
-                        console.error("Error processing referral:", err)
+                    } catch (rpcCatchError: any) {
+                        console.error("Exception calling handle_referral RPC:", rpcCatchError)
+                        toast({ variant: "destructive", title: "Referral Error", description: "Unexpected error processing referral bonus.", duration: 7000 })
                     }
                 }
             }
 
-            // Clear sessionStorage
-            sessionStorage.removeItem('signupUserData')
-            sessionStorage.removeItem('referralCode') // Also clear referral code if stored
+            // Clear sessionStorage (only if you were using it for other things, otherwise not needed)
+            // sessionStorage.removeItem('signupUserData') // Not strictly needed anymore for this page's core data
+            // sessionStorage.removeItem('referralCode') // This was for the code the current user INPUTTED.
 
-            // Show success message
             toast({
                 title: "Account setup complete!",
                 description: "Welcome aboard!",
@@ -270,6 +207,7 @@ export default function ChooseUsernamePage() {
 
             // Redirect to dashboard
             router.push("/dashboard")
+            router.refresh()
         } catch (err: any) {
             setError(err.message || "Failed to set up your account")
             toast({
@@ -295,6 +233,31 @@ export default function ChooseUsernamePage() {
         if (value === '' || isValidUsername(value)) {
             setUsername(value)
         }
+    }
+
+    if (isLoadingProfile) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+                <div className="w-full max-w-md text-center">
+                    <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Loading your profile...</p>
+                </div>
+            </div>
+        )
+    }
+
+    // If userData is still null after loading (e.g., error during fetch), show error or redirect
+    // This specific check might be redundant if fetchProfileAndRedirect handles all error cases with redirects/setErrors.
+    if (!userData && !isLoadingProfile) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
+                <div className="w-full max-w-md text-center">
+                    <h1 className="text-xl font-semibold text-destructive">Loading Error</h1>
+                    <p className="text-muted-foreground mt-2">Could not load user data. {error || "Please try signing in again."}</p>
+                    <Button onClick={() => router.push('/auth/signin')} className="mt-4">Go to Sign In</Button>
+                </div>
+            </div>
+        )
     }
 
     return (

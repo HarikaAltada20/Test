@@ -37,18 +37,55 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
-    if (
-        !user &&
-        !request.nextUrl.pathname.startsWith('/login') &&
-        !request.nextUrl.pathname.startsWith('/auth')
-    ) {
-        // no user, potentially respond by redirecting the user to the login page
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        return NextResponse.redirect(url)
+    if (request.nextUrl.pathname.startsWith('/choose-username')) {
+        console.log('Middleware: Accessing /choose-username. User from getUser():', user ? user.id : 'No user');
     }
 
-    // IMPORTANT: You *must* return the supabaseResponse object as it is.
+    if (user) {
+        // User is authenticated
+        const { data: userProfile, error: profileError } = await supabase
+            .from('users')
+            .select('username')
+            .eq('id', user.id)
+            .maybeSingle(); // Changed from .single() to .maybeSingle()
+
+        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 is "No rows found", which maybeSingle handles by returning null data
+            console.error(`Middleware: Error fetching profile for user ${user.id}:`, profileError.message);
+            // Allow request to proceed to avoid blocking user for DB hiccup. Error is logged.
+        } else {
+            // Profile fetched (or userProfile is null if no row was found)
+            const hasUsername = userProfile && userProfile.username;
+            const currentPath = request.nextUrl.pathname;
+
+            if (hasUsername && currentPath.startsWith('/choose-username')) {
+                // User has a username but is trying to access /choose-username again.
+                // Redirect them to the dashboard.
+                console.log(`Middleware: User ${user.id} has username, redirecting from /choose-username to /dashboard.`);
+                return NextResponse.redirect(new URL('/dashboard', request.url));
+            }
+
+            if (!hasUsername && !currentPath.startsWith('/choose-username') && !currentPath.startsWith('/api/auth')) {
+                // User does NOT have a username and is trying to access a protected route (not /choose-username or /api/auth)
+                // The main middleware.ts config.matcher defines which routes are protected.
+                console.log(`Middleware: User ${user.id} has no username, path: ${currentPath}. Redirecting to /choose-username.`);
+                return NextResponse.redirect(new URL('/choose-username', request.url));
+            }
+        }
+    } else if (
+        // Unauthenticated user handling (redirect to signin)
+        !request.nextUrl.pathname.startsWith('/auth/signin') && // Allow access to signin itself
+        !request.nextUrl.pathname.startsWith('/auth/signup') && // Allow access to signup
+        !request.nextUrl.pathname.startsWith('/auth/callback') && // Allow Supabase callback
+        !request.nextUrl.pathname.startsWith('/verify-otp') && // Allow access to OTP page
+        !request.nextUrl.pathname.startsWith('/choose-username') && // Allow unauth access to choose-username IF direct nav (OTP flow sets session first)
+        !request.nextUrl.pathname.startsWith('/auth') // Broadly allow API routes (adjust if too permissive)
+    ) {
+        // no user, redirect to signin page
+        console.log(`Middleware: No user, path: ${request.nextUrl.pathname}. Redirecting to /auth/signin.`);
+        return NextResponse.redirect(new URL('/auth/signin', request.url));
+    }
+
+    // IMPORTANT: You *must* return the supabaseResponse object as it is if not redirecting earlier.
     // If you're creating a new response object with NextResponse.next() make sure to:
     // 1. Pass the request in it, like so:
     //    const myNewResponse = NextResponse.next({ request })
@@ -62,4 +99,12 @@ export async function updateSession(request: NextRequest) {
     // of sync and terminate the user's session prematurely!
 
     return supabaseResponse
+}
+
+export const config = {
+  matcher: [
+    '/dashboard/:path*',
+    '/choose-username', // Add this if it's a protected route
+    // other protected routes
+  ],
 }

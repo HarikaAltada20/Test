@@ -37,33 +37,97 @@ function SignInForm({ verification }: { verification: string }) {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
+      const normalizedEmail = email.trim(); // Normalize email
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail, // Use normalized email
         password: password,
       });
 
       if (data.user) {
+        // User successfully signed in with Supabase Auth.
+        // Now, check their profile in the public users table.
+        const { data: userProfile, error: profileError } = await supabase
+          .from('users')
+          // Fetch all fields needed by ChooseUsernamePage or for general session context
+          .select('username, full_name, user_type, referred_by')
+          .eq('id', data.user.id)
+          .maybeSingle();
+
+        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 means no rows found
+          console.error("SignInPage: Error fetching user profile:", profileError);
+          setError("Failed to retrieve your profile. Please try again.");
+          toast({ variant: "destructive", title: "Profile Error", description: "Could not retrieve your profile information.", duration: 5000 });
+          setIsLoading(false);
+          return;
+        }
+
+        // If userProfile is null here, it means the public.users row wasn't created at OTP/signup.
+        // This would be an inconsistent state. For now, we'll proceed, and ChooseUsernamePage might catch it,
+        // or they might get stuck if ChooseUsernamePage strictly expects a profile.
+        // Ideally, the OTP verification step ALWAYS creates the public.users row.
+        if (!userProfile) {
+          console.warn(`SignInPage: No public.users profile found for authenticated user ${data.user.id}. This indicates an issue with profile creation at OTP/signup.`);
+          // Fallback: proceed to choose-username with minimal data, or redirect to an error/support page.
+          // For now, we'll attempt to let them set a username, but ChooseUsernamePage might need robust handling for missing profiles.
+        }
+
         toast({
           title: "Success!",
           description: "You've been signed in successfully.",
-          duration: 3000, // 3 seconds
+          duration: 3000,
         });
 
-        // Delay navigation to dashboard to ensure toast is visible
-        setTimeout(() => {
-          router.push("/dashboard");
-          router.refresh();
-        }, 500);
+        if (userProfile && userProfile.username) {
+          // Username is set, redirect to dashboard
+          setTimeout(() => {
+            router.push("/dashboard");
+            router.refresh();
+          }, 300);
+        } else {
+          // Username is NOT set (or profile was missing).
+          // ChooseUsernamePage will fetch the necessary data based on the authenticated user.
+          // No need to set sessionStorage here anymore.
+          setTimeout(() => {
+            router.push("/choose-username");
+          }, 300);
+        }
+
+      } else if (signInError) { // Explicitly check if signInError is not null
+        if (signInError.message.includes("Invalid login credentials")) {
+          // Check if the email exists in the public users table
+          const { data: userExistsCheck, error: checkError } = await supabase
+            .from('users') // Your public users table
+            .select('id')
+            .eq('email', normalizedEmail) // Use normalized email for the check
+            .maybeSingle();
+
+          if (checkError && checkError.code !== 'PGRST116') { // PGRST116: No rows found
+            console.error("Error checking if user exists:", checkError);
+            // Fallback to a generic error if the check itself fails
+            setError("Failed to sign in. Please try again later.");
+            toast({ variant: "destructive", title: "Sign in Error", description: "An unexpected error occurred. Please try again.", duration: 5000 });
+          } else if (!userExistsCheck) {
+            setError("Account not found. Please register first.");
+            toast({ variant: "destructive", title: "Account Not Found", description: "No account found with this email. Please register.", duration: 5000 });
+          } else {
+            setError("Incorrect password. Please try again.");
+            toast({ variant: "destructive", title: "Incorrect Password", description: "The password you entered is incorrect.", duration: 5000 });
+          }
+        } else {
+          // Handle other Supabase auth errors
+          setError(signInError.message || "Failed to sign in");
+          toast({
+            variant: "destructive",
+            title: "Sign in failed",
+            description: signInError.message || "Failed to sign in. Please check your credentials.",
+            duration: 5000,
+          });
+        }
+        setIsLoading(false);
       } else {
-        setError(error?.message || "Failed to sign in");
-        toast({
-          variant: "destructive",
-          title: "Sign in failed",
-          description:
-            error?.message ||
-            "Failed to sign in. Please check your credentials.",
-          duration: 5000, // 5 seconds
-        });
+        // Fallback for unexpected cases where there's no user and no error
+        setError("An unexpected error occurred during sign in.");
+        toast({ variant: "destructive", title: "Sign in failed", description: "An unexpected error occurred. Please try again.", duration: 5000 });
         setIsLoading(false);
       }
     } catch (err: any) {

@@ -48,68 +48,188 @@ export default function SignUpPage() {
 
     try {
       const fullName = `${firstName} ${lastName}`.trim();
-      const { data, error } = await supabase.auth.signUp({
-        email,
+      const normalizedEmail = email.trim();
+
+      // 1. Check if email already exists and if username is set
+      const { data: existingUser, error: checkError } = await supabase
+        .from('users')
+        .select('id, username')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116: "No rows found"
+        console.error("Error checking existing email:", checkError);
+        setError("Could not verify email. Please try again later.");
+        toast({ variant: "destructive", title: "Verification Error", description: "Could not verify your email. Please try again." });
+        setIsLoading(false);
+        return;
+      }
+
+      if (existingUser) {
+        if (!existingUser.username) {
+          // Email exists, but username is not set
+          setError("Your email is verified, but username setup is pending.");
+          toast({
+            variant: "default",
+            title: "Profile Incomplete",
+            description: (
+              <div className="flex flex-col items-start space-y-2">
+                <span>Your email is verified, but username setup is pending.</span>
+                <Button
+                  variant="outline" // Or your preferred secondary style
+                  size="sm"
+                  className="mt-2 text-xs h-auto py-1 px-2 border-blue-500 text-blue-500 hover:bg-blue-50 hover:text-blue-600"
+                  onClick={() => router.push('/auth/signin')}
+                >
+                  Sign in to complete profile
+                </Button>
+              </div>
+            ),
+            duration: 10000,
+          });
+        } else {
+          // Email exists, and username is set (fully registered user)
+          setError("An account with this email already exists.");
+          toast({
+            variant: "destructive",
+            title: "Account Already Exists",
+            description: (
+              <div className="flex flex-col items-start space-y-2">
+                <span>An account with this email already exists.</span>
+                <Button
+                  variant="secondary" // Using a common secondary variant for ShadCN UI
+                  size="sm"
+                  className="mt-2 text-xs h-auto py-1 px-2" // Adjust styling as needed
+                  onClick={() => router.push('/auth/signin')}
+                >
+                  Sign in instead
+                </Button>
+              </div>
+            ),
+            duration: 8000,
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Validate referral code (if provided)
+      const trimmedReferralCode = referralCode.trim();
+      if (trimmedReferralCode) {
+        // Assuming referral codes are stored in a column named 'referral_code' in the 'users' table
+        // This implies that a user's referral code is unique or identifiable.
+        const { data: referrerCheck, error: referrerError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('referral_code', trimmedReferralCode)
+          .maybeSingle();
+
+        if (referrerError) {
+          console.error("Error checking referral code:", referrerError);
+          setError("Could not verify referral code. Please try again later.");
+          toast({ variant: "destructive", title: "Referral Error", description: "Could not verify the referral code." });
+          setIsLoading(false);
+          return;
+        }
+
+        if (!referrerCheck) {
+          setError("Invalid referral code. Please check and try again.");
+          toast({ variant: "destructive", title: "Invalid Referral", description: "The referral code entered is invalid." });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Proceed with Supabase auth sign up
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
         password,
         options: {
           data: {
             full_name: fullName,
             user_type: user_type,
-            referral_code: referralCode,
+            referral_code: trimmedReferralCode || undefined, // Pass validated code
           },
+          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`
         },
       });
 
-      if (data) {
-        // For OTP flow, the redirect is handled in auth-context.tsx
+      if (signUpError) {
+        console.error("Supabase signUp error:", signUpError);
+        let errorMessage = signUpError.message;
+        if (signUpError.message.includes("User already registered") ||
+          signUpError.message.includes("already exists") ||
+          (signUpError.message.includes("violates unique constraint") && signUpError.message.includes("email"))) {
+          errorMessage = "An account with this email already exists.";
+          setError(errorMessage);
+          toast({
+            variant: "destructive",
+            title: "Account Exists",
+            description: (
+              <div className="flex flex-col items-start space-y-2">
+                <span>{errorMessage}</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2 text-xs h-auto py-1 px-2"
+                  onClick={() => router.push('/auth/signin')}
+                >
+                  Sign in
+                </Button>
+              </div>
+            ),
+            duration: 8000,
+          });
+        } else {
+          setError(errorMessage);
+          toast({
+            variant: "destructive",
+            title: "Sign up failed",
+            description: errorMessage,
+            duration: 8000,
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (data.user) {
+        // User object exists, email verification (OTP) is likely required.
         toast({
           title: "Verification code sent!",
           description:
             "We've sent a verification code to your email address. Please check your inbox.",
           duration: 5000,
         });
+        // Redirect to OTP verification page with email
+        router.push(`/verify-otp?email=${encodeURIComponent(normalizedEmail)}`);
+        // No need to setIsLoading(false) here as we are navigating away.
       } else {
-        const isDuplicateEmailError =
-          error &&
-          (error.message.includes("already exists") ||
-            error.message.includes("violates unique constraint"));
-
-        setError(error?.message || "Failed to sign up");
-
+        // This case might indicate that email confirmation is disabled and the user is auto-verified,
+        // or some other unexpected state where data.user is null after a successful call.
+        // For an OTP flow, this is unexpected if no signUpError was thrown.
+        console.warn("SignUpPage: supabase.auth.signUp call was successful but data.user is null. This is unexpected for an OTP flow.", data);
+        setError("Sign up process did not complete as expected for OTP. Please try again.");
         toast({
           variant: "destructive",
-          title: isDuplicateEmailError
-            ? "Account Already Exists"
-            : "Sign up failed",
-          description: isDuplicateEmailError ? (
-            <>
-              {error?.message}
-              <div className="mt-2">
-                <Button
-                  variant="outline"
-                  className="bg-white text-black hover:bg-gray-100 border-0 text-xs"
-                  onClick={() => router.push("/auth/signin")}
-                >
-                  Go to Sign in
-                </Button>
-              </div>
-            </>
-          ) : (
-            error?.message || "Failed to create your account. Please try again."
-          ),
-          duration: 8000,
+          title: "Sign up Incomplete",
+          description: "Could not initiate the OTP verification process. Please try again.",
+          duration: 5000,
         });
-
         setIsLoading(false);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to sign up");
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: err.message || "Failed to sign up",
-        duration: 5000,
-      });
+    } catch (err: any) { // Catch for truly unexpected errors (e.g., network, programming errors in checks)
+      console.error("SignUpPage handleSubmit unexpected error:", err);
+      // Avoid setting error/toasting again if it was already handled by a specific check above
+      if (!error) { // Only set error if it hasn't been set by a prior, more specific check
+        setError(err.message || "An unexpected error occurred. Please try again.");
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: err.message || "An unexpected error occurred. Please try again.",
+          duration: 5000,
+        });
+      }
       setIsLoading(false);
     }
   };

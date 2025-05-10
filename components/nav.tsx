@@ -27,7 +27,13 @@ import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 
-export function Nav({ user }: { user: UserResponse["data"]["user"] }) {
+interface NavProps {
+  user: UserResponse["data"]["user"];
+  profileFullName?: string | null;
+  profilePictureUrl?: string | null;
+}
+
+export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
 
   const pathname = usePathname();
   const supabase = createClient();
@@ -44,10 +50,13 @@ export function Nav({ user }: { user: UserResponse["data"]["user"] }) {
     pathname === "/auth/signup" ||
     pathname === "/auth/forgot-password" ||
     pathname === "/auth/reset-password" ||
-    pathname === "/verify-otp"
+    pathname === "/verify-otp" ||
+    pathname === "/choose-username"
   ) {
     return null;
   }
+
+  console.log("user", user)
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
@@ -88,13 +97,11 @@ export function Nav({ user }: { user: UserResponse["data"]["user"] }) {
                 <Button className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
                     <AvatarImage
-                      src={user.user_metadata.profile_picture_url || undefined}
-                      alt={user.user_metadata.full_name || "User"}
+                      src={profilePictureUrl || user?.user_metadata?.profile_picture_url || undefined}
+                      alt={profileFullName || user?.user_metadata?.full_name || "User"}
                     />
                     <AvatarFallback>
-                      {user.user_metadata.full_name?.[0]?.toUpperCase() ||
-                        user.email?.[0]?.toUpperCase() ||
-                        "U"}
+                      {(profileFullName?.[0] || user?.user_metadata?.full_name?.[0] || user?.email?.[0] || "U").toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -102,12 +109,12 @@ export function Nav({ user }: { user: UserResponse["data"]["user"] }) {
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <div className="flex items-center justify-start gap-2 p-2">
                   <div className="flex flex-col space-y-1 leading-none">
-                    {user.user_metadata.full_name && (
+                    {(profileFullName || user?.user_metadata?.full_name) && (
                       <p className="font-medium">
-                        {user.user_metadata.full_name}
+                        {profileFullName || user?.user_metadata?.full_name}
                       </p>
                     )}
-                    {user.email && (
+                    {user?.email && (
                       <p className="w-[200px] truncate text-sm text-muted-foreground">
                         {user.email}
                       </p>

@@ -164,17 +164,103 @@ export function VerifyOtpForm() {
       localStorage.setItem("verificationSuccess", "true");
       toast({ title: "Email verified!", duration: 3000 });
 
-      const userData = data.user.user_metadata;
-      sessionStorage.setItem(
-        "signupUserData",
-        JSON.stringify({
-          id: data.user.id,
-          email: data.user.email,
-          fullName: userData?.full_name || "",
-          userType: userData?.user_type || "creator",
-          referralCode: sessionStorage.getItem("referralCode") || null,
-        })
-      );
+      const authUser = data.user;
+      const userMetaData = authUser.user_metadata;
+
+      // --- Create user profile and related data ---
+      try {
+        // Step 1: Upsert user in public.users table
+        const { error: upsertUserError } = await supabase
+          .from('users')
+          .upsert({
+            id: authUser.id,
+            email: authUser.email,
+            full_name: userMetaData?.full_name || "",
+            user_type: userMetaData?.user_type || "creator",
+            username: null,
+            referral_code: null,
+            referred_by: userMetaData?.referral_code || null,
+            coins: 100,
+            advertisers_referred: 0,
+            creators_referred: 0,
+            is_active: true,
+            email_confirmed_at: authUser.email_confirmed_at || new Date().toISOString(),
+          }, {
+            onConflict: 'id',
+          });
+
+        if (upsertUserError) {
+          console.error("Error upserting user in public.users:", upsertUserError);
+          throw new Error(`Failed to save user profile: ${upsertUserError.message}`);
+        }
+
+        // Step 2: Create welcome bonus transaction (only if not already created for this user - simplistic check)
+        const { data: existingCoinTx, error: checkTxError } = await supabase
+          .from('coin_transactions')
+          .select('id')
+          .eq('user_id', authUser.id)
+          .eq('type', 'bonus')
+          .eq('description', 'Welcome bonus for joining Game Of Creators')
+          .maybeSingle();
+
+        if (checkTxError) {
+          console.error("Error checking existing coin transaction:", checkTxError);
+        }
+
+        if (!existingCoinTx) {
+          const { error: coinTxError } = await supabase.from('coin_transactions').insert([{
+            user_id: authUser.id,
+            type: 'bonus',
+            status: 'success',
+            coins: 100,
+            description: `Welcome bonus for joining Game Of Creators`
+          }]);
+          if (coinTxError) {
+            console.error("Error creating welcome bonus transaction (full error object):", JSON.stringify(coinTxError, null, 2));
+          }
+        }
+
+        // Step 3: Initialize the appropriate profile table (creator_profiles or advertiser_profiles)
+        const userType = userMetaData?.user_type || "creator";
+        if (userType === 'creator') {
+          const { error: creatorProfileError } = await supabase
+            .from('creator_profiles')
+            .upsert({
+              id: authUser.id,
+              total_contests_participated: 0,
+              total_contests_won: 0,
+              total_money_won: 0,
+              withdrawable_balance: 0,
+              total_views: 0
+            }, { onConflict: 'id' });
+          if (creatorProfileError) console.error("Error upserting creator profile:", creatorProfileError);
+        } else if (userType === 'advertiser') {
+          const { error: advertiserProfileError } = await supabase
+            .from('advertiser_profiles')
+            .upsert({
+              id: authUser.id,
+              subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198',
+              total_money_spent: 0,
+              total_contests_run: 0,
+              available_deposit_balance: 0,
+              withdrawable_balance: 0
+            }, { onConflict: 'id' });
+          if (advertiserProfileError) console.error("Error upserting advertiser profile:", advertiserProfileError);
+        }
+
+      } catch (profileSetupError: any) {
+        console.error("Error during post-verification profile setup:", profileSetupError);
+        toast({
+          variant: "destructive",
+          title: "Profile Setup Failed",
+          description: `Your email is verified, but we couldn\'t set up your profile. Please contact support. Error: ${profileSetupError.message}`,
+          duration: 10000,
+        });
+        setIsLoading(false);
+        return;
+      }
+      // --- End of profile setup ---
+
       router.push("/choose-username");
     } catch (err: any) {
       setError(err.message || "Failed to verify OTP");

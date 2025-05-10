@@ -335,7 +335,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          type: "referral_bonus" | "spent" | "earned"
+          type: "referral_bonus" | "spent" | "earned" | "bonus"
           status: "pending" | "success" | "failed"
           coins: number
           description: string
@@ -344,7 +344,7 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
-          type: "referral_bonus" | "spent" | "earned"
+          type: "referral_bonus" | "spent" | "earned" | "bonus"
           status: "pending" | "success" | "failed"
           coins: number
           description: string
@@ -353,7 +353,7 @@ export interface Database {
         Update: {
           id?: string
           user_id?: string
-          type?: "referral_bonus" | "spent" | "earned"
+          type?: "referral_bonus" | "spent" | "earned" | "bonus"
           status?: "pending" | "success" | "failed"
           coins?: number
           description?: string

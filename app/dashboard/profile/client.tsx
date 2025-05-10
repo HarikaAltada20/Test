@@ -259,6 +259,23 @@ export default function ProfilePage({
 
       if (updateError) throw updateError;
 
+      // Update user_metadata in Supabase Auth - No longer primary path for Nav
+      // const { error: authUpdateError } = await supabase.auth.updateUser({
+      //   data: { profile_picture_url: newPublicUrl },
+      // });
+
+      // if (authUpdateError) {
+      //   console.warn(
+      //     "Error updating auth user metadata (profile_picture_url):",
+      //     authUpdateError.message
+      //   );
+      //   toast({
+      //     variant: "destructive",
+      //     title: "Metadata Sync Issue",
+      //     description: "Profile picture updated, but session data might be stale. Try refreshing.",
+      //   });
+      // }
+
       setUserData((prev) =>
         prev ? { ...prev, profile_picture_url: newPublicUrl } : null
       );
@@ -304,6 +321,23 @@ export default function ProfilePage({
         .update({ full_name: editedFullName })
         .eq("id", userData.id);
       if (error) throw error;
+      // Update user_metadata for full_name - No longer primary path for Nav
+      // const { error: authUpdateError } = await supabase.auth.updateUser({
+      //   data: { full_name: editedFullName },
+      // });
+
+      // if (authUpdateError) {
+      //   console.warn(
+      //     "Error updating auth user metadata (full_name):",
+      //     authUpdateError.message
+      //   );
+      //   toast({
+      //     variant: "destructive",
+      //     title: "Metadata Sync Issue",
+      //     description: "Full name updated, but session data might be stale. Try refreshing.",
+      //   });
+      // }
+
       setUserData((prev) =>
         prev ? { ...prev, full_name: editedFullName } : null
       );
@@ -779,9 +813,9 @@ export default function ProfilePage({
                 <p className="font-medium mt-1">
                   {advertiserProfile?.subscription_plan
                     ? subscriptionPlans.find(
-                        (plan) =>
-                          plan.id === advertiserProfile.subscription_plan
-                      )?.name ?? "Unknown Plan"
+                      (plan) =>
+                        plan.id === advertiserProfile.subscription_plan
+                    )?.name ?? "Unknown Plan"
                     : "N/A"}
                 </p>
               </div>
