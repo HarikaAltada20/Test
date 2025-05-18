@@ -688,7 +688,7 @@ export default function ProfilePage({
             <div className="grid md:grid-cols-2 gap-x-4 gap-y-6">
               <div>
                 <Label
-                  htmlFor="companyName"
+                  htmlFor="gameofcreators"
                   className="text-sm font-medium text-muted-foreground"
                 >
                   Company Name
@@ -696,10 +696,10 @@ export default function ProfilePage({
                 {isEditingCompanyName ? (
                   <div className="flex items-center gap-2 mt-1">
                     <Input
-                      id="companyName"
+                      id="gameofcreators"
                       value={editedCompanyName}
                       onChange={(e) => setEditedCompanyName(e.target.value)}
-                      placeholder="Your Company Inc."
+                      placeholder="Game of Creators"
                       disabled={isSubmitting}
                     />
                     <Button
@@ -756,7 +756,7 @@ export default function ProfilePage({
                       type="url"
                       value={editedWebsiteUrl}
                       onChange={(e) => setEditedWebsiteUrl(e.target.value)}
-                      placeholder="https://yourcompany.com"
+                      placeholder="https://www.gameofcreators.com/"
                       disabled={isSubmitting}
                     />
                     <Button

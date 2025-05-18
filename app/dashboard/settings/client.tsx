@@ -14,28 +14,36 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
-import { Bell, LogOut, Mail } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bell, LogOut, Mail, ExternalLink, RefreshCw } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from 'dayjs';
 import { useRouter } from "next/navigation";
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
-  channel_id?: string;
-  channel_title?: string;
+  id: string;
+  provider: string;
   username?: string;
+  email?: string;
+  profile_picture_url?: string;
   access_token?: string;
   refresh_token?: string;
-  expires_at?: string;
-  token_expiry?: string;
-  profile_picture_url?: string;
+  token_expiry?: string; // ISO string
+  // YouTube specific
+  channel_id?: string;
+  channel_title?: string;
+  subscriber_count?: number;
+  video_count?: number;
+  // Instagram specific
+  instagram_user_id?: string; // Actual global IG User ID
+  app_scoped_user_id?: string; // IGBA ID or Professional Account ID for the app
+  name_of_account?: string; // User's full name on IG
+  account_type?: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
   followers_count?: number;
-  media_count?: number;
-  instagram_user_id?: string;
-  name_of_account?: string;
-  account_type?: string;
   follows_count?: number;
-  app_scoped_user_id?: string;
+  media_count?: number;
 }
 
 interface CreatorProfile {
@@ -70,6 +78,9 @@ export default function SettingsPage({
   const [pageLoading, setPageLoading] = useState(true);
   const supabase = createClient();
   const router = useRouter();
+  const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
+  const [instagramAccount, setInstagramAccount] = useState<SocialAccount | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -312,6 +323,82 @@ export default function SettingsPage({
     }
   };
 
+  const handleInstagramConnect = () => {
+    const instagramClientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
+    const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+    if (!instagramClientId) {
+      setError("Instagram Client ID is not configured. Please contact support.");
+      return;
+    }
+    if (!appBaseUrl) {
+      setError("Application Base URL is not configured. Please contact support.");
+      return;
+    }
+
+    const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
+    const scopes = [
+      'instagram_business_basic',
+      'instagram_business_manage_insights',
+      'instagram_business_content_publish', // If you need to publish content
+      // Add other scopes as needed, e.g., for messages or comments if you use those features
+      // 'instagram_manage_comments',
+      // 'instagram_manage_messages',
+    ].join(',');
+
+    // Parameters like force_authentication=1 and enable_fb_login=0 can be useful
+    // force_authentication=1: Ensures the user actively logs into Instagram.
+    // enable_fb_login=0: Can be used if you want to guide users to a pure Instagram login, not via Facebook.
+    const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
+
+    window.location.href = authUrl;
+  };
+
+  const handleInstagramDisconnect = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+      // Option 1: Just remove from your DB
+      const { error: updateError } = await supabase
+        .from('creator_profiles')
+        .update({ instagram_account: null, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+      setInstagramAccount(null);
+      setSuccess("Instagram account disconnected successfully.");
+
+      // Option 2: Call Instagram's deauthorize endpoint (if you have one and if needed by policy)
+      // await fetch('/api/instagram/deauthorize', { method: 'POST' }); 
+      // This would typically be done via a backend call if it involves client secrets or app tokens.
+      // For a simple disconnect, just clearing DB might be enough, but check IG platform terms.
+
+    } catch (err: any) {
+      setError(err.message || "Failed to disconnect Instagram account.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Add similar refresh logic for Instagram if token is about to expire
+  // This is just a placeholder, actual refresh should happen server-side or via a secure backend call
+  const checkAndRefreshInstagramToken = useCallback(async () => {
+    if (!instagramAccount || !instagramAccount.access_token || !instagramAccount.token_expiry) {
+      return;
+    }
+
+    if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, 'day'))) {
+      setSuccess("Instagram token is nearing expiry. Ideally, this would trigger a server-side refresh or prompt for re-authentication.");
+      // In a real app, you might call a backend endpoint that securely refreshes the token.
+      // e.g., await fetch('/api/instagram/refresh-token', { method: 'POST' });
+      // For now, this is a client-side notice. The cron job will handle the actual refresh.
+    }
+  }, [instagramAccount]);
+
+  useEffect(() => {
+    checkAndRefreshInstagramToken();
+  }, [checkAndRefreshInstagramToken]);
+
   if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -410,20 +497,19 @@ export default function SettingsPage({
               {(profile as CreatorProfile)?.instagram_account ? (
                 <Button
                   variant="outline"
-                  onClick={() => disconnectAccount("instagram")}
+                  onClick={handleInstagramDisconnect}
+                  disabled={isLoading}
                 >
+                  {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
                   Disconnect
                 </Button>
               ) : (
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    const CLIENT_ID = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
-                    const REDIRECT_URI = `${window.location.origin}/api/instagram/callback`;
-                    const SCOPE = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights';
-                    window.location.href = `https://api.instagram.com/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code`;
-                  }}
+                  onClick={handleInstagramConnect}
+                  disabled={isLoading}
                 >
+                  {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
                   Connect Instagram
                 </Button>
               )}
