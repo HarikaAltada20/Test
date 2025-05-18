@@ -17,13 +17,25 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { Bell, LogOut, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
+import dayjs from 'dayjs';
+import { useRouter } from "next/navigation";
 
 interface SocialAccount {
   channel_id?: string;
   channel_title?: string;
+  username?: string;
   access_token?: string;
   refresh_token?: string;
   expires_at?: string;
+  token_expiry?: string;
+  profile_picture_url?: string;
+  followers_count?: number;
+  media_count?: number;
+  instagram_user_id?: string;
+  name_of_account?: string;
+  account_type?: string;
+  follows_count?: number;
+  app_scoped_user_id?: string;
 }
 
 interface CreatorProfile {
@@ -57,6 +69,7 @@ export default function SettingsPage({
   );
   const [pageLoading, setPageLoading] = useState(true);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     if (!user) {
@@ -85,6 +98,15 @@ export default function SettingsPage({
 
           if (error) throw error;
           setProfile(data);
+
+          // Check and refresh Instagram token
+          if (data.instagram_account?.access_token && data.instagram_account?.token_expiry) {
+            const shouldRefresh = dayjs().isAfter(dayjs(data.instagram_account.token_expiry).subtract(7, 'days')); // Refresh 7 days before expiry
+            if (shouldRefresh) {
+              console.log('Attempting to refresh Instagram token');
+              await refreshInstagramToken(data.instagram_account.access_token, user!.id, data);
+            }
+          }
         } else if (userData.user_type === "advertiser") {
           const { data, error } = await supabase
             .from("advertiser_profiles")
@@ -163,15 +185,14 @@ export default function SettingsPage({
       setProfile((prev) =>
         prev
           ? {
-              ...prev,
-              [`${platform}_account`]: null,
-            }
+            ...prev,
+            [`${platform}_account`]: null,
+          }
           : null
       );
 
       setSuccess(
-        `${
-          platform.charAt(0).toUpperCase() + platform.slice(1)
+        `${platform.charAt(0).toUpperCase() + platform.slice(1)
         } account disconnected`
       );
     } catch (err: any) {
@@ -251,6 +272,46 @@ export default function SettingsPage({
     }
   };
 
+  const refreshInstagramToken = async (currentToken: string, userId: string, currentProfile: CreatorProfile) => {
+    try {
+      const refreshRes = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`);
+      const newData = await refreshRes.json();
+
+      if (!refreshRes.ok || newData.error) {
+        throw new Error(newData.error?.message || 'Failed to refresh Instagram token');
+      }
+
+      const updatedInstagramAccount = {
+        ...(currentProfile.instagram_account || {}),
+        access_token: newData.access_token,
+        token_expiry: dayjs().add(59, 'days').toISOString(), // Refreshed token is also valid for 60 days
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: updateError } = await supabase
+        .from('creator_profiles')
+        .update({
+          instagram_account: updatedInstagramAccount,
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setProfile(prev => prev ? { ...prev, instagram_account: updatedInstagramAccount as SocialAccount } : null);
+      console.log('Instagram token refreshed successfully');
+      // Optionally show a success message to the user, though this can be silent
+
+    } catch (err: any) {
+      console.error('Error refreshing Instagram token:', err);
+      // Handle token refresh error, e.g., notify user, attempt disconnect, or ask to re-authenticate
+      // For now, we'll log the error. Depending on the error type (e.g. token revoked), 
+      // you might want to nullify the instagram_account or prompt for re-login.
+      setError(`Failed to refresh Instagram token: ${err.message}. Please try reconnecting your account.`);
+    }
+  };
+
   if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -296,10 +357,9 @@ export default function SettingsPage({
                   <p className="font-medium">YouTube</p>
                   <p className="text-sm text-muted-foreground">
                     {(profile as CreatorProfile)?.youtube_account
-                      ? `Connected as ${
-                          (profile as CreatorProfile).youtube_account
-                            ?.channel_title
-                        }`
+                      ? `Connected as ${(profile as CreatorProfile).youtube_account
+                        ?.channel_title
+                      }`
                       : "Not connected"}
                   </p>
                   {!(profile as CreatorProfile)?.youtube_account && (
@@ -340,10 +400,9 @@ export default function SettingsPage({
                   <p className="font-medium">Instagram</p>
                   <p className="text-sm text-muted-foreground">
                     {(profile as CreatorProfile)?.instagram_account
-                      ? `Connected as ${
-                          (profile as CreatorProfile).instagram_account
-                            ?.channel_title
-                        }`
+                      ? `Connected as ${(profile as CreatorProfile).instagram_account
+                        ?.username
+                      }`
                       : "Not connected"}
                   </p>
                 </div>
@@ -356,8 +415,16 @@ export default function SettingsPage({
                   Disconnect
                 </Button>
               ) : (
-                <Button variant="outline" disabled>
-                  Coming Soon
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const CLIENT_ID = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
+                    const REDIRECT_URI = `${window.location.origin}/api/instagram/callback`;
+                    const SCOPE = 'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments,instagram_business_content_publish,instagram_business_manage_insights';
+                    window.location.href = `https://api.instagram.com/oauth/authorize?client_id=${CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SCOPE}&response_type=code`;
+                  }}
+                >
+                  Connect Instagram
                 </Button>
               )}
             </div>

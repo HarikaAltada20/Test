@@ -156,6 +156,7 @@ You must show the Game Of Creators App Store listing in your video`);
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>(
     {}
   );
+  const [platform, setPlatform] = useState<string>("youtube"); // Default platform
 
   // State for fetched subscription plans
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -491,9 +492,8 @@ You must show the Game Of Creators App Store listing in your video`);
             // Don't return here, let the form continue submitting
           } else {
             // Use original file name in the path for better organization
-            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${
-              thumbnail.name
-            }`;
+            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name
+              }`;
             const { data: uploadData, error: uploadError } =
               await supabase.storage
                 .from("contest-assets")
@@ -548,9 +548,8 @@ You must show the Game Of Creators App Store listing in your video`);
             for (const [name, file] of Object.entries(resourceFiles)) {
               try {
                 // Use original file name in the path
-                const fileName = `contest_resources/${userId}_${Date.now()}_${
-                  file.name
-                }`;
+                const fileName = `contest_resources/${userId}_${Date.now()}_${file.name
+                  }`;
 
                 const uploadPromise = supabase.storage
                   .from("contest-assets")
@@ -664,7 +663,7 @@ You must show the Game Of Creators App Store listing in your video`);
         title,
         thumbnail_url: thumbnailUrl,
         category,
-        platform: "youtube", // Default platform
+        platform: platform, // Use the state variable 'platform'
         brief,
         prizes: prizesArray, // Prize amounts in dollars
         total_prize: prizesArray.reduce((sum, prize) => sum + prize.amount, 0), // Store total in dollars
@@ -740,8 +739,7 @@ You must show the Game Of Creators App Store listing in your video`);
         );
       } else {
         setError(
-          `Failed to ${isDraft ? "save draft" : "create contest"}: ${
-            err.message || "Unknown error"
+          `Failed to ${isDraft ? "save draft" : "create contest"}: ${err.message || "Unknown error"
           }`
         );
       }
@@ -843,8 +841,7 @@ You must show the Game Of Creators App Store listing in your video`);
       // Show validation errors only after a complete value is entered
       if (numValue < MIN_PRIZE_PER_WINNER) {
         setValidationError(
-          `Prize amount for Winner ${
-            index + 1
+          `Prize amount for Winner ${index + 1
           } cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`
         );
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
@@ -885,8 +882,7 @@ You must show the Game Of Creators App Store listing in your video`);
 
     if (count > planFeatures.maxWinnersPerContest) {
       setValidationError(
-        `Your ${userPlan || "current"} plan is limited to ${
-          planFeatures.maxWinnersPerContest
+        `Your ${userPlan || "current"} plan is limited to ${planFeatures.maxWinnersPerContest
         } winners per contest. Upgrade your plan for more.`
       );
       return;
@@ -903,7 +899,7 @@ You must show the Game Of Creators App Store listing in your video`);
         const position = i + 1;
         newAmounts.push(
           DEFAULT_PRIZE_ALLOCATIONS[
-            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+          position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
           ] || MIN_PRIZE_PER_WINNER
         );
       }
@@ -1169,13 +1165,16 @@ You must show the Game Of Creators App Store listing in your video`);
 
   // Helper function to populate form with draft data
   const populateDraftData = (draft: any) => {
+    setTitle(draft.title || "");
+    setCategory(draft.category || "technology");
+    setPlatform(draft.platform || "youtube"); // Load platform, default if not present
+    // Thumbnail: If draft.thumbnail_url exists, set it to thumbnailPreview.
+    // Do not set the 'thumbnail' File object from a URL.
     setDraftId(draft.id);
 
     console.log("Loading draft data:", draft); // For debugging
 
     // Pre-fill form fields with draft data
-    if (draft.title) setTitle(draft.title);
-    if (draft.category) setCategory(draft.category);
     if (draft.brief) setBrief(draft.brief);
     if (draft.rules?.list) setRules(draft.rules.list.join("\n"));
 
@@ -1338,28 +1337,23 @@ You must show the Game Of Creators App Store listing in your video`);
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
-        daysUntilStart !== 1 ? "s" : ""
-      }`;
-      if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${
-          hoursUntilStart !== 1 ? "s" : ""
+      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
         }`;
+      if (hoursUntilStart > 0)
+        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+          }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
-        hoursUntilStart !== 1 ? "s" : ""
-      }`;
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${
-      durationDays !== 1 ? "s" : ""
-    }${
-      durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
+      }${durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-    }`;
+      }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -1583,21 +1577,20 @@ You must show the Game Of Creators App Store listing in your video`);
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-4">
                   <div
-                    className={`w-14 h-14 rounded-full flex items-center justify-center ${
-                      userPlan === "a28ef5c0-3391-44a1-a9ef-f9b999ff0198"
-                        ? "bg-gray-300"
-                        : userPlan === "0477016e-7751-4049-bc57-19012004a05b"
+                    className={`w-14 h-14 rounded-full flex items-center justify-center ${userPlan === "a28ef5c0-3391-44a1-a9ef-f9b999ff0198"
+                      ? "bg-gray-300"
+                      : userPlan === "0477016e-7751-4049-bc57-19012004a05b"
                         ? "bg-orange-500"
                         : userPlan === "4107627f-4ccb-4f1e-ad1a-fdc723e6a5ef"
-                        ? "bg-gray-300"
-                        : userPlan === "0f094792-1ef6-4334-b169-f98d21ca0fbd"
-                        ? "bg-yellow-400"
-                        : userPlan === "f7630717-5578-4988-922f-255ca4c985c4"
-                        ? "bg-indigo-400"
-                        : userPlan === "79a96d6b-ba5c-453c-bbca-49937ba05ad6"
-                        ? "bg-blue-300"
-                        : "bg-gray-300"
-                    }`}
+                          ? "bg-gray-300"
+                          : userPlan === "0f094792-1ef6-4334-b169-f98d21ca0fbd"
+                            ? "bg-yellow-400"
+                            : userPlan === "f7630717-5578-4988-922f-255ca4c985c4"
+                              ? "bg-indigo-400"
+                              : userPlan === "79a96d6b-ba5c-453c-bbca-49937ba05ad6"
+                                ? "bg-blue-300"
+                                : "bg-gray-300"
+                      }`}
                   >
                     <Trophy className="h-6 w-6 text-white" />
                   </div>
@@ -1944,11 +1937,10 @@ You must show the Game Of Creators App Store listing in your video`);
             <div className={`relative z-10 flex flex-col items-center gap-1`}>
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-full 
-                ${
-                  step === "basics"
+                ${step === "basics"
                     ? "bg-rose-600 text-white"
                     : "bg-rose-600 text-white"
-                }`}
+                  }`}
               >
                 <span className="text-sm font-medium">1</span>
               </div>
@@ -1958,11 +1950,10 @@ You must show the Game Of Creators App Store listing in your video`);
             <div className={`relative z-10 flex flex-col items-center gap-1`}>
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-full 
-                ${
-                  step === "brief" || step === "resources" || step === "prize"
+                ${step === "brief" || step === "resources" || step === "prize"
                     ? "bg-rose-600 text-white"
                     : "bg-gray-300 text-gray-700"
-                }`}
+                  }`}
               >
                 <span className="text-sm font-medium">2</span>
               </div>
@@ -1972,11 +1963,10 @@ You must show the Game Of Creators App Store listing in your video`);
             <div className={`relative z-10 flex flex-col items-center gap-1`}>
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-full 
-                ${
-                  step === "resources" || step === "prize"
+                ${step === "resources" || step === "prize"
                     ? "bg-rose-600 text-white"
                     : "bg-gray-300 text-gray-700"
-                }`}
+                  }`}
               >
                 <span className="text-sm font-medium">3</span>
               </div>
@@ -1986,11 +1976,10 @@ You must show the Game Of Creators App Store listing in your video`);
             <div className={`relative z-10 flex flex-col items-center gap-1`}>
               <div
                 className={`flex h-10 w-10 items-center justify-center rounded-full 
-                ${
-                  step === "prize"
+                ${step === "prize"
                     ? "bg-rose-600 text-white"
                     : "bg-gray-300 text-gray-700"
-                }`}
+                  }`}
               >
                 <span className="text-sm font-medium">4</span>
               </div>
@@ -2044,9 +2033,29 @@ You must show the Game Of Creators App Store listing in your video`);
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Game Of Creators! Get Paid to Create"
+                  placeholder="e.g., Create a Viral TikTok for Our New App"
+                  maxLength={100}
                   required
                 />
+                <p className="text-xs text-muted-foreground text-right">
+                  {title.length} / 100
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="platform">Platform</Label>
+                <Select value={platform} onValueChange={setPlatform}>
+                  <SelectTrigger id="platform">
+                    <SelectValue placeholder="Select contest platform" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="youtube">YouTube</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Choose the platform where creators will submit content.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2099,8 +2108,8 @@ You must show the Game Of Creators App Store listing in your video`);
                           {thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
-                              )}MB`
+                              2
+                            )}MB`
                             : ""}
                         </p>
                         <Button
@@ -2150,8 +2159,8 @@ You must show the Game Of Creators App Store listing in your video`);
                   disabled={isLoading}
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <span>{uploadProgress}</span>
                       <Progress
@@ -2288,8 +2297,8 @@ You must show the Game Of Creators App Store listing in your video`);
                   disabled={isLoading}
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <span>{uploadProgress}</span>
                       <Progress
@@ -2391,76 +2400,76 @@ You must show the Game Of Creators App Store listing in your video`);
                               {resourceFilePreview.startsWith(
                                 "file-type:application/pdf"
                               ) && (
-                                <div className="flex flex-col items-center">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-16 w-16 text-red-500"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M8.267 14.68c-.184 0-.308.018-.372.036v1.178c.076.018.171.023.302.023.479 0 .774-.242.774-.651 0-.366-.254-.586-.704-.586zm3.487.012c-.2 0-.33.018-.407.036v2.61c.077.018.201.018.313.018.817.006 1.349-.444 1.349-1.396.006-.83-.479-1.268-1.255-1.268z" />
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM9.498 16.19c-.309.29-.765.42-1.296.42a2.23 2.23 0 0 1-.308-.018v1.426H7v-3.936A7.558 7.558 0 0 1 8.219 14c.557 0 .953.106 1.22.319.254.202.426.533.426.923-.001.392-.131.723-.367.948zm3.807 1.355c-.42.349-1.059.515-1.84.515-.468 0-.799-.03-1.024-.06v-3.917A7.947 7.947 0 0 1 11.66 14c.757 0 1.249.136 1.633.426.415.308.675.799.675 1.504 0 .763-.279 1.29-.763 1.615zM17 14.77h-1.532v.911H16.9v.734h-1.432v1.604h-.906V14.03H17v.74zM14 9h-1V4l5 5h-4z" />
-                                  </svg>
-                                  <span className="mt-2 font-medium">
-                                    PDF Document
-                                  </span>
-                                </div>
-                              )}
+                                  <div className="flex flex-col items-center">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-16 w-16 text-red-500"
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M8.267 14.68c-.184 0-.308.018-.372.036v1.178c.076.018.171.023.302.023.479 0 .774-.242.774-.651 0-.366-.254-.586-.704-.586zm3.487.012c-.2 0-.33.018-.407.036v2.61c.077.018.201.018.313.018.817.006 1.349-.444 1.349-1.396.006-.83-.479-1.268-1.255-1.268z" />
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM9.498 16.19c-.309.29-.765.42-1.296.42a2.23 2.23 0 0 1-.308-.018v1.426H7v-3.936A7.558 7.558 0 0 1 8.219 14c.557 0 .953.106 1.22.319.254.202.426.533.426.923-.001.392-.131.723-.367.948zm3.807 1.355c-.42.349-1.059.515-1.84.515-.468 0-.799-.03-1.024-.06v-3.917A7.947 7.947 0 0 1 11.66 14c.757 0 1.249.136 1.633.426.415.308.675.799.675 1.504 0 .763-.279 1.29-.763 1.615zM17 14.77h-1.532v.911H16.9v.734h-1.432v1.604h-.906V14.03H17v.74zM14 9h-1V4l5 5h-4z" />
+                                    </svg>
+                                    <span className="mt-2 font-medium">
+                                      PDF Document
+                                    </span>
+                                  </div>
+                                )}
                               {/* Rest of the file type renderers */}
                               {resourceFilePreview.startsWith(
                                 "file-type:video/"
                               ) && (
-                                <div className="flex flex-col items-center">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-16 w-16 text-blue-500"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
-                                    <path d="m9 17 8-5-8-5z" />
-                                  </svg>
-                                  <span className="mt-2 font-medium">
-                                    Video File
-                                  </span>
-                                </div>
-                              )}
+                                  <div className="flex flex-col items-center">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-16 w-16 text-blue-500"
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
+                                      <path d="m9 17 8-5-8-5z" />
+                                    </svg>
+                                    <span className="mt-2 font-medium">
+                                      Video File
+                                    </span>
+                                  </div>
+                                )}
                               {resourceFilePreview.startsWith(
                                 "file-type:audio/"
                               ) && (
-                                <div className="flex flex-col items-center">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-16 w-16 text-purple-500"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M19.952 1.651a.991.991 0 0 0-1.164.986v14.522c-.87-.703-2.354-1.062-4.137-1.062-1.636 0-3.52.33-4.7 1.505S9 20.147 9 21.428v.893C9 22.705 9.322 23 9.731 23c.4 0 .726-.286.735-.678v-.009l.007-.407c.001-.921.396-1.762 1.465-2.506.957-.662 2.492-1.046 4.313-1.046s3.356.384 4.313 1.046c1.069.744 1.464 1.585 1.465 2.506l.007.407v.009c.009.392.335.678.735.678.409 0 .731-.295.731-.679v-.893c0-1.281-.297-2.45-1.478-3.625S17.172 16.1 15.532 16.1c-.51 0-1.01.036-1.492.103V5.256l5.227-2.783a.996.996 0 0 0 .571-1.173 1.01 1.01 0 0 0-.876-.749zM8.364 6.4a.771.771 0 0 0-.388 0c-.612.13-1.21.332-1.781.6-1.307.619-2.398 1.525-3.182 2.643a1.773 1.773 0 0 0-.3.507c-.435.941-.671 1.969-.671 3.021 0 1.051.236 2.078.671 3.018.141.299.215.421.3.507.784 1.118 1.875 2.026 3.182 2.644.571.271 1.169.473 1.781.603a.771.771 0 0 0 .388 0c.612-.13 1.21-.332 1.781-.603 1.307-.618 2.398-1.526 3.182-2.644.084-.086.158-.208.3-.507.436-.94.671-1.967.671-3.018 0-1.052-.235-2.08-.671-3.021a1.772 1.772 0 0 0-.3-.507c-.784-1.118-1.875-2.024-3.182-2.643-.571-.268-1.169-.47-1.781-.6zm.134 1.728c.419.089.823.219 1.207.39a7.216 7.216 0 0 1 2.12 1.67c.823 1.003 1.305 2.159 1.347 3.35.055 1.522-.464 3.03-1.534 4.303a7.222 7.222 0 0 1-2.327 1.953 5.683 5.683 0 0 1-.813.329 5.686 5.686 0 0 1-.813-.329 7.222 7.222 0 0 1-2.327-1.953c-1.07-1.273-1.589-2.781-1.534-4.303.042-1.191.524-2.347 1.347-3.35a7.217 7.217 0 0 1 2.119-1.67c.384-.171.789-.301 1.208-.39z" />
-                                  </svg>
-                                  <span className="mt-2 font-medium">
-                                    Audio File
-                                  </span>
-                                </div>
-                              )}
+                                  <div className="flex flex-col items-center">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-16 w-16 text-purple-500"
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M19.952 1.651a.991.991 0 0 0-1.164.986v14.522c-.87-.703-2.354-1.062-4.137-1.062-1.636 0-3.52.33-4.7 1.505S9 20.147 9 21.428v.893C9 22.705 9.322 23 9.731 23c.4 0 .726-.286.735-.678v-.009l.007-.407c.001-.921.396-1.762 1.465-2.506.957-.662 2.492-1.046 4.313-1.046s3.356.384 4.313 1.046c1.069.744 1.464 1.585 1.465 2.506l.007.407v.009c.009.392.335.678.735.678.409 0 .731-.295.731-.679v-.893c0-1.281-.297-2.45-1.478-3.625S17.172 16.1 15.532 16.1c-.51 0-1.01.036-1.492.103V5.256l5.227-2.783a.996.996 0 0 0 .571-1.173 1.01 1.01 0 0 0-.876-.749zM8.364 6.4a.771.771 0 0 0-.388 0c-.612.13-1.21.332-1.781.6-1.307.619-2.398 1.525-3.182 2.643a1.773 1.773 0 0 0-.3.507c-.435.941-.671 1.969-.671 3.021 0 1.051.236 2.078.671 3.018.141.299.215.421.3.507.784 1.118 1.875 2.026 3.182 2.644.571.271 1.169.473 1.781.603a.771.771 0 0 0 .388 0c.612-.13 1.21-.332 1.781-.603 1.307-.618 2.398-1.526 3.182-2.644.084-.086.158-.208.3-.507.436-.94.671-1.967.671-3.018 0-1.052-.235-2.08-.671-3.021a1.772 1.772 0 0 0-.3-.507c-.784-1.118-1.875-2.024-3.182-2.643-.571-.268-1.169-.47-1.781-.6zm.134 1.728c.419.089.823.219 1.207.39a7.216 7.216 0 0 1 2.12 1.67c.823 1.003 1.305 2.159 1.347 3.35.055 1.522-.464 3.03-1.534 4.303a7.222 7.222 0 0 1-2.327 1.953 5.683 5.683 0 0 1-.813.329 5.686 5.686 0 0 1-.813-.329 7.222 7.222 0 0 1-2.327-1.953c-1.07-1.273-1.589-2.781-1.534-4.303.042-1.191.524-2.347 1.347-3.35a7.217 7.217 0 0 1 2.119-1.67c.384-.171.789-.301 1.208-.39z" />
+                                    </svg>
+                                    <span className="mt-2 font-medium">
+                                      Audio File
+                                    </span>
+                                  </div>
+                                )}
                               {/* Office document icon */}
                               {resourceFilePreview.startsWith(
                                 "file-type:application/vnd.openxmlformats-officedocument."
                               ) && (
-                                <div className="flex flex-col items-center">
-                                  <svg
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    className="h-16 w-16 text-green-500"
-                                    viewBox="0 0 24 24"
-                                    fill="currentColor"
-                                  >
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-                                    <path d="M14 14H8v-2h6v2zm0 3H8v-2h6v2z" />
-                                  </svg>
-                                  <span className="mt-2 font-medium">
-                                    Office Document
-                                  </span>
-                                </div>
-                              )}
+                                  <div className="flex flex-col items-center">
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-16 w-16 text-green-500"
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                    >
+                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
+                                      <path d="M14 14H8v-2h6v2zm0 3H8v-2h6v2z" />
+                                    </svg>
+                                    <span className="mt-2 font-medium">
+                                      Office Document
+                                    </span>
+                                  </div>
+                                )}
                               {/* Default file icon for other file types */}
                               {!resourceFilePreview.startsWith(
                                 "file-type:application/pdf"
@@ -2645,8 +2654,8 @@ You must show the Game Of Creators App Store listing in your video`);
                   disabled={isLoading}
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <span>{uploadProgress}</span>
                       <Progress
@@ -2701,8 +2710,8 @@ You must show the Game Of Creators App Store listing in your video`);
                   disabled={isLoading}
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <span>{uploadProgress}</span>
                       <Progress
@@ -2727,8 +2736,8 @@ You must show the Game Of Creators App Store listing in your video`);
                   className="bg-rose-600 hover:bg-rose-700 text-white"
                 >
                   {isLoading &&
-                  uploadProgress &&
-                  !uploadProgress.includes("draft") ? (
+                    uploadProgress &&
+                    !uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
                       <span>{uploadProgress}</span>
                       <Progress
@@ -2736,16 +2745,16 @@ You must show the Game Of Creators App Store listing in your video`);
                           uploadProgress.includes("Preparing")
                             ? 15
                             : uploadProgress.includes("Validating")
-                            ? 25
-                            : uploadProgress.includes("1/2")
-                            ? 40
-                            : uploadProgress.includes("2/2")
-                            ? 60
-                            : uploadProgress.includes("Creating")
-                            ? 80
-                            : uploadProgress.includes("Redirecting")
-                            ? 100
-                            : 10
+                              ? 25
+                              : uploadProgress.includes("1/2")
+                                ? 40
+                                : uploadProgress.includes("2/2")
+                                  ? 60
+                                  : uploadProgress.includes("Creating")
+                                    ? 80
+                                    : uploadProgress.includes("Redirecting")
+                                      ? 100
+                                      : 10
                         }
                         className="w-10 h-2"
                       />

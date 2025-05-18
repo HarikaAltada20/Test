@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { use } from "react";
+
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
+import dayjs from 'dayjs';
 
 interface YouTubeVideo {
   id: {
@@ -53,6 +54,17 @@ interface YouTubeVideo {
   };
 }
 
+interface InstagramReel {
+  id: string; // Media ID
+  media_type: 'REEL' | 'VIDEO'; // Should be REEL for our purpose, VIDEO for IGTV, regular videos
+  media_url: string;
+  thumbnail_url?: string; // Not always present for REELS, might need separate call if required for all
+  caption?: string;
+  timestamp: string;
+  permalink: string;
+  // Potentially add insights here if fetched early, or keep them separate until submission
+}
+
 // Helper function to extract YouTube ID (client-side only)
 function extractYoutubeId(url: string) {
   const regex =
@@ -73,18 +85,39 @@ export default function SubmitContentPage({
   const [youtubeAccount, setYoutubeAccount] = useState<any>(null);
   const [userVideos, setUserVideos] = useState<YouTubeVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+
+  // Instagram specific state
+  const [instagramAccount, setInstagramAccount] = useState<any>(null); // Holds creator_profiles.instagram_account
+  const [userReels, setUserReels] = useState<InstagramReel[]>([]);
+  const [selectedReel, setSelectedReel] = useState<InstagramReel | null>(null);
+  const [isLoadingReels, setIsLoadingReels] = useState(false);
+  const [instagramLink, setInstagramLink] = useState(""); // If we want to allow manual IG link input
+
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isTokenExpired, setIsTokenExpired] = useState(false);
+  const [isInstagramTokenExpired, setIsInstagramTokenExpired] = useState(false);
+
   const router = useRouter();
   const supabase = createClient();
   const [isFetchingVideo, setIsFetchingVideo] = useState(false);
   const [videoPreview, setVideoPreview] = useState<YouTubeVideo | null>(null);
+  const [submissionType, setSubmissionType] = useState<'youtube' | 'instagram' | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [currentInstagramBusinessAccountID, setCurrentInstagramBusinessAccountID] = useState<string | null>(null);
+
+  const [contestPlatform, setContestPlatform] = useState<string | null>(null);
+  const [isLoadingContest, setIsLoadingContest] = useState(true);
+  const [instagramMediaPreview, setInstagramMediaPreview] = useState<InstagramReel | null>(null);
+  const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] = useState(false);
 
   // Check if user has connected YouTube account
   useEffect(() => {
     async function checkYouTubeConnection() {
-      if (!user) return;
+      if (!user || !supabase || contestPlatform !== 'youtube') {
+        if (contestPlatform === 'youtube') setYoutubeAccount(null); // Clear if it was youtube but now no user
+        return;
+      }
 
       try {
         const { data: profile } = await supabase
@@ -113,10 +146,88 @@ export default function SubmitContentPage({
     }
 
     checkYouTubeConnection();
-  }, [user, supabase]);
+  }, [user, supabase, contestPlatform]);
+
+  // Check if user has connected Instagram account
+  useEffect(() => {
+    async function checkInstagramConnection() {
+      if (!user || !supabase || contestPlatform !== 'instagram') {
+        if (contestPlatform === 'instagram') {
+          setInstagramAccount(null); // Clear if it was instagram but now no user
+          setCurrentInstagramBusinessAccountID(null);
+        }
+        return;
+      }
+
+      try {
+        const { data: profileFromDB } = await supabase
+          .from("creator_profiles")
+          .select("instagram_account")
+          .eq("id", user.id)
+          .single();
+
+        if (!profileFromDB || !profileFromDB.instagram_account) {
+          setInstagramAccount(null);
+          setCurrentInstagramBusinessAccountID(null); // Also clear this if no account
+          setIsLoadingReels(false);
+          return;
+        }
+
+        const igAccount = profileFromDB.instagram_account as any;
+        setInstagramAccount(igAccount);
+        setCurrentInstagramBusinessAccountID(null); // Reset before attempting to set
+
+        if (igAccount?.access_token) {
+          if (igAccount.token_expiry && dayjs().isAfter(dayjs(igAccount.token_expiry))) {
+            setIsInstagramTokenExpired(true);
+            setError(
+              "Your Instagram connection has expired. Please re-connect your Instagram account in settings."
+            );
+            setIsLoadingReels(false);
+          } else {
+            setIsInstagramTokenExpired(false);
+            // If it's a Business or Creator account, the app_scoped_user_id IS the IGBA ID needed.
+            if ((igAccount.account_type === 'BUSINESS' || igAccount.account_type === 'MEDIA_CREATOR') && igAccount.app_scoped_user_id) {
+              setCurrentInstagramBusinessAccountID(igAccount.app_scoped_user_id);
+              // The useEffect listening to currentInstagramBusinessAccountID will now trigger fetchInstagramReels
+              setIsLoadingReels(true); // Set loading true, fetchInstagramReels will set it false in its finally block
+            } else if (!igAccount.app_scoped_user_id && (igAccount.account_type === 'BUSINESS' || igAccount.account_type === 'MEDIA_CREATOR')) {
+              setError("Connected Instagram account is Business/Creator but missing the required ID (app_scoped_user_id). Please try reconnecting the account.");
+              setIsLoadingReels(false);
+            } else {
+              setError("Instagram account must be a Business or Creator account to fetch reels. Current type: " + (igAccount.account_type || 'Unknown'));
+              setIsLoadingReels(false);
+            }
+          }
+        } else {
+          setInstagramAccount(null);
+          setCurrentInstagramBusinessAccountID(null);
+          setIsLoadingReels(false);
+        }
+      } catch (err: any) {
+        console.error("Error in checkInstagramConnection:", err);
+        setError("Failed to process Instagram account information.");
+        setCurrentInstagramBusinessAccountID(null);
+        setIsLoadingReels(false);
+      }
+    }
+
+    checkInstagramConnection();
+  }, [user, supabase, contestPlatform]);
+
+  // New useEffect to fetch reels once currentInstagramBusinessAccountID is set
+  useEffect(() => {
+    if (contestPlatform === 'instagram' && currentInstagramBusinessAccountID && instagramAccount?.access_token && !isInstagramTokenExpired) {
+      // Ensure it's a business/creator account before fetching reels with IGBA ID
+      if (instagramAccount.account_type === 'BUSINESS' || instagramAccount.account_type === 'MEDIA_CREATOR') {
+        fetchInstagramReels(instagramAccount.access_token, currentInstagramBusinessAccountID);
+      }
+    }
+  }, [currentInstagramBusinessAccountID, instagramAccount, isInstagramTokenExpired, contestPlatform]);
 
   // Fetch videos using the server API endpoint
   const fetchYouTubeVideos = async () => {
+    if (contestPlatform !== 'youtube') return;
     setIsLoadingVideos(true);
     setError(null);
 
@@ -151,7 +262,7 @@ export default function SubmitContentPage({
   const handleReconnectYouTube = () => {
     router.push(
       "/api/youtube/auth?returnTo=" +
-        encodeURIComponent(`/dashboard/opportunities/${contestId}/submit`)
+      encodeURIComponent(`/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ''}`) // pass platform back
     );
   };
 
@@ -187,7 +298,11 @@ export default function SubmitContentPage({
 
   useEffect(() => {
     async function fetchData() {
-      if (!user) return;
+      if (!user) {
+        setIsLoadingContest(false);
+        return;
+      }
+      setIsLoadingContest(true);
 
       // First check if user has already submitted
       const { data: existingSubmission } = await supabase
@@ -206,18 +321,31 @@ export default function SubmitContentPage({
       // Get contest details
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
-        .select("*")
+        .select("platform") // Only select platform, or '*' if other contest details are needed here
         .eq("id", contestId)
         .single();
 
       if (contestError || !contestData) {
         console.error("Error fetching contest:", contestError);
-        redirect("/dashboard/opportunities");
+        setError("Failed to load contest details. The contest might not exist or an error occurred.");
+        setContestPlatform(null);
+        setIsLoadingContest(false);
+        // Optionally redirect, or let the UI handle the error state
+        // redirect("/dashboard/opportunities"); 
+        return;
       }
+
+      if (contestData.platform) {
+        setContestPlatform(contestData.platform.toLowerCase());
+      } else {
+        setError("This contest does not have a specified platform (e.g., YouTube or Instagram).");
+        setContestPlatform(null);
+      }
+      setIsLoadingContest(false);
     }
 
     fetchData();
-  }, [contestId, user, router, supabase]);
+  }, [contestId, user, router, supabase]); // Removed redirect from dependencies as it's called within
 
   const handleFetchVideo = async () => {
     if (!contentLink) {
@@ -253,6 +381,8 @@ export default function SubmitContentPage({
       if (data.valid && data.videoInfo) {
         setVideoPreview(data.videoInfo);
         setSelectedVideo(data.videoInfo);
+        setSelectedReel(null);
+        setSubmissionType('youtube');
       } else {
         throw new Error("This video does not belong to your YouTube channel");
       }
@@ -266,10 +396,62 @@ export default function SubmitContentPage({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFetchInstagramByLink = async () => {
+    if (!instagramLink) {
+      setError("Please enter an Instagram media URL.");
+      return;
+    }
+    if (!instagramAccount?.access_token || !instagramAccount?.app_scoped_user_id) {
+      setError("Instagram account not connected, token missing, or user ID missing.");
+      return;
+    }
+
+    setIsFetchingInstagramMedia(true);
+    setError(null);
+    setInstagramMediaPreview(null);
+    setSelectedReel(null); // Clear selection from library
+
+    console.log("instagramAccount.access_token", instagramAccount.access_token);
+    try {
+      const response = await fetch("/api/instagram/verify-media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaUrl: instagramLink,
+          userAccessToken: instagramAccount.access_token,
+          userAppScopedId: instagramAccount.app_scoped_user_id
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error || "Failed to fetch or verify Instagram media.");
+
+      if (data.valid && data.mediaInfo) {
+        const reelData = data.mediaInfo as InstagramReel; // Assuming mediaInfo matches InstagramReel structure
+        setInstagramMediaPreview(reelData);
+        setSelectedReel(reelData); // Also set the main selectedReel
+
+        // Clear YouTube selections
+        setSelectedVideo(null);
+        setContentLink("");
+        setVideoPreview(null);
+        setSubmissionType('instagram');
+      } else {
+        throw new Error(data.error || "This media does not belong to your connected Instagram account, is not a Reel/Video, or is invalid.");
+      }
+    } catch (err: any) {
+      console.error("Error fetching Instagram media by link:", err);
+      setError(err.message);
+    } finally {
+      setIsFetchingInstagramMedia(false);
+    }
+  };
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setError(null);
     setIsLoading(true);
+    setMessage(null); // Clear previous messages
 
     if (!user) {
       setError("You must be logged in to submit content");
@@ -277,89 +459,239 @@ export default function SubmitContentPage({
       return;
     }
 
-    if (!youtubeAccount) {
-      setError("Please connect your YouTube account first");
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      let videoId: string | null = null;
-      let videoTitle: string | undefined = undefined;
-      let videoThumbnail: string | undefined = undefined;
+      let submissionPayload: any = {
+        contest_id: contestId,
+        creator_id: user.id,
+        status: "pending",
+      };
 
-      if (selectedVideo) {
-        // Using selected video from library
-        videoId = selectedVideo.id.videoId;
-        videoTitle = selectedVideo.snippet.title;
-        videoThumbnail = selectedVideo.snippet.thumbnails.default.url;
-      } else if (contentLink) {
-        // Using manually entered URL
-        videoId = extractYoutubeId(contentLink);
-        if (!videoId) {
-          setError("Invalid YouTube URL");
+      if (contestPlatform === 'instagram' && selectedReel && instagramAccount?.access_token && currentInstagramBusinessAccountID) {
+        setMessage("Fetching Instagram Reel insights...");
+        const insightsRes = await fetch(
+          `https://graph.instagram.com/${currentInstagramBusinessAccountID}/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,video_views,total_interactions&access_token=${instagramAccount.access_token}`
+        );
+        const insightsData = await insightsRes.json();
+
+        if (!insightsRes.ok || insightsData.error) {
+          console.warn("Failed to fetch Instagram insights, submitting with potentially partial/zero stats:", insightsData.error?.message);
+        }
+
+        let views = 0;
+        const instagramStats: any = {};
+        if (insightsData?.data) {
+          insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
+            const value = metric.values[0]?.value || 0;
+            if (metric.name === "reach") {
+              views = value;
+              instagramStats.reach = views;
+            }
+            if (metric.name === "likes") instagramStats.likes = value;
+            if (metric.name === "comments") instagramStats.comments = value;
+            if (metric.name === "shares") instagramStats.shares = value;
+            if (metric.name === "saved") instagramStats.saved = value;
+            if (metric.name === "video_views" || metric.name === "plays") instagramStats.video_views = value;
+            if (metric.name === "total_interactions") instagramStats.total_interactions = value;
+          });
+        }
+
+        submissionPayload = {
+          ...submissionPayload,
+          platform: 'instagram',
+          views: views,
+          content_link: selectedReel.permalink,
+          video_id: selectedReel.id,
+          video_title: selectedReel.caption || "Instagram Content", // Generic
+          video_thumbnail_url: selectedReel.thumbnail_url,
+          other_stats: { instagram: instagramStats },
+        };
+
+      } else if (contestPlatform === 'youtube' && (selectedVideo || videoPreview)) {
+        // YouTube Video Submission
+        const videoToSubmit = selectedVideo || videoPreview; // Prioritize actively selected library video
+
+        if (!videoToSubmit) {
+          setError("No YouTube video selected or fetched for submission.");
           setIsLoading(false);
           return;
         }
 
-        // Validate the URL belongs to the user
-        const isValid = await validateYoutubeUrl(contentLink);
-        if (!isValid) {
-          setError("This video does not belong to your YouTube channel");
-          setIsLoading(false);
-          return;
+        setMessage("Fetching YouTube video insights...");
+
+        // Fetch YouTube video stats (views, likes, etc.) via API endpoint
+        // This part reuses your existing logic for /api/youtube/metrics or similar
+        const metricsResponse = await fetch(`/api/youtube/metrics?videoId=${videoToSubmit.id.videoId}`);
+        const metricsData = await metricsResponse.json();
+
+        if (!metricsResponse.ok) {
+          console.warn("Failed to fetch YouTube metrics, submitting with basic info.", metricsData.error);
+          // Proceed with submission using basic info, or handle error more strictly
         }
 
-        // If we get here and selectedVideo is set by validateYoutubeUrl
-        if (selectedVideo) {
-          videoTitle = (selectedVideo as YouTubeVideo).snippet.title;
-          videoThumbnail = (selectedVideo as YouTubeVideo).snippet.thumbnails
-            .default.url;
-        }
+        const youtubeStats = {
+          likes: metricsData?.statistics?.likeCount,
+          comments: metricsData?.statistics?.commentCount,
+          // Add any other YouTube specific stats you want in other_stats.youtube
+        };
+
+        submissionPayload = {
+          ...submissionPayload,
+          platform: 'youtube',
+          views: metricsData?.statistics?.viewCount || 0, // Ensure this is a number
+          content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
+          video_id: videoToSubmit.id.videoId,
+          video_title: videoToSubmit.snippet.title,
+          video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
+          other_stats: { youtube: youtubeStats },
+        };
+
+      } else if (contestPlatform === 'youtube' && contentLink && !selectedVideo && !videoPreview) {
+        setError("For YouTube, please fetch and verify the link first, or select a video from your library.");
+        setIsLoading(false);
+        return;
+      } else if (contestPlatform === 'instagram' && instagramLink && !selectedReel && !instagramMediaPreview) {
+        setError("For Instagram, please fetch and verify the link first, or select an item from your library.");
+        setIsLoading(false);
+        return;
       } else {
-        setError("Please select a video or enter a YouTube URL");
+        setError("Please select a video or Reel to submit, or ensure your linked content is fetched and verified.");
         setIsLoading(false);
         return;
       }
 
-      const { data, error: submitError } = await supabase
+      setMessage("Submitting your content...");
+      const { data: submissionData, error: submissionError } = await supabase
         .from("submissions")
-        .insert({
-          contest_id: contestId,
-          creator_id: user.id,
-          content_link: `https://www.youtube.com/watch?v=${videoId}`,
-          video_id: videoId,
-          video_title: videoTitle,
-          video_thumbnail_url: videoThumbnail,
-          description: selectedVideo?.snippet.description || "",
-          views: 0, // Initialize with 0 views
-          other_stats: {
-            publishedAt: selectedVideo?.snippet.publishedAt,
-            thumbnails: selectedVideo?.snippet.thumbnails,
-          },
-          status: "pending",
-          earnings: 0, // Initialize with 0 earnings
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        .insert([submissionPayload])
         .select();
 
-      if (submitError) {
-        console.error("Submission error details:", submitError);
-        throw new Error(submitError.message || "Failed to submit video");
+      if (submissionError) {
+        throw submissionError;
       }
 
-      if (!data) {
-        throw new Error("No data returned from submission");
-      }
+      console.log("Submission successful:", submissionData);
+      setMessage("Content submitted successfully! Redirecting...");
+      router.push(`/dashboard/opportunities/${contestId}?success=content_submitted`);
 
-      router.push(`/dashboard/opportunities/${contestId}`);
     } catch (err: any) {
-      setError(err.message || "Failed to submit content");
+      console.error("Error during submission:", err);
+      setError(err.message || "Failed to submit content. Please try again.");
     } finally {
       setIsLoading(false);
+      setMessage(null);
     }
   };
+
+  const fetchInstagramReels = async (accessToken: string, igBusinessAccountID: string) => {
+    if (contestPlatform !== 'instagram' || !accessToken || !igBusinessAccountID) {
+      setError("Instagram access token or Business Account ID not found for fetching reels.");
+      setIsLoadingReels(false); // Ensure loading is stopped
+      return;
+    }
+    // setIsLoadingReels(true) should have been set by the calling context (e.g., fetchAndSetInstagramBusinessAccountID)
+    // or if this function can be called independently, set it here.
+    // For now, assume it's true from fetchAndSetInstagramBusinessAccountID.
+    // If fetchAndSet... fails, it sets isLoadingReels to false.
+    // If it succeeds, this function is called, and this function's finally block will set it to false.
+
+    setError(null); // Clear previous errors specific to reel fetching
+    setUserReels([]);
+    console.log("[fetchInstagramReels] Starting fetch for IGBA ID:", igBusinessAccountID);
+
+    try {
+      const mediaRes = await fetch(`https://graph.instagram.com/${igBusinessAccountID}/media?fields=id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp&access_token=${accessToken}`);
+      // Added media_product_type, video_title to fields if available, to better identify reels.
+      const mediaData = await mediaRes.json();
+      console.log("[fetchInstagramReels] Raw mediaData from API:", JSON.stringify(mediaData, null, 2));
+
+
+      if (!mediaRes.ok || mediaData.error) {
+        console.error("[fetchInstagramReels] API Error response:", mediaData.error);
+        throw new Error(mediaData.error?.message || "Failed to fetch Instagram media IDs using Business Account ID");
+      }
+
+      const potentialContent = mediaData.data;
+      if (!potentialContent || potentialContent.length === 0) {
+        console.log("[fetchInstagramReels] No potential content found in API response data.");
+        setUserReels([]);
+        // setIsLoadingReels(false); // Done in finally
+        return;
+      }
+
+      console.log(`[fetchInstagramReels] Received ${potentialContent.length} items from /media endpoint. Full list:`, JSON.stringify(potentialContent, null, 2));
+
+
+      const fetchedReels: InstagramReel[] = [];
+      // The /media endpoint returns a mix. We need to filter for Reels.
+      // Reels often have media_product_type === 'REELS' or media_type === 'VIDEO'
+      // The structure from /media might be slightly different than direct /media_id calls.
+      // We may need to iterate and fetch full details for each *potential* reel if thumbnail_url or other specific fields are missing here.
+      // For now, let's assume the direct /media call with expanded fields gives enough info.
+
+      console.log("[fetchInstagramReels] Starting to filter items for Reels...");
+      for (const item of potentialContent) {
+        console.log(`[fetchInstagramReels] Processing item: id=${item.id}, media_type=${item.media_type}, media_product_type=${item.media_product_type}`);
+        // Prioritize media_product_type if available, otherwise check media_type.
+        // Instagram API can be a bit varied here. If it's a VIDEO, we should include it.
+        if (item.media_product_type === 'REELS' || item.media_type === 'VIDEO') {
+          console.log(`[fetchInstagramReels] ✅ Including item id=${item.id} as a Reel/Video.`);
+          // Create a reel object matching our InstagramReel interface
+          fetchedReels.push({
+            id: item.id,
+            media_type: (item.media_product_type === 'REELS') ? 'REEL' : 'VIDEO', // Be more specific based on product type if REELS
+            media_url: item.permalink, // permalink is better for media_url in this context
+            thumbnail_url: item.thumbnail_url,
+            caption: item.caption || item.video_title, // Use caption, fallback to video_title if available
+            timestamp: item.timestamp,
+            permalink: item.permalink,
+          });
+        } else {
+          console.log(`[fetchInstagramReels] ❌ Skipping item id=${item.id} - media_type: ${item.media_type}, media_product_type: ${item.media_product_type}`);
+        }
+      }
+      console.log(`[fetchInstagramReels] Filtered down to ${fetchedReels.length} reels.`);
+
+      setUserReels(fetchedReels.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf()));
+
+    } catch (err: any) {
+      console.error("Error fetching Instagram Reels:", err);
+      setError(err.message || "Failed to load your Instagram Reels.");
+      if (err.message?.includes("token") || err.message?.includes("OAuthException")) {
+        setIsInstagramTokenExpired(true);
+      }
+    } finally {
+      console.log("[fetchInstagramReels] Fetch operation complete.");
+      setIsLoadingReels(false);
+    }
+  };
+
+  if (isLoadingContest) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <RefreshCw className="w-12 h-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading contest details...</p>
+      </div>
+    );
+  }
+
+  if (!contestPlatform) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center mb-6 gap-2">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-2xl font-bold ml-2">Submit Content</h1>
+        </div>
+        <Alert variant="destructive">
+          <AlertDescription>
+            {error || "This contest does not specify a platform (e.g., YouTube or Instagram) or the contest details could not be loaded. Please check the contest setup or go back."}
+          </AlertDescription>
+        </Alert>
+        <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8">
@@ -371,198 +703,293 @@ export default function SubmitContentPage({
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h1 className="text-2xl font-bold">Submit Content</h1>
+        <h1 className="text-2xl font-bold">Submit Content for {contestPlatform === 'youtube' ? 'YouTube' : 'Instagram'} Contest</h1>
       </div>
 
-      {isTokenExpired ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>YouTube Connection Expired</CardTitle>
-            <CardDescription>
-              Your YouTube connection has expired. Please re-connect your
-              YouTube account to continue.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button onClick={handleReconnectYouTube} className="w-full">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Re-connect YouTube Account
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="max-w-2xl mx-auto">
-          <CardHeader>
-            <CardTitle>Content Submission</CardTitle>
-            <CardDescription>
-              Submit your YouTube content for this contest. Make sure your
-              content follows the contest guidelines.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {!youtubeAccount ? (
-              <div className="text-center py-8">
-                <h3 className="text-lg font-medium mb-4">
-                  Connect Your YouTube Account
-                </h3>
-                <p className="text-muted-foreground mb-6">
-                  To submit content, you need to connect your YouTube account
-                  first. This allows us to verify your videos and track their
-                  performance.
-                </p>
-                <Button asChild>
-                  <Link
-                    href={`/api/youtube/auth?returnTo=${encodeURIComponent(
-                      `/dashboard/opportunities/${contestId}/submit`
-                    )}`}
-                  >
-                    Connect YouTube Account
+      <Card className="max-w-2xl mx-auto">
+        <CardHeader>
+          <CardTitle>Content Submission</CardTitle>
+          <CardDescription>
+            Submit your {contestPlatform === 'youtube' ? 'YouTube video/short' : 'Instagram Reel/video'} for this contest.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {message && (
+            <Alert variant="default" className="mb-4">
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* YOUTUBE UI BLOCK */}
+          {contestPlatform === 'youtube' && (
+            <>
+              {isTokenExpired && (
+                <Alert variant="destructive" className="mb-4 text-center">
+                  <AlertDescription>Your YouTube connection has expired.</AlertDescription>
+                  <Button onClick={handleReconnectYouTube} variant="link" className="text-destructive dark:text-red-400 mt-1">
+                    Reconnect YouTube Account
+                  </Button>
+                </Alert>
+              )}
+              {!youtubeAccount && !isTokenExpired && (
+                <Alert variant="default" className="mb-4 text-center">
+                  <AlertDescription>Connect your YouTube account to submit content.</AlertDescription>
+                  <Link href="/dashboard/settings">
+                    <Button variant="link" className="mt-1">Connect YouTube in Settings</Button>
                   </Link>
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit}>
-                {error && (
-                  <Alert variant="destructive" className="mb-6">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
+                </Alert>
+              )}
 
-                <Tabs defaultValue="browse" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 mb-6">
-                    <TabsTrigger value="browse">Browse Your Videos</TabsTrigger>
-                    <TabsTrigger value="link">Enter Video URL</TabsTrigger>
+              {youtubeAccount && !isTokenExpired && (
+                <Tabs defaultValue="youtube-library" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="youtube-library">Your Videos & Shorts</TabsTrigger>
+                    <TabsTrigger value="youtube-link">YouTube Link</TabsTrigger>
                   </TabsList>
-
-                  <TabsContent value="browse">
+                  <TabsContent value="youtube-library" className="mt-4">
                     {isLoadingVideos ? (
-                      <div className="text-center py-4">
-                        Loading your videos...
-                      </div>
+                      <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading YouTube videos...</div>
                     ) : userVideos.length > 0 ? (
-                      <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
                         {userVideos.map((video) => (
-                          <div
+                          <Card
                             key={video.id.videoId}
-                            className={`border rounded-md p-2 cursor-pointer ${
-                              selectedVideo?.id.videoId === video.id.videoId
-                                ? "border-primary ring-2 ring-primary/20"
-                                : ""
-                            }`}
+                            className={`cursor-pointer ${selectedVideo?.id.videoId === video.id.videoId ? "border-primary ring-2 ring-primary" : ""}`}
                             onClick={() => {
                               setSelectedVideo(video);
-                              setContentLink(
-                                `https://www.youtube.com/watch?v=${video.id.videoId}`
-                              );
+                              setSelectedReel(null); setInstagramMediaPreview(null); setInstagramLink("");
+                              setSubmissionType('youtube');
+                              setContentLink(`https://www.youtube.com/watch?v=${video.id.videoId}`);
+                              setVideoPreview(null); // Clear manual link preview
                             }}
                           >
-                            <div className="aspect-video relative mb-2 bg-gray-100">
-                              {video.snippet.thumbnails?.medium && (
-                                <Image
-                                  src={video.snippet.thumbnails.medium.url}
-                                  alt={video.snippet.title}
-                                  fill
-                                  className="object-cover rounded"
-                                />
-                              )}
-                            </div>
-                            <p className="font-medium truncate">
-                              {video.snippet.title}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(
-                                video.snippet.publishedAt
-                              ).toLocaleDateString()}
-                            </p>
-                          </div>
+                            <CardContent className="p-3 flex items-start space-x-3">
+                              <Image
+                                src={video.snippet.thumbnails.default.url}
+                                alt={video.snippet.title}
+                                width={120} // Adjusted for consistency
+                                height={68}  // Adjusted for consistency
+                                className="rounded-sm object-cover aspect-video"
+                              />
+                              <div className="flex-1">
+                                <p className="font-medium text-sm truncate" title={video.snippet.title}>{video.snippet.title}</p>
+                                <p className="text-xs text-muted-foreground">{new Date(video.snippet.publishedAt).toLocaleDateString()}</p>
+                              </div>
+                            </CardContent>
+                          </Card>
                         ))}
                       </div>
                     ) : (
-                      <div className="text-center py-4 mb-6">
+                      <div className="text-center py-4">
                         <p>No videos found in your YouTube channel.</p>
+                        <Button variant="outline" onClick={fetchYouTubeVideos} className="mt-2" disabled={isLoadingVideos}>
+                          <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingVideos ? 'animate-spin' : ''}`} /> Reload Videos
+                        </Button>
                       </div>
                     )}
                   </TabsContent>
-
-                  <TabsContent value="link">
-                    <div className="space-y-4 mb-6">
-                      <div>
-                        <Label htmlFor="content-link">YouTube Video URL</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="content-link"
-                            value={contentLink}
-                            onChange={(e) => {
-                              setContentLink(e.target.value);
-                              setSelectedVideo(null);
-                              setVideoPreview(null);
-                            }}
-                            placeholder="https://www.youtube.com/watch?v=..."
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={handleFetchVideo}
-                            disabled={isFetchingVideo || !contentLink}
-                          >
-                            {isFetchingVideo ? "Fetching..." : "Fetch Video"}
-                          </Button>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Enter the URL of your YouTube video
-                        </p>
+                  <TabsContent value="youtube-link" className="mt-4">
+                    <div className="space-y-3">
+                      <Label htmlFor="youtubeLink">YouTube Video URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="youtubeLink"
+                          value={contentLink}
+                          onChange={(e) => {
+                            setContentLink(e.target.value);
+                            setSelectedVideo(null); // Clear library selection
+                            setVideoPreview(null);  // Clear existing preview
+                            setSubmissionType(null);
+                          }}
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          disabled={isFetchingVideo}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleFetchVideo}
+                          disabled={isFetchingVideo || !contentLink}
+                        >
+                          {isFetchingVideo ? <RefreshCw className="animate-spin mr-1 h-4 w-4" /> : null}
+                          Fetch Video
+                        </Button>
                       </div>
-
                       {videoPreview && (
-                        <div className="mt-4 border rounded-lg p-4">
-                          <h3 className="font-medium mb-2">Video Preview</h3>
-                          <div className="flex gap-4">
-                            <div className="w-48 aspect-video relative bg-gray-100 rounded-md overflow-hidden">
-                              {videoPreview.snippet.thumbnails?.medium && (
-                                <Image
-                                  src={
-                                    videoPreview.snippet.thumbnails.medium.url
-                                  }
-                                  alt={videoPreview.snippet.title}
-                                  fill
-                                  className="object-cover"
-                                />
-                              )}
-                            </div>
+                        <Card className="mt-3">
+                          <CardHeader><CardTitle className="text-base">Video Preview</CardTitle></CardHeader>
+                          <CardContent className="flex gap-3 items-start">
+                            <Image src={videoPreview.snippet.thumbnails.default.url} alt={videoPreview.snippet.title} width={120} height={68} className="rounded-sm object-cover aspect-video" />
                             <div className="flex-1">
-                              <h4 className="font-medium">
-                                {videoPreview.snippet.title}
-                              </h4>
-                              <p className="text-sm text-muted-foreground mt-1">
-                                Published:{" "}
-                                {new Date(
-                                  videoPreview.snippet.publishedAt
-                                ).toLocaleDateString()}
-                              </p>
-                              <p className="text-sm mt-2 line-clamp-2">
-                                {videoPreview.snippet.description}
-                              </p>
+                              <h4 className="font-medium text-sm truncate" title={videoPreview.snippet.title}>{videoPreview.snippet.title}</h4>
+                              <p className="text-xs text-muted-foreground mt-1">Published: {new Date(videoPreview.snippet.publishedAt).toLocaleDateString()}</p>
                             </div>
-                          </div>
-                        </div>
+                          </CardContent>
+                        </Card>
                       )}
                     </div>
                   </TabsContent>
                 </Tabs>
+              )}
+            </>
+          )}
 
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={isLoading || (!selectedVideo && !videoPreview)}
-                  >
-                    {isLoading ? "Submitting..." : "Submit Content"}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </CardContent>
-        </Card>
-      )}
+          {/* INSTAGRAM UI BLOCK */}
+          {contestPlatform === 'instagram' && (
+            <>
+              {isInstagramTokenExpired && (
+                <Alert variant="destructive" className="mb-4 text-center">
+                  <AlertDescription>Your Instagram connection has expired.</AlertDescription>
+                  <Link href="/dashboard/settings">
+                    <Button variant="link" className="text-destructive dark:text-red-400 mt-1">Reconnect Instagram in Settings</Button>
+                  </Link>
+                </Alert>
+              )}
+              {!instagramAccount && !isInstagramTokenExpired && (
+                <Alert variant="default" className="mb-4 text-center">
+                  <AlertDescription>Connect your Instagram Business/Creator account.</AlertDescription>
+                  <Link href="/dashboard/settings">
+                    <Button variant="link" className="mt-1">Connect Instagram in Settings</Button>
+                  </Link>
+                </Alert>
+              )}
+              {instagramAccount && (instagramAccount.account_type !== 'BUSINESS' && instagramAccount.account_type !== 'MEDIA_CREATOR') && !isInstagramTokenExpired && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>
+                    Your connected Instagram account is a '{instagramAccount.account_type || 'Personal'}' account.
+                    You need a Business or Creator account to submit Reels/Videos for contests.
+                    Please update your account type on Instagram or connect a different account in settings.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {instagramAccount && (instagramAccount.account_type === 'BUSINESS' || instagramAccount.account_type === 'MEDIA_CREATOR') && !isInstagramTokenExpired && (
+                <Tabs defaultValue="instagram-library" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="instagram-library">Your Reels & Videos</TabsTrigger>
+                    <TabsTrigger value="instagram-link">Instagram Link</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="instagram-library" className="mt-4">
+                    {isLoadingReels ? (
+                      <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading Instagram content...</div>
+                    ) : userReels.length > 0 ? (
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {userReels.map((reel) => (
+                          <Card
+                            key={reel.id}
+                            className={`cursor-pointer ${selectedReel?.id === reel.id && !instagramMediaPreview ? "border-primary ring-2 ring-primary" : ""}`}
+                            onClick={() => {
+                              setSelectedReel(reel);
+                              setInstagramMediaPreview(null); // Clear link preview
+                              setInstagramLink("");      // Clear link input
+                              setSelectedVideo(null); setContentLink(""); setVideoPreview(null); // Clear YT
+                              setSubmissionType('instagram');
+                            }}
+                          >
+                            <CardContent className="p-3 flex items-start space-x-3">
+                              {reel.thumbnail_url ? (
+                                <Image
+                                  src={reel.thumbnail_url}
+                                  alt={reel.caption || "Instagram media"}
+                                  width={120}
+                                  height={120} // Reels are often more square/portrait in previews
+                                  className="rounded-sm object-cover aspect-square" // Changed aspect
+                                />
+                              ) : (
+                                <div className="w-[120px] h-[120px] bg-muted rounded-sm flex items-center justify-center text-xs text-muted-foreground">No thumbnail</div>
+                              )}
+                              <div className="flex-1">
+                                <p className="font-medium text-sm truncate" title={reel.caption || "Instagram media"}>{reel.caption || "No caption"}</p>
+                                <p className="text-xs text-muted-foreground">{dayjs(reel.timestamp).format("MMM D, YYYY")}</p>
+                                <a href={reel.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1" onClick={(e) => e.stopPropagation()}>View on Instagram</a>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4">
+                        <p>No Reels or Videos found on your Instagram account.</p>
+                        <Button variant="outline" onClick={() => fetchInstagramReels(instagramAccount.access_token, currentInstagramBusinessAccountID!)} className="mt-2" disabled={isLoadingReels}>
+                          <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingReels ? 'animate-spin' : ''}`} /> Reload Instagram Content
+                        </Button>
+                      </div>
+                    )}
+                  </TabsContent>
+                  <TabsContent value="instagram-link" className="mt-4">
+                    <div className="space-y-3">
+                      <Label htmlFor="instagramLink">Instagram Media URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="instagramLink"
+                          value={instagramLink}
+                          onChange={(e) => {
+                            setInstagramLink(e.target.value);
+                            setSelectedReel(null); // Clear library selection
+                            setInstagramMediaPreview(null); // Clear existing preview
+                            setSubmissionType(null);
+                          }}
+                          placeholder="https://www.instagram.com/p/your_post_id/"
+                          disabled={isFetchingInstagramMedia}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleFetchInstagramByLink}
+                          disabled={isFetchingInstagramMedia || !instagramLink}
+                        >
+                          {isFetchingInstagramMedia ? <RefreshCw className="animate-spin mr-1 h-4 w-4" /> : null}
+                          Fetch Media
+                        </Button>
+                      </div>
+                      {instagramMediaPreview && (
+                        <Card className="mt-3">
+                          <CardHeader><CardTitle className="text-base">Media Preview</CardTitle></CardHeader>
+                          <CardContent className="flex gap-3 items-start">
+                            {instagramMediaPreview.thumbnail_url ? (
+                              <Image src={instagramMediaPreview.thumbnail_url} alt={instagramMediaPreview.caption || "Instagram Media"} width={120} height={120} className="rounded-sm object-cover aspect-square" />
+                            ) : (
+                              <div className="w-[120px] h-[120px] bg-muted rounded-sm flex items-center justify-center text-xs text-muted-foreground">No thumbnail</div>
+                            )}
+                            <div className="flex-1">
+                              <h4 className="font-medium text-sm truncate" title={instagramMediaPreview.caption || undefined}>{instagramMediaPreview.caption || "No Caption"}</h4>
+                              <p className="text-xs text-muted-foreground mt-1">Published: {dayjs(instagramMediaPreview.timestamp).format("MMM D, YYYY")}</p>
+                              <a href={instagramMediaPreview.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1">View on Instagram</a>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              )}
+            </>
+          )}
+
+        </CardContent>
+        <CardFooter className="flex justify-end space-x-2">
+          <Button variant="outline" onClick={() => router.back()}>
+            Cancel
+          </Button>
+          <Button
+            type="button" // Changed to type button, form submission handled by onSubmit on Card
+            onClick={handleSubmit}
+            disabled={
+              isLoading ||
+              (contestPlatform === 'youtube' && !selectedVideo && !videoPreview) ||
+              (contestPlatform === 'instagram' && !selectedReel && !instagramMediaPreview) ||
+              isFetchingVideo || isFetchingInstagramMedia
+            }
+          >
+            {isLoading ? <RefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
+            Submit Content
+          </Button>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
