@@ -14,7 +14,9 @@ import {
   Video,
   DollarSign,
 } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
+// import { createClient } from "@/utils/supabase/client";
+import { useClientAuth } from "@/hooks/use-client-auth";
+
 
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator";
@@ -24,10 +26,22 @@ export function DashboardSidebar({
   userRole = "advertiser",
 }: DashboardSidebarProps) {
   const pathname = usePathname();
-  const supabase = createClient();
+  // const supabase = createClient();
+  // const handleSignOut = async () => {
+  //   await supabase.auth.signOut();
+  // };
+
+  const { logout } = useClientAuth();
+
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await logout();
+      console.log("Sign out successful");
+    } catch (error) {
+      console.error("Sign out error in sidebar:", error);
+    }
   };
+
   const advertiserLinks = [
     {
       name: "Dashboard",

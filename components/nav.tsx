@@ -26,6 +26,7 @@ import logo from "@/public/images/GoViral_transparent_logo.png";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
+import { useClientAuth } from "@/hooks/use-client-auth";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
@@ -36,14 +37,19 @@ interface NavProps {
 export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
 
   const pathname = usePathname();
-  const supabase = createClient();
-  const router = useRouter();
+  // const supabase = createClient();
+  // const router = useRouter();
+
+  const { logout } = useClientAuth();
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.refresh();
+    try {
+      await logout();
+      console.log("Sign out successful");
+    } catch (error) {
+      console.error("Sign out error in sidebar:", error);
+    }
   };
-
   // Don't show nav on auth pages
   if (
     pathname === "/auth/signin" ||

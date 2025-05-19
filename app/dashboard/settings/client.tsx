@@ -336,43 +336,52 @@ export default function SettingsPage({
       return;
     }
 
-    const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
-    const scopes = [
-      'instagram_business_basic',
-      'instagram_business_manage_insights',
-      'instagram_business_content_publish', // If you need to publish content
-      // Add other scopes as needed, e.g., for messages or comments if you use those features
-      // 'instagram_manage_comments',
-      // 'instagram_manage_messages',
-    ].join(',');
+    setIsLoading(true);
+    try {
+      const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
+      const scopes = [
+        'instagram_business_basic',
+        'instagram_business_manage_insights',
+        'instagram_business_content_publish',
+      ].join(',');
 
-    // Parameters like force_authentication=1 and enable_fb_login=0 can be useful
-    // force_authentication=1: Ensures the user actively logs into Instagram.
-    // enable_fb_login=0: Can be used if you want to guide users to a pure Instagram login, not via Facebook.
-    const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
+      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
 
-    window.location.href = authUrl;
+      // Set a timeout to reset loading state if redirect doesn't happen
+      const timeoutId = setTimeout(() => {
+        setIsLoading(false);
+        setError("Connection timed out. Please try again.");
+      }, 5000);
+
+      window.location.href = authUrl;
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err.message || "Failed to initiate Instagram connection");
+    }
   };
 
   const handleInstagramDisconnect = async () => {
     if (!user) return;
     setIsLoading(true);
     try {
-      // Option 1: Just remove from your DB
+      // Set a timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        setIsLoading(false);
+        setError("Disconnection timed out. Please try again.");
+      }, 5000);
+
       const { error: updateError } = await supabase
         .from('creator_profiles')
         .update({ instagram_account: null, updated_at: new Date().toISOString() })
         .eq('id', user.id);
 
+      clearTimeout(timeoutId);
+
       if (updateError) throw updateError;
+
       setInstagramAccount(null);
+      setProfile(prev => prev ? { ...prev, instagram_account: null } : null);
       setSuccess("Instagram account disconnected successfully.");
-
-      // Option 2: Call Instagram's deauthorize endpoint (if you have one and if needed by policy)
-      // await fetch('/api/instagram/deauthorize', { method: 'POST' }); 
-      // This would typically be done via a backend call if it involves client secrets or app tokens.
-      // For a simple disconnect, just clearing DB might be enough, but check IG platform terms.
-
     } catch (err: any) {
       setError(err.message || "Failed to disconnect Instagram account.");
     } finally {
