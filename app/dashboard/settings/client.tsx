@@ -80,7 +80,7 @@ export default function SettingsPage({
   const router = useRouter();
   const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
   const [instagramAccount, setInstagramAccount] = useState<SocialAccount | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -218,9 +218,6 @@ export default function SettingsPage({
     setSuccess(null);
     setPasswordChangeLoading(true);
 
-    // Use the main component's Supabase client again
-    const supabaseClient = supabase;
-
     try {
       // Log values right before the update attempt
       const companyName = (e.target as any).company_name.value;
@@ -240,7 +237,7 @@ export default function SettingsPage({
         console.log(
           "updateCompanyProfile: INNER TRY - Attempting Supabase update"
         );
-        updateResult = await supabaseClient // Use main client
+        updateResult = await supabase // Use main client
           .from("advertiser_profiles")
           .update({
             company_name: companyName,
