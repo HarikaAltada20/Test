@@ -164,22 +164,45 @@ export default function ChooseUsernamePage() {
             }
 
             if (userData.referred_by_code) {
-                console.log("userData.referred_by_code", userData.referred_by_code)
+                console.log("Attempting to process referral for code:", userData.referred_by_code);
                 try {
-                    const { error: rpcError } = await supabase.rpc('handle_referral', {
-                        p_referrer_code: userData.referred_by_code,
-                        p_referred_user_id: userData.id,
-                        p_referred_user_type: userData.userType
-                    });
-                    if (rpcError) {
-                        console.error("Error calling handle_referral RPC:", rpcError)
-                        toast({ variant: "default", title: "Referral Note", description: "Could not automatically process bonus for the referrer due to: " + rpcError.message, duration: 7000 })
+                    // Fetch the referrer user by their referral code (which is their username)
+                    const { data: referrerUser, error: fetchReferrerError } = await supabase
+                        .from('users')
+                        .select('id')
+                        .eq('username', userData.referred_by_code) // Usernames are used as referral codes
+                        .single();
+
+                    if (fetchReferrerError) {
+                        console.error("Error fetching referrer user:", fetchReferrerError);
+                        toast({ variant: "default", title: "Referral Issue", description: `Could not verify referrer: ${fetchReferrerError.message}. Bonus might not be applied.`, duration: 7000 });
+                        // Depending on policy, you might choose to not proceed or allow account creation without referral bonus to referrer
+                    } else if (!referrerUser) {
+                        console.warn("Referrer user not found for code:", userData.referred_by_code);
+                        toast({ variant: "default", title: "Referral Not Found", description: "The referral code used was not found. No bonus applied for referrer.", duration: 7000 });
                     } else {
-                        toast({ title: "Referral Applied!", description: "Referral bonus processed for the referrer.", duration: 5000 })
+                        // Referrer found, proceed with RPC call
+                        const { error: rpcError } = await supabase.rpc('handle_referral', {
+                            referrer_id: referrerUser.id,      // Referrer's actual ID
+                            referred_id: userData.id,          // Current user's ID (the one being referred)
+                            ref_code: userData.referred_by_code, // The referral code string
+                            referred_type: userData.userType   // Current user's type
+                        });
+
+                        if (rpcError) {
+                            console.error("Error calling handle_referral RPC:", rpcError);
+                            // The original error message from the user log indicates this toast is shown:
+                            // hook.js:608 Error calling handle_referral RPC: {code: 'PGRST202', details: '...', hint: '...', message: '...'}
+                            // So, this part of the code is likely being reached when the error occurs.
+                            // The toast below is also important for user feedback.
+                            toast({ variant: "default", title: "Referral Note", description: "Could not automatically process bonus for the referrer due to: " + rpcError.message, duration: 7000 });
+                        } else {
+                            toast({ title: "Referral Applied!", description: "Referral bonus processed for the referrer.", duration: 5000 });
+                        }
                     }
-                } catch (rpcCatchError: any) {
-                    console.error("Exception calling handle_referral RPC:", rpcCatchError)
-                    toast({ variant: "destructive", title: "Referral Error", description: "Unexpected error processing referral bonus: " + rpcCatchError.message, duration: 7000 })
+                } catch (processingError: any) { // Catch errors from fetching referrer or the RPC call itself
+                    console.error("Exception during referral processing:", processingError);
+                    toast({ variant: "destructive", title: "Referral Error", description: "Unexpected error processing referral bonus: " + processingError.message, duration: 7000 });
                 }
             }
 
