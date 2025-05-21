@@ -27,9 +27,43 @@ export default function ForgotPasswordPage() {
         setIsLoading(true)
 
         try {
-            await supabase.auth.resetPasswordForEmail(email, {
+            const normalizedEmail = email.trim().toLowerCase(); // Normalize email
+
+            // 1. Check if the email exists in your public users table
+            const { data: userExists, error: checkError } = await supabase
+                .from('users') // Your public users table name
+                .select('id')
+                .eq('email', normalizedEmail)
+                .maybeSingle();
+
+            if (checkError && checkError.code !== 'PGRST116') { // PGRST116: no rows found, not an error for this check
+                console.error("Error checking email existence:", checkError);
+                setError("Could not verify email. Please try again later.");
+                toast({ variant: "destructive", title: "Verification Error", description: "Could not verify your email. Please try again." });
+                setIsLoading(false);
+                return;
+            }
+
+            if (!userExists) {
+                setError("No account found with this email address. Please ensure you entered it correctly or register for an account.");
+                toast({
+                    variant: "destructive",
+                    title: "Account Not Found",
+                    description: "No account found with this email address.",
+                    duration: 6000,
+                });
+                setIsLoading(false);
+                return;
+            }
+
+            // 2. If email exists, proceed to send reset link
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
                 redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/reset-password`
-            })
+            });
+
+            if (resetError) throw resetError;
+
+
             setIsSuccess(true)
             toast({
                 title: "Reset link sent",
