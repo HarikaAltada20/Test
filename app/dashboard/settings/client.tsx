@@ -338,8 +338,7 @@ export default function SettingsPage({
       const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
       const scopes = [
         'instagram_business_basic',
-        'instagram_business_manage_insights',
-        'instagram_business_content_publish',
+        'instagram_business_manage_insights'
       ].join(',');
 
       const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
