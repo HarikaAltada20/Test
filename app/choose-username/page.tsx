@@ -164,6 +164,7 @@ export default function ChooseUsernamePage() {
             }
 
             if (userData.referred_by_code) {
+                console.log("userData.referred_by_code", userData.referred_by_code)
                 try {
                     const { error: rpcError } = await supabase.rpc('handle_referral', {
                         p_referrer_code: userData.referred_by_code,
