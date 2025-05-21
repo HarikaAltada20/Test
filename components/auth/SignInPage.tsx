@@ -1,6 +1,5 @@
 "use client";
 
-import { BrandLogo } from "@/components/brand-logo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,12 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import logo from "@/public/images/gold_logo_vertical.svg";
+import Image from "next/image";
+
+// Add a style tag for the animation
+// Note: Using <style jsx global> for component-level global styles in Next.js
+// This is generally acceptable for self-contained component enhancements.
 
 function SignInForm({ verification }: { verification: string }) {
   const [email, setEmail] = useState("");
@@ -155,7 +160,7 @@ function SignInForm({ verification }: { verification: string }) {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email" className="text-slate-300">Email</Label>
         <Input
           id="email"
           type="email"
@@ -165,16 +170,16 @@ function SignInForm({ verification }: { verification: string }) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="h-11"
+          className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
         />
       </div>
 
       <div className="space-y-2">
         <div className="flex justify-between items-center">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password" className="text-slate-300">Password</Label>
           <Link
             href="/auth/forgot-password"
-            className="text-sm text-primary hover:underline"
+            className="text-sm text-amber-500 hover:text-amber-400"
           >
             Forgot password?
           </Link>
@@ -187,7 +192,7 @@ function SignInForm({ verification }: { verification: string }) {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
-            className="h-11 pr-10"
+            className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
           />
           <button
             type="button"
@@ -223,31 +228,59 @@ function SignInForm({ verification }: { verification: string }) {
 
 export default function SignInPage({ verification }: { verification: string }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-6">
-          <BrandLogo centered showText={false} size="lg" />
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8">
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Sign In
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/auth/signup"
-                className="text-primary font-medium hover:underline"
-              >
-                Get started
-              </Link>
-            </p>
+    <>
+      <style jsx global>{`
+        @keyframes border-flow {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animate-border-flow {
+          background-image: linear-gradient(to right, #FBBF24, #F59E0B, #D97706, #F59E0B, #FBBF24); /* Gold/Amber tones */
+          background-size: 300% auto; /* Increased size for smoother flow */
+          animation: border-flow 5s linear infinite; /* Slightly slower animation */
+        }
+      `}</style>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 dark:bg-gray-900 px-4 pt-4 pb-16">
+        <div className="w-full max-w-md">
+          <div className="mb-10 flex flex-col items-center">
+            <Image
+              src={logo}
+              alt="Game Of Creators Logo"
+              priority
+              width={150}
+              height={150}
+            />
           </div>
 
-          <SignInForm verification={verification} />
+          <div className="p-[2.5px] rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 animate-border-flow shadow-2xl">
+            <div className="bg-[#0B0F11] dark:bg-gray-800 rounded-lg p-8">
+              <div className="mb-6 text-center">
+                <h1 className="text-3xl font-bold text-white dark:text-white">
+                  Sign In
+                </h1>
+                <p className="text-sm text-slate-400 mt-2">
+                  Don&apos;t have an account?{" "}
+                  <Link
+                    href="/auth/signup"
+                    className="font-medium text-amber-500 hover:text-amber-400"
+                  >
+                    Get started
+                  </Link>
+                </p>
+              </div>
+
+              <SignInForm verification={verification} />
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

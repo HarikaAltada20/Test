@@ -1,7 +1,7 @@
 import React, { memo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import brandLogo from '@/public/images/GoViral_transparent_logo.png'
+import brandLogo from "@/public/images/gold_logo_horizontal.svg";
 
 interface BrandLogoProps {
     centered?: boolean;

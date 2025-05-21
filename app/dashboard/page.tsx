@@ -16,10 +16,6 @@ import { useRouter } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
 
-// Wrap component with username check
-// export default withUsernameCheck(DashboardPage) // Temporarily disable HOC
-
-// Client component version
 function DashboardPage() {
   const [profile, setProfile] = useState<any>(null);
   const [recentContests, setRecentContests] = useState<any[]>([]);

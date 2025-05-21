@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Loader2, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { BrandLogo } from "@/components/brand-logo"
+import Image from "next/image"
+import logo from "@/public/images/gold_logo_vertical.svg"
 import { createClient } from "@/utils/supabase/client"
+
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("")
     const [error, setError] = useState<string | null>(null)
@@ -17,7 +19,7 @@ export default function ForgotPasswordPage() {
     const [isSuccess, setIsSuccess] = useState(false)
     const { toast } = useToast()
     const supabase = createClient()
-    
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -26,7 +28,7 @@ export default function ForgotPasswordPage() {
 
         try {
             await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password`
+                redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/reset-password`
             })
             setIsSuccess(true)
             toast({
@@ -48,76 +50,105 @@ export default function ForgotPasswordPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-            <div className="w-full max-w-md">
-                <div className="mb-6">
-                    <BrandLogo centered showText={false} size="lg" />
-                </div>
-
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8">
-                    <div className="mb-6 text-center">
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Forgot your password?</h1>
-                        <p className="text-sm text-muted-foreground mt-1">
-                            Please enter the email address associated with your account and we&apos;ll send you a link to reset your
-                            password.
-                        </p>
+        <>
+            <style jsx global>{`
+                @keyframes border-flow {
+                  0% {
+                    background-position: 0% 50%;
+                  }
+                  50% {
+                    background-position: 100% 50%;
+                  }
+                  100% {
+                    background-position: 0% 50%;
+                  }
+                }
+                .animate-border-flow {
+                  background-image: linear-gradient(to right, #FBBF24, #F59E0B, #D97706, #F59E0B, #FBBF24);
+                  background-size: 300% auto;
+                  animation: border-flow 5s linear infinite;
+                }
+            `}</style>
+            <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 dark:bg-gray-900 px-4 pt-4 pb-16">
+                <div className="w-full max-w-md">
+                    <div className="mb-10 flex flex-col items-center">
+                        <Image
+                            src={logo}
+                            alt="Game Of Creators Logo"
+                            priority
+                            width={150}
+                            height={150}
+                        />
                     </div>
 
-                    {isSuccess ? (
-                        <div className="flex flex-col items-center justify-center py-4 text-center">
-                            <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
-                            <h3 className="text-lg font-medium">Check your email</h3>
-                            <p className="text-sm text-muted-foreground mt-2">
-                                We&apos;ve sent a password reset link to <span className="font-medium">{email}</span>
-                            </p>
-                            <Button className="mt-6 w-full" asChild>
-                                <Link href="/auth/signin">Return to sign in</Link>
-                            </Button>
-                        </div>
-                    ) : (
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {error && (
-                                <Alert variant="destructive">
-                                    <AlertDescription>{error}</AlertDescription>
-                                </Alert>
-                            )}
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="example@gmail.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    className="h-11"
-                                />
-                            </div>
-
-                            <Button type="submit" className="w-full h-11 bg-rose-600 hover:bg-rose-700" disabled={isLoading}>
-                                {isLoading ? (
-                                    <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Sending request...
-                                    </>
-                                ) : (
-                                    "Send reset link"
+                    <div className="p-[2.5px] rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 animate-border-flow shadow-2xl">
+                        <div className="bg-[#0B0F11] dark:bg-gray-800 rounded-lg p-8">
+                            <div className="mb-6 text-center">
+                                <h1 className="text-3xl font-bold text-white dark:text-white">Forgot your password?</h1>
+                                {!isSuccess && (
+                                    <p className="text-sm text-slate-400 mt-2">
+                                        Enter your email and we&apos;ll send you a link to reset your password.
+                                    </p>
                                 )}
-                            </Button>
-
-                            <div className="text-center">
-                                <Link
-                                    href="/auth/signin"
-                                    className="inline-flex items-center text-sm text-primary hover:underline"
-                                >
-                                    <ArrowLeft className="mr-1 h-4 w-4" />
-                                    Return to sign in
-                                </Link>
                             </div>
-                        </form>
-                    )}
+
+                            {isSuccess ? (
+                                <div className="flex flex-col items-center justify-center py-4 text-center">
+                                    <CheckCircle className="h-16 w-16 text-green-500 mb-6" />
+                                    <h3 className="text-2xl font-semibold text-white">Check your email</h3>
+                                    <p className="text-slate-300 mt-3 text-base">
+                                        We&apos;ve sent a password reset link to <span className="font-medium text-amber-400">{email}</span>
+                                    </p>
+                                    <Button className="mt-8 w-full h-11 bg-rose-600 hover:bg-rose-700 text-white" asChild>
+                                        <Link href="/auth/signin">Return to Sign In</Link>
+                                    </Button>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                                    {error && (
+                                        <Alert variant="destructive">
+                                            <AlertDescription>{error}</AlertDescription>
+                                        </Alert>
+                                    )}
+                                    <div className="space-y-2">
+                                        <Label htmlFor="email" className="text-slate-300">Email address</Label>
+                                        <Input
+                                            id="email"
+                                            type="email"
+                                            placeholder="name@example.com"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            required
+                                            className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                                        />
+                                    </div>
+
+                                    <Button type="submit" className="w-full h-11 bg-rose-600 hover:bg-rose-700 text-white" disabled={isLoading}>
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Sending Link...
+                                            </>
+                                        ) : (
+                                            "Send Reset Link"
+                                        )}
+                                    </Button>
+
+                                    <div className="text-center pt-2">
+                                        <Link
+                                            href="/auth/signin"
+                                            className="inline-flex items-center text-sm font-medium text-amber-500 hover:text-amber-400"
+                                        >
+                                            <ArrowLeft className="mr-1 h-4 w-4" />
+                                            Back to Sign In
+                                        </Link>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     )
 } 

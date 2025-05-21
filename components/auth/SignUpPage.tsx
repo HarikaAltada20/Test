@@ -1,5 +1,4 @@
 "use client";
-import { BrandLogo } from "@/components/brand-logo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +7,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import logo from "@/public/images/gold_logo_vertical.svg";
+
 
 export default function SignUpPage() {
   const [firstName, setFirstName] = useState("");
@@ -18,9 +20,7 @@ export default function SignUpPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [user_type, Setuser_type] = useState<"advertiser" | "creator">(
-    "creator"
-  );
+  const [user_type, Setuser_type] = useState<"advertiser" | "creator">("creator");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [referralCode, setReferralCode] = useState("");
@@ -33,7 +33,6 @@ export default function SignUpPage() {
     setError(null);
     setIsLoading(true);
 
-    // Basic validation
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
       toast({
@@ -50,14 +49,13 @@ export default function SignUpPage() {
       const fullName = `${firstName} ${lastName}`.trim();
       const normalizedEmail = email.trim();
 
-      // 1. Check if email already exists and if username is set
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
         .select('id, username')
         .eq('email', normalizedEmail)
         .maybeSingle();
 
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116: "No rows found"
+      if (checkError && checkError.code !== 'PGRST116') {
         console.error("Error checking existing email:", checkError);
         setError("Could not verify email. Please try again later.");
         toast({ variant: "destructive", title: "Verification Error", description: "Could not verify your email. Please try again." });
@@ -67,18 +65,17 @@ export default function SignUpPage() {
 
       if (existingUser) {
         if (!existingUser.username) {
-          // Email exists, but username is not set
           setError("Your email is verified, but username setup is pending.");
           toast({
-            variant: "default",
+            variant: "default", // Keep default for info, but style button
             title: "Profile Incomplete",
             description: (
               <div className="flex flex-col items-start space-y-2">
                 <span>Your email is verified, but username setup is pending.</span>
                 <Button
-                  variant="outline" // Or your preferred secondary style
+                  variant="outline"
                   size="sm"
-                  className="mt-2 text-xs h-auto py-1 px-2 border-blue-500 text-blue-500 hover:bg-blue-50 hover:text-blue-600"
+                  className="mt-2 text-xs h-auto py-1 px-2 border-amber-500 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
                   onClick={() => router.push('/auth/signin')}
                 >
                   Sign in to complete profile
@@ -88,7 +85,6 @@ export default function SignUpPage() {
             duration: 10000,
           });
         } else {
-          // Email exists, and username is set (fully registered user)
           setError("An account with this email already exists.");
           toast({
             variant: "destructive",
@@ -97,9 +93,9 @@ export default function SignUpPage() {
               <div className="flex flex-col items-start space-y-2">
                 <span>An account with this email already exists.</span>
                 <Button
-                  variant="secondary" // Using a common secondary variant for ShadCN UI
+                  variant="link"
                   size="sm"
-                  className="mt-2 text-xs h-auto py-1 px-2" // Adjust styling as needed
+                  className="mt-2 text-xs h-auto py-1 px-2 text-amber-500 hover:text-amber-400"
                   onClick={() => router.push('/auth/signin')}
                 >
                   Sign in instead
@@ -113,11 +109,8 @@ export default function SignUpPage() {
         return;
       }
 
-      // 2. Validate referral code (if provided)
       const trimmedReferralCode = referralCode.trim();
       if (trimmedReferralCode) {
-        // Assuming referral codes are stored in a column named 'referral_code' in the 'users' table
-        // This implies that a user's referral code is unique or identifiable.
         const { data: referrerCheck, error: referrerError } = await supabase
           .from('users')
           .select('id')
@@ -140,7 +133,6 @@ export default function SignUpPage() {
         }
       }
 
-      // Proceed with Supabase auth sign up
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
@@ -148,7 +140,7 @@ export default function SignUpPage() {
           data: {
             full_name: fullName,
             user_type: user_type,
-            referral_code: trimmedReferralCode || undefined, // Pass validated code
+            referral_code: trimmedReferralCode || undefined,
           },
           emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`
         },
@@ -169,9 +161,9 @@ export default function SignUpPage() {
               <div className="flex flex-col items-start space-y-2">
                 <span>{errorMessage}</span>
                 <Button
-                  variant="secondary"
+                  variant="link"
                   size="sm"
-                  className="mt-2 text-xs h-auto py-1 px-2"
+                  className="mt-2 text-xs h-auto py-1 px-2 text-amber-500 hover:text-amber-400"
                   onClick={() => router.push('/auth/signin')}
                 >
                   Sign in
@@ -194,20 +186,14 @@ export default function SignUpPage() {
       }
 
       if (data.user) {
-        // User object exists, email verification (OTP) is likely required.
         toast({
           title: "Verification code sent!",
           description:
-            "We've sent a verification code to your email address. Please check your inbox.",
+            "We\'ve sent a verification code to your email address. Please check your inbox.",
           duration: 5000,
         });
-        // Redirect to OTP verification page with email
         router.push(`/verify-otp?email=${encodeURIComponent(normalizedEmail)}`);
-        // No need to setIsLoading(false) here as we are navigating away.
       } else {
-        // This case might indicate that email confirmation is disabled and the user is auto-verified,
-        // or some other unexpected state where data.user is null after a successful call.
-        // For an OTP flow, this is unexpected if no signUpError was thrown.
         console.warn("SignUpPage: supabase.auth.signUp call was successful but data.user is null. This is unexpected for an OTP flow.", data);
         setError("Sign up process did not complete as expected for OTP. Please try again.");
         toast({
@@ -218,10 +204,9 @@ export default function SignUpPage() {
         });
         setIsLoading(false);
       }
-    } catch (err: any) { // Catch for truly unexpected errors (e.g., network, programming errors in checks)
+    } catch (err: any) {
       console.error("SignUpPage handleSubmit unexpected error:", err);
-      // Avoid setting error/toasting again if it was already handled by a specific check above
-      if (!error) { // Only set error if it hasn't been set by a prior, more specific check
+      if (!error) {
         setError(err.message || "An unexpected error occurred. Please try again.");
         toast({
           variant: "destructive",
@@ -239,158 +224,194 @@ export default function SignUpPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-6">
-          <BrandLogo centered showText={false} size="lg" />
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8">
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              The best way to grow your business
-            </h1>
-            <p className="text-sm text-mute d-foreground mt-1">
-              Already have an account?{" "}
-              <Link
-                href="/auth/signin"
-                className="text-primary font-medium hover:underline"
-              >
-                Sign in
-              </Link>
-            </p>
+    <>
+      <style jsx global>{`
+        @keyframes border-flow {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animate-border-flow {
+          background-image: linear-gradient(to right, #FBBF24, #F59E0B, #D97706, #F59E0B, #FBBF24);
+          background-size: 300% auto;
+          animation: border-flow 5s linear infinite;
+        }
+      `}</style>
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 dark:bg-gray-900 px-4 pt-4 pb-16">
+        <div className="w-full max-w-md">
+          <div className="mb-10 flex flex-col items-center">
+            <Image
+              src={logo}
+              alt="Game Of Creators Logo"
+              priority
+              width={150}
+              height={150}
+            />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Tabs
-              defaultValue="creator"
-              onValueChange={(value) =>
-                Setuser_type(value as "advertiser" | "creator")
-              }
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="advertiser">I'm a Brand</TabsTrigger>
-                <TabsTrigger value="creator">I'm a Creator</TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First name</Label>
-                <Input
-                  id="firstName"
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  required
-                  className="h-11"
-                />
+          <div className="p-[2.5px] rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 animate-border-flow shadow-2xl">
+            <div className="bg-[#0B0F11] dark:bg-gray-800 rounded-lg p-8">
+              <div className="mb-6 text-center">
+                <h1 className="text-3xl font-bold text-white dark:text-white">
+                  Create Account
+                </h1>
+                <p className="text-sm text-slate-400 mt-2">
+                  Already have an account?{" "}
+                  <Link
+                    href="/auth/signin"
+                    className="font-medium text-amber-500 hover:text-amber-400"
+                  >
+                    Sign In
+                  </Link>
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last name</Label>
-                <Input
-                  id="lastName"
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  required
-                  className="h-11"
-                />
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="example@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="h-11"
-              />
-            </div>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="6+ characters"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-11 pr-10"
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
-                  onClick={togglePasswordVisibility}
+                <Tabs
+                  value={user_type}
+                  onValueChange={(value) =>
+                    Setuser_type(value as "advertiser" | "creator")
+                  }
+                  className="w-full"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
+                  <TabsList className="grid w-full grid-cols-2 bg-slate-800">
+                    <TabsTrigger value="creator" className="data-[state=active]:bg-rose-600 data-[state=active]:text-white">Creator</TabsTrigger>
+                    <TabsTrigger value="advertiser" className="data-[state=active]:bg-rose-600 data-[state=active]:text-white">Brand</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
+                    <Input
+                      id="firstName"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      required
+                      className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                      placeholder="John"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      required
+                      className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                      placeholder="Doe"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-slate-300">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    name="email"
+                    placeholder="name@example.com"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-slate-300">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoComplete="new-password"
+                      className="h-11 pr-10 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
+                      onClick={togglePasswordVisibility}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">Password must be at least 6 characters.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="referralCode" className="text-slate-300">
+                    Referral Code{" "}
+                    <span className="text-slate-500">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="referralCode"
+                    type="text"
+                    value={referralCode}
+                    onChange={(e) => setReferralCode(e.target.value)}
+                    className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                    placeholder="Enter referral code"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="w-full h-11 bg-rose-600 hover:bg-rose-700 text-white"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating Account...
+                    </>
                   ) : (
-                    <Eye className="h-5 w-5" />
+                    "Create Account"
                   )}
-                </button>
-              </div>
+                </Button>
+                <p className="text-xs text-center text-slate-500">
+                  By signing up, I agree to the{" "}
+                  <Link
+                    href="/terms-of-service"
+                    className="font-medium text-amber-500 hover:text-amber-400 underline"
+                  >
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    href="/privacy-policy"
+                    className="font-medium text-amber-500 hover:text-amber-400 underline"
+                  >
+                    Privacy Policy
+                  </Link>
+                </p>
+              </form>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="referralCode">Referral code (optional)</Label>
-              <Input
-                id="referralCode"
-                type="text"
-                placeholder="Enter referral code"
-                value={referralCode}
-                onChange={(e) => setReferralCode(e.target.value)}
-                className="h-11"
-              />
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full h-11 bg-rose-600 hover:bg-rose-700"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                "Create account"
-              )}
-            </Button>
-
-            <p className="text-xs text-center text-muted-foreground">
-              By signing up, I agree to the{" "}
-              <Link
-                href="/terms-of-service"
-                className="text-primary hover:underline"
-              >
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="/privacy-policy"
-                className="text-primary hover:underline"
-              >
-                Privacy Policy
-              </Link>
-            </p>
-          </form>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

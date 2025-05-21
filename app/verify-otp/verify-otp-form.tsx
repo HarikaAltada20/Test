@@ -1,63 +1,54 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BrandLogo } from "@/components/brand-logo";
 import { createClient } from "@/utils/supabase/client";
+import Link from "next/link";
 
-// This component contains the core logic and UI for OTP verification
 export function VerifyOtpForm() {
-  const [otp, setOtp] = useState("");
+  const [otp, setOtp] = useState(Array(6).fill(""));
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownInterval = useRef<NodeJS.Timeout | null>(null);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const router = useRouter();
-  const searchParams = useSearchParams(); // This hook is now safely inside a client component
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const supabase = createClient();
 
   useEffect(() => {
     const emailParam = searchParams.get("email");
     if (!emailParam) {
-      // Redirect immediately if no email is found
-      router.replace("/auth/signup"); // Use replace to avoid adding to history
+      router.replace("/auth/signup");
       toast({
         variant: "destructive",
         title: "Missing Email",
-        description: "No email address was provided. Please sign up again.",
+        description: "No email address provided. Please try again.",
         duration: 5000,
       });
       return;
     }
     setEmail(emailParam);
-
     setResendCooldown(30);
     startCooldownTimer();
 
     return () => {
-      if (cooldownInterval.current) {
-        clearInterval(cooldownInterval.current);
-      }
+      if (cooldownInterval.current) clearInterval(cooldownInterval.current);
     };
-    // Intentionally omitting router and toast from deps as they are stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Check previous verification effect (depends on email state)
   useEffect(() => {
     const checkPreviousVerification = async () => {
-      // Check only if email state is set
       if (!email) return;
-
       const verificationSuccess = localStorage.getItem("verificationSuccess");
       const verificationAttempt = localStorage.getItem("verificationAttempt");
 
@@ -69,21 +60,11 @@ export function VerifyOtpForm() {
             if (data.user) {
               toast({
                 title: "Already Verified",
-                description: "Continuing setup...",
+                description: "Continuing your setup...",
                 duration: 3000,
               });
-              // Store user data needed for next step
-              sessionStorage.setItem(
-                "signupUserData",
-                JSON.stringify({
-                  id: data.user.id,
-                  email: data.user.email,
-                  fullName: data.user.user_metadata?.full_name || "",
-                  userType: data.user.user_metadata?.user_type || "creator",
-                  referralCode: sessionStorage.getItem("referralCode") || null,
-                })
-              );
-              router.replace("/choose-username"); // Use replace
+              router.replace("/choose-username");
+              return;
             }
           }
         } catch (err) {
@@ -92,7 +73,6 @@ export function VerifyOtpForm() {
       }
     };
     checkPreviousVerification();
-    // Intentionally omitting router, toast, supabase.auth from deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email]);
 
@@ -109,6 +89,24 @@ export function VerifyOtpForm() {
     }, 1000);
   };
 
+  const handleOtpChange = (index: number, value: string) => {
+    if (!/^[0-9]?$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    if (value && index < otp.length - 1) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
   const handleResendCode = async () => {
     if (resendCooldown > 0 || !email) return;
     setIsResending(true);
@@ -120,18 +118,18 @@ export function VerifyOtpForm() {
       });
       if (resendError) throw resendError;
       toast({
-        title: "Code Resent",
-        description: "A new verification code has been sent.",
+        title: "Verification Code Resent",
+        description: "A new code has been sent to your email.",
         duration: 5000,
       });
       setResendCooldown(60);
       startCooldownTimer();
     } catch (err: any) {
-      setError(`Resend failed: ${err.message}`);
+      setError(`Failed to resend code: ${err.message}`);
       toast({
         variant: "destructive",
         title: "Resend Failed",
-        description: err.message || "Could not send code.",
+        description: err.message || "Could not send a new code. Please try again.",
         duration: 5000,
       });
     } finally {
@@ -139,10 +137,11 @@ export function VerifyOtpForm() {
     }
   };
 
-  const handleVerify = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length !== 6) {
-      setError("Please enter a valid 6-digit OTP.");
+    const otpString = otp.join("");
+    if (otpString.length !== 6) {
+      setError("Please enter the full 6-digit verification code.");
       return;
     }
     setError(null);
@@ -154,22 +153,33 @@ export function VerifyOtpForm() {
       );
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
         email,
-        token: otp,
+        token: otpString,
         type: "signup",
       });
-      if (verifyError) throw verifyError;
-      if (!data.session || !data.user)
-        throw new Error("Verification successful, but no session created.");
+
+      if (verifyError) {
+        let friendlyMessage = "Invalid or expired verification code. Please try again.";
+        if (verifyError.message.includes("already confirmed")) {
+          friendlyMessage = "This email address has already been verified.";
+          toast({ title: "Already Verified", description: friendlyMessage, duration: 4000 });
+          router.push("/auth/signin");
+          setIsLoading(false);
+          return;
+        }
+        throw new Error(friendlyMessage);
+      }
+
+      if (!data.session || !data.user) {
+        throw new Error("Verification successful, but no session created. Please try signing in.");
+      }
 
       localStorage.setItem("verificationSuccess", "true");
-      toast({ title: "Email verified!", duration: 3000 });
+      toast({ title: "Email Verified Successfully!", description: "Proceeding to account setup...", duration: 3000 });
 
       const authUser = data.user;
       const userMetaData = authUser.user_metadata;
 
-      // --- Create user profile and related data ---
       try {
-        // Step 1: Upsert user in public.users table
         const { error: upsertUserError } = await supabase
           .from('users')
           .upsert({
@@ -177,25 +187,16 @@ export function VerifyOtpForm() {
             email: authUser.email,
             full_name: userMetaData?.full_name || "",
             user_type: userMetaData?.user_type || "creator",
-            username: null,
             referral_code: null,
             referred_by: userMetaData?.referral_code || null,
             coins: 100,
-            advertisers_referred: 0,
-            creators_referred: 0,
             is_active: true,
             email_confirmed_at: authUser.email_confirmed_at || new Date().toISOString(),
-          }, {
-            onConflict: 'id',
-          });
+          }, { onConflict: 'id' });
 
-        if (upsertUserError) {
-          console.error("Error upserting user in public.users:", upsertUserError);
-          throw new Error(`Failed to save user profile: ${upsertUserError.message}`);
-        }
+        if (upsertUserError) throw new Error(`Failed to save user profile: ${upsertUserError.message}`);
 
-        // Step 2: Create welcome bonus transaction (only if not already created for this user - simplistic check)
-        const { data: existingCoinTx, error: checkTxError } = await supabase
+        const { data: existingCoinTx } = await supabase
           .from('coin_transactions')
           .select('id')
           .eq('user_id', authUser.id)
@@ -203,71 +204,32 @@ export function VerifyOtpForm() {
           .eq('description', 'Welcome bonus for joining Game Of Creators')
           .maybeSingle();
 
-        if (checkTxError) {
-          console.error("Error checking existing coin transaction:", checkTxError);
-        }
-
         if (!existingCoinTx) {
-          const { error: coinTxError } = await supabase.from('coin_transactions').insert([{
-            user_id: authUser.id,
-            type: 'bonus',
-            status: 'success',
-            coins: 100,
-            description: `Welcome bonus for joining Game Of Creators`
+          await supabase.from('coin_transactions').insert([{
+            user_id: authUser.id, type: 'bonus', status: 'success', coins: 100,
+            description: 'Welcome bonus for joining Game Of Creators'
           }]);
-          if (coinTxError) {
-            console.error("Error creating welcome bonus transaction (full error object):", JSON.stringify(coinTxError, null, 2));
-          }
         }
 
-        // Step 3: Initialize the appropriate profile table (creator_profiles or advertiser_profiles)
-        const userType = userMetaData?.user_type || "creator";
-        if (userType === 'creator') {
-          const { error: creatorProfileError } = await supabase
-            .from('creator_profiles')
-            .upsert({
-              id: authUser.id,
-              total_contests_participated: 0,
-              total_contests_won: 0,
-              total_money_won: 0,
-              withdrawable_balance: 0,
-              total_views: 0
-            }, { onConflict: 'id' });
-          if (creatorProfileError) console.error("Error upserting creator profile:", creatorProfileError);
-        } else if (userType === 'advertiser') {
-          const { error: advertiserProfileError } = await supabase
-            .from('advertiser_profiles')
-            .upsert({
-              id: authUser.id,
-              subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198',
-              total_money_spent: 0,
-              total_contests_run: 0,
-              available_deposit_balance: 0,
-              withdrawable_balance: 0
-            }, { onConflict: 'id' });
-          if (advertiserProfileError) console.error("Error upserting advertiser profile:", advertiserProfileError);
-        }
+        const profileTable = userMetaData?.user_type === 'advertiser' ? 'advertiser_profiles' : 'creator_profiles';
+        const profileData = userMetaData?.user_type === 'advertiser' ?
+          { id: authUser.id, subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198' } :
+          { id: authUser.id };
+        await supabase.from(profileTable).upsert(profileData, { onConflict: 'id' });
 
-      } catch (profileSetupError: any) {
-        console.error("Error during post-verification profile setup:", profileSetupError);
-        toast({
-          variant: "destructive",
-          title: "Profile Setup Failed",
-          description: `Your email is verified, but we couldn\'t set up your profile. Please contact support. Error: ${profileSetupError.message}`,
-          duration: 10000,
-        });
-        setIsLoading(false);
-        return;
+      } catch (profileError: any) {
+        console.error("Error during post-verification profile setup:", profileError);
+        toast({ variant: "destructive", title: "Setup Incomplete", description: `Your email is verified, but there was an issue setting up your profile. Please contact support. Details: ${profileError.message}`, duration: 8000 });
       }
-      // --- End of profile setup ---
 
       router.push("/choose-username");
+
     } catch (err: any) {
-      setError(err.message || "Failed to verify OTP");
+      setError(err.message || "An unexpected error occurred during verification.");
       toast({
         variant: "destructive",
         title: "Verification Failed",
-        description: err.message || "Failed to verify OTP.",
+        description: err.message || "An unexpected error occurred. Please try again.",
         duration: 5000,
       });
     } finally {
@@ -275,86 +237,112 @@ export function VerifyOtpForm() {
     }
   };
 
-  // Display loading or message while email is being fetched from params
-  if (!email) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-        <div className="w-full max-w-md text-center">
-          <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Main UI once email is loaded
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-6">
-          <BrandLogo centered showText={false} size="lg" />
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-8">
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Verify your email
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Enter the 6-digit code sent to{" "}
-              <span className="font-medium">{email}</span>
-            </p>
-          </div>
-          <form onSubmit={handleVerify} className="space-y-5">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="otp">Verification code</Label>
+    <>
+      <style jsx global>{`
+        @keyframes border-flow {
+          0% {
+            background-position: 0% 50%;
+          }
+          50% {
+            background-position: 100% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
+          }
+        }
+        .animate-border-flow {
+          background-image: linear-gradient(to right, #FBBF24, #F59E0B, #D97706, #F59E0B, #FBBF24);
+          background-size: 300% auto;
+          animation: border-flow 5s linear infinite;
+        }
+      `}</style>
+      <div className="text-center">
+        <h2 className="text-2xl font-semibold text-white mb-3">Check Your Email</h2>
+        <p className="text-slate-400 mb-1">
+          We&apos;ve sent a 6-digit verification code to:
+        </p>
+        <p className="text-amber-400 font-medium mb-6 break-all">
+          {email || "your email address"}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="flex justify-center gap-2 sm:gap-3">
+            {otp.map((digit, index) => (
               <Input
-                id="otp"
+                key={index}
+                ref={(el) => { inputRefs.current[index] = el; }}
                 type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="123456"
-                required
-                className="text-center text-lg tracking-widest"
+                maxLength={1}
+                value={digit}
+                onChange={(e) => handleOtpChange(index, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(index, e)}
+                className="w-10 h-10 sm:w-12 sm:h-12 text-center text-lg sm:text-xl font-semibold bg-slate-800 border-slate-700 text-white focus:border-amber-500 focus:ring-amber-500"
                 disabled={isLoading}
+                pattern="[0-9]"
+                inputMode="numeric"
               />
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isLoading || otp.length !== 6}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : null}
-              Verify Email
-            </Button>
-          </form>
-          <div className="mt-4 text-center">
-            <Button
-              variant="link"
-              size="sm"
-              onClick={handleResendCode}
-              disabled={isResending || resendCooldown > 0}
-              className="text-sm text-muted-foreground"
-            >
-              {isResending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-1" />
-              )}
-              Resend code {resendCooldown > 0 ? `(${resendCooldown}s)` : ""}
-            </Button>
+            ))}
           </div>
+
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full h-11 bg-rose-600 hover:bg-rose-700 text-white text-base"
+            disabled={isLoading || isResending}
+          >
+            {isLoading ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
+            ) : (
+              "Verify Email"
+            )}
+          </Button>
+        </form>
+
+        <div className="mt-6 text-sm">
+          <p className="text-slate-400">
+            Didn&apos;t receive the code?{" "}
+            {resendCooldown > 0 ? (
+              <span className="text-slate-500">
+                Resend available in {resendCooldown}s
+              </span>
+            ) : (
+              <Button
+                variant="link"
+                onClick={handleResendCode}
+                disabled={isResending || isLoading}
+                className="p-0 h-auto font-medium text-amber-500 hover:text-amber-400 disabled:text-slate-500 disabled:no-underline"
+              >
+                {isResending ? (
+                  <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Resending...</>
+                ) : (
+                  "Resend Code"
+                )}
+              </Button>
+            )}
+          </p>
+        </div>
+
+        <div className="mt-8 text-center">
+          <p className="text-xs text-slate-500">
+            Signed up with the wrong email?{" "}
+          </p>
+          <p>
+            <Link
+              href="/auth/signin"
+              className="inline-flex items-center text-sm font-medium text-amber-500 hover:text-amber-400"
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              Back to Sign In
+            </Link>
+          </p>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AvatarImage, AvatarFallback, Avatar } from "@/components/ui/avatar";
 // import { ModeToggle } from "@/components/mode-toggle"
-import { Logo } from "./logo";
 import {
   Sheet,
   SheetContent,
@@ -20,12 +19,11 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Menu } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
-import logo from "@/public/images/GoViral_transparent_logo.png";
+import { Menu, Moon } from "lucide-react";
+import { usePathname } from "next/navigation";
+import logo from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
-import { createClient } from "@/utils/supabase/client";
 import { useClientAuth } from "@/hooks/use-client-auth";
 
 interface NavProps {
@@ -37,8 +35,6 @@ interface NavProps {
 export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
 
   const pathname = usePathname();
-  // const supabase = createClient();
-  // const router = useRouter();
 
   const { logout } = useClientAuth();
 
@@ -63,81 +59,97 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
-      <div className="flex h-16 items-center">
+    <header className="py-3 bg-[#0B0F11]">
+      <div className="bg-[#333A4A] text-slate-100 p-3 rounded-full shadow-lg flex h-16 items-center relative max-w-[720px] mx-auto px-4 sm:px-6">
+        {/* Logo */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center">
             <Image
               src={logo}
               alt="Game Of Creators Logo"
-              width={80}
-              height={80}
+              width={120}
+              height={40}
             />
+            {/* <span className="ml-2.5 text-lg font-semibold text-slate-200 hidden sm:inline">
+              GAME OF CREATORS
+            </span> */}
           </Link>
         </div>
 
-        {/* Center navigation - positioned absolutely for true centering */}
-        <div className="absolute left-1/2 -translate-x-1/2">
-          <nav className="hidden md:flex gap-6">
-            <Link
-              href="/creators"
-              className="text-sm font-medium transition-colors hover:text-primary"
-            >
-              Creators
-            </Link>
+        {/* Center navigation */}
+        <div className="absolute left-1/2 -translate-x-1/2 hidden md:block">
+          <nav className="flex items-center gap-6">
             <Link
               href="/brands"
-              className="text-sm font-medium transition-colors hover:text-primary"
+              className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
             >
-              Brands
+              For Brands
+            </Link>
+            <Link
+              href="/creators"
+              className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
+            >
+              For Creators
             </Link>
           </nav>
         </div>
 
-        <div className="ml-auto flex items-center">
+        {/* Right side actions */}
+        <div className="ml-auto flex items-center space-x-2 sm:space-x-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-slate-300 hover:text-slate-100 hover:bg-slate-700 rounded-full p-2 hidden sm:flex"
+            aria-label="Toggle theme (placeholder)"
+          >
+            <Moon className="h-5 w-5" />
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-8 w-8">
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                  <Avatar className="h-9 w-9 border-2 border-slate-600 hover:border-slate-400">
                     <AvatarImage
                       src={profilePictureUrl || user?.user_metadata?.profile_picture_url || undefined}
                       alt={profileFullName || user?.user_metadata?.full_name || "User"}
                     />
-                    <AvatarFallback>
+                    <AvatarFallback className="bg-slate-700 text-slate-300">
                       {(profileFullName?.[0] || user?.user_metadata?.full_name?.[0] || user?.email?.[0] || "U").toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
+              {/* Consider styling DropdownMenuContent for dark theme if not inheriting properly */}
+              <DropdownMenuContent className="w-56 bg-slate-800 border-slate-700 text-slate-200" align="end" forceMount>
                 <div className="flex items-center justify-start gap-2 p-2">
                   <div className="flex flex-col space-y-1 leading-none">
                     {(profileFullName || user?.user_metadata?.full_name) && (
-                      <p className="font-medium">
+                      <p className="font-medium text-slate-100">
                         {profileFullName || user?.user_metadata?.full_name}
                       </p>
                     )}
                     {user?.email && (
-                      <p className="w-[200px] truncate text-sm text-muted-foreground">
+                      <p className="w-[200px] truncate text-sm text-slate-400">
                         {user.email}
                       </p>
                     )}
                   </div>
                 </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="cursor-pointer">
+                <DropdownMenuSeparator className="bg-slate-700" />
+                <DropdownMenuItem asChild className="cursor-pointer hover:bg-slate-700 focus:bg-slate-700">
                   <Link href="/dashboard">Dashboard</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer">
+                <DropdownMenuItem asChild className="cursor-pointer hover:bg-slate-700 focus:bg-slate-700">
                   <Link href="/dashboard/profile">Profile</Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer">
+                <DropdownMenuItem asChild className="cursor-pointer hover:bg-slate-700 focus:bg-slate-700">
                   <Link href="/dashboard/settings">Settings</Link>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="bg-slate-700" />
                 <DropdownMenuItem
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-slate-700 focus:bg-slate-700"
                   onClick={handleSignOut}
                 >
                   Log out
@@ -145,89 +157,83 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button variant="outline" asChild>
-              <Link href="/auth/signin">Log in</Link>
+            <Button asChild className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 sm:px-5 rounded-md text-sm">
+              <Link href="/auth/signin">Sign In</Link>
             </Button>
           )}
+
+          {/* Mobile Menu Trigger */}
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="ml-2 md:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden text-slate-300 hover:text-slate-100 hover:bg-slate-700 p-2"
+              >
                 <Menu className="h-5 w-5" />
                 <span className="sr-only">Toggle Menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="right">
-              <SheetHeader>
-                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+            <SheetContent side="right" className="bg-slate-800 text-slate-100 border-l-slate-700 w-[280px] sm:w-[320px]">
+              <SheetHeader className="mb-6 border-b border-slate-700 pb-4">
+                <SheetTitle className="text-lg font-semibold text-slate-100 text-left">Menu</SheetTitle>
                 <SheetDescription className="sr-only">
                   Main navigation links for the site and user dashboard access.
                 </SheetDescription>
               </SheetHeader>
-              <Link href="/" className="flex items-center gap-2 mb-4">
-                <Logo />
+
+              <Link href="/" className="flex items-center gap-2 mb-6">
+                <Image
+                  src={logo}
+                  alt="Game Of Creators Logo"
+                  width={120}
+                  height={28}
+                />
+                {/* <span className="font-semibold text-slate-200">GAME OF CREATORS</span> */}
               </Link>
-              <nav className="mt-8 flex flex-col gap-4">
-                <Link
-                  href="/creators"
-                  className="text-sm font-medium transition-colors hover:text-primary"
-                >
-                  Creators
-                </Link>
+
+              <nav className="flex flex-col gap-3">
                 <Link
                   href="/brands"
-                  className="text-sm font-medium transition-colors hover:text-primary"
+                  className="text-base font-medium text-slate-300 hover:text-white transition-colors p-2 rounded-md hover:bg-slate-700"
                 >
-                  Brands
+                  For Brands
                 </Link>
+                <Link
+                  href="/creators"
+                  className="text-base font-medium text-slate-300 hover:text-white transition-colors p-2 rounded-md hover:bg-slate-700"
+                >
+                  For Creators
+                </Link>
+
+                <Button
+                  variant="ghost"
+                  className="text-slate-300 hover:text-white hover:bg-slate-700 justify-start sm:hidden flex items-center gap-2 mt-3 p-2 rounded-md text-base font-medium"
+                  aria-label="Toggle theme (placeholder)"
+                >
+                  <Moon className="h-5 w-5" />
+                  <span>Toggle Theme</span>
+                </Button>
+
+                <hr className="border-slate-700 my-3" />
+
                 {!user && (
                   <Link
                     href="/auth/signin"
-                    className="text-sm font-medium transition-colors hover:text-primary"
+                    className="text-base font-medium text-blue-400 hover:text-blue-300 transition-colors p-2 rounded-md hover:bg-slate-700"
                   >
-                    Log in
+                    Sign In
                   </Link>
                 )}
                 {user && (
                   <>
-                    <Link
-                      href="/dashboard"
-                      className="text-sm font-medium transition-colors hover:text-primary"
-                    >
-                      Dashboard
-                    </Link>
-                    <Link
-                      href="/dashboard/content"
-                      className="text-sm font-medium transition-colors hover:text-primary"
-                    >
-                      My Content
-                    </Link>
-                    <Link
-                      href="/dashboard/opportunities"
-                      className="text-sm font-medium transition-colors hover:text-primary"
-                    >
-                      Opportunities
-                    </Link>
-                    <Link
-                      href="/dashboard/earnings"
-                      className="text-sm font-medium transition-colors hover:text-primary"
-                    >
-                      Earnings
-                    </Link>
-                    <Link
-                      href="/dashboard/profile"
-                      className="text-sm font-medium transition-colors hover:text-primary"
-                    >
-                      Profile
-                    </Link>
-                    <Link
-                      href="/dashboard/settings"
-                      className="text-sm font-medium transition-colors hover:text-primary"
-                    >
-                      Settings
-                    </Link>
+                    <Link href="/dashboard" className="text-base font-medium text-slate-300 hover:text-white transition-colors p-2 rounded-md hover:bg-slate-700">Dashboard</Link>
+                    <Link href="/dashboard/profile" className="text-base font-medium text-slate-300 hover:text-white transition-colors p-2 rounded-md hover:bg-slate-700">Profile</Link>
+                    <Link href="/dashboard/settings" className="text-base font-medium text-slate-300 hover:text-white transition-colors p-2 rounded-md hover:bg-slate-700">Settings</Link>
+                    {/* Add other user-specific links here if needed, with similar styling */}
                     <Button
                       variant="ghost"
-                      className="justify-start px-0 text-sm font-medium"
+                      className="justify-start text-base font-medium text-slate-300 hover:text-white mt-2 p-2 rounded-md hover:bg-slate-700 w-full"
                       onClick={handleSignOut}
                     >
                       Log out

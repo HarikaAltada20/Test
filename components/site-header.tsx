@@ -1,9 +1,9 @@
 import Link from "next/link"
 import { MainNav } from "@/components/main-nav"
-import { MobileNav } from "@/components/mobile-nav"
-import { AuthNav } from "./auth-nav"
+// import { MobileNav } from "@/components/mobile-nav"
+// import { AuthNav } from "./auth-nav"
 import Image from "next/image"
-import logo from "@/public/images/GoViral_transparent_logo.png"
+import logo from "@/public/images/gold_logo_horizontal.svg";
 // import { ThemeToggle } from "@/components/theme-toggle"
 
 export function SiteHeader() {
@@ -13,7 +13,7 @@ export function SiteHeader() {
 
         {/* Left: Logo */}
         <Link href="/" className="flex items-center space-x-2">
-          <Image className="ml-8" src={logo} alt="Game Of Creators Logo" width={80} height={80} />
+          <Image className="ml-8" src={logo} alt="Game Of Creators Logo" width={120} height={120} />
         </Link>
 
         {/* Center: Brands & Creators */}
@@ -23,8 +23,8 @@ export function SiteHeader() {
 
         {/* Right: Auth options */}
         <div className="flex items-center space-x-4">
-          <AuthNav />
-          <MobileNav />
+          {/* <AuthNav />
+          <MobileNav /> */}
         </div>
       </div>
     </header>
