@@ -1,9 +1,9 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getUserVideos, refreshAccessToken } from '@/lib/youtube-api';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(
@@ -18,7 +18,6 @@ export async function GET() {
       }
     );
 
-    // Verify user authentication with server
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (userError || !user) {
@@ -26,7 +25,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get creator profile with YouTube account info
     const { data: profile, error: profileError } = await supabase
       .from('creator_profiles')
       .select('youtube_account')
@@ -44,12 +42,10 @@ export async function GET() {
 
     let accessToken = profile.youtube_account.access_token;
 
-    // Check if token is expired and try to refresh it
     if (profile.youtube_account.expires_at && new Date(profile.youtube_account.expires_at) <= new Date()) {
       try {
         const newTokens = await refreshAccessToken(profile.youtube_account.refresh_token);
         
-        // Update the tokens in the database
         const { error: updateError } = await supabase
           .from('creator_profiles')
           .update({
@@ -66,7 +62,6 @@ export async function GET() {
           console.error('Error updating tokens:', updateError);
           return NextResponse.json({ error: 'Failed to refresh YouTube token' }, { status: 500 });
         }
-
         accessToken = newTokens.access_token;
       } catch (refreshError) {
         console.error('Error refreshing token:', refreshError);
@@ -76,16 +71,12 @@ export async function GET() {
 
     const videos = await getUserVideos(accessToken);
     
-    if (!videos) {
-      return NextResponse.json({ error: 'Failed to fetch videos' }, { status: 500 });
-    }
-
     return NextResponse.json({ videos });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in YouTube videos endpoint:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch YouTube videos' },
+      { error: error.message || 'Failed to fetch YouTube videos' },
       { status: 500 }
     );
   }

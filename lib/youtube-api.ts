@@ -44,7 +44,7 @@ const isNode = typeof window === 'undefined';
 
 // Extract YouTube video ID from URL (works both client and server)
 export function extractYoutubeId(url: string) {
-  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([\w-]{11})(?:&\S+)?/i;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
@@ -83,7 +83,6 @@ export async function getUserVideos(accessToken: string) {
   const oauth2Client = await createOAuthClient();
   oauth2Client.setCredentials({ access_token: accessToken });
   
-  // First get the channel ID
   const channelResponse = await youtube.channels.list({
     part: ['contentDetails'],
     mine: true,
@@ -93,45 +92,51 @@ export async function getUserVideos(accessToken: string) {
   const uploadsPlaylistId = channelResponse.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
   
   if (!uploadsPlaylistId) {
-    throw new Error('No uploads playlist found');
+    throw new Error('No uploads playlist found for the channel.');
   }
 
   // Get videos from the uploads playlist
   const videosResponse = await youtube.playlistItems.list({
-    part: ['snippet', 'contentDetails'],
+    part: ['snippet', 'contentDetails'], // contentDetails contains videoId
     playlistId: uploadsPlaylistId,
-    maxResults: 50,
+    maxResults: 50, // Fetch up to 50 items for client-side pagination
     access_token: accessToken
   });
 
-  // Get detailed statistics for each video
-  const videoIds = videosResponse.data.items?.map(item => item.contentDetails?.videoId).filter(Boolean) as string[];
-  
-  if (videoIds.length === 0) {
-    return [];
-  }
+  const videoItems = videosResponse.data.items?.filter(item => item.contentDetails?.videoId);
 
-  const videoStatsResponse = await youtube.videos.list({
-    part: ['statistics', 'snippet'],
+  if (!videoItems || videoItems.length === 0) {
+    return []; // Return empty array if no video items found
+  }
+  
+  const videoIds = videoItems.map(item => item.contentDetails!.videoId) as string[];
+
+  // Get detailed statistics and status for each video
+  const videoDetailsResponse = await youtube.videos.list({
+    part: ['statistics', 'snippet', 'status'], // Ensure status is fetched
     id: videoIds,
     access_token: accessToken
   });
 
-  // Format the response to match the expected structure
-  return videoStatsResponse.data.items?.map((video) => ({
-    id: { videoId: video.id },
+  // Filter for public videos and then format the response
+  const publicVideos = videoDetailsResponse.data.items?.filter(
+    (video) => video.status?.privacyStatus === 'public'
+  );
+
+  return publicVideos?.map((video) => ({
+    id: { videoId: video.id! }, 
     snippet: {
-      title: video.snippet?.title,
-      description: video.snippet?.description,
-      publishedAt: video.snippet?.publishedAt,
+      title: video.snippet?.title || undefined,
+      description: video.snippet?.description || undefined,
+      publishedAt: video.snippet?.publishedAt || undefined,
       thumbnails: {
         default: video.snippet?.thumbnails?.default,
         medium: video.snippet?.thumbnails?.medium,
         high: video.snippet?.thumbnails?.high
       }
     },
-    statistics: video.statistics
-  }));
+    statistics: video.statistics 
+  })) || [];
 }
 
 export async function getVideoStats(videoId: string, accessToken: string) {
@@ -241,12 +246,12 @@ export async function verifyVideoOwnership(accessToken: string, videoId: string)
     const channelId = channelResponse.data.items?.[0]?.id || '';
     
     if (!channelId) {
-      throw new Error('No channel found');
+      throw new Error('No channel found for the authenticated user.');
     }
 
-    // Get video details
+    // Get video details, including snippet, statistics, and status
     const videoResponse = await youtube.videos.list({
-      part: ['snippet'],
+      part: ['snippet', 'statistics', 'status'], // Added statistics and status
       id: [videoId],
       access_token: accessToken
     });
@@ -254,16 +259,37 @@ export async function verifyVideoOwnership(accessToken: string, videoId: string)
     const video = videoResponse.data.items?.[0];
     
     if (!video) {
-      throw new Error('Video not found');
+      throw new Error('Video not found on YouTube.');
     }
 
-    // Check if the video belongs to the authenticated channel
+    // Check if the video belongs to the authenticated channel and is public
+    const isOwned = video.snippet?.channelId === channelId;
+    const isPublic = video.status?.privacyStatus === 'public';
+
+    if (!isOwned) {
+      return {
+        valid: false,
+        videoInfo: video, // Return video info even if not owned, for error message context
+        error: 'not_owned'
+      };
+    }
+
+    if (!isPublic) {
+      return {
+        valid: false,
+        videoInfo: video,
+        error: 'not_public'
+      };
+    }
+
     return {
-      valid: video.snippet?.channelId === channelId,
-      videoInfo: video
+      valid: true,
+      videoInfo: video // This now includes snippet, statistics, and status
     };
   } catch (error) {
     console.error('Error verifying video ownership:', error);
+    // Re-throw the error or handle it by returning a specific structure
+    // For now, re-throwing to be caught by the API route
     throw error;
   }
 }

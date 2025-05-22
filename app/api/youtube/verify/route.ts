@@ -105,17 +105,30 @@ async function handleVerification(request: NextRequest) {
 
     // For POST requests, verify video ownership
     if (videoId) {
-      const { valid, videoInfo } = await verifyVideoOwnership(youtubeAccount.access_token, videoId);
+      const verificationResult = await verifyVideoOwnership(youtubeAccount.access_token, videoId);
       
-      if (!valid) {
-        return NextResponse.json({ error: 'This video does not belong to your YouTube channel' }, { status: 403 });
+      if (!verificationResult.valid) {
+        let errorMessage = 'Video verification failed.';
+        if (verificationResult.error === 'not_owned') {
+          errorMessage = 'This video does not belong to your YouTube channel.';
+        } else if (verificationResult.error === 'not_public') {
+          errorMessage = 'This video is not public. Please select a public video.';
+        } else if (verificationResult.videoInfo && verificationResult.videoInfo.snippet) {
+          // Fallback if error type is not specific but videoInfo exists
+          errorMessage = `Could not verify video: ${verificationResult.videoInfo.snippet.title}. It might not be public or belong to your channel.`;
+        }
+        return NextResponse.json({ error: errorMessage }, { status: 403 });
       }
+
+      // Destructure the parts from videoInfo for the response
+      const { id: videoInfoId, snippet, statistics } = verificationResult.videoInfo;
 
       return NextResponse.json({
         valid: true,
         videoInfo: {
-          id: { videoId: videoInfo.id },
-          snippet: videoInfo.snippet
+          id: { videoId: videoInfoId }, // Ensure consistent structure with YouTubeVideo interface
+          snippet: snippet,
+          statistics: statistics // Pass along the statistics
         }
       });
     }
