@@ -20,6 +20,7 @@ import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from 'dayjs';
 import { useRouter } from "next/navigation";
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import Link from "next/link";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -81,6 +82,9 @@ export default function SettingsPage({
   const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
   const [instagramAccount, setInstagramAccount] = useState<SocialAccount | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [youtubeConnected, setYoutubeConnected] = useState(false);
+  const [instagramConnected, setInstagramConnected] = useState(false);
+  const [youtubeAuthUrl, setYoutubeAuthUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -433,92 +437,98 @@ export default function SettingsPage({
       {userType === "creator" && (
         <Card>
           <CardHeader>
-            <CardTitle>Connected Accounts</CardTitle>
+            <CardTitle className="text-lg">Social Accounts</CardTitle>
             <CardDescription>
-              Manage your connected social media accounts
+              Connect your social media accounts to participate in campaigns.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* YouTube Account */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="p-2 bg-red-100 rounded-full">
-                  <SiYoutube className="h-5 w-5 text-red-600" />
-                </div>
+            {/* YouTube Connection */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center space-x-3">
+                <SiYoutube className="text-2xl text-red-600" />
                 <div>
-                  <p className="font-medium">YouTube</p>
-                  <p className="text-sm text-muted-foreground">
-                    {(profile as CreatorProfile)?.youtube_account
-                      ? `Connected as ${(profile as CreatorProfile).youtube_account
-                        ?.channel_title
-                      }`
-                      : "Not connected"}
-                  </p>
-                  {!(profile as CreatorProfile)?.youtube_account && (
-                    <p className="text-xs text-muted-foreground mt-1 max-w-md">
-                      Connect to allow Game Of Creators to view basic channel
-                      info (name, subscribers) and list your videos for
-                      opportunities. We only request{" "}
-                      <span className="font-medium">read-only access</span> and{" "}
-                      <span className="font-medium">cannot</span> upload,
-                      modify, or change settings.
+                  <h3 className="font-medium">YouTube</h3>
+                  {youtubeConnected ? (
+                    <p className="text-sm text-muted-foreground">
+                      Connected as {youtubeAccount?.channel_title || "your YouTube account"}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Not connected
                     </p>
                   )}
                 </div>
               </div>
-              {(profile as CreatorProfile)?.youtube_account ? (
-                <Button
-                  variant="outline"
-                  onClick={() => disconnectAccount("youtube")}
-                >
+              {youtubeConnected ? (
+                <Button variant="outline" onClick={() => disconnectAccount('youtube')}>
                   Disconnect
                 </Button>
               ) : (
                 <Button asChild>
-                  <a href="/api/youtube/auth?returnTo=/dashboard/settings">
+                  <Link href={youtubeAuthUrl || "/api/youtube/auth"}>
                     Connect YouTube
-                  </a>
+                  </Link>
                 </Button>
               )}
             </div>
+            {/* YouTube Connection Information - Display if not connected */}
+            {!youtubeConnected && (
+              <Alert variant="default" className="mt-2">
+                <Bell className="h-4 w-4" />
+                <AlertDescription className="text-xs leading-relaxed">
+                  Connect your YouTube account to allow Game Of Creators to view basic channel information (e.g., name, subscriber count, username). This also enables us to display your videos on the campaign submission page, allowing you to easily select them for opportunities.
+                  Please note that we will only have <span className="font-medium">read-only access</span> and <span className="font-medium">will not</span> be able to upload videos, modify content, or change any of your channel settings.
+                </AlertDescription>
+              </Alert>
+            )}
 
-            {/* Instagram Account */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="p-2 bg-pink-100 rounded-full">
-                  <SiInstagram className="h-5 w-5 text-pink-600" />
-                </div>
+            {/* Instagram Connection */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center space-x-3">
+                <SiInstagram className="text-2xl text-pink-600" />
                 <div>
-                  <p className="font-medium">Instagram</p>
-                  <p className="text-sm text-muted-foreground">
-                    {(profile as CreatorProfile)?.instagram_account
-                      ? `Connected as ${(profile as CreatorProfile).instagram_account
-                        ?.username
-                      }`
-                      : "Not connected"}
-                  </p>
+                  <h3 className="font-medium">Instagram</h3>
+                  {instagramConnected ? (
+                    <p className="text-sm text-muted-foreground">
+                      Connected as {instagramAccount?.name_of_account || instagramAccount?.username || "your Instagram account"} ({(instagramAccount?.account_type || 'N/A').replace('_', ' ')})
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Not connected
+                    </p>
+                  )}
                 </div>
               </div>
-              {(profile as CreatorProfile)?.instagram_account ? (
-                <Button
-                  variant="outline"
-                  onClick={handleInstagramDisconnect}
-                  disabled={isLoading}
-                >
-                  {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
-                  Disconnect
+              {instagramConnected ? (
+                <Button variant="outline" onClick={handleInstagramDisconnect} disabled={isLoading}>
+                  {isLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}Disconnect
                 </Button>
               ) : (
-                <Button
-                  variant="outline"
-                  onClick={handleInstagramConnect}
-                  disabled={isLoading}
-                >
-                  {isLoading && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}
-                  Connect Instagram
+                <Button onClick={handleInstagramConnect} disabled={isLoading}>
+                  {isLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}Connect Instagram
                 </Button>
               )}
             </div>
+            {/* Instagram Connection Information - Display if not connected */}
+            {!instagramConnected && (
+              <Alert variant="default" className="mt-2">
+                <Bell className="h-4 w-4" />
+                <AlertDescription className="text-xs leading-relaxed">
+                  To participate in Instagram campaigns, you need to connect an Instagram <strong className="font-semibold">Business or Creator account</strong>. This is required by Instagram for us to fetch your Reels/Videos and their performance insights. We request permissions for basic profile data and to read your media and insights.<br /><br />
+                  <strong className="font-semibold">Important Steps Before Connecting:</strong>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    <li>Ensure your Instagram profile is a <strong className="font-semibold">Business or Creator</strong> account. (To check your Instagram account type, open the Instagram app, go to your profile, tap the menu icon (three horizontal lines), select "Settings and Privacy," then "Account type and tools," and finally, "Switch to professional account". If you see the "Switch to professional account" option, you have a Personal account. If you see "Switch to personal account" or "Switch to creator account," you have a Business or Creator account. )</li>
+                    <li>If your account is not a Business or Creator account, please convert it by going to your profile and clicking on the three dots in the top right corner,then navigate to Settings - Account - Switch to Businees/Creator account.</li>
+                    <li>Please be aware: For contest eligibility and data fetching, only content created <strong className="font-semibold">after</strong> your account has been converted to a Business or Creator account will be valid.</li>
+                  </ul>
+                  {/* Replace # with your actual FAQ/help page URL */}
+                  <a href="/instagram-connection-faq" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline hover:text-primary">
+                    Learn more about these requirements <ExternalLink className="inline h-3 w-3 ml-0.5" />
+                  </a>
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       )}
