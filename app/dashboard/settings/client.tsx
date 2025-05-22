@@ -146,6 +146,33 @@ export default function SettingsPage({
     loadProfile();
   }, [user, supabase]);
 
+  useEffect(() => {
+    if (profile && userType === 'creator') {
+      const creatorProfile = profile as CreatorProfile;
+      if (creatorProfile.youtube_account) {
+        setYoutubeAccount(creatorProfile.youtube_account);
+        setYoutubeConnected(true);
+      } else {
+        setYoutubeAccount(null);
+        setYoutubeConnected(false);
+      }
+
+      if (creatorProfile.instagram_account) {
+        setInstagramAccount(creatorProfile.instagram_account);
+        setInstagramConnected(true);
+      } else {
+        setInstagramAccount(null);
+        setInstagramConnected(false);
+      }
+    } else {
+      // Reset if profile is null or user is not a creator, or if profile is for an advertiser
+      setYoutubeAccount(null);
+      setYoutubeConnected(false);
+      setInstagramAccount(null);
+      setInstagramConnected(false);
+    }
+  }, [profile, userType]);
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
