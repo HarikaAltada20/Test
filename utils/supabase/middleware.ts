@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
@@ -15,13 +15,9 @@ export async function updateSession(request: NextRequest) {
                     return request.cookies.getAll()
                 },
                 setAll(cookiesToSet) {
-                    cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-                    supabaseResponse = NextResponse.next({
-                        request,
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                        supabaseResponse.cookies.set(name, value, options as CookieOptions)
                     })
-                    cookiesToSet.forEach(({ name, value, options }) =>
-                        supabaseResponse.cookies.set(name, value, options)
-                    )
                 },
             },
         }
@@ -37,52 +33,77 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
+    const currentPath = request.nextUrl.pathname;
+
     if (request.nextUrl.pathname.startsWith('/choose-username')) {
         console.log('Middleware: Accessing /choose-username. User from getUser():', user ? user.id : 'No user');
     }
 
     if (user) {
         // User is authenticated
+
+        // Prevent logged-in users from accessing auth pages
+        if (
+            currentPath.startsWith('/auth/signin') ||
+            currentPath.startsWith('/auth/signup') ||
+            currentPath.startsWith('/auth/forgot-password') || // Add other auth pages as needed
+            currentPath.startsWith('/verify-otp') // OTP page is usually for pre-auth or immediately post-signup
+        ) {
+            console.log(`Middleware: Authenticated user ${user.id} attempting to access auth page ${currentPath}. Redirecting to /dashboard.`);
+            return NextResponse.redirect(new URL('/dashboard', request.url));
+        }
+
         const { data: userProfile, error: profileError } = await supabase
             .from('users')
             .select('username')
             .eq('id', user.id)
-            .maybeSingle(); // Changed from .single() to .maybeSingle()
+            .maybeSingle();
 
-        if (profileError && profileError.code !== 'PGRST116') { // PGRST116 is "No rows found", which maybeSingle handles by returning null data
+        if (profileError && profileError.code !== 'PGRST116') {
             console.error(`Middleware: Error fetching profile for user ${user.id}:`, profileError.message);
-            // Allow request to proceed to avoid blocking user for DB hiccup. Error is logged.
         } else {
-            // Profile fetched (or userProfile is null if no row was found)
             const hasUsername = userProfile && userProfile.username;
-            const currentPath = request.nextUrl.pathname;
 
             if (hasUsername && currentPath.startsWith('/choose-username')) {
-                // User has a username but is trying to access /choose-username again.
-                // Redirect them to the dashboard.
                 console.log(`Middleware: User ${user.id} has username, redirecting from /choose-username to /dashboard.`);
                 return NextResponse.redirect(new URL('/dashboard', request.url));
             }
 
             if (!hasUsername && !currentPath.startsWith('/choose-username') && !currentPath.startsWith('/api/auth')) {
-                // User does NOT have a username and is trying to access a protected route (not /choose-username or /api/auth)
-                // The main middleware.ts config.matcher defines which routes are protected.
+                 // Also ensure they are not trying to access other auth flow pages if they don't have a username yet, beyond /choose-username
+                if (currentPath.startsWith('/auth/') && !currentPath.startsWith('/auth/callback')) { // Allow callback
+                     console.log(`Middleware: User ${user.id} (no username) trying to access ${currentPath}. Redirecting to /choose-username.`);
+                     return NextResponse.redirect(new URL('/choose-username', request.url));
+                }
                 console.log(`Middleware: User ${user.id} has no username, path: ${currentPath}. Redirecting to /choose-username.`);
                 return NextResponse.redirect(new URL('/choose-username', request.url));
             }
         }
-    } else if (
-        // Unauthenticated user handling (redirect to signin)
-        !request.nextUrl.pathname.startsWith('/auth/signin') && // Allow access to signin itself
-        !request.nextUrl.pathname.startsWith('/auth/signup') && // Allow access to signup
-        !request.nextUrl.pathname.startsWith('/auth/callback') && // Allow Supabase callback
-        !request.nextUrl.pathname.startsWith('/verify-otp') && // Allow access to OTP page
-        !request.nextUrl.pathname.startsWith('/choose-username') && // Allow unauth access to choose-username IF direct nav (OTP flow sets session first)
-        !request.nextUrl.pathname.startsWith('/auth') // Broadly allow API routes (adjust if too permissive)
-    ) {
-        // no user, redirect to signin page
-        console.log(`Middleware: No user, path: ${request.nextUrl.pathname}. Redirecting to /auth/signin.`);
-        return NextResponse.redirect(new URL('/auth/signin', request.url));
+    } else {
+        // Unauthenticated user handling
+        // If accessing a route that requires auth (and is not /choose-username for direct nav)
+        // and is not an explicit auth flow page, redirect to signin.
+        const isAuthFlowPage = 
+            currentPath.startsWith('/auth/signin') ||
+            currentPath.startsWith('/auth/signup') ||
+            currentPath.startsWith('/auth') ||
+            currentPath.startsWith('/auth/forgot-password') || // Add other auth pages as needed
+            currentPath.startsWith('/verify-otp');
+
+        const isChooseUsernamePage = currentPath.startsWith('/choose-username');
+        const isAllowedPublicApi = currentPath.startsWith('/api/auth'); // Or more specific public API paths
+
+        const isProtectedRoute = config.matcher.some((pattern: string) => {
+            const regexPattern = pattern
+                .replace(/\/:[^/]+/g, '/[^/]+') 
+                .replace(/\/\*$/, '/.*');        
+            return new RegExp(`^${regexPattern}$`).test(currentPath);
+        });
+
+        if (isProtectedRoute && !isAuthFlowPage && !isAllowedPublicApi) {
+            console.log(`Middleware: No user, protected path by matcher: ${currentPath}. Redirecting to /auth/signin.`);
+            return NextResponse.redirect(new URL('/auth/signin', request.url));
+        }
     }
 
     // IMPORTANT: You *must* return the supabaseResponse object as it is if not redirecting earlier.
@@ -104,7 +125,8 @@ export async function updateSession(request: NextRequest) {
 export const config = {
   matcher: [
     '/dashboard/:path*',
-    '/choose-username', // Add this if it's a protected route
-    // other protected routes
+    '/choose-username',
+    // Add other routes that strictly require authentication to be matched by middleware for processing
+    // Public pages like homepage, /about, /pricing usually don't need to be in matcher unless specific checks are done
   ],
 }
