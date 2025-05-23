@@ -208,11 +208,11 @@ export async function GET(request: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
+    console.log('Instagram account data:', instagramAccountData);
     const { error: updateError } = await supabase
       .from('creator_profiles')
       .update({
-        instagram_account: instagramAccountData,
-        updated_at: new Date().toISOString(),
+        instagram_account: instagramAccountData
        })
       .eq('id', user.id);
 
