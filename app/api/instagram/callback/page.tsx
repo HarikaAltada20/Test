@@ -1,0 +1,124 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+
+// Function to get a cookie by name
+function getCookie(name: string): string | null {
+    const nameEQ = name + '=';
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+// Function to delete a cookie by name
+function deleteCookie(name: string) {
+    document.cookie = name + '=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+}
+
+export default function InstagramCallbackPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const [error, setError] = useState<string | null>(null);
+    const [message, setMessage] = useState<string | null>('Processing Instagram authentication...');
+
+    useEffect(() => {
+        const handleAuth = async () => {
+            const code = searchParams.get('code');
+            const stateFromUrl = searchParams.get('state');
+            const errorParam = searchParams.get('error');
+            const errorDescription = searchParams.get('error_description');
+
+            const storedState = getCookie('instagram_oauth_state');
+            // Delete the state cookie once read, regardless of outcome
+            if (storedState) {
+                deleteCookie('instagram_oauth_state');
+            }
+
+            if (errorParam) {
+                const fullError = `Instagram authentication failed: ${errorDescription || errorParam}`;
+                setError(fullError);
+                setMessage(null);
+                router.push(`/dashboard/settings?error=${encodeURIComponent(fullError)}`);
+                return;
+            }
+
+            if (!stateFromUrl || !storedState || stateFromUrl !== storedState) {
+                const stateMismatchError = 'Instagram authentication failed: State mismatch. Please try connecting again.';
+                console.error('Instagram OAuth state mismatch. URL state:', stateFromUrl, 'Cookie state:', storedState);
+                setError(stateMismatchError);
+                setMessage(null);
+                router.push(`/dashboard/settings?error=${encodeURIComponent(stateMismatchError)}`);
+                return;
+            }
+
+            if (!code) {
+                const noCodeError = 'No authorization code found from Instagram.';
+                setError(noCodeError);
+                setMessage(null);
+                router.push(`/dashboard/settings?error=${encodeURIComponent(noCodeError)}`);
+                return;
+            }
+
+            try {
+                // The redirectUri used here is for the client-side page itself,
+                // but the backend will use the redirect_uri that was originally registered with Instagram for the app.
+                // This clientSideRedirectUri is not strictly needed for the backend call if your app setup is correct.
+                const clientSideRedirectUri = `${window.location.origin}/api/instagram/callback`;
+
+                const response = await fetch('/api/instagram/exchange-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        code: code,
+                        // We send the validated state to the backend as an additional check, though the primary validation is done above.
+                        state: stateFromUrl,
+                        redirectUri: clientSideRedirectUri // This might be used by backend if it needs to construct a full URI again for some reason
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    throw new Error(data.error || `Server responded with status ${response.status}`);
+                }
+
+                setMessage('Instagram account connected successfully! Redirecting...');
+                router.push('/dashboard/settings?success=instagram_connected');
+
+            } catch (err: any) {
+                console.error('Error during Instagram authentication processing:', err);
+                const authProcessingError = `Error processing Instagram authentication: ${err.message}`;
+                setError(authProcessingError);
+                setMessage(null);
+                router.push(`/dashboard/settings?error=${encodeURIComponent(authProcessingError)}`);
+            }
+        };
+
+        handleAuth();
+    }, [searchParams, router]);
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: '20px', textAlign: 'center' }}>
+            {message && <p>{message}</p>}
+            {error && (
+                <div style={{ color: 'red', marginTop: '20px' }}>
+                    <p>Error: {error}</p>
+                    <button
+                        onClick={() => router.push('/dashboard/settings')}
+                        style={{ marginTop: '10px', padding: '10px 20px', cursor: 'pointer' }}
+                    >
+                        Go to Settings
+                    </button>
+                </div>
+            )}
+            {!message && !error && <p>Loading...</p>}
+        </div>
+    );
+} 
