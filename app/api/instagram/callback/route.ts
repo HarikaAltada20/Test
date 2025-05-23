@@ -221,7 +221,7 @@ export async function GET(request: NextRequest) {
       throw updateError;
     }
 
-    console.log('Successfully connected Instagram account for user:', user.id);
+    console.log('Successfully connected Instagram account for user - :', user.id);
     const successUrl = new URL('/dashboard/settings?success=instagram_connected', request.url);
     response = NextResponse.redirect(successUrl);
     return response;
