@@ -1,55 +1,31 @@
 import { createClient } from '@/utils/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
-import dayjs from 'dayjs';
+// dayjs is not needed here anymore as token expiry is handled by client or long-lived token
 
-interface InstagramTokenResponse {
+interface InstagramShortLivedTokenResponse {
   access_token: string;
-  user_id: number; // This is the app-scoped user ID (IGSID) from token exchange
+  user_id: number; // This is the App-Scoped User ID (IGSID) or Instagram Business Account ID
 }
 
-// Simplified interface based on user's /me sample response fields
-interface InstagramUserProfile {
-  id: string; // Standard global ID from Instagram Graph API /me endpoint
-  user_id?: string; // User-provided field from their /me sample, capture if present
-  username: string;
-  name?: string;
-  account_type: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
-  profile_picture_url?: string;
-  followers_count?: number;
-  follows_count?: number;
-  media_count?: number;
+interface InstagramLongLivedTokenResponse {
+  access_token: string;
+  token_type: string; // Should be 'bearer'
+  expires_in: number; // Seconds until expiry, typically for 60 days
 }
 
-async function getInstagramMeProfile(accessToken: string): Promise<InstagramUserProfile | null> {
-  try {
-    // Fields as per user's sample response for /me, ensuring 'id' is primary.
-    const fields = 'id,user_id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count';
-    const userProfileUrl = `https://graph.instagram.com/me?fields=${fields}&access_token=${accessToken}`;
-    const profileResponse = await fetch(userProfileUrl);
-    const profileData = await profileResponse.json();
-
-    if (!profileResponse.ok || profileData.error) {
-      console.error('Error fetching Instagram user profile via /me:', profileData.error);
-      let errorMessage = 'Failed to fetch Instagram user profile via /me';
-      if (profileData.error && profileData.error.message) {
-        errorMessage += `: ${profileData.error.message} (Code: ${profileData.error.code}, Type: ${profileData.error.type})`;
-      }
-      throw new Error(errorMessage);
-    }
-    return profileData as InstagramUserProfile;
-  } catch (error) {
-    console.error('Exception in getInstagramMeProfile:', error);
-    return null;
-  }
-}
+// No profile fetching functions needed in this simplified backend route
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { code } = body; // State and clientCallbackUri are not strictly needed by this simplified backend endpoint
+    // clientCallbackUri from body is the redirect_uri used in the client's initial auth redirect to Instagram
+    const { code, redirectUri: clientRegisteredRedirectUri } = body; 
 
     if (!code) {
       return NextResponse.json({ error: 'No code provided for token exchange.' }, { status: 400 });
+    }
+    if (!clientRegisteredRedirectUri) {
+      return NextResponse.json({ error: 'Client redirect URI is missing from request body.' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -61,88 +37,65 @@ export async function POST(request: NextRequest) {
     }
     console.log('Supabase session found in /exchange-token for user:', user.id);
 
-    const appRegisteredRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/instagram/callback`;
+    const clientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID!;
+    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!; // Use non-public for server-side
 
+    if (!clientId || !clientSecret) {
+        console.error('Instagram client ID or server secret is not configured.');
+        return NextResponse.json({ error: 'Server configuration error for Instagram auth.' }, { status: 500 });
+    }
+
+    // Step 1: Exchange code for a short-lived access token
     const tokenParams = new URLSearchParams({
-      client_id: process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID!,
-      client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
+      client_id: clientId,
+      client_secret: clientSecret,
       grant_type: 'authorization_code',
-      redirect_uri: appRegisteredRedirectUri,
+      redirect_uri: clientRegisteredRedirectUri, // This MUST match the URI used in the initial auth request
       code: code,
     });
 
-    const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
+    const shortLivedTokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: tokenParams.toString(),
     });
-    const tokenData = await tokenRes.json();
+    const shortLivedTokenData: InstagramShortLivedTokenResponse = await shortLivedTokenRes.json();
 
-    if (!tokenRes.ok || tokenData.error_message) {
-      console.error('Error exchanging Instagram code for token in /exchange-token:', tokenData.error_message || tokenData);
-      throw new Error(tokenData.error_message || 'Failed to exchange Instagram code for token');
+    if (!shortLivedTokenRes.ok || !shortLivedTokenData.access_token) {
+      console.error('Error exchanging code for short-lived Instagram token:', (shortLivedTokenData as any).error_message || shortLivedTokenData);
+      throw new Error((shortLivedTokenData as any).error_message || 'Failed to exchange code for short-lived Instagram token');
     }
 
-    const shortLivedAccessToken = tokenData.access_token;
-    const appScopedUserIdToStore = tokenData.user_id?.toString(); // IGSID from token exchange, store this.
+    const shortLivedAccessToken = shortLivedTokenData.access_token;
+    const instagramAppScopedUserId = shortLivedTokenData.user_id; // Capture this before it's gone
 
-    const longLivedTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.INSTAGRAM_CLIENT_SECRET!}&access_token=${shortLivedAccessToken}`;
+    // Step 2: Exchange short-lived token for a long-lived token
+    const longLivedTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${shortLivedAccessToken}`;
     const longLivedTokenRes = await fetch(longLivedTokenUrl);
-    const longLivedTokenData = await longLivedTokenRes.json();
+    const longLivedTokenData: InstagramLongLivedTokenResponse = await longLivedTokenRes.json();
 
-    if (!longLivedTokenRes.ok || longLivedTokenData.error) {
-      console.error('Error exchanging for long-lived Instagram token in /exchange-token:', longLivedTokenData.error);
-      throw new Error(longLivedTokenData.error?.message || 'Failed to get long-lived Instagram token');
+    if (!longLivedTokenRes.ok || !longLivedTokenData.access_token) {
+      console.error('Error exchanging for long-lived Instagram token:', (longLivedTokenData as any).error || longLivedTokenData);
+      // Don't fail the whole flow if long-lived token fails; return short-lived one with its app_scoped_id.
+      // Client can decide how to handle it (e.g. shorter session, prompt again sooner)
+      // Or, you might choose to throw an error here if long-lived is essential.
+      console.warn('Failed to get long-lived token, returning short-lived token details.');
+      return NextResponse.json({
+        access_token: shortLivedAccessToken, // short-lived
+        user_id: instagramAppScopedUserId, // App-Scoped ID or Business Account ID
+        token_type: 'bearer', // Standard type
+        expires_in: 3600 // Approx. 1 hour for short-lived tokens
+      });
     }
     
-    const longLivedAccessToken = longLivedTokenData.access_token;
-    const expiresInSeconds = longLivedTokenData.expires_in;
-
-    // Step 3: Get Instagram User Profile using only /me
-    const userProfile = await getInstagramMeProfile(longLivedAccessToken);
-
-    if (!userProfile || !userProfile.id) { // Ensure we have the profile and the main 'id' field
-      console.error('Failed to fetch Instagram /me profile or ID missing in /exchange-token.');
-      throw new Error('Failed to fetch Instagram user profile or main user ID from /me.');
-    }
-    
-    if (userProfile.account_type !== 'BUSINESS' && userProfile.account_type !== 'MEDIA_CREATOR') {
-        console.warn(`User connected a ${userProfile.account_type} Instagram account. This is not supported.`);
-        return NextResponse.json({
-            error: `Please connect an Instagram Business or Creator account. You connected a ${userProfile.account_type} account.`
-        }, { status: 400 });
-    }
-
-    const tokenExpiry = dayjs().add(expiresInSeconds, 'seconds').toISOString();
-    const instagramAccountData = {
-      provider: 'instagram',
-      instagram_user_id: userProfile.id, // Using userProfile.id as the global, unique IG user ID
-      app_scoped_user_id: appScopedUserIdToStore, // Storing the IGSID from token exchange
-      username: userProfile.username,
-      name_of_account: userProfile.name || userProfile.username,
-      profile_picture_url: userProfile.profile_picture_url,
-      account_type: userProfile.account_type,
-      access_token: longLivedAccessToken,
-      token_expiry: tokenExpiry,
-      followers_count: userProfile.followers_count,
-      follows_count: userProfile.follows_count,
-      media_count: userProfile.media_count,
-      user_id_debug: userProfile.user_id, // Storing the user_id field from /me for debugging if it exists
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: updateError } = await supabase
-      .from('creator_profiles')
-      .update({ instagram_account: instagramAccountData, updated_at: new Date().toISOString() })
-      .eq('id', user.id);
-
-    if (updateError) {
-      console.error('Error updating creator profile in /exchange-token:', updateError);
-      throw updateError;
-    }
-
-    console.log('Successfully connected Instagram & updated profile in /exchange-token for user:', user.id);
-    return NextResponse.json({ success: true, message: 'Instagram account connected successfully.' });
+    console.log('Successfully obtained long-lived Instagram token for user:', user.id);
+    // Return the long-lived token and the original user_id from the short-lived token exchange
+    return NextResponse.json({
+        access_token: longLivedTokenData.access_token, // long-lived
+        user_id: instagramAppScopedUserId, // App-Scoped ID or Business Account ID from initial exchange
+        token_type: longLivedTokenData.token_type,
+        expires_in: longLivedTokenData.expires_in
+    });
 
   } catch (error: any) {
     console.error('Full error in /api/instagram/exchange-token:', error);
