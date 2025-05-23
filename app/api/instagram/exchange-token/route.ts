@@ -1,107 +1,63 @@
-import { createClient } from '@/utils/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
-// dayjs is not needed here anymore as token expiry is handled by client or long-lived token
-
-interface InstagramShortLivedTokenResponse {
-  access_token: string;
-  user_id: number; // This is the App-Scoped User ID (IGSID) or Instagram Business Account ID
-}
-
-interface InstagramLongLivedTokenResponse {
-  access_token: string;
-  token_type: string; // Should be 'bearer'
-  expires_in: number; // Seconds until expiry, typically for 60 days
-}
-
-// No profile fetching functions needed in this simplified backend route
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    // clientCallbackUri from body is the redirect_uri used in the client's initial auth redirect to Instagram
-    const { code, redirectUri: clientRegisteredRedirectUri } = body; 
+    const { code, redirectUri: clientRedirectUri } = await request.json();
 
     if (!code) {
-      return NextResponse.json({ error: 'No code provided for token exchange.' }, { status: 400 });
+      return NextResponse.json({ error: 'Authorization code is missing' }, { status: 400 });
     }
-    if (!clientRegisteredRedirectUri) {
-      return NextResponse.json({ error: 'Client redirect URI is missing from request body.' }, { status: 400 });
-    }
-
-    const supabase = await createClient();
-    const { data: { user }, error: sessionError } = await supabase.auth.getUser();
-
-    if (sessionError || !user) {
-      console.error('Supabase session error or no user in /exchange-token:', sessionError);
-      return NextResponse.json({ error: 'User not authenticated in Supabase.' }, { status: 401 });
-    }
-    console.log('Supabase session found in /exchange-token for user:', user.id);
-
-    const clientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID!;
-    const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET!; // Use non-public for server-side
-
-    if (!clientId || !clientSecret) {
-        console.error('Instagram client ID or server secret is not configured.');
-        return NextResponse.json({ error: 'Server configuration error for Instagram auth.' }, { status: 500 });
+    if (!clientRedirectUri) {
+      return NextResponse.json({ error: 'Client redirect URI is missing' }, { status: 400 });
     }
 
-    // Step 1: Exchange code for a short-lived access token
-    const tokenParams = new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'authorization_code',
-      redirect_uri: clientRegisteredRedirectUri, // This MUST match the URI used in the initial auth request
-      code: code,
-    });
-
-    const shortLivedTokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: tokenParams.toString(),
-    });
-    const shortLivedTokenData: InstagramShortLivedTokenResponse = await shortLivedTokenRes.json();
-
-    if (!shortLivedTokenRes.ok || !shortLivedTokenData.access_token) {
-      console.error('Error exchanging code for short-lived Instagram token:', (shortLivedTokenData as any).error_message || shortLivedTokenData);
-      throw new Error((shortLivedTokenData as any).error_message || 'Failed to exchange code for short-lived Instagram token');
-    }
-
-    const shortLivedAccessToken = shortLivedTokenData.access_token;
-    const instagramAppScopedUserId = shortLivedTokenData.user_id; // Capture this before it's gone
-
-    // Step 2: Exchange short-lived token for a long-lived token
-    const longLivedTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${shortLivedAccessToken}`;
-    const longLivedTokenRes = await fetch(longLivedTokenUrl);
-    const longLivedTokenData: InstagramLongLivedTokenResponse = await longLivedTokenRes.json();
-
-    if (!longLivedTokenRes.ok || !longLivedTokenData.access_token) {
-      console.error('Error exchanging for long-lived Instagram token:', (longLivedTokenData as any).error || longLivedTokenData);
-      // Don't fail the whole flow if long-lived token fails; return short-lived one with its app_scoped_id.
-      // Client can decide how to handle it (e.g. shorter session, prompt again sooner)
-      // Or, you might choose to throw an error here if long-lived is essential.
-      console.warn('Failed to get long-lived token, returning short-lived token details.');
-      return NextResponse.json({
-        access_token: shortLivedAccessToken, // short-lived
-        user_id: instagramAppScopedUserId, // App-Scoped ID or Business Account ID
-        token_type: 'bearer', // Standard type
-        expires_in: 3600 // Approx. 1 hour for short-lived tokens
-      });
-    }
+    const clientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
+    const clientSecret = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_SECRET;
     
-    console.log('Successfully obtained long-lived Instagram token for user:', user.id);
-    // Return the long-lived token and the original user_id from the short-lived token exchange
-    return NextResponse.json({
-        access_token: longLivedTokenData.access_token, // long-lived
-        user_id: instagramAppScopedUserId, // App-Scoped ID or Business Account ID from initial exchange
-        token_type: longLivedTokenData.token_type,
-        expires_in: longLivedTokenData.expires_in
+    console.log("Client ID:", clientId);
+    console.log("Client Secret:", clientSecret);
+    if (!clientId || !clientSecret) {
+      console.error('Instagram client ID or secret is not configured in environment variables.');
+      return NextResponse.json({ error: 'Server configuration error.' }, { status: 500 });
+    }
+
+    const form = new URLSearchParams();
+    form.append('client_id', clientId);
+    form.append('client_secret', clientSecret);
+    form.append('grant_type', 'authorization_code');
+    form.append('redirect_uri', clientRedirectUri); // Use the redirect_uri passed from the client, which should match the initial one
+    form.append('code', code);
+
+    const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
+      method: 'POST',
+      body: form,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    const tokenData = await tokenRes.json();
+
+    if (!tokenRes.ok) {
+      console.error('Instagram token exchange error:', tokenData);
+      return NextResponse.json(
+        { error: tokenData.error_message || 'Failed to exchange code for token', details: tokenData },
+        { status: tokenRes.status }
+      );
+    }
+
+    // user_id from this response is the Instagram App-Scoped User ID if using Basic Display, or actual IG User ID for business.
+    // The original brief was for basic display initially, then switched to business scopes.
+    // For Business accounts, user_id returned here is the Instagram Account ID (a.k.a. Instagram Business Account ID).
+    // This is what you need for /insights, /media etc for that business.
+    // If you also need the Facebook Page ID linked to this IGBA, or the User accessing it, that would be a separate call or different handling.
+    return NextResponse.json({ 
+      access_token: tokenData.access_token, 
+      user_id: tokenData.user_id // This is the Instagram Business Account ID (IGBA ID)
     });
 
   } catch (error: any) {
-    console.error('Full error in /api/instagram/exchange-token:', error);
-    return NextResponse.json(
-        { error: error.message || 'An unknown error occurred during Instagram token exchange.' }, 
-        { status: 500 }
-    );
+    console.error('Error in /api/instagram/exchange-token:', error);
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 } 

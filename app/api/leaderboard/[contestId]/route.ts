@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'; // Revert to basic client
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic'; // Force dynamic rendering
@@ -7,6 +8,7 @@ export const dynamic = 'force-dynamic'; // Force dynamic rendering
 export async function GET(
   request: Request
 ) {
+  const cookieStore = cookies();
 
   // Extract contestId from URL
   const url = new URL(request.url);

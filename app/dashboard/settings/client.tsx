@@ -21,7 +21,6 @@ import dayjs from 'dayjs';
 import { useRouter } from "next/navigation";
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import Link from "next/link";
-import { v4 as uuidv4 } from 'uuid';
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -366,7 +365,6 @@ export default function SettingsPage({
     }
 
     setIsLoading(true);
-    let timeoutId: NodeJS.Timeout | undefined = undefined;
     try {
       const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
       const scopes = [
@@ -374,23 +372,16 @@ export default function SettingsPage({
         'instagram_business_manage_insights'
       ].join(',');
 
-      const state = uuidv4();
-      document.cookie = `instagram_oauth_state=${state};path=/;max-age=300;SameSite=Lax;Secure`;
+      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
 
-      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&state=${state}&enable_fb_login=0&force_authentication=1`;
-
-      timeoutId = setTimeout(() => {
-        if (isLoading) {
-          setIsLoading(false);
-          setError("Connection timed out. Please try again.");
-        }
+      // Set a timeout to reset loading state if redirect doesn't happen
+      const timeoutId = setTimeout(() => {
+        setIsLoading(false);
+        setError("Connection timed out. Please try again.");
       }, 5000);
 
       window.location.href = authUrl;
-      if (timeoutId) clearTimeout(timeoutId);
-
     } catch (err: any) {
-      if (timeoutId) clearTimeout(timeoutId);
       setIsLoading(false);
       setError(err.message || "Failed to initiate Instagram connection");
     }

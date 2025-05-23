@@ -1,10 +1,22 @@
-import { createClient } from '@/utils/supabase/server';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserVideos, refreshAccessToken } from '@/lib/youtube-api';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -34,30 +46,26 @@ export async function GET(request: NextRequest) {
       try {
         const newTokens = await refreshAccessToken(profile.youtube_account.refresh_token);
         
-        const updatedYoutubeAccount = {
-          ...profile.youtube_account,
-          access_token: newTokens.access_token,
-          expires_at: newTokens.expires_at, 
-          updated_at: new Date().toISOString()
-        };
-
         const { error: updateError } = await supabase
           .from('creator_profiles')
-          .update({ youtube_account: updatedYoutubeAccount })
+          .update({
+            youtube_account: {
+              ...profile.youtube_account,
+              access_token: newTokens.access_token,
+              expires_at: newTokens.expires_at,
+              updated_at: new Date().toISOString()
+            }
+          })
           .eq('id', user.id);
 
         if (updateError) {
           console.error('Error updating tokens:', updateError);
-          return NextResponse.json({ error: 'Failed to refresh YouTube token in DB' }, { status: 500 });
+          return NextResponse.json({ error: 'Failed to refresh YouTube token' }, { status: 500 });
         }
         accessToken = newTokens.access_token;
-      } catch (refreshError: any) {
-        console.error('Error refreshing YouTube token:', refreshError);
-        let message = 'YouTube token expired and refresh failed';
-        if (refreshError.message) {
-          message += `: ${refreshError.message}`;
-        }
-        return NextResponse.json({ error: message }, { status: 401 });
+      } catch (refreshError) {
+        console.error('Error refreshing token:', refreshError);
+        return NextResponse.json({ error: 'YouTube token expired and refresh failed' }, { status: 401 });
       }
     }
 
