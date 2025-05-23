@@ -23,23 +23,26 @@ interface InstagramUserProfile {
   profile_picture_url?: string; // if available and permitted
   followers_count?: number; // Requires Business/Creator account and advanced permissions
   follows_count?: number; // Requires Business/Creator account and advanced permissions
+  instagram_business_account?: { id: string }; // Added to capture linked business account ID from /me
 }
 
 
-async function getInstagramUserDetails(accessToken: string, igUserId: string): Promise<InstagramUserProfile | null> {
+async function getInstagramMeProfile(accessToken: string): Promise<InstagramUserProfile | null> {
   try {
-    const fields = 'id,username,account_type,name,profile_picture_url';
-    const userProfileUrl = `https://graph.instagram.com/${igUserId}?fields=${fields}&access_token=${accessToken}`;
+    // Requesting fields available on the /me endpoint for an Instagram user
+    // 'name' and 'profile_picture_url' might require specific permissions or account types.
+    const fields = 'id,username,account_type,media_count,name,profile_picture_url,instagram_business_account';
+    const userProfileUrl = `https://graph.instagram.com/me?fields=${fields}&access_token=${accessToken}`;
     const profileResponse = await fetch(userProfileUrl);
     const profileData = await profileResponse.json();
 
     if (!profileResponse.ok || profileData.error) {
-      console.error('Error fetching Instagram user profile:', profileData.error);
-      throw new Error(profileData.error?.message || 'Failed to fetch Instagram user profile');
+      console.error('Error fetching Instagram user profile via /me:', profileData.error);
+      throw new Error(profileData.error?.message || 'Failed to fetch Instagram user profile via /me');
     }
     return profileData as InstagramUserProfile;
   } catch (error) {
-    console.error('Exception in getInstagramUserDetails:', error);
+    console.error('Exception in getInstagramMeProfile:', error);
     return null;
   }
 }
@@ -163,24 +166,48 @@ export async function GET(request: NextRequest) {
     const expiresInSeconds = longLivedTokenData.expires_in; // typically 60 days
 
     // Step 3: Get Instagram User Profile
-    // We try fetching business details first, as it can provide richer info like followers.
-    // The instagramAppScopedUserId from the token exchange might be the business account ID or a user ID.
-    let userProfile = await getInstagramBusinessUserDetails(longLivedAccessToken, instagramAppScopedUserId.toString());
-    
-    // If business details fetch failed or didn't return a proper account_type (e.g. personal account connected)
-    // fallback to basic user details. The ID from token exchange (instagramAppScopedUserId) is the key.
-    if (!userProfile || !userProfile.account_type) {
-        console.log('Falling back to basic Instagram user details for ID:', instagramAppScopedUserId.toString())
-        userProfile = await getInstagramUserDetails(longLivedAccessToken, instagramAppScopedUserId.toString());
-    }
+    // First, try fetching the user's own profile using /me
+    let userProfile = await getInstagramMeProfile(longLivedAccessToken);
 
     if (!userProfile) {
-      console.error('Failed to fetch Instagram user profile after token exchange.');
-      throw new Error('Failed to fetch Instagram user profile.');
+      console.error('Failed to fetch Instagram user profile using /me endpoint.');
+      // If /me fails catastrophically, we might not have an ID to try business details with.
+      // However, the original code used instagramAppScopedUserId for business details, so let's respect that if /me fails.
+      // This path is less likely if /me fails due to token issues.
+      if (instagramAppScopedUserId) {
+        console.log('Falling back to getInstagramBusinessUserDetails with app-scoped ID due to /me failure for token.');
+        userProfile = await getInstagramBusinessUserDetails(longLivedAccessToken, instagramAppScopedUserId.toString());
+      }
+      if (!userProfile) { // If still no profile after fallback or if /me failed and no appScopedId to try
+         throw new Error('Failed to fetch Instagram user profile after /me and potential fallback.');
+      }
+    } else {
+        // If /me was successful and it returned an instagram_business_account id, 
+        // let's try to get more detailed business info using that specific ID.
+        if (userProfile.instagram_business_account?.id) {
+            console.log('Fetched /me profile, now attempting to get enhanced business details for ID:', userProfile.instagram_business_account.id);
+            const businessDetails = await getInstagramBusinessUserDetails(longLivedAccessToken, userProfile.instagram_business_account.id);
+            if (businessDetails) {
+                // Combine /me results with business details, prioritizing business details if fields overlap
+                userProfile = { ...userProfile, ...businessDetails };
+            } else {
+                console.warn('Failed to fetch enhanced business details, proceeding with /me profile data for business account.');
+            }
+        } else if (userProfile.account_type === 'BUSINESS' || userProfile.account_type === 'MEDIA_CREATOR'){
+            // If /me says it's a business/creator account but no explicit instagram_business_account.id was returned by /me
+            // (e.g. for creator accounts not linked to a FB page in a certain way),
+            // we can try to use the user's own ID (which is the global ID from /me) to get business details.
+            // This is what getInstagramBusinessUserDetails was originally designed to do with a generic ID.
+            console.log(`Fetched /me profile (${userProfile.account_type}), now attempting to get enhanced business details using user's own ID: ${userProfile.id}`);
+            const businessDetails = await getInstagramBusinessUserDetails(longLivedAccessToken, userProfile.id);
+            if (businessDetails) {
+                userProfile = { ...userProfile, ...businessDetails };
+            }
+        }
     }
     
-    // Ensure account type is suitable
-    if (userProfile.account_type !== 'BUSINESS' && userProfile.account_type !== 'MEDIA_CREATOR') {
+    // Ensure account type is suitable (check after all profile fetching attempts)
+    if (!userProfile.account_type || (userProfile.account_type !== 'BUSINESS' && userProfile.account_type !== 'MEDIA_CREATOR')) {
         console.warn(`User connected a ${userProfile.account_type} Instagram account. Reverting connection.`);
         const errorUrl = new URL('/dashboard/settings', request.url);
         errorUrl.searchParams.set('error', 'instagram_account_type_invalid');
