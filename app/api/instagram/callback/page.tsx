@@ -22,14 +22,14 @@ export default function InstagramCallbackPage() {
                 setError(`Instagram authentication failed: ${errorDescription || errorParam}`);
                 setMessage(null);
                 // Optionally redirect or show a button to go back
-                // router.push('/dashboard/settings?error=instagram_auth_failed');
+                router.push('/dashboard/settings?error=instagram_auth_failed');
                 return;
             }
 
             if (!code) {
                 setError('No authorization code found from Instagram.');
                 setMessage(null);
-                // router.push('/dashboard/settings?error=instagram_no_code');
+                router.push('/dashboard/settings?error=instagram_no_code');
                 return;
             }
 
