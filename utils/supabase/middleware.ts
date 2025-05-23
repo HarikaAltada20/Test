@@ -83,11 +83,12 @@ export async function updateSession(request: NextRequest) {
         // Unauthenticated user handling
         // If accessing a route that requires auth (and is not /choose-username for direct nav)
         // and is not an explicit auth flow page, redirect to signin.
-        const isAuthFlowPage = 
+        const isAuthFlowPage =
             currentPath.startsWith('/auth/signin') ||
             currentPath.startsWith('/auth/signup') ||
-            currentPath.startsWith('/auth') ||
-            currentPath.startsWith('/auth/forgot-password') || // Add other auth pages as needed
+            currentPath.startsWith('/auth/callback') || // For Supabase email/OAuth redirects
+            currentPath.startsWith('/auth/forgot-password') ||
+            currentPath.startsWith('/auth/reset-password') || // If you have this
             currentPath.startsWith('/verify-otp');
 
         const isChooseUsernamePage = currentPath.startsWith('/choose-username');
