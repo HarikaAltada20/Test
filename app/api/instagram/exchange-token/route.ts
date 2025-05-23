@@ -1,34 +1,40 @@
 import { createClient } from '@/utils/supabase/server';
-import { cookies } from 'next/headers'; // Though not directly used for state here, it initializes the context for Supabase server client
 import { NextRequest, NextResponse } from 'next/server';
 import dayjs from 'dayjs';
 
 interface InstagramTokenResponse {
   access_token: string;
-  user_id: number; // This is the app-scoped user ID (IGSID)
+  user_id: number; // This is the app-scoped user ID (IGSID) from token exchange
 }
 
+// Simplified interface based on user's /me sample response fields
 interface InstagramUserProfile {
-  id: string; // Actual global Instagram User ID
+  id: string; // Standard global ID from Instagram Graph API /me endpoint
+  user_id?: string; // User-provided field from their /me sample, capture if present
   username: string;
-  account_type: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
-  media_count?: number;
   name?: string;
+  account_type: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
   profile_picture_url?: string;
   followers_count?: number;
   follows_count?: number;
-  instagram_business_account?: { id: string };
+  media_count?: number;
 }
 
 async function getInstagramMeProfile(accessToken: string): Promise<InstagramUserProfile | null> {
   try {
-    const fields = 'id,username,account_type,media_count,name,profile_picture_url,instagram_business_account';
+    // Fields as per user's sample response for /me, ensuring 'id' is primary.
+    const fields = 'id,user_id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count';
     const userProfileUrl = `https://graph.instagram.com/me?fields=${fields}&access_token=${accessToken}`;
     const profileResponse = await fetch(userProfileUrl);
     const profileData = await profileResponse.json();
+
     if (!profileResponse.ok || profileData.error) {
       console.error('Error fetching Instagram user profile via /me:', profileData.error);
-      throw new Error(profileData.error?.message || 'Failed to fetch Instagram user profile via /me');
+      let errorMessage = 'Failed to fetch Instagram user profile via /me';
+      if (profileData.error && profileData.error.message) {
+        errorMessage += `: ${profileData.error.message} (Code: ${profileData.error.code}, Type: ${profileData.error.type})`;
+      }
+      throw new Error(errorMessage);
     }
     return profileData as InstagramUserProfile;
   } catch (error) {
@@ -37,30 +43,10 @@ async function getInstagramMeProfile(accessToken: string): Promise<InstagramUser
   }
 }
 
-async function getInstagramBusinessUserDetails(accessToken: string, igBusinessAccountId: string): Promise<InstagramUserProfile | null> {
-    try {
-        const fields = 'id,username,name,profile_picture_url,followers_count,follows_count,media_count,account_type';
-        const userProfileUrl = `https://graph.facebook.com/v19.0/${igBusinessAccountId}?fields=instagram_business_account{${fields}}&access_token=${accessToken}`;
-        const profileResponse = await fetch(userProfileUrl);
-        const profileData = await profileResponse.json();
-        if (!profileResponse.ok || profileData.error) {
-            console.error('Error fetching Instagram Business user profile:', profileData.error);
-            throw new Error(profileData.error?.message || 'Failed to fetch Instagram Business user profile');
-        }
-        return profileData.instagram_business_account ? profileData.instagram_business_account : profileData as InstagramUserProfile;
-    } catch (error) {
-        console.error('Exception in getInstagramBusinessUserDetails:', error);
-        return null;
-    }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { code, state, redirectUri: clientCallbackUri } = body;
-
-    // Optional: Re-validate state if desired, though primary validation is client-side for this pattern.
-    // This route is protected by Supabase auth below.
+    const { code } = body; // State and clientCallbackUri are not strictly needed by this simplified backend endpoint
 
     if (!code) {
       return NextResponse.json({ error: 'No code provided for token exchange.' }, { status: 400 });
@@ -75,16 +61,13 @@ export async function POST(request: NextRequest) {
     }
     console.log('Supabase session found in /exchange-token for user:', user.id);
 
-    // Step 1: Exchange code for a short-lived access token
-    // IMPORTANT: The redirect_uri here MUST EXACTLY MATCH the one used in the initial auth request to Instagram (/api/instagram/callback page)
-    // and registered in your Instagram app settings.
     const appRegisteredRedirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/instagram/callback`;
 
     const tokenParams = new URLSearchParams({
       client_id: process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID!,
       client_secret: process.env.INSTAGRAM_CLIENT_SECRET!,
       grant_type: 'authorization_code',
-      redirect_uri: appRegisteredRedirectUri, // Use the redirect URI registered in IG app settings
+      redirect_uri: appRegisteredRedirectUri,
       code: code,
     });
 
@@ -101,9 +84,8 @@ export async function POST(request: NextRequest) {
     }
 
     const shortLivedAccessToken = tokenData.access_token;
-    // const instagramAppScopedUserId = tokenData.user_id; // This is the IGSID, available if needed
+    const appScopedUserIdToStore = tokenData.user_id?.toString(); // IGSID from token exchange, store this.
 
-    // Step 2: Exchange short-lived token for a long-lived token
     const longLivedTokenUrl = `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.INSTAGRAM_CLIENT_SECRET!}&access_token=${shortLivedAccessToken}`;
     const longLivedTokenRes = await fetch(longLivedTokenUrl);
     const longLivedTokenData = await longLivedTokenRes.json();
@@ -116,28 +98,14 @@ export async function POST(request: NextRequest) {
     const longLivedAccessToken = longLivedTokenData.access_token;
     const expiresInSeconds = longLivedTokenData.expires_in;
 
-    // Step 3: Get Instagram User Profile
-    let userProfile = await getInstagramMeProfile(longLivedAccessToken);
-    let appScopedUserIdToStore = tokenData.user_id?.toString(); // IGSID from token exchange
+    // Step 3: Get Instagram User Profile using only /me
+    const userProfile = await getInstagramMeProfile(longLivedAccessToken);
 
-    if (!userProfile) {
-      console.error('Failed to fetch Instagram /me profile in /exchange-token.');
-      throw new Error('Failed to fetch Instagram user profile using /me.');
+    if (!userProfile || !userProfile.id) { // Ensure we have the profile and the main 'id' field
+      console.error('Failed to fetch Instagram /me profile or ID missing in /exchange-token.');
+      throw new Error('Failed to fetch Instagram user profile or main user ID from /me.');
     }
     
-    // If /me was successful, userProfile.id is the global IG User ID.
-    // If it has an instagram_business_account.id, try to get enhanced details.
-    if (userProfile.instagram_business_account?.id) {
-        console.log('Fetched /me profile, attempting enhanced business details for ID:', userProfile.instagram_business_account.id);
-        const businessDetails = await getInstagramBusinessUserDetails(longLivedAccessToken, userProfile.instagram_business_account.id);
-        if (businessDetails) userProfile = { ...userProfile, ...businessDetails };
-        else console.warn('Failed to fetch enhanced business details for business account.');
-    } else if (userProfile.account_type === 'BUSINESS' || userProfile.account_type === 'MEDIA_CREATOR') {
-        console.log(`Fetched /me profile (${userProfile.account_type}), attempting enhanced business details using user's own global ID: ${userProfile.id}`);
-        const businessDetails = await getInstagramBusinessUserDetails(longLivedAccessToken, userProfile.id);
-        if (businessDetails) userProfile = { ...userProfile, ...businessDetails };
-    }
-
     if (userProfile.account_type !== 'BUSINESS' && userProfile.account_type !== 'MEDIA_CREATOR') {
         console.warn(`User connected a ${userProfile.account_type} Instagram account. This is not supported.`);
         return NextResponse.json({
@@ -148,8 +116,8 @@ export async function POST(request: NextRequest) {
     const tokenExpiry = dayjs().add(expiresInSeconds, 'seconds').toISOString();
     const instagramAccountData = {
       provider: 'instagram',
-      instagram_user_id: userProfile.id, // Global IG User ID from /me
-      app_scoped_user_id: appScopedUserIdToStore,
+      instagram_user_id: userProfile.id, // Using userProfile.id as the global, unique IG user ID
+      app_scoped_user_id: appScopedUserIdToStore, // Storing the IGSID from token exchange
       username: userProfile.username,
       name_of_account: userProfile.name || userProfile.username,
       profile_picture_url: userProfile.profile_picture_url,
@@ -159,6 +127,7 @@ export async function POST(request: NextRequest) {
       followers_count: userProfile.followers_count,
       follows_count: userProfile.follows_count,
       media_count: userProfile.media_count,
+      user_id_debug: userProfile.user_id, // Storing the user_id field from /me for debugging if it exists
       updated_at: new Date().toISOString(),
     };
 
