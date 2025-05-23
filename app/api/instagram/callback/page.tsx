@@ -73,6 +73,8 @@ export default function InstagramCallbackPage() {
 
                 // 3. Get Supabase user
                 const { data: { user }, error: userError } = await supabase.auth.getUser();
+                console.log('user', user);
+                console.log('userError', userError);
                 if (userError || !user) {
                     throw new Error('User not authenticated in Supabase.');
                 }
@@ -113,7 +115,7 @@ export default function InstagramCallbackPage() {
                 setError(`Error during Instagram authentication: ${err.message}`);
                 setMessage(null);
                 // Optionally redirect with a more specific error
-                // router.push(`/dashboard/settings?error=instagram_failed&message=${encodeURIComponent(err.message)}`);
+                router.push(`/dashboard/settings?error=instagram_failed&message=${encodeURIComponent(err.message)}`);
             }
         };
 
