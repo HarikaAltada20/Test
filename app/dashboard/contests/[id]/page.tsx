@@ -35,8 +35,35 @@ export default async function ContestDetailPage({
     .eq("id", contestId)
     .single();
 
+  console.log("contestData", contestData);
+
   if (!contestData) {
     redirect("/dashboard/contests");
+  }
+
+  let finalInspirationLinks: string[] | null = null;
+  const rawInspirationLinks = contestData.inspiration_links;
+
+  if (Array.isArray(rawInspirationLinks)) {
+    finalInspirationLinks = rawInspirationLinks.filter(link => typeof link === 'string');
+  } else if (typeof rawInspirationLinks === 'string') {
+    try {
+      const parsed = JSON.parse(rawInspirationLinks);
+      if (Array.isArray(parsed)) {
+        finalInspirationLinks = parsed.filter(link => typeof link === 'string');
+      } else {
+        finalInspirationLinks = null;
+      }
+    } catch (error) {
+      finalInspirationLinks = null;
+    }
+  } else if (rawInspirationLinks === null) {
+    finalInspirationLinks = null;
+  } else {
+    if (rawInspirationLinks !== undefined) {
+      // console.warn('Inspiration links is of unexpected type:', typeof rawInspirationLinks, rawInspirationLinks);
+    }
+    finalInspirationLinks = null;
   }
 
   const { data: submissionsData } = await supabase // Renamed to avoid conflict
@@ -45,7 +72,7 @@ export default async function ContestDetailPage({
     .eq("contest_id", contestId)
     .order("current_views", { ascending: false });
 
-  const isLive = contestData.status === "live";
+  const isLive = contestData.status === "Active";
 
   const calculateDurationDays = (
     start: string | null,
@@ -78,14 +105,13 @@ export default async function ContestDetailPage({
     thumbnail_url: contestData.thumbnail_url,
     brief: contestData.brief,
     platform: contestData.platform,
-    start_date: contestData.start_date, // Pass as string or Date
-    end_date: contestData.end_date,     // Pass as string or Date
-    prizes: contestData.prizes || [], // Ensure it's an array
+    start_date: contestData.start_date,
+    end_date: contestData.end_date,
     rules: contestData.rules,
-    inspiration_links: contestData.inspiration_links,
+    inspiration_links: finalInspirationLinks,
     resources: contestData.resources,
-    total_prize: contestData.total_prize,
-    winner_count: contestData.winner_count,
+    contest_type: contestData.contest_type,
+    contest_based_details: contestData.contest_based_details,
   };
 
   const submissions = submissionsData

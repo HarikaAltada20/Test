@@ -31,22 +31,46 @@ type SubscriptionPlan = {
     features: PlanFeatures;
 }
 
+type CpmContestDetails = {
+    cpm_rate_usd: number;
+    min_views?: number | null;
+    max_views?: number | null;
+    total_budget: number;
+    budget_spent?: number;
+    terms_conditions: string;
+    tiered_payouts?: any[];
+};
+
+type LeaderboardContestDetails = {
+    prizes: { position: number; amount: number }[];
+    total_prize: number;
+    winner_count: number;
+};
+
 type ContestData = {
-    id: string
-    title: string
-    category: string
-    thumbnail_url: string | null
-    brief: string | null
-    rules: { list: string[] } | null
-    start_date: string | null
-    end_date: string | null
-    prizes: { position: number; amount: number }[]
-    total_prize: number
-    winner_count: number
-    inspiration_links: string[]
-    resources: Record<string, string>
-    status: string
-}
+    id: string;
+    title: string;
+    category: string;
+    platform?: string;
+    thumbnail_url: string | null;
+    brief: string | null;
+    rules: { list: string[] } | null;
+    start_date: string | null;
+    end_date: string | null;
+    inspiration_links: string[] | string | null; // Allow for parsing
+    resources: Record<string, string> | null;
+    status: string;
+    advertiser_id?: string; // Added, ensure it's selected if needed
+    contest_type: "leaderboard" | "cpm" | null;
+    contest_based_details: {
+        cpm_contest?: CpmContestDetails;
+        leaderboard_contest?: LeaderboardContestDetails;
+    } | null;
+    // Old fields to be phased out or mapped from contest_based_details
+    prizes?: { position: number; amount: number }[];
+    total_prize?: number;
+    winner_count?: number;
+};
 
 export default function EditContestPage({ user, contestId }: { user: UserResponse["data"]["user"], contestId: string }) {
     const router = useRouter()
@@ -64,21 +88,34 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const [userPlan, setUserPlan] = useState<string | null>(null)
     const [isUserPlanLoading, setIsUserPlanLoading] = useState(true);
 
+    // Common contest fields
     const [title, setTitle] = useState("")
-    const [category, setCategory] = useState<string>("technology")
+    const [category, setCategory] = useState<string>("technology") // Or consider platform if that's more accurate
     const [brief, setBrief] = useState("")
     const [rules, setRules] = useState("")
     const [startDate, setStartDate] = useState<string>("")
     const [startTime, setStartTime] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [endTime, setEndTime] = useState<string>("")
-    const [winnerCount, setWinnerCount] = useState<number>(3)
-    const [winnerAmounts, setWinnerAmounts] = useState<number[]>([500, 300, 200])
     const [inspirationLinks, setInspirationLinks] = useState<string[]>([])
     const [newInspirationLink, setNewInspirationLink] = useState("")
     const [thumbnail, setThumbnail] = useState<File | null>(null)
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // Contest Type and Specific Details
+    const [contestType, setContestType] = useState<"leaderboard" | "cpm" | null>(null);
+
+    // Leaderboard specific
+    const [winnerCount, setWinnerCount] = useState<number>(3)
+    const [winnerAmounts, setWinnerAmounts] = useState<number[]>([500, 300, 200]) // Note: these amounts are in cents if formatCurrency expects cents
+
+    // CPM specific
+    const [cpmRate, setCpmRate] = useState<number | string>(""); // Store as string for input, parse to number for saving
+    const [minViews, setMinViews] = useState<number | string>("");
+    const [maxViews, setMaxViews] = useState<number | string>("");
+    const [totalBudget, setTotalBudget] = useState<number | string>("");
+    const [termsConditions, setTermsConditions] = useState<string>("");
 
     // Fetch subscription plans from the database
     const fetchSubscriptionPlans = async () => {
@@ -194,27 +231,42 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             try {
                 const { data, error: contestError } = await supabase
                     .from("contests")
-                    .select("*")
+                    .select("*, advertiser_id") // Ensure advertiser_id is fetched for security if needed in RLS
                     .eq("id", contestId)
-                    .eq("advertiser_id", user.id)
+                    // .eq("advertiser_id", user.id) // RLS should handle this, but explicit check can be added if RLS is not robust
                     .single();
 
-                if (contestError) throw contestError;
+                if (contestError) {
+                    if (contestError.code === 'PGRST116') { // 'PGRST116': Row not found
+                        setError("Contest not found or you do not have permission to edit it.");
+                    } else {
+                        throw contestError;
+                    }
+                    setIsLoading(false);
+                    return;
+                }
+
+                if (data && data.advertiser_id !== user.id) {
+                    setError("You do not have permission to edit this contest.");
+                    setIsLoading(false);
+                    return;
+                }
+
 
                 if (data) {
                     const now = new Date();
-                    const startDate = data.start_date ? new Date(data.start_date) : null;
-                    const endDate = data.end_date ? new Date(data.end_date) : null;
-                    const isLive = startDate && startDate <= now && (!endDate || endDate > now);
-                    const isEnded = endDate && endDate <= now;
+                    const contestStartDate = data.start_date ? new Date(data.start_date) : null;
+                    const contestEndDate = data.end_date ? new Date(data.end_date) : null;
+                    const isLive = contestStartDate && contestStartDate <= now && (!contestEndDate || contestEndDate > now);
+                    const isEnded = contestEndDate && contestEndDate <= now;
 
                     if (isLive || isEnded) {
                         setError("This contest is already live or has ended and cannot be edited.");
-                        // Don't set contest data if editing is disallowed
+                        setContest(data as ContestData); // Still set contest to allow viewing some info if needed
                     } else {
                         setContest(data as ContestData);
                         setTitle(data.title || "");
-                        setCategory(data.category || "technology");
+                        setCategory(data.category || "technology"); // Or data.platform
                         setBrief(data.brief || "");
                         setRules(data.rules?.list?.join("\n") || "");
 
@@ -228,30 +280,63 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                             setEndDate(dateString);
                             setEndTime(timeString);
                         }
-                        if (data.prizes && Array.isArray(data.prizes)) {
-                            setWinnerCount(data.prizes.length);
-                            setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount));
-                        } else {
-                            // Set defaults if no prize data exists
-                            setWinnerCount(3);
-                            setWinnerAmounts([5000, 3000, 2000]); // Example defaults
+
+                        // Parse inspiration_links
+                        let parsedInspirationLinks: string[] = [];
+                        if (Array.isArray(data.inspiration_links)) {
+                            parsedInspirationLinks = data.inspiration_links.filter((link: any) => typeof link === 'string');
+                        } else if (typeof data.inspiration_links === 'string') {
+                            try {
+                                const parsed = JSON.parse(data.inspiration_links);
+                                if (Array.isArray(parsed)) {
+                                    parsedInspirationLinks = parsed.filter((link: any) => typeof link === 'string');
+                                }
+                            } catch (e) {
+                                console.error("Failed to parse inspiration_links:", e);
+                                // Keep parsedInspirationLinks as empty array
+                            }
                         }
-                        // Ensure inspiration_links is always an array
-                        setInspirationLinks(Array.isArray(data.inspiration_links) ? data.inspiration_links : []);
+                        setInspirationLinks(parsedInspirationLinks);
+
                         setThumbnailPreview(data.thumbnail_url || null);
+                        setContestType(data.contest_type || "leaderboard"); // Default to leaderboard if null for some reason
+
+                        if (data.contest_type === 'leaderboard') {
+                            const lbDetails = data.contest_based_details?.leaderboard_contest;
+                            if (lbDetails && Array.isArray(lbDetails.prizes)) {
+                                setWinnerCount(lbDetails.winner_count || lbDetails.prizes.length);
+                                setWinnerAmounts(lbDetails.prizes.map((prize: { amount: number }) => prize.amount));
+                            } else if (Array.isArray(data.prizes)) { // Fallback to old structure if new one not present
+                                setWinnerCount(data.winner_count || data.prizes.length);
+                                setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount));
+                            } else {
+                                setWinnerCount(3); // Default
+                                setWinnerAmounts([5000, 3000, 2000]); // Default
+                            }
+                        } else if (data.contest_type === 'cpm') {
+                            const cpmDetails = data.contest_based_details?.cpm_contest;
+                            if (cpmDetails) {
+                                setCpmRate(cpmDetails.cpm_rate_usd?.toString() || "");
+                                setMinViews(cpmDetails.min_views?.toString() || "");
+                                setMaxViews(cpmDetails.max_views?.toString() || "");
+                                setTotalBudget(cpmDetails.total_budget?.toString() || "");
+                                setTermsConditions(cpmDetails.terms_conditions || "");
+                            }
+                        }
                     }
                 } else {
                     setError("Contest not found or you don't have permission to edit it.");
                 }
             } catch (error: any) {
-                if (error.code === 'PGRST116') { // Handle case where contest ID doesn't exist
+                console.error("Error fetching contest data:", error);
+                if (error.code === 'PGRST116') {
                     setError("Contest not found.");
                 } else {
                     setError(`Failed to load contest: ${error.message}`);
                 }
-                setContest(null); // Ensure contest is null on error
+                setContest(null);
             } finally {
-                setIsLoading(false); // Stop general loading
+                setIsLoading(false);
             }
         }
 
@@ -308,192 +393,195 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const handleSubmit = async () => {
         setError(null);
         setValidationError(null);
-        setIsSubmitting(true); // Use separate submitting state
+        setIsSubmitting(true);
 
         let submitTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
-
-        // Add a timeout to prevent hanging in case of unexpected delays
         submitTimeoutId = setTimeout(() => {
-            if (isLoading) {
+            if (isSubmitting) {
                 console.log("Edit submission taking longer than expected...");
-                // Keep the UI responsive by updating state but don't stop the operation
                 setValidationError("Operation is taking longer than expected. Please wait...");
             }
-        }, 5000);
+        }, 10000);
 
         if (!user) {
             setError("You must be logged in to update a contest");
             setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
         }
 
         if (!contest) {
             setError("Contest data not loaded. Cannot save changes.");
             setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
         }
 
-        // Get current plan features for validation
         const planFeatures = getPlanFeatures(userPlan);
-        const totalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+        let contestBasedDetails: any = {};
+        let updatePayload: any = {
+            title,
+            category,
+            brief,
+            rules: { list: rules.split('\n').filter(rule => rule.trim() !== "") },
+            inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+        };
 
-        try {
-            // Validate against plan limits
+        if (startDate && startTime && endDate && endTime) {
+            try {
+                const startDateTime = new Date(`${startDate}T${startTime}`);
+                const endDateTime = new Date(`${endDate}T${endTime}`);
+                const now = new Date();
+
+                if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+                    setValidationError("Invalid date or time format. Please check your entries.");
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                // Allow editing start time for contests not yet started, but it must still be in the future from now
+                // And if contest.start_date exists, it means we are editing an existing draft, so only check if it has not started.
+                const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
+                if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
+                    setValidationError("Contest start time must be in the future.");
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                if (endDateTime <= startDateTime) {
+                    setValidationError("Contest end time must be after the start time.");
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                const durationMs = endDateTime.getTime() - startDateTime.getTime();
+                const oneDayMs = 24 * 60 * 60 * 1000;
+                if (durationMs < oneDayMs) {
+                    setValidationError("Contest duration must be at least 1 day.");
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                updatePayload.start_date = toUTCISOString(startDate, startTime);
+                updatePayload.end_date = toUTCISOString(endDate, endTime);
+            } catch (error) {
+                console.error("Date validation error:", error);
+                setValidationError("There was an error with the date/time format. Please check your entries.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+        } else {
+            setValidationError("Contest start and end dates/times are required.");
+            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+
+        if (contestType === 'leaderboard') {
+            const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
             if (winnerCount > planFeatures.maxWinnersPerContest) {
                 setValidationError(`Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
-                setIsSubmitting(false);
-                return;
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
-            if (totalPrizePool < planFeatures.minContestBudget) {
+            if (currentTotalPrizePool < planFeatures.minContestBudget) {
                 setValidationError(`Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`);
-                setIsSubmitting(false);
-                return;
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
-            // Validate individual prize amounts (min $5)
             for (let i = 0; i < winnerCount; i++) {
                 if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
                     setValidationError(`Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
-                    setIsSubmitting(false);
-                    return;
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
                 if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
                     setValidationError(`Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
-                    setIsSubmitting(false);
-                    return;
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
             }
+            const prizesArray = winnerAmounts.slice(0, winnerCount).map((amount, i) => ({
+                position: i + 1,
+                amount: amount || 0,
+            }));
+            contestBasedDetails.leaderboard_contest = {
+                prizes: prizesArray,
+                total_prize: currentTotalPrizePool,
+                winner_count: winnerCount,
+            };
+        } else if (contestType === 'cpm') {
+            const numCpmRate = parseFloat(cpmRate as string);
+            const numTotalBudget = parseFloat(totalBudget as string);
+            const numMinViews = minViews !== "" && minViews !== null ? parseInt(minViews as string, 10) : null;
+            const numMaxViews = maxViews !== "" && maxViews !== null ? parseInt(maxViews as string, 10) : null;
 
-            // Validate dates and times - use local timezone for validation
-            if (startDate && startTime && endDate && endTime) {
-                try {
-                    // Create local date objects in user's timezone
-                    const startDateTime = new Date(`${startDate}T${startTime}`);
-                    const endDateTime = new Date(`${endDate}T${endTime}`);
-                    const now = new Date();
-
-                    // Make sure dates are valid
-                    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-                        setValidationError("Invalid date or time format. Please check your entries.");
-                        setIsSubmitting(false);
-                        return;
-                    }
-
-                    if (startDateTime < now) {
-                        setValidationError("Contest start time must be in the future");
-                        setIsSubmitting(false);
-                        return;
-                    }
-
-                    if (endDateTime <= startDateTime) {
-                        setValidationError("Contest end time must be after the start time");
-                        setIsSubmitting(false);
-                        return;
-                    }
-
-                    // Check if duration is at least 1 day (24 hours)
-                    const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                    const oneDayMs = 24 * 60 * 60 * 1000;
-                    if (durationMs < oneDayMs) {
-                        setValidationError("Contest duration must be at least 1 day");
-                        setIsSubmitting(false);
-                        return;
-                    }
-                } catch (error) {
-                    console.error("Date validation error:", error);
-                    setValidationError("There was an error with the date/time format. Please check your entries.");
-                    setIsSubmitting(false);
-                    return;
-                }
-            } else {
-                setValidationError("Contest start and end dates/times are required");
-                setIsSubmitting(false);
-                return;
+            if (isNaN(numCpmRate) || numCpmRate <= 0) {
+                setValidationError("CPM Rate is required and must be a positive number.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
-
-            // Format prizes array
-            const prizesArray = []
-            for (let i = 0; i < winnerCount; i++) {
-                prizesArray.push({
-                    position: i + 1,
-                    amount: (winnerAmounts[i] || 0)
-                })
+            if (isNaN(numTotalBudget) || numTotalBudget <= 0) {
+                setValidationError("Total Budget is required and must be a positive number.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
-
-            // Calculate total prize
-            let totalPrize = 0
-            for (let i = 0; i < winnerCount; i++) {
-                totalPrize += winnerAmounts[i] || 0
+            if (numMinViews !== null && (isNaN(numMinViews) || numMinViews < 0)) {
+                setValidationError("Minimum Views, if provided, must be a non-negative number.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
+            if (numMaxViews !== null && (isNaN(numMaxViews) || numMaxViews < 0)) {
+                setValidationError("Maximum Views, if provided, must be a non-negative number.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            if (numMinViews !== null && numMaxViews !== null && numMinViews > numMaxViews) {
+                setValidationError("Minimum Views cannot be greater than Maximum Views.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            if (!termsConditions || termsConditions.trim() === "") {
+                setValidationError("Terms & Conditions are required for CPM contests.");
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            contestBasedDetails.cpm_contest = {
+                cpm_rate_usd: numCpmRate,
+                total_budget: numTotalBudget,
+                min_views: numMinViews,
+                max_views: numMaxViews,
+                terms_conditions: termsConditions,
+                budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
+            };
+        } else {
+            setValidationError("Invalid contest type selected. Please refresh and try again.");
+            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
 
-            // Upload new thumbnail if present
-            let thumbnailUrl = contest.thumbnail_url // Use loaded contest data
+        updatePayload.contest_type = contestType;
+        updatePayload.contest_based_details = contestBasedDetails;
+
+        try {
+            let finalThumbnailUrl = contest.thumbnail_url;
             if (thumbnail) {
                 try {
-                    const fileName = `contest_thumbnails/${user.id}_${Date.now()}`
+                    const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${thumbnail.name.replace(/\s+/g, '_')}`;
                     const { error: uploadError } = await supabase.storage
                         .from('contest-assets')
-                        .upload(fileName, thumbnail)
-
+                        .upload(fileName, thumbnail);
                     if (uploadError) {
-                        throw new Error(`Failed to upload thumbnail: ${uploadError.message}`)
+                        throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
                     }
-
                     const { data: publicUrlData } = supabase.storage
                         .from('contest-assets')
-                        .getPublicUrl(fileName)
-
-                    thumbnailUrl = publicUrlData.publicUrl
+                        .getPublicUrl(fileName);
+                    finalThumbnailUrl = publicUrlData.publicUrl;
                 } catch (error: any) {
-                    setError(`Thumbnail upload failed: ${error.message}`)
-                    setIsSubmitting(false)
-                    return
+                    setError(`Thumbnail upload failed: ${error.message}`);
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
             }
+            updatePayload.thumbnail_url = finalThumbnailUrl;
 
-            // Format dates properly to ensure they're in ISO format (UTC)
-            let formattedStartDate = null
-            let formattedEndDate = null
-
-            if (startDate && startTime) {
-                formattedStartDate = toUTCISOString(startDate, startTime);
-                if (!formattedStartDate) throw new Error("Invalid start date/time format");
-            }
-
-            if (endDate && endTime) {
-                formattedEndDate = toUTCISOString(endDate, endTime);
-                if (!formattedEndDate) throw new Error("Invalid end date/time format");
-            }
-
-            // Update contest
-            const { error } = await supabase
+            const { error: updateError } = await supabase
                 .from("contests")
-                .update({
-                    title,
-                    thumbnail_url: thumbnailUrl,
-                    category,
-                    brief,
-                    prizes: prizesArray,
-                    total_prize: totalPrize,
-                    rules: { list: rules.split("\n") },
-                    inspiration_links: inspirationLinks,
-                    winner_count: winnerCount,
-                    start_date: formattedStartDate, // Use ISO format for UTC
-                    end_date: formattedEndDate // Use ISO format for UTC
-                })
+                .update(updatePayload)
                 .eq("id", contestId)
-                .eq("advertiser_id", user.id)
+                .eq("advertiser_id", user.id);
 
-            if (error) throw error
+            if (updateError) {
+                console.error("Supabase update error:", updateError);
+                throw updateError;
+            }
 
-            router.push(`/dashboard/contests/${contestId}`)
-            if (submitTimeoutId !== undefined) clearTimeout(submitTimeoutId);
+            router.push(`/dashboard/contests/${contestId}`);
         } catch (err: any) {
-            if (submitTimeoutId !== undefined) clearTimeout(submitTimeoutId);
-            setError(err.message || "Failed to update contest")
+            setError(err.message || "Failed to update contest");
         } finally {
-            setIsSubmitting(false) // Ensure submitting state is always reset
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            setIsSubmitting(false);
         }
-    }
+    };
 
     const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -765,6 +853,17 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                     <Separator />
 
+                    {/* Contest Type Display (Read-Only) */}
+                    <div className="space-y-2">
+                        <Label htmlFor="contest-type">Contest Type</Label>
+                        <Input
+                            id="contest-type"
+                            value={contestType === 'cpm' ? 'CPM Based' : 'Leaderboard Based'}
+                            readOnly
+                            className="bg-gray-100 cursor-not-allowed"
+                        />
+                    </div>
+
                     {/* Contest Duration */}
                     <div className="space-y-4">
                         <h3 className="text-lg font-medium">Contest Duration</h3>
@@ -820,130 +919,214 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                     <Separator />
 
-                    {/* Prize Distribution */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-medium">Prize distribution</h3>
-                            <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
-                                <span className="text-sm font-medium">Total Prize Pool:</span>
-                                <span className="text-lg font-bold">{formatCurrency(totalPrizePool)}</span>
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                            <div className="flex items-center gap-4 mb-4">
-                                <Label className="w-48">Number of Winners <span className="text-xs text-gray-500">(Required)</span></Label>
-                                <div className="flex items-center gap-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-8 w-8 rounded-full"
-                                        onClick={() => {
-                                            if (winnerCount > 1) {
-                                                const newCount = winnerCount - 1;
-                                                setWinnerCount(newCount);
-                                                const newAmounts = [...winnerAmounts].slice(0, newCount);
-                                                setWinnerAmounts(newAmounts);
-                                            }
-                                        }}
-                                        disabled={winnerCount <= 1}
-                                    >
-                                        -
-                                    </Button>
-                                    <span className="w-8 text-center">{winnerCount}</span>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-8 w-8 rounded-full"
-                                        onClick={() => {
-                                            const newCount = winnerCount + 1;
-                                            // Use planFeatures limit
-                                            if (newCount <= planFeatures.maxWinnersPerContest) {
-                                                setWinnerCount(newCount);
-                                                const newAmounts = [...winnerAmounts];
-                                                const position = newCount;
-                                                newAmounts.push(DEFAULT_PRIZE_ALLOCATIONS[position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS] || MIN_PRIZE_PER_WINNER);
-                                                setWinnerAmounts(newAmounts);
-                                                setValidationError(null); // Clear potential previous errors
-                                            } else {
-                                                // Optionally show a temporary message or rely on validationError state
-                                                setValidationError(`Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
-                                            }
-                                        }}
-                                        // Disable based on planFeatures limit
-                                        disabled={winnerCount >= planFeatures.maxWinnersPerContest}
-                                    >
-                                        +
-                                    </Button>
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                    {/* Display planFeatures limit */}
-                                    <span>Max: {planFeatures.maxWinnersPerContest}</span>
+                    {/* Prize Distribution - Conditional for Leaderboard */}
+                    {contestType === 'leaderboard' && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-medium">Prize distribution</h3>
+                                <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
+                                    <span className="text-sm font-medium">Total Prize Pool:</span>
+                                    <span className="text-lg font-bold">{formatCurrency(totalPrizePool)}</span>
                                 </div>
                             </div>
 
-                            {Array.from({ length: winnerCount }).map((_, i) => (
-                                <div key={i} className="flex items-center gap-4 mb-2">
-                                    <Label className="w-48">Winner {i + 1}</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
-                                        onChange={(e) => {
-                                            const inputValue = e.target.value;
-
-                                            // Allow empty input for typing new values
-                                            if (inputValue === '') {
-                                                const newAmounts = [...winnerAmounts];
-                                                newAmounts[i] = 0; // Temporarily set to 0
-                                                setWinnerAmounts(newAmounts);
-                                                return;
-                                            }
-
-                                            // Convert from display dollars to cents for storage
-                                            const dollars = parseFloat(inputValue);
-
-                                            // Only validate if we have a proper number
-                                            if (!isNaN(dollars)) {
-                                                // Convert to cents and round to avoid floating point issues
-                                                const value = Math.round(dollars * 100);
-
-                                                // Always update the value first for responsiveness
-                                                const newAmounts = [...winnerAmounts];
-                                                newAmounts[i] = value;
-                                                setWinnerAmounts(newAmounts);
-
-                                                // Show validation messages after updating
-                                                if (value < MIN_PRIZE_PER_WINNER) {
-                                                    setValidationError(`Prize amount cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
-                                                } else if (value > MAX_PRIZE_PER_WINNER) {
-                                                    setValidationError(`Prize amount cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
-                                                } else {
-                                                    setValidationError(null);
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <Label className="w-48">Number of Winners <span className="text-xs text-gray-500">(Required)</span></Label>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-8 w-8 rounded-full"
+                                            onClick={() => {
+                                                if (winnerCount > 1) {
+                                                    const newCount = winnerCount - 1;
+                                                    setWinnerCount(newCount);
+                                                    const newAmounts = [...winnerAmounts].slice(0, newCount);
+                                                    setWinnerAmounts(newAmounts);
                                                 }
-                                            }
-                                        }}
-                                        min={MIN_PRIZE_PER_WINNER / 100}
-                                        max={MAX_PRIZE_PER_WINNER / 100}
-                                        className="w-48"
-                                    />
+                                            }}
+                                            disabled={winnerCount <= 1}
+                                        >
+                                            -
+                                        </Button>
+                                        <span className="w-8 text-center">{winnerCount}</span>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-8 w-8 rounded-full"
+                                            onClick={() => {
+                                                const newCount = winnerCount + 1;
+                                                // Use planFeatures limit
+                                                if (newCount <= planFeatures.maxWinnersPerContest) {
+                                                    setWinnerCount(newCount);
+                                                    const newAmounts = [...winnerAmounts];
+                                                    const position = newCount;
+                                                    newAmounts.push(DEFAULT_PRIZE_ALLOCATIONS[position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS] || MIN_PRIZE_PER_WINNER);
+                                                    setWinnerAmounts(newAmounts);
+                                                    setValidationError(null); // Clear potential previous errors
+                                                } else {
+                                                    // Optionally show a temporary message or rely on validationError state
+                                                    setValidationError(`Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
+                                                }
+                                            }}
+                                            // Disable based on planFeatures limit
+                                            disabled={winnerCount >= planFeatures.maxWinnersPerContest}
+                                        >
+                                            +
+                                        </Button>
+                                    </div>
                                     <div className="text-sm text-gray-500">
-                                        <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+                                        {/* Display planFeatures limit */}
+                                        <span>Max: {planFeatures.maxWinnersPerContest}</span>
                                     </div>
                                 </div>
-                            ))}
+
+                                {Array.from({ length: winnerCount }).map((_, i) => (
+                                    <div key={i} className="flex items-center gap-4 mb-2">
+                                        <Label className="w-48">Winner {i + 1}</Label>
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
+                                            onChange={(e) => {
+                                                const inputValue = e.target.value;
+
+                                                // Allow empty input for typing new values
+                                                if (inputValue === '') {
+                                                    const newAmounts = [...winnerAmounts];
+                                                    newAmounts[i] = 0; // Temporarily set to 0
+                                                    setWinnerAmounts(newAmounts);
+                                                    return;
+                                                }
+
+                                                // Convert from display dollars to cents for storage
+                                                const dollars = parseFloat(inputValue);
+
+                                                // Only validate if we have a proper number
+                                                if (!isNaN(dollars)) {
+                                                    // Convert to cents and round to avoid floating point issues
+                                                    const value = Math.round(dollars * 100);
+
+                                                    // Always update the value first for responsiveness
+                                                    const newAmounts = [...winnerAmounts];
+                                                    newAmounts[i] = value;
+                                                    setWinnerAmounts(newAmounts);
+
+                                                    // Show validation messages after updating
+                                                    if (value < MIN_PRIZE_PER_WINNER) {
+                                                        setValidationError(`Prize amount cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
+                                                    } else if (value > MAX_PRIZE_PER_WINNER) {
+                                                        setValidationError(`Prize amount cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
+                                                    } else {
+                                                        setValidationError(null);
+                                                    }
+                                                }
+                                            }}
+                                            min={MIN_PRIZE_PER_WINNER / 100}
+                                            max={MAX_PRIZE_PER_WINNER / 100}
+                                            className="w-48"
+                                        />
+                                        <div className="text-sm text-gray-500">
+                                            <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            {/* Add validation message for minimum total prize pool */}
+                            {totalPrizePool < planFeatures.minContestBudget && (
+                                <Alert variant="destructive" className="mt-4">
+                                    <AlertDescription>
+                                        The minimum prize pool for your current plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase prize amounts.
+                                    </AlertDescription>
+                                </Alert>
+                            )}
                         </div>
-                        {/* Add validation message for minimum total prize pool */}
-                        {totalPrizePool < planFeatures.minContestBudget && (
-                            <Alert variant="destructive" className="mt-4">
-                                <AlertDescription>
-                                    The minimum prize pool for your current plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase prize amounts.
-                                </AlertDescription>
-                            </Alert>
-                        )}
-                    </div>
+                    )}
+
+                    {/* CPM Configuration - Conditional for CPM */}
+                    {contestType === 'cpm' && (
+                        <div className="space-y-6">
+                            <Separator />
+                            <div>
+                                <h3 className="text-lg font-medium">CPM Configuration</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Configure the Cost Per Mille (CPM) details for this contest.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="cpmRate">CPM Rate (USD per 1000 views) <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        id="cpmRate"
+                                        type="number"
+                                        value={cpmRate}
+                                        onChange={(e) => setCpmRate(e.target.value)}
+                                        placeholder="e.g., 1.50"
+                                        step="0.01"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="totalBudget">Total Budget (USD) <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        id="totalBudget"
+                                        type="number"
+                                        value={totalBudget}
+                                        onChange={(e) => setTotalBudget(e.target.value)}
+                                        placeholder="e.g., 10000"
+                                        step="0.01"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label htmlFor="minViews">Minimum Views (Optional)</Label>
+                                    <Input
+                                        id="minViews"
+                                        type="number"
+                                        value={minViews}
+                                        onChange={(e) => setMinViews(e.target.value)}
+                                        placeholder="e.g., 10000"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Optional: Minimum views a submission needs to be eligible for earnings.
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="maxViews">Maximum Views (Cap, Optional)</Label>
+                                    <Input
+                                        id="maxViews"
+                                        type="number"
+                                        value={maxViews}
+                                        onChange={(e) => setMaxViews(e.target.value)}
+                                        placeholder="e.g., 1000000"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Optional: Maximum views for which a creator can be paid for a single submission.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="termsConditions">Terms & Conditions <span className="text-red-500">*</span></Label>
+                                <Textarea
+                                    id="termsConditions"
+                                    value={termsConditions}
+                                    onChange={(e) => setTermsConditions(e.target.value)}
+                                    placeholder="Outline the specific terms and conditions for creators participating in this CPM contest..."
+                                    rows={6}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    These terms will be shown to creators. Be clear and concise.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                 </CardContent>
                 <CardFooter className="flex justify-between">
                     <Button

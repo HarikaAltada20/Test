@@ -107,6 +107,37 @@ export function VerifyOtpForm() {
     }
   };
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData("text").trim();
+    if (/^\d+$/.test(pastedData)) {
+      const newOtp = [...otp];
+      let pastedDigits = 0;
+      for (let i = 0; i < otp.length && i < pastedData.length; i++) {
+        newOtp[i] = pastedData[i];
+        pastedDigits++;
+      }
+      setOtp(newOtp);
+
+      // Focus the next empty input or the last filled one
+      const nextFocusIndex = Math.min(pastedDigits, otp.length - 1);
+      if (inputRefs.current[nextFocusIndex]) {
+        inputRefs.current[nextFocusIndex]?.focus();
+      }
+      // If pasted data fills all inputs, attempt to submit
+      if (pastedData.length >= otp.length) {
+        const otpString = newOtp.join("");
+        if (otpString.length === otp.length) {
+          // Trigger form submission logic directly or set a flag to submit
+          // For now, let's log and the user can click verify
+          console.log("OTP auto-filled, ready for submission:", otpString);
+          // Or, if you want to auto-submit:
+          // handleSubmit(new Event('submit') as any);
+        }
+      }
+    }
+  };
+
   const handleResendCode = async () => {
     if (resendCooldown > 0 || !email) return;
     setIsResending(true);
@@ -277,6 +308,7 @@ export function VerifyOtpForm() {
                 value={digit}
                 onChange={(e) => handleOtpChange(index, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(index, e)}
+                onPaste={index === 0 ? handlePaste : undefined}
                 className="w-10 h-10 sm:w-12 sm:h-12 text-center text-lg sm:text-xl font-semibold bg-slate-800 border-slate-700 text-white focus:border-amber-500 focus:ring-amber-500"
                 disabled={isLoading}
                 pattern="[0-9]"

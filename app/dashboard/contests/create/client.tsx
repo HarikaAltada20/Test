@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
@@ -84,6 +85,16 @@ export default function CreateContestPage({
   user: UserResponse["data"]["user"];
 }) {
   const [step, setStep] = useState<Step>("basics");
+
+  // Contest Type and CPM-specific state
+  const [contestType, setContestType] = useState<"leaderboard" | "cpm">("leaderboard");
+  const [cpmRate, setCpmRate] = useState<number | string>("");
+  const [minViews, setMinViews] = useState<number | string>("");
+  const [maxViews, setMaxViews] = useState<number | string>("");
+  const [totalBudget, setTotalBudget] = useState<number | string>("");
+  const [termsConditions, setTermsConditions] = useState<string>("");
+  // End Contest Type and CPM-specific state
+
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("technology");
   const [thumbnail, setThumbnail] = useState<File | null>(null);
@@ -301,6 +312,7 @@ You must show the Game Of Creators App Store listing in your video`);
       await handleSubmit(true);
 
       // Clear timeout if we got here successfully
+      console.log("Draft saved successfully, clearing timeout");
       clearTimeout(draftTimeoutId);
     } catch (error: any) {
       console.error("Error saving draft:", error);
@@ -317,42 +329,18 @@ You must show the Game Of Creators App Store listing in your video`);
     setSuccess(null);
     setIsLoading(true);
 
-    // Add timeout to clear loading state if something goes wrong
-    const loadingTimeoutId = setTimeout(() => {
-      setIsLoading(false);
-      setUploadProgress(null);
-      setError("Request timed out. Please try again.");
-    }, 30000); // 30 second timeout as safety measure
 
-    // Declare timeout ID at the function scope so it's available in all blocks
     let prepTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
     try {
-      // Early return for draft with no title but keep other fields
       if (isDraft && !title) {
         setValidationError("Title is required even for drafts");
         setIsLoading(false);
         setUploadProgress(null);
-        clearTimeout(loadingTimeoutId);
+
         return;
       }
 
-      // Client-side validation for prize amounts
-      for (let i = 0; i < winnerCount; i++) {
-        if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-          setValidationError(
-            `Prize for Winner ${i + 1} must be at least ${formatCurrency(
-              MIN_PRIZE_PER_WINNER
-            )}`
-          );
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
-        }
-      }
-
-      // Check if any required user plan information is available
       const userId = user?.id;
       if (!isDraft && !userId) {
         setError(
@@ -360,18 +348,70 @@ You must show the Game Of Creators App Store listing in your video`);
         );
         setIsLoading(false);
         setUploadProgress(null);
-        clearTimeout(loadingTimeoutId);
+
         return;
+      }
+
+      let contestBasedDetails: any = {};
+
+      if (contestType === "leaderboard") {
+        // Client-side validation for prize amounts for leaderboard
+        for (let i = 0; i < winnerCount; i++) {
+          if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+            setValidationError(
+              `Prize for Winner ${i + 1} must be at least ${formatCurrency(
+                MIN_PRIZE_PER_WINNER
+              )}`
+            );
+            setIsLoading(false);
+            setUploadProgress(null);
+
+            return;
+          }
+        }
+        const prizesArray = Array.from({ length: winnerCount }, (_, i) => ({
+          position: i + 1,
+          amount: winnerAmounts[i] || 0, // Stored in cents
+        }));
+        contestBasedDetails = {
+          leaderboard_contest: {
+            prizes: prizesArray,
+            total_prize: totalPrizePool, // Already in cents
+            winner_count: winnerCount,
+          },
+        };
+      } else if (contestType === "cpm") {
+        if (!isDraft) {
+          if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
+            setValidationError("CPM Rate must be a positive number.");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+            setValidationError("Total Budget must be a positive number for CPM contests.");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+          if (!termsConditions) {
+            setValidationError("Terms & Conditions are required for CPM contests.");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+        }
+        contestBasedDetails = {
+          cpm_contest: {
+            cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
+            min_views: minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null,
+            max_views: maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null,
+            total_budget: parseFloat(totalBudget.toString()) || 0,
+            budget_spent: 0, // Initial value
+            terms_conditions: termsConditions,
+            // tiered_payouts: [] // Future use
+          },
+        };
       }
 
       // Only run these validations if we're not in draft mode
       if (!isDraft) {
         setUploadProgress("Preparing contest...");
-
-        // Add this timeout to prevent getting stuck forever
         prepTimeoutId = setTimeout(() => {
-          // If we're still at "Preparing contest..." after 5 seconds,
-          // something might be wrong - provide feedback to the user
           if (isLoading && uploadProgress === "Preparing contest...") {
             console.log("Contest creation taking longer than expected...");
             setUploadProgress("Validating contest details...");
@@ -380,197 +420,93 @@ You must show the Game Of Creators App Store listing in your video`);
 
         if (!thumbnail && !thumbnailPreview) {
           setValidationError("Contest thumbnail is required");
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setIsLoading(false); setUploadProgress(null); return;
         }
-
         if (!brief) {
           setValidationError("Contest brief is required");
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setIsLoading(false); setUploadProgress(null); return;
         }
-
         if (!rules) {
           setValidationError("Contest rules are required");
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setIsLoading(false); setUploadProgress(null); return;
         }
-
-        // Validate dates and times for published contests
         if (!startDate || !startTime || !endDate || !endTime) {
           setValidationError(
             "Contest start and end dates/times are required for publishing"
           );
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setIsLoading(false); setUploadProgress(null); return;
         }
-
         try {
           const startDateTime = new Date(`${startDate}T${startTime}`);
           const endDateTime = new Date(`${endDate}T${endTime}`);
           const now = new Date();
-
-          // Make sure dates are valid
           if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-            setValidationError(
-              "Invalid date or time format. Please check your entries."
-            );
-            setIsLoading(false);
-            setUploadProgress(null);
-            clearTimeout(loadingTimeoutId);
-            return;
+            setValidationError("Invalid date or time format. Please check your entries.");
+            setIsLoading(false); setUploadProgress(null); return;
           }
-
           if (startDateTime < now) {
             setValidationError("Contest start time must be in the future");
-            setIsLoading(false);
-            setUploadProgress(null);
-            clearTimeout(loadingTimeoutId);
-            return;
+            setIsLoading(false); setUploadProgress(null); return;
           }
-
           if (endDateTime <= startDateTime) {
             setValidationError("Contest end time must be after the start time");
-            setIsLoading(false);
-            setUploadProgress(null);
-            clearTimeout(loadingTimeoutId);
-            return;
+            setIsLoading(false); setUploadProgress(null); return;
           }
-
-          // Check if duration is at least 1 day (24 hours)
           const durationMs = endDateTime.getTime() - startDateTime.getTime();
           const oneDayMs = 24 * 60 * 60 * 1000;
           if (durationMs < oneDayMs) {
             setValidationError("Contest duration must be at least 1 day");
-            setIsLoading(false);
-            setUploadProgress(null);
-            clearTimeout(loadingTimeoutId);
-            return;
+            setIsLoading(false); setUploadProgress(null); return;
           }
         } catch (error) {
           console.error("Date validation error:", error);
-          setValidationError(
-            "There was an error with the date/time format. Please check your entries."
-          );
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setValidationError("There was an error with the date/time format. Please check your entries.");
+          setIsLoading(false); setUploadProgress(null); return;
         }
       }
 
-      // Create prize array - store prize amounts in cents
-      const prizesArray = Array.from({ length: winnerCount }, (_, i) => ({
-        position: i + 1,
-        amount: winnerAmounts[i] || 0,
-      }));
-
       let thumbnailUrl = thumbnailPreview && !thumbnail ? thumbnailPreview : "";
-
-      // Upload thumbnail if provided
       if (thumbnail) {
-        setUploadProgress(
-          isDraft ? "Uploading thumbnail..." : "Uploading thumbnail (1/2)..."
-        );
+        setUploadProgress(isDraft ? "Uploading thumbnail..." : "Uploading thumbnail (1/2)...");
         try {
-          // Check if storage is available first
           const isStorageAvailable = await checkStorageAvailability();
-
           if (!isStorageAvailable) {
-            // Continue without thumbnail
-            setError(
-              "Unable to upload thumbnail due to storage configuration. Contest will be created without a thumbnail."
-            );
-            // Don't return here, let the form continue submitting
+            setError("Unable to upload thumbnail due to storage configuration. Contest will be created without a thumbnail.");
           } else {
-            // Use original file name in the path for better organization
-            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name
-              }`;
-            const { data: uploadData, error: uploadError } =
-              await supabase.storage
-                .from("contest-assets")
-                .upload(fileName, thumbnail);
-
-            if (uploadError) {
-              throw new Error(
-                `Failed to upload thumbnail: ${uploadError.message}`
-              );
-            }
-
-            const { data: publicUrlData } = supabase.storage
-              .from("contest-assets")
-              .getPublicUrl(fileName);
-
+            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name}`;
+            const { data: uploadData, error: uploadError } = await supabase.storage.from("contest-assets").upload(fileName, thumbnail);
+            if (uploadError) throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
+            const { data: publicUrlData } = supabase.storage.from("contest-assets").getPublicUrl(fileName);
             thumbnailUrl = publicUrlData?.publicUrl || "";
           }
         } catch (error: any) {
           setError(`Thumbnail upload failed: ${error.message}`);
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setIsLoading(false); setUploadProgress(null); return;
         }
       }
 
-      // Upload resource files to storage if any exist
       if (Object.keys(resourceFiles).length > 0) {
-        setUploadProgress(
-          isDraft ? "Uploading assets..." : "Uploading assets (2/2)..."
-        );
+        setUploadProgress(isDraft ? "Uploading assets..." : "Uploading assets (2/2)...");
         try {
-          // Check if storage is available first
           const isStorageAvailable = await checkStorageAvailability();
-
           if (!isStorageAvailable) {
-            if (isDraft) {
-              // For drafts, just show a warning but continue
-              console.warn(
-                "Storage not available, continuing with draft save without uploading resources"
-              );
-            } else {
-              setError(
-                "File upload is unavailable due to storage configuration. Contest will be created without resources."
-              );
-            }
+            if (isDraft) console.warn("Storage not available, continuing with draft save without uploading resources");
+            else setError("File upload is unavailable due to storage configuration. Contest will be created without resources.");
           } else {
-            // Track all resource uploads
             const resourceUploadPromises = [];
             const failedUploads = [];
-
             for (const [name, file] of Object.entries(resourceFiles)) {
               try {
-                // Use original file name in the path
-                const fileName = `contest_resources/${userId}_${Date.now()}_${file.name
-                  }`;
-
-                const uploadPromise = supabase.storage
-                  .from("contest-assets")
-                  .upload(fileName, file)
+                const fileName = `contest_resources/${userId}_${Date.now()}_${file.name}`;
+                const uploadPromise = supabase.storage.from("contest-assets").upload(fileName, file)
                   .then(({ data: uploadData, error: uploadError }) => {
                     if (uploadError) {
                       failedUploads.push(name);
-                      if (!isDraft)
-                        throw new Error(
-                          `Failed to upload resource: ${uploadError.message}`
-                        );
+                      if (!isDraft) throw new Error(`Failed to upload resource: ${uploadError.message}`);
                       return null;
                     }
-
-                    // getPublicUrl returns an object directly, not a Promise
-                    const result = supabase.storage
-                      .from("contest-assets")
-                      .getPublicUrl(fileName);
-
+                    const result = supabase.storage.from("contest-assets").getPublicUrl(fileName);
                     const resourceUrl = result.data.publicUrl || "";
-                    // Update resource URL with the actual storage URL
                     resources[name] = resourceUrl;
                     return resourceUrl;
                   })
@@ -579,169 +515,99 @@ You must show the Game Of Creators App Store listing in your video`);
                     failedUploads.push(name);
                     return null;
                   });
-
                 resourceUploadPromises.push(uploadPromise);
               } catch (err) {
                 console.error(`Error uploading resource ${name}:`, err);
                 failedUploads.push(name);
               }
             }
-
-            // Wait for all uploads to complete
             await Promise.allSettled(resourceUploadPromises);
-
-            // Show warning if some uploads failed but we're in draft mode
-            if (failedUploads.length > 0 && isDraft) {
-              console.warn(
-                `Some resource uploads failed: ${failedUploads.join(", ")}`
-              );
-            }
+            if (failedUploads.length > 0 && isDraft) console.warn(`Some resource uploads failed: ${failedUploads.join(", ")}`);
           }
         } catch (error) {
           console.error("Error handling resource uploads:", error);
-          // For drafts, continue despite errors
           if (!isDraft) {
             setError("Failed to upload resources. Please try again.");
-            setIsLoading(false);
-            setUploadProgress(null);
-            clearTimeout(loadingTimeoutId);
-            return;
+            setIsLoading(false); setUploadProgress(null); return;
           }
-          // Continue with submission using temporary URLs
         }
       }
 
-      // Format dates properly to ensure they're in ISO format (UTC)
       let formattedStartDate = null;
       let formattedEndDate = null;
-
       try {
-        // For published contests, dates are required and must be formatted
         if (!isDraft) {
-          if (startDate && startTime) {
-            formattedStartDate = toUTCISOString(startDate, startTime);
-            if (!formattedStartDate)
-              throw new Error("Invalid start date/time format");
-          }
-
-          if (endDate && endTime) {
-            formattedEndDate = toUTCISOString(endDate, endTime);
-            if (!formattedEndDate)
-              throw new Error("Invalid end date/time format");
-          }
+          if (startDate && startTime) formattedStartDate = toUTCISOString(startDate, startTime);
+          if (endDate && endTime) formattedEndDate = toUTCISOString(endDate, endTime);
+          if ((startDate && startTime && !formattedStartDate) || (endDate && endTime && !formattedEndDate)) throw new Error("Invalid date/time format for submission");
         } else {
-          // For drafts, dates are optional and should be null if not provided
-          if (startDate && startTime) {
-            formattedStartDate = toUTCISOString(startDate, startTime);
-          }
-
-          if (endDate && endTime) {
-            formattedEndDate = toUTCISOString(endDate, endTime);
-          }
+          if (startDate && startTime) formattedStartDate = toUTCISOString(startDate, startTime);
+          if (endDate && endTime) formattedEndDate = toUTCISOString(endDate, endTime);
         }
       } catch (error) {
-        console.error("Error formatting dates:", error);
-        // If there's an error formatting dates for a published contest, show an error
+        console.error("Error formatting dates for submission:", error);
         if (!isDraft) {
-          setError(
-            "There was a problem with the date format. Please check the start and end dates."
-          );
-          setIsLoading(false);
-          setUploadProgress(null);
-          clearTimeout(loadingTimeoutId);
-          return;
+          setError("There was a problem with the date format. Please check the start and end dates.");
+          setIsLoading(false); setUploadProgress(null); return;
         }
-        // For drafts, continue with null dates if there's an error
       }
 
-      // Prepare contest data for submission
-      setUploadProgress(
-        isDraft ? "Finalizing draft..." : "Creating contest..."
-      );
+      setUploadProgress(isDraft ? "Finalizing draft..." : "Creating contest...");
       const contestData = {
-        advertiser_id: userId, // Use userId from auth.getUser()
+        advertiser_id: userId,
         title,
         thumbnail_url: thumbnailUrl,
         category,
-        platform: platform, // Use the state variable 'platform'
+        platform: platform,
         brief,
-        prizes: prizesArray, // Prize amounts in dollars
-        total_prize: prizesArray.reduce((sum, prize) => sum + prize.amount, 0), // Store total in dollars
         rules: { list: rules.split("\n") },
         resources,
         inspiration_links: inspirationLinks,
-        subscription_plan_of_user: userPlan, // Changed from subscription_plan to subscription_plan_of_user
-        winner_count: winnerCount,
-        is_draft: isDraft, // Mark as draft
-        start_date: formattedStartDate, // Use proper ISO format or null
-        end_date: formattedEndDate, // Use proper ISO format or null
-        // Note: We do not store status explicitly as it will be calculated by the view
+        subscription_plan_of_user: userPlan,
+        is_draft: isDraft,
+        start_date: formattedStartDate,
+        end_date: formattedEndDate,
+        contest_type: contestType, // Added contest_type
+        contest_based_details: contestBasedDetails, // Added contest_based_details
       };
 
       let responseData, responseError;
-
       if (draftId) {
-        // Update existing draft
-        const response = await supabase
-          .from("contests")
-          .update(contestData)
-          .eq("id", draftId)
-          .select();
-
+        const response = await supabase.from("contests").update(contestData).eq("id", draftId).select();
         responseData = response.data;
         responseError = response.error;
       } else {
-        // Create new contest
-        const response = await supabase
-          .from("contests")
-          .insert(contestData)
-          .select();
-
+        const response = await supabase.from("contests").insert([contestData]).select(); // insert expects an array
         responseData = response.data;
         responseError = response.error;
       }
 
       if (responseError) throw responseError;
 
-      // Set draft ID if this is a new draft
       if (isDraft && !draftId && responseData && responseData.length > 0) {
         setDraftId(responseData[0].id);
       }
 
-      // Only redirect if not a draft
       if (!isDraft) {
         setUploadProgress("Contest created successfully! Redirecting...");
-        // Clear any pending timeouts
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
-        setTimeout(() => {
-          router.push("/dashboard/contests");
-        }, 1000);
+        setTimeout(() => { router.push("/dashboard/contests"); }, 1000);
       } else {
-        // Clear resource files after successful draft save to prevent duplicate uploads on next save
         setResourceFiles({});
-        // Clear any pending timeouts
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
         setIsLoading(false);
         setUploadProgress(null);
-        // Show success message for draft
         setSuccess("Draft saved successfully!");
-        // Clear success message after 3 seconds
         setTimeout(() => setSuccess(null), 3000);
       }
     } catch (err: any) {
       console.error("Error submitting contest:", err);
-      // Clear any pending timeouts
-      clearTimeout(loadingTimeoutId);
+
       if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
       if (err.message && err.message.includes("timestamp with time zone")) {
-        setError(
-          "Invalid date format. Please make sure all dates and times are properly set."
-        );
+        setError("Invalid date format. Please make sure all dates and times are properly set.");
       } else {
-        setError(
-          `Failed to ${isDraft ? "save draft" : "create contest"}: ${err.message || "Unknown error"
-          }`
-        );
+        setError(`Failed to ${isDraft ? "save draft" : "create contest"}: ${err.message || "Unknown error"}`);
       }
       setIsLoading(false);
       setUploadProgress(null);
@@ -1526,14 +1392,10 @@ You must show the Game Of Creators App Store listing in your video`);
 
   // Prize section
   const renderPrizeSection = () => {
-    // Get current plan details
-    // Find the plan from the fetched DB plans
     const currentPlan =
       dbSubscriptionPlans.find((p) => p.id === userPlan) || null;
-    // Use getPlanFeatures which handles loading/missing plans
     const planFeatures = getPlanFeatures(userPlan);
 
-    // Handle loading state for plans
     if (isPlansLoading) {
       return (
         <CardContent className="space-y-6">
@@ -1542,24 +1404,14 @@ You must show the Game Of Creators App Store listing in your video`);
       );
     }
 
-    // Handle error state (optional, if you want specific UI for plan fetch errors)
-    // if (error && error.includes("subscription plans")) {
-    //   return (
-    //     <CardContent className="space-y-6">
-    //       <Alert variant="destructive">
-    //          <AlertDescription>{error}</AlertDescription>
-    //       </Alert>
-    //       {/* Optionally allow user to proceed with defaults or retry */}
-    //     </CardContent>
-    //   );
-    // }
-
     return (
       <>
         <CardHeader>
-          <CardTitle>Total Prize</CardTitle>
+          <CardTitle>
+            {contestType === 'leaderboard' ? 'Prize & Duration' : 'CPM Configuration & Duration'}
+          </CardTitle>
           <CardDescription>
-            Configure prize distribution for your contest
+            Configure the financial aspects, duration, and terms for your contest.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1572,7 +1424,6 @@ You must show the Game Of Creators App Store listing in your video`);
           {/* Current Plan Details */}
           <div className="border rounded-lg p-6 mb-6">
             <h3 className="text-lg font-medium mb-4">Your Current Plan</h3>
-
             {currentPlan ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-4">
@@ -1657,7 +1508,6 @@ You must show the Game Of Creators App Store listing in your video`);
                   value={startDate}
                   onChange={(e) => {
                     setStartDate(e.target.value);
-                    // If new date is today, check if time needs adjustment
                     const minTime = getMinStartTime();
                     if (startTime < minTime) {
                       setStartTime(minTime);
@@ -1690,7 +1540,6 @@ You must show the Game Of Creators App Store listing in your video`);
                   value={endDate}
                   onChange={(e) => {
                     setEndDate(e.target.value);
-                    // If new end date requires time adjustment
                     const minEndTime = getMinEndTime();
                     if (endTime < minEndTime) {
                       setEndTime(minEndTime);
@@ -1716,13 +1565,11 @@ You must show the Game Of Creators App Store listing in your video`);
                 />
               </div>
             </div>
-
             {getContestDuration() && (
               <Alert className="mt-2 bg-green-50 border-green-200 text-green-700">
                 <AlertDescription>{getContestDuration()}</AlertDescription>
               </Alert>
             )}
-
             <p className="text-sm text-gray-500 mt-1">
               Contest duration must be at least 1 day. The end date will
               automatically adjust to maintain this minimum duration.
@@ -1731,97 +1578,195 @@ You must show the Game Of Creators App Store listing in your video`);
 
           <Separator className="my-6" />
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-medium">Prize distribution</h3>
-              <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
-                <span className="text-sm font-medium">Total Prize Pool:</span>
-                <span className="text-lg font-bold">
-                  {formatCurrency(totalPrizePool)}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <div className="flex items-center gap-4 mb-4">
-                <Label className="w-48">
-                  Number of Winners{" "}
-                  <span className="text-xs text-gray-500">(Required)</span>
-                </Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    onClick={() => handleWinnerCountChange(winnerCount - 1)}
-                    disabled={winnerCount <= 1}
-                  >
-                    -
-                  </Button>
-                  <span className="w-8 text-center">{winnerCount}</span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    onClick={() => handleWinnerCountChange(winnerCount + 1)}
-                    disabled={
-                      winnerCount >= planFeatures.maxWinnersPerContest ||
-                      winnerCount >= 10
-                    } // Use fetched features
-                  >
-                    +
-                  </Button>
-                </div>
-                <div className="text-sm text-gray-500">
-                  <span>
-                    Allowed:{" "}
-                    {planFeatures.maxWinnersPerContest === Infinity
-                      ? "Unlimited"
-                      : planFeatures.maxWinnersPerContest}
-                  </span>{" "}
-                  {/* Use fetched features */}
-                </div>
-              </div>
-
-              {Array.from({ length: Math.min(winnerCount, 10) }).map((_, i) => (
-                <div key={i} className="flex items-center gap-4 mb-2">
-                  <Label className="w-48">Winner {i + 1}</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
-                    onChange={(e) =>
-                      handleWinnerAmountChange(i, e.target.value)
-                    }
-                    min={formatCurrency(MIN_PRIZE_PER_WINNER)}
-                    max={formatCurrency(MAX_PRIZE_PER_WINNER)}
-                    className="w-48"
-                  />
-                  <div className="text-sm text-gray-500">
-                    <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+          {/* Conditional UI based on contestType */}
+          {contestType === 'leaderboard' ? (
+            <>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  {/* This is the specific "Prize distribution" heading for leaderboard */}
+                  <h3 className="text-lg font-medium">Prize Distribution</h3>
+                  <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
+                    <span className="text-sm font-medium">Total Prize Pool:</span>
+                    <span className="text-lg font-bold">
+                      {formatCurrency(totalPrizePool)}
+                    </span>
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {totalPrizePool < planFeatures.minContestBudget && (
-              <Alert className="mt-2">
-                <AlertDescription>
-                  The minimum prize pool for your{" "}
-                  {currentPlan?.name || "current"} plan is{" "}
-                  {formatCurrency(planFeatures.minContestBudget)}. Please
-                  increase your prize amounts. {/* Use fetched features */}
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center gap-4 mb-4">
+                    <Label className="w-48">
+                      Number of Winners{' '}
+                      <span className="text-xs text-gray-500">(Required)</span>
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full"
+                        onClick={() => handleWinnerCountChange(winnerCount - 1)}
+                        disabled={winnerCount <= 1}
+                      >
+                        -
+                      </Button>
+                      <span className="w-8 text-center">{winnerCount}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 rounded-full"
+                        onClick={() => handleWinnerCountChange(winnerCount + 1)}
+                        disabled={
+                          winnerCount >= planFeatures.maxWinnersPerContest ||
+                          winnerCount >= 10
+                        }
+                      >
+                        +
+                      </Button>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      <span>
+                        Allowed:{' '}
+                        {planFeatures.maxWinnersPerContest === Infinity
+                          ? 'Unlimited'
+                          : planFeatures.maxWinnersPerContest}
+                      </span>
+                    </div>
+                  </div>
+                  {Array.from({ length: Math.min(winnerCount, 10) }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 mb-2">
+                      <Label className="w-48">Winner {i + 1}</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        // Ensure value is in dollars for display
+                        value={winnerAmounts[i] ? winnerAmounts[i] / 100 : (MIN_PRIZE_PER_WINNER / 100)}
+                        onChange={(e) =>
+                          handleWinnerAmountChange(i, e.target.value) // Expects dollars
+                        }
+                        min={MIN_PRIZE_PER_WINNER / 100}
+                        max={MAX_PRIZE_PER_WINNER / 100}
+                        className="w-48"
+                      />
+                      <div className="text-sm text-gray-500">
+                        <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {totalPrizePool < planFeatures.minContestBudget && (
+                <Alert className="mt-2">
+                  <AlertDescription>
+                    The minimum prize pool for your{' '}
+                    {currentPlan?.name || 'current'} plan is{' '}
+                    {formatCurrency(planFeatures.minContestBudget)}. Please
+                    increase your prize amounts.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          ) : ( // contestType === "cpm"
+            <>
+              <div className="space-y-6 p-4 border rounded-md">
+                <h3 className="text-lg font-medium">CPM Contest Configuration</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="cpmRatePrize">CPM Rate (USD)</Label>
+                  <Input
+                    id="cpmRatePrize"
+                    type="number"
+                    value={cpmRate}
+                    onChange={(e) => setCpmRate(e.target.value)}
+                    placeholder="e.g., 1.50 for $1.50 per 1000 views"
+                    min="0.01"
+                    step="0.01"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Amount paid to creators per 1000 views.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="minViewsPrize">Minimum Views (Optional)</Label>
+                    <Input
+                      id="minViewsPrize"
+                      type="number"
+                      value={minViews}
+                      onChange={(e) => setMinViews(e.target.value)}
+                      placeholder="e.g., 10000"
+                      min="0"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Minimum views required for a submission to be eligible for payment.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxViewsPrize">Maximum Views (Optional)</Label>
+                    <Input
+                      id="maxViewsPrize"
+                      type="number"
+                      value={maxViews}
+                      onChange={(e) => setMaxViews(e.target.value)}
+                      placeholder="e.g., 1000000"
+                      min="0"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Maximum views for which a submission will be paid.
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="totalBudgetPrize">Total Contest Budget (USD)</Label>
+                  <Input
+                    id="totalBudgetPrize"
+                    type="number"
+                    value={totalBudget} // This is a string from state, input type handles conversion
+                    onChange={(e) => {
+                      const newBudgetString = e.target.value;
+                      setTotalBudget(newBudgetString); // Keep as string for input
+                      const newBudgetNumber = parseFloat(newBudgetString);
+                      if (!isNaN(newBudgetNumber) && newBudgetNumber > HIGH_BUDGET_THRESHOLD && !hasExceededBudgetThreshold) {
+                        setShowHighBudgetPrompt(true);
+                        setHasExceededBudgetThreshold(true);
+                      }
+                    }}
+                    placeholder="e.g., 10000"
+                    min="1"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The maximum total amount to be paid out for this contest. This is the effective prize pool.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="termsConditionsPrize">Terms & Conditions</Label>
+                  <Textarea
+                    id="termsConditionsPrize"
+                    value={termsConditions}
+                    onChange={(e) => setTermsConditions(e.target.value)}
+                    placeholder="Enter or paste your contest terms and conditions for CPM participants. This will be shown to them before they can submit."
+                    rows={6}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Specific rules and agreements for CPM participants.
+                  </p>
+                </div>
+              </div>
+              {/* Min budget alert for CPM */}
+              {/* Ensure totalBudget is treated as a number for comparison, and it has a value */}
+              {parseFloat(totalBudget.toString() || "0") * 100 < planFeatures.minContestBudget && (totalBudget.toString() || "0").length > 0 && (
+                <Alert className="mt-2">
+                  <AlertDescription>
+                    The minimum contest budget for your {currentPlan?.name || "current"} plan is{' '}
+                    {formatCurrency(planFeatures.minContestBudget)}. Please increase your total budget.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </>
+          )}
         </CardContent>
       </>
     );
   };
-
   // Modify the clearResources function
   const clearResources = async () => {
     // Get references to all resource URLs
@@ -2026,6 +1971,31 @@ You must show the Game Of Creators App Store listing in your video`);
                   <AlertDescription>{validationError}</AlertDescription>
                 </Alert>
               )}
+
+              {/* Contest Type Selection */}
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Contest Type</Label>
+                <RadioGroup
+                  value={contestType}
+                  onValueChange={(value: "leaderboard" | "cpm") => setContestType(value)}
+                  className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-2"
+                >
+                  <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-accent hover:text-accent-foreground cursor-pointer flex-1">
+                    <RadioGroupItem value="leaderboard" id="leaderboard" />
+                    <Label htmlFor="leaderboard" className="cursor-pointer">
+                      <span className="font-medium">Leaderboard Contest</span>
+                      <p className="text-xs text-muted-foreground">Creators compete for top spots based on performance. Prizes are awarded to winners.</p>
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-accent hover:text-accent-foreground cursor-pointer flex-1">
+                    <RadioGroupItem value="cpm" id="cpm" />
+                    <Label htmlFor="cpm" className="cursor-pointer">
+                      <span className="font-medium">CPM Based Contest</span>
+                      <p className="text-xs text-muted-foreground">Creators are paid based on the number of views their content receives, at a pre-defined CPM rate.</p>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="title">Add contest title</Label>

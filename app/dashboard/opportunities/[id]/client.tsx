@@ -302,462 +302,539 @@ export function ContestClientPage({
 
   // Render main content
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex items-center gap-2 mb-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/dashboard/opportunities")}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h1 className="text-2xl font-bold">{contest.title}</h1>
-        <Badge
-          className={
-            contest.status === "live"
-              ? "bg-green-500 ml-2"
-              : contest.status === "upcoming"
-              ? "bg-blue-500 ml-2"
-              : "bg-gray-500 ml-2"
-          }
-        >
-          {contest.status}
-        </Badge>
-      </div>
-
-      {contest.thumbnail_url && (
-        <div className="mb-6 aspect-video w-full max-w-4xl mx-auto relative overflow-hidden rounded-lg bg-gray-100">
-          <Image
-            src={contest.thumbnail_url}
-            alt={`${contest.title} thumbnail`}
-            fill
-            style={{ objectFit: "contain" }}
-            priority
-          />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-6 flex items-center justify-between">
+          <Button
+            variant="outline"
+            size="icon"
+            className="hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600"
+            onClick={() => router.push("/dashboard/opportunities")}
+          >
+            <ArrowLeft className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+          </Button>
+          {/* Placeholder for potential future actions like share */}
         </div>
-      )}
 
-      <Tabs defaultValue="details" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="details">Contest Details</TabsTrigger>
-          <TabsTrigger value="leaderboard">Leaderboard</TabsTrigger>
-        </TabsList>
+        {/* Contest Header Section */}
+        <div className="mb-8 p-6 bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 dark:from-rose-600 dark:via-pink-600 dark:to-purple-700 rounded-xl shadow-2xl text-white">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
+                {contest.title}
+              </h1>
+              <div className="flex items-center space-x-3 mb-4">
+                <Badge
+                  className={`text-sm px-3 py-1 font-semibold rounded-full shadow-md border-2 border-white/50 ${contest.status === "active"
+                    ? "bg-green-400/80 backdrop-blur-sm"
+                    : contest.status === "upcoming"
+                      ? "bg-blue-400/80 backdrop-blur-sm"
+                      : "bg-slate-400/80 backdrop-blur-sm"
+                    }`}
+                >
+                  {contest.status.toUpperCase()}
+                </Badge>
+                {contest.contest_type && (
+                  <Badge
+                    variant={contest.contest_type === 'cpm' ? "outline" : "default"} // Use outline for secondary for better contrast on gradient
+                    className="capitalize text-sm px-3 py-1 font-semibold rounded-full shadow-md bg-white/20 backdrop-blur-sm border-2 border-white/50 text-white"
+                  >
+                    {contest.contest_type === 'cpm' ? 'CPM Based' : 'Leaderboard'}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="flex-shrink-0">
+              {/* Placeholder for a potential countdown timer or key stat like total entries */}
+            </div>
+          </div>
+        </div>
 
-        <TabsContent value="details">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Contest Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div>
-                    <h3 className="font-semibold mb-2">Brief</h3>
-                    <p className="text-muted-foreground text-sm">
-                      {contest.brief || "No brief provided"}
-                    </p>
-                  </div>
-                  <Separator />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {contest.thumbnail_url && (
+          <div className="mb-8 aspect-video w-full max-w-5xl mx-auto relative overflow-hidden rounded-xl shadow-xl border-4 border-white dark:border-slate-700">
+            <Image
+              src={contest.thumbnail_url}
+              alt={`${contest.title} thumbnail`}
+              fill
+              style={{ objectFit: "contain" }} // Changed to contain to ensure full image visibility
+              priority
+              className="bg-slate-100 dark:bg-slate-800"
+            />
+          </div>
+        )}
+
+        {/* Action Card: Submit or Status - More Prominent */}
+        <Card className="mb-8 shadow-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <CardContent className="p-6 text-center">
+            {hasSubmitted ? (
+              <div className="flex flex-col items-center">
+                <CheckCircle className="h-12 w-12 text-green-500 mb-3" />
+                <p className="text-xl font-semibold text-slate-700 dark:text-slate-200 mb-1">
+                  You have already submitted for this opportunity!
+                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Submitted {formatTimeAgo(existingSubmission.created_at)}
+                </p>
+                {/* Optional: Link to view submission could go here */}
+              </div>
+            ) : (
+              <div>
+                <p className="text-xl font-semibold text-slate-700 dark:text-slate-200 mb-2">
+                  Ready to Showcase Your Talent?
+                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                  {contest.status === "active"
+                    ? "The stage is yours! Submit your content to join the game."
+                    : contest.status === "upcoming"
+                      ? "Get ready! This contest hasn\'t started yet."
+                      : "This contest has ended or is no longer active."
+                  }
+                </p>
+                <Button
+                  size="lg" // Larger button
+                  onClick={handleSubmitContent}
+                  disabled={contest.status?.toLowerCase() !== "active"}
+                  className={`w-full max-w-xs mx-auto font-bold text-base py-3 rounded-lg shadow-md transition-all duration-300 ease-in-out 
+                    ${contest.status?.toLowerCase() === "active"
+                      ? "bg-rose-600 hover:bg-rose-700 text-white transform hover:scale-105"
+                      : "bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                    }`}
+                >
+                  {contest.status?.toLowerCase() === "upcoming"
+                    ? (<><Calendar className="mr-2 h-5 w-5" /> Contest Not Started</>)
+                    : contest.status?.toLowerCase() === "ended" || contest.status?.toLowerCase() === "completed"
+                      ? "Contest Ended"
+                      : (<><PlayCircle className="mr-2 h-5 w-5" /> Submit Your Entry!</>)
+                  }
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-200 dark:bg-slate-700/50 rounded-lg p-1">
+            <TabsTrigger value="details" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Contest Details</TabsTrigger>
+            <TabsTrigger value="leaderboard" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Leaderboard</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-bold">Contest Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                     <div>
-                      <h3 className="font-semibold mb-1">Start Date & Time</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {contest.start_date
-                          ? formatLocalDateTime(contest.start_date)
-                          : "Not specified"}
+                      <h3 className="font-semibold text-lg mb-2">Brief</h3>
+                      <p className="text-muted-foreground text-sm">
+                        {contest.brief || "No brief provided"}
                       </p>
                     </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">End Date & Time</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {contest.end_date
-                          ? formatLocalDateTime(contest.end_date)
-                          : "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">Platform</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {contest.platform || "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">Category</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {contest.category || "Not specified"}
-                      </p>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold mb-1">Sponsor</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {contest.advertiser_profiles?.company_name ||
-                          "Not specified"}
-                      </p>
-                    </div>
-                  </div>
-                  <Separator />
-                  <div>
-                    <h3 className="font-semibold mb-2">Prize Structure</h3>
-                    {Array.isArray(contest?.prizes) &&
-                    contest.prizes.length > 0 ? (
-                      <ul className="space-y-1 list-disc list-inside text-sm text-muted-foreground">
-                        {[...(contest.prizes as PrizeInfo[])]
-                          .sort((a, b) => a.position - b.position)
-                          .map((prize) => (
-                            <li key={prize.position}>
-                              Position {prize.position}:{" "}
-                              {formatMoney(prize.amount)}
-                            </li>
-                          ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No prize structure defined.
-                      </p>
-                    )}
-                  </div>
-                  {/* Rules Section */}
-                  {(contest.rules || contest.rules_description) && (
                     <Separator />
-                  )}
-                  {(contest.rules || contest.rules_description) && (
-                    <div>
-                      <h3 className="font-semibold mb-2 flex items-center gap-2">
-                        <ScrollText className="h-4 w-4" /> Rules & Guidelines
-                      </h3>
-                      <div className="prose prose-sm text-muted-foreground max-w-none">
-                        {contest.rules_description ? (
-                          <p>{contest.rules_description}</p>
-                        ) : contest.rules &&
-                          typeof contest.rules === "object" &&
-                          contest.rules.list &&
-                          Array.isArray(contest.rules.list) ? (
-                          <ul className="list-disc pl-5 space-y-1">
-                            {contest.rules.list.map(
-                              (rule: string, index: number) => (
-                                <li key={index}>{rule}</li>
-                              )
-                            )}
-                          </ul>
-                        ) : (
-                          <p>No specific rules provided.</p>
-                        )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <h3 className="font-semibold text-base mb-1">Start Date & Time</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {contest.start_date
+                            ? formatLocalDateTime(contest.start_date)
+                            : "Not specified"}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-base mb-1">End Date & Time</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {contest.end_date
+                            ? formatLocalDateTime(contest.end_date)
+                            : "Not specified"}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-base mb-1">Platform</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {contest.platform || "Not specified"}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-base mb-1">Category</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {contest.category || "Not specified"}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-base mb-1">Sponsor</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {contest.advertiser_profiles?.company_name ||
+                            "Not specified"}
+                        </p>
                       </div>
                     </div>
-                  )}
-
-                  {/* Resources Section */}
-                  {contest.resources &&
-                    typeof contest.resources === "object" &&
-                    Object.keys(contest.resources).length > 0 && <Separator />}
-                  {contest.resources &&
-                    typeof contest.resources === "object" &&
-                    Object.keys(contest.resources).length > 0 && (
+                    <Separator />
+                    <div>
+                      <h3 className="font-semibold text-lg mb-2">
+                        {contest.contest_type === 'cpm' ? 'CPM Configuration' : 'Prize Structure'}
+                      </h3>
+                      {contest.contest_type === 'leaderboard' && (
+                        Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && contest.contest_based_details.leaderboard_contest.prizes.length > 0 ? (
+                          <ul className="space-y-1 list-disc list-inside text-sm text-muted-foreground">
+                            {[...(contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])]
+                              .sort((a, b) => a.position - b.position)
+                              .map((prize) => (
+                                <li key={prize.position}>
+                                  Position {prize.position}: {formatMoney(prize.amount)}
+                                </li>
+                              ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No prize structure defined for this leaderboard contest.
+                          </p>
+                        )
+                      )}
+                      {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
+                        <div className="space-y-3 text-sm text-muted-foreground">
+                          <p><strong className="font-semibold text-slate-700 dark:text-slate-300">CPM Rate:</strong> {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views</p>
+                          <p><strong className="font-semibold text-slate-700 dark:text-slate-300">Total Budget:</strong> {formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}</p>
+                          {contest.contest_based_details.cpm_contest.min_views != null && (
+                            <p><strong className="font-semibold text-slate-700 dark:text-slate-300">Minimum Views:</strong> {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}</p>
+                          )}
+                          {contest.contest_based_details.cpm_contest.max_views != null && (
+                            <p><strong className="font-semibold text-slate-700 dark:text-slate-300">Max Views (Cap):</strong> {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}</p>
+                          )}
+                          <div>
+                            <h4 className="font-semibold mt-1 mb-1 text-slate-700 dark:text-slate-300">Terms & Conditions:</h4>
+                            <div className="prose prose-sm max-w-none p-2 border rounded bg-slate-50 dark:bg-slate-700/50 text-xs">
+                              <pre className="whitespace-pre-wrap break-words font-sans text-muted-foreground">
+                                {contest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {contest.contest_type !== 'leaderboard' && contest.contest_type !== 'cpm' && (
+                        <p className="text-sm text-muted-foreground">Contest type details not available.</p>
+                      )}
+                    </div>
+                    {/* Rules Section */}
+                    {(contest.rules || contest.rules_description) && (
+                      <Separator />
+                    )}
+                    {(contest.rules || contest.rules_description) && (
                       <div>
-                        <h3 className="font-semibold mb-2 flex items-center gap-2">
-                          <Link2 className="h-4 w-4" /> Resources
+                        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                          <ScrollText className="h-5 w-5" /> Rules & Guidelines
                         </h3>
-                        <div className="space-y-2">
-                          {Object.entries(contest.resources).map(
-                            ([key, value]) => (
-                              <Button
-                                key={key}
-                                variant="outline"
-                                size="sm"
-                                asChild
-                              >
-                                <Link
-                                  href={value as string}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <ExternalLink className="h-4 w-4 mr-2" />
-                                  {key}
-                                </Link>
-                              </Button>
-                            )
+                        <div className="prose prose-sm text-muted-foreground max-w-none">
+                          {contest.rules_description ? (
+                            <p>{contest.rules_description}</p>
+                          ) : contest.rules &&
+                            typeof contest.rules === "object" &&
+                            contest.rules.list &&
+                            Array.isArray(contest.rules.list) ? (
+                            <ul className="list-disc pl-5 space-y-1">
+                              {contest.rules.list.map(
+                                (rule: string, index: number) => (
+                                  <li key={index}>{rule}</li>
+                                )
+                              )}
+                            </ul>
+                          ) : (
+                            <p>No specific rules provided.</p>
                           )}
                         </div>
                       </div>
                     )}
 
-                  {/* Inspiration Links Section */}
-                  {(() => {
-                    let links = [];
-                    try {
-                      links =
-                        typeof contest.inspiration_links === "string"
-                          ? JSON.parse(contest.inspiration_links)
-                          : Array.isArray(contest.inspiration_links)
-                          ? contest.inspiration_links
-                          : [];
-                    } catch (e) {
-                      console.error("Error parsing inspiration_links:", e);
-                    }
-                    return links.length > 0 ? (
-                      <>
-                        <Separator />
+                    {/* Resources Section */}
+                    {contest.resources &&
+                      typeof contest.resources === "object" &&
+                      Object.keys(contest.resources).length > 0 && <Separator />}
+                    {contest.resources &&
+                      typeof contest.resources === "object" &&
+                      Object.keys(contest.resources).length > 0 && (
                         <div>
-                          <h3 className="font-semibold mb-2 flex items-center gap-2">
-                            <Lightbulb className="h-4 w-4" /> Inspiration Links
+                          <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                            <Link2 className="h-5 w-5" /> Resources
                           </h3>
                           <div className="space-y-2">
-                            {links.map((link: string, index: number) => (
-                              <Button
-                                key={index}
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                className="text-primary hover:underline p-0 h-auto justify-start"
-                              >
-                                <Link
-                                  href={link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                            {Object.entries(contest.resources).map(
+                              ([key, value]) => (
+                                <Button
+                                  key={key}
+                                  variant="outline"
+                                  size="sm"
+                                  asChild
                                 >
-                                  <ExternalLink className="h-3 w-3 mr-1.5" />
-                                  Inspiration Example {index + 1}
-                                </Link>
-                              </Button>
-                            ))}
+                                  <Link
+                                    href={value as string}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    {key}
+                                  </Link>
+                                </Button>
+                              )
+                            )}
                           </div>
                         </div>
-                      </>
-                    ) : null;
-                  })()}
-                </CardContent>
-              </Card>
-            </div>
+                      )}
 
-            <div className="lg:col-span-1 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Contest Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">Timeframe</p>
-                      <p className="text-xs text-muted-foreground">
-                        {contest.start_date
-                          ? formatLocalDateTime(contest.start_date, {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                          : "N/A"}{" "}
-                        -{" "}
-                        {contest.end_date
-                          ? formatLocalDateTime(contest.end_date, {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                          : "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Trophy className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">Total Prize Pool</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatMoney(contest.total_prize || 0)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <User className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">Sponsor</p>
-                      <p className="text-xs text-muted-foreground">
-                        {contest.advertiser_profiles?.company_name ||
-                          "Not specified"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-secondary/30 border-secondary">
-                <CardContent className="pt-6">
-                  {hasSubmitted ? (
-                    <div className="text-center">
-                      <CheckCircle className="inline mr-2 h-4 w-4 text-green-500" />
-                      <p>
-                        You have already submitted for this opportunity.
-                        Submitted {formatTimeAgo(existingSubmission.created_at)}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="text-center">
-                      <p className="text-sm font-medium mb-4">
-                        Ready to submit your content?
-                      </p>
-                      <Button
-                        size="sm"
-                        onClick={handleSubmitContent}
-                        disabled={contest.status !== "live"}
-                      >
-                        {contest.status === "upcoming"
-                          ? "Contest Not Started"
-                          : contest.status === "ended" ||
-                            contest.status === "completed"
-                          ? "Contest Ended"
-                          : "Submit Content"}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="leaderboard">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Leaderboard</CardTitle>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">
-                  Last updated: {formatTimeAgo(lastUpdated)}
-                </p>
-                {loadingLeaderboard && (
-                  <p className="text-xs text-blue-500 animate-pulse">
-                    Updating...
-                  </p>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {/* Handle overall fetch error affecting leaderboard */}
-              {error && !loadingLeaderboard && leaderboard.length === 0 && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>
-                    Error loading leaderboard: {error}
-                  </AlertDescription>
-                </Alert>
-              )}
-              {
-                loadingLeaderboard && leaderboard.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    Loading leaderboard...
-                  </div>
-                ) : !error && leaderboard.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No submissions yet. Be the first!
-                  </div>
-                ) : leaderboard.length > 0 ? (
-                  <div className="space-y-3">
-                    {leaderboard.map((entry, index) => {
-                      const rank = index + 1;
-                      // Use contest.prizes for prize lookup
-                      const prizeInfo = Array.isArray(contest?.prizes)
-                        ? (contest.prizes as PrizeInfo[]).find(
-                            (p) => p.position === rank
-                          )
-                        : null;
-                      const prizeAmount = prizeInfo ? prizeInfo.amount : null;
-                      const userData = entry.users; // Use entry.users
-                      const creatorProfileData = entry.creator_profile;
-                      const videoUrl = entry.content_link || "#";
-                      const displayName =
-                        userData?.full_name ||
-                        userData?.username ||
-                        "Unknown Creator";
-                      // Prioritize profile_picture_url, then youtube thumbnail
-                      const profilePicUrl = userData?.profile_picture_url;
-                      const youtubeThumbnail =
-                        creatorProfileData?.youtube_account?.channel_thumbnail;
-
-                      return (
-                        <div
-                          key={entry.id}
-                          className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors"
-                        >
-                          {/* Rank */}
-                          <span
-                            className={`font-bold text-lg w-8 text-center flex-shrink-0 ${
-                              prizeAmount
-                                ? "text-primary"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {rank}
-                          </span>
-
-                          {/* --- Use Avatar Component --- */}
-                          <Avatar className="h-10 w-10 rounded-full flex-shrink-0 border">
-                            <AvatarImage
-                              src={
-                                profilePicUrl || youtubeThumbnail || undefined
-                              }
-                              alt={displayName}
-                            />
-                            <AvatarFallback>
-                              {displayName?.[0]?.toUpperCase() || "U"}
-                            </AvatarFallback>
-                          </Avatar>
-                          {/* --- End Avatar Component --- */}
-
-                          {/* Info using full_name / username */}
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className="font-semibold text-sm truncate"
-                              title={displayName}
-                            >
-                              {displayName}
-                            </p>
-                            {userData?.full_name &&
-                              userData?.username &&
-                              userData.full_name !== userData.username && (
-                                <p className="text-xs text-muted-foreground truncate">
-                                  @{userData.username}
-                                </p>
-                              )}
-                          </div>
-                          {/* Right Aligned Section */}
-                          <div className="flex items-center gap-3 ml-auto pl-2 flex-shrink-0">
-                            {/* Play Button */}
-                            <Link
-                              href={videoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Watch Video"
-                            >
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-primary"
-                              >
-                                <PlayCircle className="h-5 w-5" />
-                              </Button>
-                            </Link>
-
-                            {/* Views & Prize */}
-                            <div className="text-right w-24 space-y-0.5">
-                              <p className="font-semibold text-sm truncate">
-                                {entry.views?.toLocaleString() || 0} views
-                              </p>
-                              {prizeAmount && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-xs font-medium bg-green-100 text-green-700 border-green-200 px-1.5 py-0.5 whitespace-nowrap"
+                    {/* Inspiration Links Section */}
+                    {(() => {
+                      let links = [];
+                      try {
+                        links =
+                          typeof contest.inspiration_links === "string"
+                            ? JSON.parse(contest.inspiration_links)
+                            : Array.isArray(contest.inspiration_links)
+                              ? contest.inspiration_links
+                              : [];
+                      } catch (e) {
+                        console.error("Error parsing inspiration_links:", e);
+                      }
+                      return links.length > 0 ? (
+                        <>
+                          <Separator />
+                          <div>
+                            <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+                              <Lightbulb className="h-5 w-5" /> Inspiration Links
+                            </h3>
+                            <div className="space-y-2">
+                              {links.map((link: string, index: number) => (
+                                <Button
+                                  key={index}
+                                  variant="ghost"
+                                  size="sm"
+                                  asChild
+                                  className="text-primary hover:underline p-0 h-auto justify-start"
                                 >
-                                  Winning Zone: {formatMoney(prizeAmount)}
-                                </Badge>
-                              )}
+                                  <Link
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-1.5" />
+                                    Inspiration Example {index + 1}
+                                  </Link>
+                                </Button>
+                              ))}
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null /* Should be covered by loading/error/empty states */
-              }
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                        </>
+                      ) : null;
+                    })()}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-1 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-bold">Contest Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-semibold">Timeframe</p>
+                        <p className="text-xs text-muted-foreground">
+                          {contest.start_date
+                            ? formatLocalDateTime(contest.start_date, {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                            : "N/A"}{" "}
+                          -{" "}
+                          {contest.end_date
+                            ? formatLocalDateTime(contest.end_date, {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                            : "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Trophy className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {contest.contest_type === 'cpm' ? 'Total Budget' : 'Total Prize Pool'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
+                            ? formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)
+                            : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
+                              ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
+                              : contest.total_prize // Fallback to old field if necessary for older data
+                                ? formatMoney(contest.total_prize || 0)
+                                : "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <User className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-semibold">Sponsor</p>
+                        <p className="text-xs text-muted-foreground">
+                          {contest.advertiser_profiles?.company_name ||
+                            "Not specified"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="leaderboard">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="font-bold">Leaderboard</CardTitle>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">
+                    Last updated: {formatTimeAgo(lastUpdated)}
+                  </p>
+                  {loadingLeaderboard && (
+                    <p className="text-xs text-blue-500 animate-pulse">
+                      Updating...
+                    </p>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {/* Handle overall fetch error affecting leaderboard */}
+                {error && !loadingLeaderboard && leaderboard.length === 0 && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertDescription>
+                      Error loading leaderboard: {error}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {
+                  loadingLeaderboard && leaderboard.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Loading leaderboard...
+                    </div>
+                  ) : !error && leaderboard.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No submissions yet. Be the first!
+                    </div>
+                  ) : leaderboard.length > 0 ? (
+                    <div className="space-y-3">
+                      {leaderboard.map((entry, index) => {
+                        const rank = index + 1;
+                        // Use contest.prizes for prize lookup
+                        let prizeInfo = null;
+                        if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
+                          prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[]).find(
+                            (p) => p.position === rank
+                          );
+                        }
+                        const prizeAmount = prizeInfo ? prizeInfo.amount : null;
+                        const userData = entry.users; // Use entry.users
+                        const creatorProfileData = entry.creator_profile;
+                        const videoUrl = entry.content_link || "#";
+                        const displayName =
+                          userData?.full_name ||
+                          userData?.username ||
+                          "Unknown Creator";
+                        // Prioritize profile_picture_url, then youtube thumbnail
+                        const profilePicUrl = userData?.profile_picture_url;
+                        const youtubeThumbnail =
+                          creatorProfileData?.youtube_account?.channel_thumbnail;
+
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors"
+                          >
+                            {/* Rank */}
+                            <span
+                              className={`font-bold text-lg w-8 text-center flex-shrink-0 ${prizeAmount
+                                ? "text-primary"
+                                : "text-muted-foreground"
+                                }`}
+                            >
+                              {rank}
+                            </span>
+
+                            {/* --- Use Avatar Component --- */}
+                            <Avatar className="h-10 w-10 rounded-full flex-shrink-0 border">
+                              <AvatarImage
+                                src={
+                                  profilePicUrl || youtubeThumbnail || undefined
+                                }
+                                alt={displayName}
+                              />
+                              <AvatarFallback>
+                                {displayName?.[0]?.toUpperCase() || "U"}
+                              </AvatarFallback>
+                            </Avatar>
+                            {/* --- End Avatar Component --- */}
+
+                            {/* Info using full_name / username */}
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className="font-semibold text-sm truncate"
+                                title={displayName}
+                              >
+                                {displayName}
+                              </p>
+                              {userData?.full_name &&
+                                userData?.username &&
+                                userData.full_name !== userData.username && (
+                                  <p className="text-xs text-muted-foreground truncate">
+                                    @{userData.username}
+                                  </p>
+                                )}
+                            </div>
+                            {/* Right Aligned Section */}
+                            <div className="flex items-center gap-3 ml-auto pl-2 flex-shrink-0">
+                              {/* Play Button */}
+                              <Link
+                                href={videoUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Watch Video"
+                              >
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                >
+                                  <PlayCircle className="h-5 w-5" />
+                                </Button>
+                              </Link>
+
+                              {/* Views & Prize */}
+                              <div className="text-right w-24 space-y-0.5">
+                                <p className="font-semibold text-sm truncate">
+                                  {entry.views?.toLocaleString() || 0} views
+                                </p>
+                                {prizeAmount && contest.contest_type === 'leaderboard' && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs font-medium bg-green-100 text-green-700 border-green-200 px-1.5 py-0.5 whitespace-nowrap"
+                                  >
+                                    Winning Zone: {formatMoney(prizeAmount)}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null /* Should be covered by loading/error/empty states */
+                }
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

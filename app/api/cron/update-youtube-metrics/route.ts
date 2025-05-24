@@ -44,7 +44,7 @@ export async function GET(request: Request) {
         const { data: submissions, error: submissionError } = await supabaseAdmin
             .from('submissions')
             .select('id, creator_id, content_link, views') // Select necessary fields
-            .in('status', ['approved', 'pending', 'completed']) // Example: Only update active/pending/completed
+            .in('status', ['verified', 'pending']) // Changed to valid enum values
             .not('content_link', 'is', null); 
 
         if (submissionError) {

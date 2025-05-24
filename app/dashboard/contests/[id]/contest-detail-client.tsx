@@ -20,10 +20,12 @@ interface Contest {
     platform: string;
     start_date: string | null; // Pass as ISO string or Date object
     end_date: string | null;   // Pass as ISO string or Date object
-    prizes: Array<{ position: number; amount: number }>;
     rules?: { list: string[] } | null;
     inspiration_links?: string[] | null;
     resources?: Record<string, string> | null;
+    contest_type?: "leaderboard" | "cpm" | null; // Make it optional for safety, though it should always come from DB
+    contest_based_details?: any | null; // Use 'any' for now, or define specific types for cpm_contest and leaderboard_contest
+    prizes?: Array<{ position: number; amount: number }>;
     total_prize?: number | null;
     winner_count?: number | null;
 }
@@ -81,6 +83,14 @@ export default function ContestDetailClient({
                 >
                     {contest.status}
                 </Badge>
+                {contest.contest_type && (
+                    <Badge
+                        variant={contest.contest_type === 'cpm' ? 'secondary' : 'default'}
+                        className="capitalize ml-2"
+                    >
+                        {contest.contest_type === 'cpm' ? 'CPM' : 'Leaderboard'}
+                    </Badge>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -147,21 +157,81 @@ export default function ContestDetailClient({
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <h3 className="font-medium mb-2">Prize Structure</h3>
-                                        <div className="space-y-2">
-                                            {Array.isArray(contest.prizes) &&
-                                                contest.prizes.map((prize: any, index: number) => (
-                                                    <div
-                                                        key={index}
-                                                        className="flex items-center justify-between"
-                                                    >
-                                                        <span>Position {prize.position}</span>
-                                                        <span>{formatMoney(prize.amount)}</span>
-                                                    </div>
-                                                ))}
+                                    {/* Conditional Prize Structure / CPM Details */}
+                                    {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest && (
+                                        <div>
+                                            <h3 className="font-medium mb-2">Prize Structure</h3>
+                                            <div className="space-y-2 border p-3 rounded-md bg-gray-50">
+                                                <div className="flex items-center justify-between">
+                                                    <span>Total Prize Pool</span>
+                                                    <span className="font-semibold">
+                                                        {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <span>Number of Winners</span>
+                                                    <span className="font-semibold">
+                                                        {contest.contest_based_details.leaderboard_contest.winner_count}
+                                                    </span>
+                                                </div>
+                                                {Array.isArray(contest.contest_based_details.leaderboard_contest.prizes) &&
+                                                    contest.contest_based_details.leaderboard_contest.prizes.map((prize: any, index: number) => (
+                                                        <div
+                                                            key={index}
+                                                            className="flex items-center justify-between pl-4"
+                                                        >
+                                                            <span>Position {prize.position}</span>
+                                                            <span>{formatMoney(prize.amount)}</span>
+                                                        </div>
+                                                    ))}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
+
+                                    {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
+                                        <div>
+                                            <h3 className="font-medium mb-2">CPM Configuration</h3>
+                                            <div className="space-y-3 border p-3 rounded-md bg-gray-50">
+                                                <div>
+                                                    <span className="text-sm text-muted-foreground">CPM Rate: </span>
+                                                    <span className="font-semibold">
+                                                        ${parseFloat(contest.contest_based_details.cpm_contest.cpm_rate_usd).toFixed(2)} per 1000 views
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-sm text-muted-foreground">Total Budget: </span>
+                                                    <span className="font-semibold">
+                                                        {formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}
+                                                        {/* Assuming total_budget is dollars, formatMoney expects cents */}
+                                                    </span>
+                                                </div>
+                                                {contest.contest_based_details.cpm_contest.min_views != null && (
+                                                    <div>
+                                                        <span className="text-sm text-muted-foreground">Min Views: </span>
+                                                        <span className="font-semibold">
+                                                            {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {contest.contest_based_details.cpm_contest.max_views != null && (
+                                                    <div>
+                                                        <span className="text-sm text-muted-foreground">Max Views (Cap): </span>
+                                                        <span className="font-semibold">
+                                                            {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <h4 className="text-sm font-medium mt-2 mb-1">Terms & Conditions</h4>
+                                                    <div className="prose prose-sm max-w-none p-2 border rounded bg-white text-xs">
+                                                        <pre className="whitespace-pre-wrap break-words font-sans">
+                                                            {contest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
+                                                        </pre>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {contest.rules && contest.rules.list && (
                                         <div>
@@ -432,19 +502,29 @@ export default function ContestDetailClient({
                                 </p>
                             </div>
 
-                            {contest.total_prize && (
-                                <div>
-                                    <h3 className="text-sm font-medium mb-1">Total Prize Pool</h3>
-                                    <p className="font-semibold">
-                                        {formatMoney(contest.total_prize)}
-                                    </p>
-                                </div>
+                            {/* Conditional Prize/Budget Info in Summary */}
+                            {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest && (
+                                <>
+                                    <div>
+                                        <h3 className="text-sm font-medium mb-1">Total Prize Pool</h3>
+                                        <p className="font-semibold">
+                                            {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-medium mb-1">Winner Count</h3>
+                                        <p>{contest.contest_based_details.leaderboard_contest.winner_count}</p>
+                                    </div>
+                                </>
                             )}
 
-                            {contest.winner_count && (
+                            {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
                                 <div>
-                                    <h3 className="text-sm font-medium mb-1">Winner Count</h3>
-                                    <p>{contest.winner_count}</p>
+                                    <h3 className="text-sm font-medium mb-1">Total Budget</h3>
+                                    <p className="font-semibold">
+                                        {formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}
+                                        {/* Assuming total_budget is dollars, formatMoney expects cents */}
+                                    </p>
                                 </div>
                             )}
 
@@ -466,14 +546,16 @@ export default function ContestDetailClient({
                                         </Link>
                                     </Button>
 
-                                    <DeleteContestButton
-                                        contestId={contestId}
-                                        contestTitle={contest.title}
-                                        isLive={isLive}
-                                        variant="outline"
-                                        size="default"
-                                        className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"
-                                    />
+                                    {!isLive && (
+                                        <DeleteContestButton
+                                            contestId={contestId}
+                                            contestTitle={contest.title}
+                                            isLive={isLive}
+                                            variant="outline"
+                                            size="default"
+                                            className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"
+                                        />
+                                    )}
                                 </div>
                             </div>
                         </CardContent>

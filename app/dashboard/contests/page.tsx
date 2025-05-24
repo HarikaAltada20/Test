@@ -83,9 +83,19 @@ export default async function ContestsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-medium">{contest.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Platform: {contest.platform} | Created:{" "}
-                            {formatLocalDateTime(contest.created_at)}
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge variant="outline" className="capitalize">
+                              {contest.platform}
+                            </Badge>
+                            <Badge
+                              variant={contest.contest_type === 'cpm' ? 'secondary' : 'default'}
+                              className="capitalize"
+                            >
+                              {contest.contest_type === 'cpm' ? 'CPM' : 'Leaderboard'}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Created: {formatLocalDateTime(contest.created_at)}
                           </p>
                         </div>
                       </div>
@@ -95,8 +105,8 @@ export default async function ContestsPage() {
                             contest.status === "live"
                               ? "bg-green-500"
                               : contest.status === "upcoming"
-                              ? "bg-blue-500"
-                              : "bg-gray-500"
+                                ? "bg-blue-500"
+                                : "bg-gray-500"
                           }
                         >
                           {contest.status}
@@ -153,7 +163,18 @@ export default async function ContestsPage() {
                           <p className="text-sm font-medium">
                             {contest.title || "Untitled Contest"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <div className="flex items-center space-x-2 mt-1">
+                            <Badge variant="outline" className="capitalize">
+                              {contest.platform || 'N/A'}
+                            </Badge>
+                            <Badge
+                              variant={contest.contest_type === 'cpm' ? 'secondary' : 'default'}
+                              className="capitalize"
+                            >
+                              {contest.contest_type === 'cpm' ? 'CPM' : (contest.contest_type || 'Leaderboard')}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
                             Created: {formatLocalDateTime(contest.created_at)}
                           </p>
                         </div>
