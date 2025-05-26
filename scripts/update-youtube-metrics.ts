@@ -1,10 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
 import { createOAuthClient, getVideoStats } from '../lib/youtube-api';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const supabase = createClient(
+const supabase = createAdminSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
@@ -165,13 +165,25 @@ async function updateMetrics() {
           continue;
         }
         
+        // Prepare data for update
+        const updateData = {
+          views: metrics.views,
+          other_stats: { 
+            youtube: {
+              likes: metrics.likes,
+              comments: metrics.comments,
+              // Storing views here too for completeness within the platform-specific stats
+              views: metrics.views 
+            }
+          },
+          last_insights_update: new Date().toISOString()
+        };
+
+        console.log("updateData", updateData);
         // Update submission metrics
         const { error: metricsError } = await supabase
           .from('submissions')
-          .update({
-            metrics,
-            last_metrics_update: new Date().toISOString()
-          })
+          .update(updateData)
           .eq('id', submission.id);
           
         if (metricsError) {
