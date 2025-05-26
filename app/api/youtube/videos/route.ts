@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
             youtube_account: {
               ...profile.youtube_account,
               access_token: newTokens.access_token,
+              refresh_token: newTokens.refresh_token || profile.youtube_account.refresh_token,
               expires_at: newTokens.expires_at,
               updated_at: new Date().toISOString()
             }
