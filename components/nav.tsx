@@ -46,13 +46,9 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
       console.error("Sign out error in sidebar:", error);
     }
   };
-  // Don't show nav on auth pages
+  // Hide nav on all /auth/* pages and /choose-username
   if (
-    pathname === "/auth/signin" ||
-    pathname === "/auth/signup" ||
-    pathname === "/auth/forgot-password" ||
-    pathname === "/auth/reset-password" ||
-    pathname === "/verify-otp" ||
+    pathname.startsWith('/auth') ||
     pathname === "/choose-username"
   ) {
     return null;
