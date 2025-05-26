@@ -89,7 +89,7 @@ export async function GET(request: Request) {
         }
         
         let updatedSubmissionsCount = 0;
-        const updates: { id: string; views: number }[] = [];
+        const updates: { id: string; views: number; newOtherStats?: any }[] = [];
         const tokenUpdates: { userId: string; newAccountData: YouTubeAccount }[] = [];
 
         // 6. Process each creator
@@ -152,14 +152,27 @@ export async function GET(request: Request) {
                     
                     for (const video of videoStats) {
                         const viewCount = parseInt(video.statistics?.viewCount || '0', 10);
+                        const likeCount = parseInt(video.statistics?.likeCount || '0', 10);
+                        const commentCount = parseInt(video.statistics?.commentCount || '0', 10);
+
+                        const youtubeStats = {
+                            views: viewCount,
+                            likes: likeCount,
+                            comments: commentCount,
+                            // Add other stats you might want here, e.g., video.statistics?.favoriteCount
+                        };
+
                         // Find the corresponding submission(s) for this video ID
                         const matchingSubs = userSubmissions.filter(s => s.video_id === video.id);
                         for (const sub of matchingSubs) {
-                            // Only add update if view count has changed
-                            if (sub.views !== viewCount) {
-                                updates.push({ id: sub.id, views: viewCount });
-                                updatedSubmissionsCount++;
-                            }
+                            // Check if views or other relevant stats changed or if other_stats is minimal
+                            // For simplicity, we can always update if we process it, or add more complex change detection
+                            updates.push({ 
+                                id: sub.id, 
+                                views: viewCount, 
+                                newOtherStats: { youtube: youtubeStats } 
+                            });
+                            updatedSubmissionsCount++; // Count as an update attempt
                         }
                     }
                 } catch (ytError: any) {
@@ -183,7 +196,12 @@ export async function GET(request: Request) {
             for (const update of updates) {
                  const { error: updateError } = await supabaseAdmin
                     .from('submissions')
-                    .update({ views: update.views, updated_at: new Date().toISOString() }) // Also update timestamp
+                    .update({
+                         views: update.views,
+                         other_stats: update.newOtherStats, // Update other_stats
+                         last_insights_update: new Date().toISOString(), // Update last_insights_update
+                         updated_at: new Date().toISOString()
+                        })
                     .eq('id', update.id);
                 if (updateError) {
                     console.error(`CRON Job: Failed to update submission ${update.id}:`, updateError.message);
