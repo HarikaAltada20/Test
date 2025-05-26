@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import dayjs from 'dayjs'; // For date manipulation
-import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
 // Assuming you have types generated, e.g., from `npx supabase gen types typescript --project-id your-project-id > types/supabase.ts`
 // import type { Database } from '@/types/supabase'; // Uncomment if you have this
 
@@ -73,7 +73,11 @@ export async function GET(request: Request) {
 
   console.log('CRON Job (Instagram): Starting Instagram insights update...');
 
-  const supabaseAdmin = await createClient();
+  // const supabaseAdmin = await createClient(); // Old way
+  const supabaseAdmin = createAdminSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
 
   try {
     // 3. Fetch relevant submissions
