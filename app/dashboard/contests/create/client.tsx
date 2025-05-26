@@ -117,10 +117,7 @@ You must show the Game Of Creators App Store listing in your video`);
   const [storageAvailable, setStorageAvailable] = useState<boolean | null>(
     null
   );
-  const [inspirationLinks, setInspirationLinks] = useState<string[]>([
-    "https://www.tiktok.com/@creator1/video/123456789",
-    "https://www.tiktok.com/@creator2/video/987654321",
-  ]);
+  const [inspirationLinks, setInspirationLinks] = useState<string[]>([]);
   const [newInspirationLink, setNewInspirationLink] = useState("");
   const [subscriptionPlan, setSubscriptionPlan] = useState<
     | "a28ef5c0-3391-44a1-a9ef-f9b999ff0198"
@@ -1050,9 +1047,14 @@ You must show the Game Of Creators App Store listing in your video`);
     }
 
     // Set inspiration links if available
-    if (draft.inspiration_links && Array.isArray(draft.inspiration_links)) {
+    if (Array.isArray(draft.inspiration_links)) {
+      // This covers cases where inspiration_links is an array (e.g., ["link1"], or [])
       setInspirationLinks(draft.inspiration_links);
+    } else if (draft.inspiration_links === null && Object.prototype.hasOwnProperty.call(draft, 'inspiration_links')) {
+      // If inspiration_links is explicitly null in the draft data (e.g. from DB column being NULL)
+      setInspirationLinks([]); // Reset to an empty array, overriding the default
     }
+    // If draft.inspiration_links is undefined (key not in draft object), the default state from useState remains.
 
     // Set subscription plan if available
     if (draft.subscription_plan) {
@@ -2003,7 +2005,7 @@ You must show the Game Of Creators App Store listing in your video`);
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g., Create a Viral TikTok for Our New App"
+                  placeholder="e.g., Create a Viral shorts/video for our New App"
                   maxLength={100}
                   required
                 />

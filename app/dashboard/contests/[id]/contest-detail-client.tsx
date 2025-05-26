@@ -14,7 +14,7 @@ import Link from "next/link";
 interface Contest {
     id: string;
     title: string;
-    status: "live" | "upcoming" | "completed" | "draft" | string; // Adjusted to include string for flexibility
+    status: "Draft" | "upcoming" | "active" | "ended" | "Unknown"; // Corrected
     thumbnail_url?: string | null;
     brief?: string | null;
     platform: string;
@@ -74,7 +74,7 @@ export default function ContestDetailClient({
                 <h1 className="text-2xl font-bold">{contest.title}</h1>
                 <Badge
                     className={
-                        contest.status === "live"
+                        contest.status === "active"
                             ? "bg-green-500 ml-2"
                             : contest.status === "upcoming"
                                 ? "bg-blue-500 ml-2"
@@ -134,7 +134,7 @@ export default function ContestDetailClient({
                                             <h3 className="font-medium mb-2">Status</h3>
                                             <Badge
                                                 className={
-                                                    contest.status === "live"
+                                                    contest.status === "active"
                                                         ? "bg-green-500"
                                                         : contest.status === "upcoming"
                                                             ? "bg-blue-500"
@@ -473,7 +473,7 @@ export default function ContestDetailClient({
                                 <h3 className="text-sm font-medium mb-1">Status</h3>
                                 <Badge
                                     className={
-                                        contest.status === "live"
+                                        contest.status === "active"
                                             ? "bg-green-500"
                                             : contest.status === "upcoming"
                                                 ? "bg-blue-500"
@@ -533,7 +533,7 @@ export default function ContestDetailClient({
                             <div>
                                 <h3 className="text-sm font-medium mb-2">Quick Actions</h3>
                                 <div className="space-y-2">
-                                    {!isLive && (
+                                    {contest.status !== "active" && contest.status !== "ended" && (
                                         <Button className="w-full" variant="outline" asChild>
                                             <Link href={`/dashboard/contests/${contestId}/edit`}>
                                                 Edit Contest
@@ -546,11 +546,11 @@ export default function ContestDetailClient({
                                         </Link>
                                     </Button>
 
-                                    {!isLive && (
+                                    {contest.status !== "active" && contest.status !== "ended" && (
                                         <DeleteContestButton
                                             contestId={contestId}
                                             contestTitle={contest.title}
-                                            isLive={isLive}
+                                            isLive={false}
                                             variant="outline"
                                             size="default"
                                             className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"

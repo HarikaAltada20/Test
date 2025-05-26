@@ -72,7 +72,7 @@ export default async function ContestDetailPage({
     .eq("contest_id", contestId)
     .order("current_views", { ascending: false });
 
-  const isLive = contestData.status === "Active";
+  const isLive = contestData.status === "active";
 
   const calculateDurationDays = (
     start: string | null,

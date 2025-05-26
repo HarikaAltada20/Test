@@ -138,10 +138,10 @@ export default function OpportunitiesPage({
                     <Badge
                       className={cn(
                         "capitalize text-xs px-2 py-1 font-medium",
-                        contest.status === "Active" && "bg-green-500 border-green-500 text-white",
+                        contest.status === "active" && "bg-green-500 border-green-500 text-white",
                         contest.status === "upcoming" && "bg-blue-500 border-blue-500 text-white",
-                        contest.status === "completed" && "bg-slate-500 border-slate-500 text-white",
-                        !["Active", "upcoming", "completed"].includes(contest.status) && "bg-yellow-400 border-yellow-400 text-yellow-900"
+                        contest.status === "ended" && "bg-slate-500 border-slate-500 text-white",
+                        !["active", "upcoming", "ended"].includes(contest.status) && "bg-yellow-400 border-yellow-400 text-yellow-900"
                       )}
                     >
                       {contest.status}

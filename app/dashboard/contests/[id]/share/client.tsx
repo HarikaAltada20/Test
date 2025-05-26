@@ -31,7 +31,7 @@ type ContestData = {
   title: string;
   brief: string | null;
   thumbnail_url: string | null;
-  status: string;
+  status: "Draft" | "upcoming" | "active" | "ended" | "Unknown";
 };
 
 export default function ShareContestPage({
@@ -161,15 +161,22 @@ export default function ShareContestPage({
         </Alert>
       )}
 
-      {contest.status !== "live" && (
-        <Alert className="mb-6 border-amber-500 bg-amber-50">
-          <AlertDescription className="text-amber-800">
-            {contest.status === "upcoming"
-              ? "This contest is not live yet. You can share it, but creators won't be able to participate until the start date."
-              : "This contest has ended. Creators can no longer submit entries."}
+      {/* Refined contest status alerts */}
+      {contest.status === "upcoming" && (
+        <Alert className="mb-6 border-blue-500 bg-blue-50">
+          <AlertDescription className="text-blue-800">
+            This contest is not live yet. You can share it, but creators won't be able to participate until the start date.
           </AlertDescription>
         </Alert>
       )}
+      {contest.status === "ended" && ( // You might want to include other terminal statuses like "completed" or "archived" here if they exist
+        <Alert className="mb-6 border-red-500 bg-red-50">
+          <AlertDescription className="text-red-800">
+            This contest has ended. Creators can no longer submit entries.
+          </AlertDescription>
+        </Alert>
+      )}
+      {/* End refined contest status alerts */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
@@ -194,11 +201,11 @@ export default function ShareContestPage({
               <div className="mt-4">
                 <Badge
                   className={
-                    contest.status === "live"
+                    contest.status === "active"
                       ? "bg-green-500"
                       : contest.status === "upcoming"
-                      ? "bg-blue-500"
-                      : "bg-gray-500"
+                        ? "bg-blue-500"
+                        : "bg-gray-500"
                   }
                 >
                   {contest.status}
