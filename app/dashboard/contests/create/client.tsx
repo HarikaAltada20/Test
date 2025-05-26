@@ -1047,14 +1047,29 @@ You must show the Game Of Creators App Store listing in your video`);
     }
 
     // Set inspiration links if available
-    if (Array.isArray(draft.inspiration_links)) {
-      // This covers cases where inspiration_links is an array (e.g., ["link1"], or [])
+    if (typeof draft.inspiration_links === 'string') {
+      try {
+        const parsedLinks = JSON.parse(draft.inspiration_links);
+        if (Array.isArray(parsedLinks)) {
+          setInspirationLinks(parsedLinks);
+        } else {
+          // Parsed, but not an array - treat as empty or log error
+          setInspirationLinks([]);
+          console.warn("Parsed inspiration_links was not an array:", parsedLinks);
+        }
+      } catch (e) {
+        // JSON parsing failed - treat as empty or log error
+        setInspirationLinks([]);
+        console.error("Failed to parse inspiration_links JSON string:", e);
+      }
+    } else if (Array.isArray(draft.inspiration_links)) {
+      // This covers cases where inspiration_links is already an array (e.g., from a previous client-side draft save)
       setInspirationLinks(draft.inspiration_links);
     } else if (draft.inspiration_links === null && Object.prototype.hasOwnProperty.call(draft, 'inspiration_links')) {
       // If inspiration_links is explicitly null in the draft data (e.g. from DB column being NULL)
       setInspirationLinks([]); // Reset to an empty array, overriding the default
     }
-    // If draft.inspiration_links is undefined (key not in draft object), the default state from useState remains.
+    // If draft.inspiration_links is undefined (key not in draft object), the default state from useState remains (empty array as per initial state).
 
     // Set subscription plan if available
     if (draft.subscription_plan) {
