@@ -74,14 +74,34 @@ export async function GET(request: NextRequest) {
             throw new Error(tokenData.error_message || `Failed to exchange code for token. Status: ${tokenExchangeRes.status}`);
         }
 
-        const { access_token: user_access_token, user_id: instagram_user_id_from_token_exchange } = tokenData;
+        const { access_token: short_lived_user_access_token, user_id: instagram_user_id_from_token_exchange } = tokenData;
 
-        if (!user_access_token || !instagram_user_id_from_token_exchange) {
-            throw new Error('User Access token or Instagram User ID not received from Instagram token exchange.');
+        if (!short_lived_user_access_token || !instagram_user_id_from_token_exchange) {
+            throw new Error('Short-lived User Access token or Instagram User ID not received from Instagram token exchange.');
         }
 
-        // 3. Fetch user profile using the User Access Token
-        const profileRes = await fetch(`https://graph.instagram.com/me?fields=id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count&access_token=${user_access_token}`);
+        // 2.1 Exchange short-lived token for a long-lived token
+        const longLivedTokenRes = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${clientSecret}&access_token=${short_lived_user_access_token}`);
+        const longLivedTokenData = await longLivedTokenRes.json();
+
+        if (!longLivedTokenRes.ok || longLivedTokenData.error) {
+            console.error('Failed to exchange short-lived token for long-lived token:', longLivedTokenData.error);
+            // It's possible the short-lived token is still usable for a short period, 
+            // but ideally, we want the long-lived one. Handle this based on requirements.
+            // For now, let's throw an error if we can't get the long-lived token.
+            throw new Error(longLivedTokenData.error?.message || `Failed to get long-lived token. Status: ${longLivedTokenRes.status}`);
+        }
+
+        const { access_token: long_lived_access_token, expires_in: long_lived_expires_in } = longLivedTokenData;
+
+        if (!long_lived_access_token) {
+            throw new Error('Long-lived access token not received from Instagram.');
+        }
+        
+        const actualTokenExpiry = dayjs().add(long_lived_expires_in, 'seconds').toISOString();
+
+        // 3. Fetch user profile using the LONG-LIVED User Access Token
+        const profileRes = await fetch(`https://graph.instagram.com/me?fields=id,username,name,account_type,profile_picture_url,followers_count,follows_count,media_count&access_token=${long_lived_access_token}`);
         const profile = await profileRes.json();
 
         if (!profileRes.ok || profile.error) {
@@ -93,7 +113,7 @@ export async function GET(request: NextRequest) {
 
         // 4. Store in Supabase (`creator_profiles.instagram_account`)
         const instagramAccountData = {
-            access_token: user_access_token,
+            access_token: long_lived_access_token, // Use long-lived token
             instagram_user_id: globalInstagramUserID,
             username: profile.username,
             profile_picture_url: profile.profile_picture_url,
@@ -101,7 +121,7 @@ export async function GET(request: NextRequest) {
             follows_count: profile.follows_count,
             media_count: profile.media_count,
             account_type: profile.account_type,
-            token_expiry: dayjs().add(59, 'days').toISOString(), // Instagram long-lived tokens last 60 days, refresh before.
+            token_expiry: actualTokenExpiry, // Use actual expiry from long-lived token
             name_of_account: profile.name,
             app_scoped_user_id: profile.id,
             updated_at: new Date().toISOString(),
