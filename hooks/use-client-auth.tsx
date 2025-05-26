@@ -19,75 +19,58 @@ export function useClientAuth(options: ClientAuthOptions = {}) {
     useEffect(() => {
         let isMounted = true;
 
-        const checkAuth = async () => {
-            try {
-                setIsLoading(true);
-                const { isAuthenticated, user, error } = await checkClientAuth();
+        const performAuthCheck = async () => {
+            if (!isMounted) return;
+            setIsLoading(true);
 
-                if (!isMounted) return;
+            const authResult = await checkClientAuth();
 
-                if (error) {
-                    setError(error);
-                    setIsAuthenticated(false);
-                    setUser(null);
+            if (!isMounted) return;
 
-                    if (options.redirectTo) {
-                        router.push(options.redirectTo);
-                    }
-                    return;
-                }
+            setUser(authResult.user);
+            setIsAuthenticated(authResult.isAuthenticated);
+            setError(authResult.error);
 
-                setIsAuthenticated(isAuthenticated);
-                setUser(user);
-
-                // Handle redirect if not authenticated
-                if (!isAuthenticated && options.redirectTo) {
+            if (options.redirectTo) {
+                if (!authResult.isAuthenticated) {
+                    console.log(`useClientAuth: Not authenticated or error (${authResult.error?.message}). Redirecting to ${options.redirectTo}`);
                     router.push(options.redirectTo);
-                    return;
-                }
-
-                // Check for required user type
-                if (isAuthenticated && options.requiredUserType) {
-                    const userType = user?.user_metadata?.user_type;
-
-                    if (userType !== options.requiredUserType) {
-                        // Unauthorized for this user type, redirect if needed
-                        if (options.redirectTo) {
-                            router.push(options.redirectTo);
-                        }
-                    }
-                }
-            } catch (err) {
-                if (!isMounted) return;
-                setError(err);
-                setIsAuthenticated(false);
-                setUser(null);
-
-                if (options.redirectTo) {
-                    router.push(options.redirectTo);
-                }
-            } finally {
-                if (isMounted) {
                     setIsLoading(false);
+                    return;
+                }
+
+                if (authResult.isAuthenticated && options.requiredUserType) {
+                    const userType = authResult.user?.user_metadata?.user_type;
+                    if (userType !== options.requiredUserType) {
+                        console.log(`useClientAuth: User type mismatch. Redirecting to ${options.redirectTo}`);
+                        router.push(options.redirectTo);
+                        setIsLoading(false);
+                        return;
+                    }
                 }
             }
+            setIsLoading(false);
         };
 
-        checkAuth();
+        performAuthCheck();
 
         return () => {
             isMounted = false;
         };
-    }, [options.redirectTo, options.requiredUserType, router]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [options.redirectTo, options.requiredUserType]);
 
     const logout = async () => {
         try {
             await completeLogout();
-            // The completeLogout function handles the redirect
+            setUser(null);
+            setIsAuthenticated(false);
+            setError(null);
         } catch (err) {
-            console.error("Error during logout:", err);
-            // Force a hard redirect as a fallback
-            window.location.href = '/auth/signin';
+            console.error("Error during logout in useClientAuth:", err);
+            if (typeof window !== 'undefined') {
+                window.location.href = '/auth/signin';
+            }
         }
     };
 

@@ -6,14 +6,16 @@ export async function completeLogout() {
   sessionStorage.clear()
   await supabase.auth.signOut()
   // Only redirect if not already on the sign-in page
+  // This hard redirect in completeLogout is fine when explicitly logging out.
   if (window.location.pathname !== '/auth/signin') {
     window.location.href = '/auth/signin'
   }
 }
 
 /**
- * Check if a user is authenticated on the client side
- * Returns an object with isAuthenticated flag and user data
+ * Check if a user is authenticated on the client side.
+ * This version primarily reports status and avoids auto-redirecting on common "no session" errors.
+ * The calling function (e.g., a hook) should decide to redirect based on context.
  */
 export async function checkClientAuth() {
   const supabase = createClient()
@@ -22,33 +24,36 @@ export async function checkClientAuth() {
     const { data, error } = await supabase.auth.getUser()
 
     if (error) {
-      // Specifically check for errors indicating an invalid JWT, non-existent user, or missing session
+      // These are common errors if no valid session exists (e.g., user is logged out).
+      // We should report them but not force a logout/redirect from this utility function.
       if (
         (error.name === 'AuthApiError' &&
           (error.message === 'User from sub claim in JWT does not exist' ||
             error.message === 'invalid claim: missing sub')) ||
         error.name === 'AuthSessionMissingError'
       ) {
-        console.log("Invalid or missing session. Clearing session and redirecting to sign-in.")
-        await completeLogout()
-        // Return a specific object to indicate redirection and prevent further processing
-        return { isAuthenticated: false, user: null, error: null, redirected: true }
+        console.log("Client Auth Util: Invalid or missing session -", error.message);
+        return { isAuthenticated: false, user: null, error: error, redirected: false } // Report error, no redirect here
       }
-      // Log other authentication errors
-      console.error("Auth check error:", error)
-      return { isAuthenticated: false, user: null, error }
+      
+      // For other, potentially more significant auth errors, log them and return.
+      console.error("Client Auth Util: Auth check error -", error);
+      return { isAuthenticated: false, user: null, error, redirected: false }
     }
 
+    // No error, user object might be null (logged out) or populated (logged in)
     return {
       isAuthenticated: !!data.user,
       user: data.user || null,
-      error: null
+      error: null,
+      redirected: false
     }
-  } catch (err) {
+  } catch (err: any) {
     // Catch any other unexpected errors during the process
-    console.error("Unexpected error checking auth:", err)
-    // Attempt to clear session and redirect as a fallback for unexpected issues
-    await completeLogout()
-    return { isAuthenticated: false, user: null, error: err, redirected: true }
+    console.error("Client Auth Util: Unexpected error checking auth -", err);
+    // For truly unexpected errors, we still return the error.
+    // The caller can decide if a completeLogout is needed.
+    // await completeLogout(); // Removed aggressive logout here
+    return { isAuthenticated: false, user: null, error: err, redirected: false }
   }
 } 
