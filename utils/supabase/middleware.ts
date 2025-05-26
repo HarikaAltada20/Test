@@ -105,6 +105,7 @@ export const config = {
   matcher: [
     '/dashboard/:path*',
     '/choose-username', // Add this if it's a protected route
+    '/api/instagram/callback', // Add the Instagram callback route
     // other protected routes
   ],
 }

@@ -1,5 +1,4 @@
-import { createClient } from '@supabase/supabase-js'; // Revert to basic client
-import { cookies } from 'next/headers';
+import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic'; // Force dynamic rendering
@@ -8,23 +7,13 @@ export const dynamic = 'force-dynamic'; // Force dynamic rendering
 export async function GET(
   request: Request
 ) {
-  const cookieStore = cookies();
-
+  const supabase = await createClient();
   // Extract contestId from URL
   const url = new URL(request.url);
   const pathSegments = url.pathname.split('/');
   const contestId = pathSegments[pathSegments.length - 1]; // Assumes ID is the last segment
 
   console.log('(Using Anon Client) Extracted contestId from URL:', contestId);
-
-  // Revert to basic Anon client for diagnosis
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseAnonKey) {
-     console.error('Supabase URL or Anon Key missing');
-     return NextResponse.json({ error: 'Server config error' }, { status: 500 });
-   }
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   if (!contestId) {
     return NextResponse.json({ error: 'Contest ID is required' }, { status: 400 });

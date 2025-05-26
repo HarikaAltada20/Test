@@ -1,4 +1,4 @@
-import { createSupabaseClient } from './supabase/client';
+import { createClient } from "@/utils/supabase/client";
 
 export async function refreshYouTubeToken() {
   try {
