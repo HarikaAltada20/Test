@@ -192,7 +192,7 @@ export default function SignUpPage() {
             "We\'ve sent a verification code to your email address. Please check your inbox.",
           duration: 5000,
         });
-        router.push(`/verify-otp?email=${encodeURIComponent(normalizedEmail)}`);
+        router.push(`/auth/verify-otp?email=${encodeURIComponent(normalizedEmail)}`);
       } else {
         console.warn("SignUpPage: supabase.auth.signUp call was successful but data.user is null. This is unexpected for an OTP flow.", data);
         setError("Sign up process did not complete as expected for OTP. Please try again.");
