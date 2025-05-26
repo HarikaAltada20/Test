@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
 import { google } from 'googleapis';
-import { createOAuthClient, refreshAccessToken, extractYoutubeId } from '@/lib/youtube-api';
-import { Database } from '@/types/supabase'; // Assuming you have types generated
+import { refreshAccessToken, extractYoutubeId } from '@/lib/youtube-api';
 
 // Type definition for the youtube_account JSON object
 type YouTubeAccount = {
@@ -31,7 +30,10 @@ export async function GET(request: Request) {
 
     console.log('CRON Job: Starting YouTube metrics update...');
 
-    const supabaseAdmin = await createClient();
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
     try {
         // 3. Fetch active contests (optional: filter if needed)
         // For now, fetch all non-draft/incomplete submissions
