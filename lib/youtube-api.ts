@@ -5,40 +5,6 @@ import { youtube_v3 } from 'googleapis';
 type Schema$Video = youtube_v3.Schema$Video;
 type Schema$CommentThread = youtube_v3.Schema$CommentThread;
 
-interface VideoItem {
-  id?: string;
-  snippet?: {
-    title?: string;
-    description?: string;
-    channelId?: string;
-    thumbnails?: {
-      default?: { url: string };
-      medium?: { url: string };
-      high?: { url: string };
-    };
-  };
-  statistics?: {
-    viewCount?: string;
-    likeCount?: string;
-    commentCount?: string;
-    favoriteCount?: string;
-  };
-}
-
-interface CommentItem {
-  id?: string;
-  snippet?: {
-    topLevelComment?: {
-      snippet?: {
-        textDisplay?: string;
-        authorDisplayName?: string;
-        likeCount?: number;
-        publishedAt?: string;
-      };
-    };
-  };
-}
-
 // Flag to detect if we're running in a Node.js environment
 const isNode = typeof window === 'undefined';
 
@@ -307,11 +273,19 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
     });
 
     const { credentials } = await oauth2Client.refreshAccessToken();
-    const expiresAt = new Date(Date.now() + (credentials.expiry_date! - Date.now())).toISOString();
+    
+    let newExpiresAt;
+    if (credentials.expiry_date) {
+      newExpiresAt = new Date(credentials.expiry_date).toISOString();
+    } else {
+      // Fallback: Assume 1 hour expiry if not provided by Google (though it usually is)
+      newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+      console.warn('YouTube API refreshAccessToken: credentials.expiry_date not found, defaulting to 1 hour.');
+    }
 
     return {
       access_token: credentials.access_token!,
-      expires_at: expiresAt,
+      expires_at: newExpiresAt,
       refresh_token: credentials.refresh_token || undefined
     };
   } catch (error) {

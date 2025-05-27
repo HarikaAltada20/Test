@@ -36,12 +36,20 @@ export async function POST(request: NextRequest) {
     const { credentials } = await oauth2Client.refreshAccessToken();
     
     // Update the tokens in the database
-    const expiresAt = new Date(Date.now() + (credentials.expiry_date! - Date.now())).toISOString();
+    let newExpiresAt;
+    if (credentials.expiry_date) {
+      newExpiresAt = new Date(credentials.expiry_date).toISOString();
+    } else {
+      // Fallback: Assume 1 hour expiry if not provided (Google usually provides this)
+      newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+      console.warn('YouTube refresh: credentials.expiry_date not found, defaulting to 1 hour.');
+    }
+
     const updatedAccount = {
       ...youtubeAccount,
       access_token: credentials.access_token,
       refresh_token: credentials.refresh_token || youtubeAccount.refresh_token,
-      expires_at: expiresAt,
+      expires_at: newExpiresAt,
       updated_at: new Date().toISOString()
     };
 
@@ -59,7 +67,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       access_token: credentials.access_token,
-      expires_at: expiresAt
+      expires_at: newExpiresAt
     });
 
   } catch (error) {

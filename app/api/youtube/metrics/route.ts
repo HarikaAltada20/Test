@@ -1,7 +1,7 @@
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { createOAuthClient } from '@/lib/youtube-api';
+import { createOAuthClient, refreshAccessToken } from '@/lib/youtube-api';
 import { google } from 'googleapis';
 
 export async function GET(request: NextRequest) {
@@ -34,27 +34,45 @@ export async function GET(request: NextRequest) {
 
     // Check if token is expired and needs refresh
     if (new Date(youtubeAccount.expires_at) <= new Date()) {
-      const oauth2Client = await createOAuthClient();
-      oauth2Client.setCredentials({
-        refresh_token: youtubeAccount.refresh_token,
-        access_token: youtubeAccount.access_token
-      });
+      console.log(`Metrics API: Token for user ${user.id} needs refresh. Old expiry: ${youtubeAccount.expires_at}`);
+      try {
+        const newTokens = await refreshAccessToken(youtubeAccount.refresh_token);
+        
+        let newExpiresAt;
+        if (newTokens.expires_at) { // Assuming refreshAccessToken returns expires_at as string ISO
+          newExpiresAt = newTokens.expires_at; 
+        } else {
+          // Fallback: This case should ideally not happen if refreshAccessToken is robust
+          newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+          console.warn('YouTube metrics refresh: newTokens.expires_at not found, defaulting to 1 hour.');
+        }
 
-      const { credentials } = await oauth2Client.refreshAccessToken();
-      
-      // Update the tokens in the database
-      const expiresAt = new Date(Date.now() + (credentials.expiry_date! - Date.now())).toISOString();
-      youtubeAccount.access_token = credentials.access_token;
-      youtubeAccount.refresh_token = credentials.refresh_token || youtubeAccount.refresh_token;
-      youtubeAccount.expires_at = expiresAt;
+        youtubeAccount.access_token = newTokens.access_token;
+        youtubeAccount.refresh_token = newTokens.refresh_token || youtubeAccount.refresh_token;
+        youtubeAccount.expires_at = newExpiresAt;
+        youtubeAccount.updated_at = new Date().toISOString();
 
-      await supabase
-        .from('creator_profiles')
-        .update({
-          youtube_account: youtubeAccount,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
+        const { error: updateError } = await supabase
+          .from('creator_profiles')
+          .update({
+            youtube_account: youtubeAccount,
+            updated_at: new Date().toISOString() // Also update the top-level updated_at
+          })
+          .eq('id', user.id);
+
+        if (updateError) {
+          console.error(`Metrics API: Error updating token for user ${user.id} after refresh:`, updateError);
+          // Decide if we should throw or try to proceed with old token if still valid for a bit
+          // For now, throwing to be consistent with previous logic if update fails
+          throw updateError;
+        }
+        console.log(`Metrics API: Token for user ${user.id} refreshed. New expiry: ${newExpiresAt}`);
+      } catch (refreshError) {
+        console.error(`Metrics API: Failed to refresh token for user ${user.id}:`, refreshError);
+        // If refresh fails, we might still try to use the old token if the API call is critical
+        // or return an error indicating refresh failure. For now, returning an error.
+        return NextResponse.json({ error: 'Failed to refresh YouTube token' }, { status: 401 });
+      }
     }
 
     // Initialize YouTube API

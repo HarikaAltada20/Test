@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createOAuthClient, getChannelInfo, verifyVideoOwnership, extractYoutubeId } from '@/lib/youtube-api';
+import { createOAuthClient, getChannelInfo, verifyVideoOwnership, extractYoutubeId, refreshAccessToken } from '@/lib/youtube-api';
 import { createClient } from '@/utils/supabase/server';
 
 export async function GET(request: NextRequest) {
@@ -46,37 +46,45 @@ async function handleVerification(request: NextRequest) {
     }
 
     const youtubeAccount = profile.youtube_account;
-    const oauth2Client = await createOAuthClient();
 
     // Check if token needs refresh
     if (new Date(youtubeAccount.expires_at) <= new Date()) {
+      console.log(`Verify API: Token for user ${user.id} needs refresh. Old expiry: ${youtubeAccount.expires_at}`);
       try {
-        oauth2Client.setCredentials({
-          refresh_token: youtubeAccount.refresh_token,
-          access_token: youtubeAccount.access_token
-        });
+        // Call the centralized refreshAccessToken function
+        const newTokens = await refreshAccessToken(youtubeAccount.refresh_token);
 
-        const { credentials } = await oauth2Client.refreshAccessToken();
+        let newExpiresAt;
+        if (newTokens.expires_at) { // newTokens.expires_at is already an ISO string from the fixed refreshAccessToken
+          newExpiresAt = newTokens.expires_at;
+        } else {
+          newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString(); // Fallback
+          console.warn('YouTube verify refresh: newTokens.expires_at not found, defaulting to 1 hour.');
+        }
         
-        // Update tokens in database
-        const expiresIn = credentials.expiry_date ? 
-          Math.floor((credentials.expiry_date - Date.now()) / 1000) : 
-          3600;
-        
-        const expiresAt = new Date(Date.now() + (expiresIn * 1000)).toISOString();
-        
-        youtubeAccount.access_token = credentials.access_token;
-        youtubeAccount.expires_at = expiresAt;
+        // Update the local youtubeAccount object with new token details
+        youtubeAccount.access_token = newTokens.access_token;
+        youtubeAccount.refresh_token = newTokens.refresh_token || youtubeAccount.refresh_token; // Keep old if new one isn't provided
+        youtubeAccount.expires_at = newExpiresAt;
+        youtubeAccount.updated_at = new Date().toISOString(); // Update the timestamp within the JSONB
 
-        await supabase
+        // Update the tokens in the database
+        const { error: updateError } = await supabase
           .from('creator_profiles')
           .update({
-            youtube_account: youtubeAccount
+            youtube_account: youtubeAccount,
+            updated_at: new Date().toISOString() // Also update the top-level updated_at for the row
           })
           .eq('id', user.id);
 
+        if (updateError) {
+          console.error(`Verify API: Error updating token for user ${user.id} after refresh:`, updateError);
+          throw updateError; // Or handle more gracefully
+        }
+        console.log(`Verify API: Token for user ${user.id} refreshed. New expiry: ${newExpiresAt}`);
+
       } catch (refreshError) {
-        console.error('Error refreshing token:', refreshError);
+        console.error(`Verify API: Error refreshing token for user ${user.id}:`, refreshError);
         return NextResponse.json({ error: 'Failed to refresh token' }, { status: 401 });
       }
     }
