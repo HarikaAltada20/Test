@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createOAuthClient, getChannelInfo, verifyVideoOwnership, extractYoutubeId, refreshAccessToken } from '@/lib/youtube-api';
+import { getChannelInfo, verifyVideoOwnership, extractYoutubeId, refreshAccessToken } from '@/lib/youtube-api';
 import { createClient } from '@/utils/supabase/server';
 
 export async function GET(request: NextRequest) {

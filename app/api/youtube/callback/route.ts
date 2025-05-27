@@ -74,8 +74,15 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetched channel info:', channelInfo.snippet?.title);
 
-    const expiresIn = tokens.expiry_date ? Math.floor((tokens.expiry_date - Date.now()) / 1000) : 3600;
-    const expiresAt = new Date(Date.now() + (expiresIn * 1000)).toISOString();
+    let newExpiresAt;
+    if (tokens.expiry_date) {
+      // tokens.expiry_date is a timestamp in milliseconds (number)
+      newExpiresAt = new Date(tokens.expiry_date).toISOString();
+    } else {
+      // Fallback: Assume 1 hour expiry if not provided by Google
+      newExpiresAt = new Date(Date.now() + 3600 * 1000).toISOString();
+      console.warn('YouTube Callback: tokens.expiry_date not found, defaulting to 1 hour.');
+    }
 
     const youtubeAccount = {
       channel_id: channelInfo.id,
@@ -89,7 +96,7 @@ export async function GET(request: NextRequest) {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       token_type: tokens.token_type,
-      expires_at: expiresAt,
+      expires_at: newExpiresAt,
       scopes: tokens.scope?.split(' '),
       updated_at: new Date().toISOString()
     };
