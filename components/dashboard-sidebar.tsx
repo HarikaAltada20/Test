@@ -77,8 +77,8 @@ export function DashboardSidebar({
       icon: LayoutDashboard,
     },
     {
-      name: "My Content",
-      href: "/dashboard/content",
+      name: "My Submissions",
+      href: "/dashboard/submissions",
       icon: Video,
     },
     {

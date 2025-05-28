@@ -82,6 +82,7 @@ export function ContestClientPage({
   const router = useRouter();
   const supabase = createClient();
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [activeTab, setActiveTab] = useState("details"); // State for controlling active tab
 
   // Function to fetch leaderboard data
   const fetchLeaderboard = async () => {
@@ -241,6 +242,14 @@ export function ContestClientPage({
       }
     }, 60 * 1000); // Check every minute if refresh is needed
 
+    // Check for URL hash to set active tab
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash;
+      if (hash === '#leaderboard') {
+        if (isMounted) setActiveTab('leaderboard');
+      }
+    }
+
     return () => {
       isMounted = false;
       clearInterval(intervalId);
@@ -252,7 +261,7 @@ export function ContestClientPage({
   };
 
   const handleViewSubmission = (submissionId: string) => {
-    router.push(`/dashboard/content/${submissionId}`);
+    router.push(`/dashboard/submissions`);
   };
 
   // Helper to format time ago
@@ -412,7 +421,7 @@ export function ContestClientPage({
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="details" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-200 dark:bg-slate-700/50 rounded-lg p-1">
             <TabsTrigger value="details" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Contest Details</TabsTrigger>
             <TabsTrigger value="leaderboard" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Leaderboard</TabsTrigger>

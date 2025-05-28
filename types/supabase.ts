@@ -222,6 +222,8 @@ export interface Database {
           created_at: string
           is_draft: boolean
           subscription_plan_of_user: string | null
+          contest_type: 'leaderboard' | 'cpm'
+          contest_based_details: Json | null
         }
         Insert: {
           id?: string
@@ -242,6 +244,8 @@ export interface Database {
           created_at?: string
           is_draft?: boolean
           subscription_plan_of_user?: string | null
+          contest_type?: 'leaderboard' | 'cpm'
+          contest_based_details?: Json | null
         }
         Update: {
           id?: string
@@ -262,6 +266,8 @@ export interface Database {
           created_at?: string
           is_draft?: boolean
           subscription_plan_of_user?: string | null
+          contest_type?: 'leaderboard' | 'cpm'
+          contest_based_details?: Json | null
         }
       }
       submissions: {
@@ -269,37 +275,52 @@ export interface Database {
           id: string
           contest_id: string
           creator_id: string
-          video_url: string
+          content_link: string
           views: number
           description: string | null
           other_stats: Json | null
           created_at: string
-          status: string
+          status: 'pending' | 'verified' | 'rejected' | 'paid'
           earnings: number
+          last_insights_update: string | null
+          platform: string | null
+          video_id: string | null
+          video_title: string | null
+          video_thumbnail_url: string | null
         }
         Insert: {
           id?: string
           contest_id: string
           creator_id: string
-          video_url: string
+          content_link: string
           views?: number
           description?: string | null
           other_stats?: Json | null
           created_at?: string
-          status?: string
+          status?: 'pending' | 'verified' | 'rejected' | 'paid'
           earnings?: number
+          last_insights_update?: string | null
+          platform?: string | null
+          video_id?: string | null
+          video_title?: string | null
+          video_thumbnail_url?: string | null
         }
         Update: {
           id?: string
           contest_id?: string
           creator_id?: string
-          video_url?: string
+          content_link?: string
           views?: number
           description?: string | null
           other_stats?: Json | null
           created_at?: string
-          status?: string
+          status?: 'pending' | 'verified' | 'rejected' | 'paid'
           earnings?: number
+          last_insights_update?: string | null
+          platform?: string | null
+          video_id?: string | null
+          video_title?: string | null
+          video_thumbnail_url?: string | null
         }
       }
       money_transactions: {
@@ -386,6 +407,33 @@ export interface Database {
         }
       }
     }
+    Functions: {
+      // ... functions ...
+    }
   }
 }
+
+// Helper type for submissions with contest details
+export type SubmissionWithContest = Database["public"]["Tables"]["submissions"]["Row"] & {
+  contests: Database["public"]["Tables"]["contests"]["Row"] | null;
+  formatted_created_at?: string;
+};
+
+// CPM contest specific details structure (for contest_based_details JSONB)
+export interface CpmContestDetails {
+  cpm_rate_usd: number;
+  min_views?: number;
+  max_views?: number;
+  total_budget: number;
+  budget_spent?: number;
+  terms_conditions: string;
+}
+
+// Ensure the submission status type reflects the ENUM from your database
+// If your Database["public"]["Tables"]["submissions"]["Row"]["status"] is just 'string',
+// you might need to manually update it here or regenerate types from Supabase
+// For example, if it's currently:
+// status: string;
+// Update it in the main Database interface to:
+// status: 'pending' | 'verified' | 'rejected' | 'paid';
 
