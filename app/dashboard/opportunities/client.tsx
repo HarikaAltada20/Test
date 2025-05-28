@@ -323,12 +323,12 @@ export default function OpportunitiesPage({
                     </div>
                   )}
                   {/* Display Total Submissions for Leaderboard contests */}
-                  {contest.contest_type === 'leaderboard' && contest.submission_count != null && (
+                  {/* {contest.contest_type === 'leaderboard' && contest.live_submission_count != null && (
                     <div className="flex items-center text-slate-500 dark:text-slate-400">
                       <Users className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                      <span>Submissions: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.submission_count}</span></span>
+                      <span>Submissions: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
                     </div>
-                  )}
+                  )} */}
                   {contest.contest_type && (
                     <div className="flex items-center text-slate-500 dark:text-slate-400">
                       <Info className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
