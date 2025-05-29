@@ -62,9 +62,9 @@ export default async function CreatorEarningsServerPage() {
 
   // IMPORTANT: Adjust parsing based on actual DB storage (cents vs dollars)
   const initialProfile: CreatorProfileData | null = profileData ? {
-    total_money_won_cents: parseMoneyToCents(profileData.total_money_won),
+    total_money_won_cents: profileData.total_money_won,
     total_contests_won: profileData.total_contests_won || 0,
-    withdrawable_balance_cents: parseMoneyToCents(profileData.withdrawable_balance),
+    withdrawable_balance_cents: profileData.withdrawable_balance,
   } : null;
 
 

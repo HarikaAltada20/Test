@@ -47,12 +47,7 @@ import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client"; // Client Supabase
 import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData } from "@/types/earnings"; // Centralized types
-
-// --- Helper Functions ---
-// Expects CENTS, returns formatted dollar string
-const formatCurrency = (cents: number = 0): string => {
-    return `$${(cents / 100).toFixed(2)}`;
-};
+import { formatCurrency } from "@/lib/currency-utils";
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
