@@ -220,27 +220,11 @@ export function VerifyOtpForm() {
             user_type: userMetaData?.user_type || "creator",
             referral_code: null,
             referred_by: userMetaData?.referral_code || null,
-            coins: 100,
             is_active: true,
             email_confirmed_at: authUser.email_confirmed_at || new Date().toISOString(),
           }, { onConflict: 'id' });
 
         if (upsertUserError) throw new Error(`Failed to save user profile: ${upsertUserError.message}`);
-
-        const { data: existingCoinTx } = await supabase
-          .from('coin_transactions')
-          .select('id')
-          .eq('user_id', authUser.id)
-          .eq('type', 'bonus')
-          .eq('description', 'Welcome bonus for joining Game Of Creators')
-          .maybeSingle();
-
-        if (!existingCoinTx) {
-          await supabase.from('coin_transactions').insert([{
-            user_id: authUser.id, type: 'bonus', status: 'success', coins: 100,
-            description: 'Welcome bonus for joining Game Of Creators'
-          }]);
-        }
 
         const profileTable = userMetaData?.user_type === 'advertiser' ? 'advertiser_profiles' : 'creator_profiles';
         const profileData = userMetaData?.user_type === 'advertiser' ?
