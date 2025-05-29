@@ -76,3 +76,7 @@ export const DEFAULT_PRIZE_ALLOCATIONS = {
     3: 2000, // $20.00
 
   }
+
+export const WITHDRAWAL_FEE_PERCENTAGE = 10; // 10% fee
+export const MIN_WITHDRAWAL_AMOUNT = 2000; // $20.00 in cents
+

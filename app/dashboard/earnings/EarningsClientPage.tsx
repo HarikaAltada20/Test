@@ -48,6 +48,7 @@ import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client"; // Client Supabase
 import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData } from "@/types/earnings"; // Centralized types
 import { formatCurrency } from "@/lib/currency-utils";
+import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
@@ -404,7 +405,7 @@ export default function EarningsClientPage({
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold">{formatCurrency(profile.withdrawable_balance_cents)}</div>
-                                <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrency(2000)}</p>
+                                <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}</p>
                             </CardContent>
                         </Card>
                         <Card>
@@ -423,7 +424,7 @@ export default function EarningsClientPage({
                         <Button
                             onClick={() => setIsWithdrawModalOpen(true)}
                             className="flex-1"
-                            disabled={(profile.withdrawable_balance_cents || 0) < 2000 || payoutMethods.length === 0 || isLoading}
+                            disabled={(profile.withdrawable_balance_cents || 0) < MIN_WITHDRAWAL_AMOUNT || payoutMethods.length === 0 || isLoading}
                         >
                             <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw Balance
                         </Button>
@@ -436,7 +437,7 @@ export default function EarningsClientPage({
                             <PlusCircle className="h-4 w-4 mr-2" /> Manage Payout Methods
                         </Button>
                     </div>
-                    {payoutMethods.length === 0 && (profile.withdrawable_balance_cents || 0) >= 2000 && (
+                    {payoutMethods.length === 0 && (profile.withdrawable_balance_cents || 0) >= MIN_WITHDRAWAL_AMOUNT && (
                         <p className="text-sm text-yellow-600 dark:text-yellow-500 mb-4 text-center">
                             Please add a payout method to withdraw your balance.
                         </p>
@@ -663,7 +664,7 @@ export default function EarningsClientPage({
                     <DialogHeader>
                         <DialogTitle>Withdraw Balance</DialogTitle>
                         <DialogDescription>
-                            Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrency(2000)}.
+                            Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
