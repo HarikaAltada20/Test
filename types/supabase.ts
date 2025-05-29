@@ -224,6 +224,9 @@ export interface Database {
           subscription_plan_of_user: string | null
           contest_type: 'leaderboard' | 'cpm'
           contest_based_details: Json | null
+          post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
+          status?: string
+          live_submission_count?: number | null
         }
         Insert: {
           id?: string
@@ -246,6 +249,9 @@ export interface Database {
           subscription_plan_of_user?: string | null
           contest_type?: 'leaderboard' | 'cpm'
           contest_based_details?: Json | null
+          post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
+          status?: string
+          live_submission_count?: number | null
         }
         Update: {
           id?: string
@@ -268,6 +274,9 @@ export interface Database {
           subscription_plan_of_user?: string | null
           contest_type?: 'leaderboard' | 'cpm'
           contest_based_details?: Json | null
+          post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
+          status?: string
+          live_submission_count?: number | null
         }
       }
       submissions: {
@@ -385,25 +394,27 @@ export interface Database {
     Views: {
       contests_with_status: {
         Row: {
-          id: string
-          advertiser_id: string
-          title: string
-          platform: string
+          id: string | null 
+          advertiser_id: string | null
+          title: string | null
+          platform: string | null
           start_date: string | null
           end_date: string | null
           thumbnail_url: string | null
           brief: string | null
-          rules: Json
-          prizes: Json
-          resources: Json
-          created_at: string
-          status: "upcoming" | "live" | "past" | "draft"
-          is_draft: boolean
+          rules: Json | null
+          resources: Json | null
           category: string | null
           inspiration_links: string | null
-          total_prize: number
-          winner_count: number
+          created_at: string | null
+          is_draft: boolean | null
           subscription_plan_of_user: string | null
+          updated_at: string | null
+          contest_type: 'leaderboard' | 'cpm' | null
+          contest_based_details: Json | null
+          post_contest_status: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
+          live_submission_count: number | null
+          status: 'draft' | 'incomplete' | 'upcoming' | 'active' | 'ended' | 'unknown' | null
         }
       }
     }
@@ -415,7 +426,7 @@ export interface Database {
 
 // Helper type for submissions with contest details
 export type SubmissionWithContest = Database["public"]["Tables"]["submissions"]["Row"] & {
-  contests: Database["public"]["Tables"]["contests"]["Row"] | null;
+  contests: Database["public"]["Views"]["contests_with_status"]["Row"] | null;
   formatted_created_at?: string;
 };
 

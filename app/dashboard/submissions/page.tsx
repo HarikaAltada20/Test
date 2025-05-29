@@ -32,7 +32,7 @@ export default async function CreatorContentPage() {
   }
 
   // Get submissions for this creator
-  const { data: submissions, error: submissionsError } = await supabase
+  const { data: submissionsData, error: submissionsError } = await supabase
     .from("submissions")
     .select(
       `
@@ -56,7 +56,8 @@ export default async function CreatorContentPage() {
         title,
         contest_type,
         contest_based_details,
-        end_date
+        end_date,
+        post_contest_status 
       )
     `
     )
@@ -64,22 +65,27 @@ export default async function CreatorContentPage() {
     .order("created_at", { ascending: false });
 
   if (submissionsError) {
-    console.error("Error fetching submissions:", submissionsError);
-    // Pass the error or an empty array to the client to handle
+    console.error("Error fetching submissions:", submissionsError.message);
     return <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />;
   }
 
-  // Format dates on the server to ensure consistency
-  const formattedSubmissions = submissions.map(sub => ({
+  const submissionsToFormat = submissionsData || [];
+
+  const formattedSubmissions = submissionsToFormat.map(sub => ({
     ...sub,
+    contests: sub.contests ? { ...sub.contests } : null,
     formatted_created_at: sub.created_at
       ? new Date(sub.created_at).toLocaleDateString('en-US', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
       })
-      : 'Date N/A' // Handle null created_at
+      : 'Date N/A'
   }));
 
-  return <SubmissionsClient initialSubmissions={(formattedSubmissions as unknown as SubmissionWithContest[]) || []} />;
+  return (
+    <SubmissionsClient
+      initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
+    />
+  );
 }

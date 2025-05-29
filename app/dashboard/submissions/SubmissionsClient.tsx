@@ -10,6 +10,7 @@ import { ExternalLink, Filter, Video, AlertCircle, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Image from 'next/image';
+import React from 'react';
 
 interface SubmissionsClientProps {
     initialSubmissions: SubmissionWithContest[];
@@ -98,18 +99,17 @@ export default function SubmissionsClient({
     };
 
     const getDisplayStatus = (submission: SubmissionWithContest): string => {
-        const contestEndDate = submission.contests?.end_date ? new Date(submission.contests.end_date) : null;
-        const isEnded = contestEndDate ? contestEndDate < new Date() : false;
-
-        if (isEnded) return "Ended";
-        if (submission.status === 'verified') return "Verified";
-        if (submission.status === 'rejected') return "Rejected";
-        if (submission.status === 'paid') return "Paid";
-        if (submission.status === 'pending') return "Pending";
-
-        return 'Unknown'; // All known statuses handled, this is a fallback.
+        if (!submission.status) return 'Unknown'; // Fallback for missing status
+        // Capitalize first letter of submission.status for display
+        return submission.status.charAt(0).toUpperCase() + submission.status.slice(1);
     };
 
+    const postContestStatusMap: Record<string, string> = {
+        'pending_review': 'Pending Review',
+        'in_review': 'In Review',
+        'verification_complete': 'Verification Complete',
+        'payouts_processed': 'Payouts Processed'
+    };
 
     if (fetchError) {
         return (
@@ -190,57 +190,78 @@ export default function SubmissionsClient({
                                 const contestId = submission.contests?.id;
                                 const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
 
-                                let earningsLabel = "";
-                                let earningsAmount: string | number = 0;
-                                let earningsNote: string | undefined = undefined;
+                                let primaryEarningsDisplay: React.ReactNode | null = null;
 
                                 if (contest?.contest_type === 'cpm') {
-                                    console.log('[CPM DEBUG] Submission ID:', submission.id, 'Status:', submission.status, 'Is Ended:', isEnded);
-                                    console.log('[CPM DEBUG] Raw Views:', views, 'CPM Config extracted:', cpmConfig);
+                                    let cpmLabel = "";
+                                    let cpmAmount: string | number = "0.00";
 
                                     if (submission.status === 'paid') {
-                                        earningsLabel = "Paid";
-                                        earningsAmount = submission.earnings?.toFixed(2) || "0.00";
+                                        cpmLabel = "Paid";
+                                        cpmAmount = submission.earnings?.toFixed(2) || "0.00";
                                     } else if (submission.status === 'rejected') {
-                                        earningsLabel = isEnded ? "Earnings" : "Est. Earnings";
-                                        earningsAmount = "0.00";
+                                        cpmLabel = isEnded ? "Earnings" : "Est. Earnings";
+                                        cpmAmount = "0.00";
                                     } else { // pending or verified
                                         let effectiveViews = views;
                                         if (cpmConfig?.min_views != null && views < cpmConfig.min_views) {
-                                            console.log('[CPM DEBUG] Hit MIN_VIEWS condition: views < min_views');
                                             effectiveViews = 0;
                                         } else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) {
-                                            console.log('[CPM DEBUG] Hit MAX_VIEWS condition: views > max_views');
                                             effectiveViews = cpmConfig.max_views;
                                         }
-                                        console.log('[CPM DEBUG] Effective Views:', effectiveViews);
                                         const calculatedEarnings = (effectiveViews * (cpmConfig?.cpm_rate_usd || 0) / 1000);
-                                        console.log('[CPM DEBUG] Calculated Earnings:', calculatedEarnings);
-                                        earningsAmount = calculatedEarnings.toFixed(2);
+                                        cpmAmount = calculatedEarnings.toFixed(2);
                                         if (isEnded) {
-                                            earningsLabel = "Final Earnings";
+                                            cpmLabel = "Final Earnings";
                                         } else {
-                                            earningsLabel = "Est. Earnings";
+                                            cpmLabel = "Est. Earnings";
                                         }
                                     }
-                                } else { // Assumed to be 'leaderboard' if not 'cpm'
-                                    if (submission.status === 'paid') {
-                                        earningsLabel = "Paid";
-                                        earningsAmount = submission.earnings?.toFixed(2) || "0.00";
-                                    } else if (submission.status === 'rejected') {
-                                        earningsLabel = "Earnings";
-                                        earningsAmount = "0.00";
-                                    } else { // pending or verified
-                                        if (isEnded) {
-                                            earningsLabel = "Earnings";
-                                            earningsAmount = submission.earnings?.toFixed(2) || "0.00";
-                                        } else {
-                                            earningsLabel = "Est. Earnings";
-                                            earningsAmount = "0.00";
-                                            earningsNote = "View contest for leaderboard standing.";
+                                    primaryEarningsDisplay = (
+                                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                            {cpmLabel}: <span className="text-base">${cpmAmount}</span> USD
+                                        </p>
+                                    );
+
+                                } else if (contest?.contest_type === 'leaderboard') {
+                                    if (!isEnded) { // LIVE Leaderboard
+                                        if (contestId) {
+                                            primaryEarningsDisplay = (
+                                                <Link href={`/dashboard/opportunities/${contestId}#leaderboard`} className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block">
+                                                    View contest for leaderboard standing.
+                                                </Link>
+                                            );
                                         }
+                                    } else { // ENDED Leaderboard
+                                        // Uses the new contest.post_contest_status field
+                                        const postContestStatus = submission.contests?.post_contest_status as string | undefined;
+                                        const calculatedAmount = submission.earnings?.toFixed(2) || "0.00";
+                                        let leaderBoardLabel = "";
+
+                                        if (submission.status === 'paid') {
+                                            leaderBoardLabel = "Paid";
+                                        } else {
+                                            switch (postContestStatus) {
+                                                case 'pending_review':
+                                                case 'in_review':
+                                                    leaderBoardLabel = "Est. Earnings";
+                                                    break;
+                                                case 'verification_complete':
+                                                case 'payouts_processed':
+                                                    leaderBoardLabel = "Final Earnings";
+                                                    break;
+                                                default: // Fallback if post_contest_status is not set or has an unexpected value
+                                                    leaderBoardLabel = "Earnings";
+                                            }
+                                        }
+                                        primaryEarningsDisplay = (
+                                            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                                {leaderBoardLabel}: <span className="text-base">${calculatedAmount}</span> USD
+                                            </p>
+                                        );
                                     }
                                 }
+                                // If contest_type is other than 'cpm' or 'leaderboard', primaryEarningsDisplay remains null.
 
                                 return (
                                     <div
@@ -285,6 +306,11 @@ export default function SubmissionsClient({
                                                             {contest.contest_type.toUpperCase()}
                                                         </Badge>
                                                     )}
+                                                    {isEnded && submission.contests?.post_contest_status && postContestStatusMap[submission.contests.post_contest_status] && (
+                                                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                            Contest Stage: <span className="font-medium">{postContestStatusMap[submission.contests.post_contest_status]}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -293,14 +319,7 @@ export default function SubmissionsClient({
                                             <div className="text-sm text-left sm:text-right p-3 rounded-md bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 min-w-[200px]">
                                                 <p className="font-medium text-slate-700 dark:text-slate-300">{views.toLocaleString()} views</p>
 
-                                                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                                    {earningsLabel}: <span className="text-base">${earningsAmount}</span> USD
-                                                </p>
-                                                {earningsNote && contestId && (
-                                                    <Link href={`/dashboard/opportunities/${contestId}#leaderboard`} className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block">
-                                                        {earningsNote}
-                                                    </Link>
-                                                )}
+                                                {primaryEarningsDisplay}
 
                                                 <Badge
                                                     className={`mt-2 text-xs ${getStatusBadgeColor(submission.status, contest?.end_date)}`}
