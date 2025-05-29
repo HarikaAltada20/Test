@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server"; // Changed to server client
 import { redirect } from "next/navigation";
 import EarningsClientPage from "./EarningsClientPage"; // New client component
-import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, UserData } from "@/types/earnings"; // Assuming types are moved
+import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, UserData, WithdrawalRequest } from "@/types/earnings"; // Assuming types are moved
 
 // Helper to safely parse numeric values from DB, converting to cents if they are dollars, or keeping as is if cents
 // For display, client component will convert cents to dollars
@@ -123,6 +123,19 @@ export default async function CreatorEarningsServerPage() {
   }
   const initialCoinTransactions: CoinTransaction[] = coinData || [];
 
+  // Fetch Withdrawal Requests
+  const { data: withdrawalRequestsData, error: withdrawalRequestsError } = await supabase
+    .from("withdrawal_requests")
+    .select("id, created_at, updated_at, amount_cents, currency, status, payout_method_id, user_notes, admin_notes")
+    .eq("user_id", authUser.id)
+    .order("created_at", { ascending: false });
+
+  if (withdrawalRequestsError) {
+    console.error("Error fetching withdrawal requests:", withdrawalRequestsError);
+    // Continue, client can handle empty or error state
+  }
+  const initialWithdrawalRequests: WithdrawalRequest[] = withdrawalRequestsData || [];
+
   // Remove Link import if not used here
   // import Link from "next/link"; 
 
@@ -134,6 +147,7 @@ export default async function CreatorEarningsServerPage() {
       initialCashTransactions={initialCashTransactions}
       initialCoinTransactions={initialCoinTransactions}
       initialPayoutMethods={initialPayoutMethods}
+      initialWithdrawalRequests={initialWithdrawalRequests}
     />
   );
 }

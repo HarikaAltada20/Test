@@ -56,4 +56,20 @@ export interface EarningsClientPageProps {
   initialCashTransactions: CashTransaction[];
   initialCoinTransactions: CoinTransaction[];
   initialPayoutMethods: PayoutMethod[];
+  initialWithdrawalRequests: WithdrawalRequest[];
+}
+
+// For the 'withdrawal_requests' table
+export interface WithdrawalRequest {
+  id: string;
+  created_at: string;
+  updated_at?: string;
+  amount_cents: number;
+  currency: string;
+  status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed' | 'cancelled'; // Possible statuses
+  payout_method_id: string; 
+  user_notes: string | null;
+  admin_notes?: string | null; // Optional, if you fetch it
+  // You might want to include a summary of the payout method if fetched/joined
+  payout_method_summary?: string; 
 } 

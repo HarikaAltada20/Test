@@ -42,13 +42,15 @@ import {
     Wallet as CryptoWalletIcon, // Renamed to avoid conflict
     Sparkles,
     Power,
+    Loader2,
 } from "lucide-react";
 import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client"; // Client Supabase
-import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData } from "@/types/earnings"; // Centralized types
+import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData, WithdrawalRequest } from "@/types/earnings"; // Centralized types
 import { formatCurrency } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
+import { toast } from "sonner"; // Import toast
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
@@ -66,6 +68,7 @@ interface EarningsClientPageProps {
     initialCashTransactions: CashTransaction[];
     initialCoinTransactions: CoinTransaction[];
     initialPayoutMethods: PayoutMethod[];
+    initialWithdrawalRequests: WithdrawalRequest[];
 }
 
 export default function EarningsClientPage({
@@ -75,9 +78,13 @@ export default function EarningsClientPage({
     initialCashTransactions,
     initialCoinTransactions,
     initialPayoutMethods,
+    initialWithdrawalRequests,
 }: EarningsClientPageProps) {
     const supabase = createClient();
     const router = useRouter(); // Initialize router
+
+    // Define getPayoutMethodSummaryById earlier, but it depends on payoutMethods state
+    // To handle this, we'll adjust how withdrawalRequests is initialized slightly
 
     // States derived from props, allowing client-side updates
     const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
@@ -86,8 +93,12 @@ export default function EarningsClientPage({
     const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(initialCashTransactions);
     const [coinTransactions, setCoinTransactionsState] = useState<CoinTransaction[]>(initialCoinTransactions);
     const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>(initialPayoutMethods);
+    // Initialize withdrawalRequests without summary first, then add summary in useEffect
+    const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(initialWithdrawalRequests);
 
     const [isLoading, setIsLoading] = useState(false); // For client-side actions
+    const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false); // Specific loading for withdrawal submission
+    const [isCancellingWithdrawal, setIsCancellingWithdrawal] = useState<string | null>(null); // Stores ID of withdrawal being cancelled
 
     // Modal States (same as before)
     const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -111,6 +122,12 @@ export default function EarningsClientPage({
     const [selectedWithdrawMethodId, setSelectedWithdrawMethodId] = useState<string | null>(null);
     const [withdrawalUserNotes, setWithdrawalUserNotes] = useState<string>(""); // New state for user notes
 
+    // Define getPayoutMethodSummaryById here, as it uses payoutMethods state
+    const getPayoutMethodSummaryById = (methodId: string): string => {
+        const method = payoutMethods.find(p => p.id === methodId);
+        return method ? getPayoutMethodSummary(method) : "Unknown Method";
+    };
+
     useEffect(() => {
         if (!initialAuthUser) {
             router.push("/login"); // Redirect if no auth user from server
@@ -122,8 +139,13 @@ export default function EarningsClientPage({
         setCashTransactions(initialCashTransactions);
         setCoinTransactionsState(initialCoinTransactions);
         setPayoutMethods(initialPayoutMethods);
-    }, [initialAuthUser, initialProfile, initialUserData, initialCashTransactions, initialCoinTransactions, initialPayoutMethods, router]);
-
+        // Now that payoutMethods state is set (or about to be from initialPayoutMethods),
+        // map the summaries for withdrawalRequests.
+        setWithdrawalRequests(initialWithdrawalRequests.map(wr => ({
+            ...wr,
+            payout_method_summary: getPayoutMethodSummaryById(wr.payout_method_id)
+        })));
+    }, [initialAuthUser, initialProfile, initialUserData, initialCashTransactions, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
 
     const handleSavePayoutMethod = async () => {
         if (!authUser) return;
@@ -298,42 +320,87 @@ export default function EarningsClientPage({
         const withdrawAmountCents = Math.round(withdrawAmountDollars * 100);
 
         if (withdrawAmountDollars < minWithdrawalDollars) {
-            alert(`Minimum withdrawal amount is ${formatCurrency(minWithdrawalDollars * 100)}.`); // formatCurrency expects cents
+            alert(`Minimum withdrawal amount is ${formatCurrency(minWithdrawalDollars * 100)}.`);
             return;
         }
         if (!profile || withdrawAmountCents > (profile.withdrawable_balance_cents || 0)) {
-            alert("Insufficient balance.");
+            alert("Insufficient balance (client-side check).");
             return;
         }
-        setIsLoading(true);
-        let errorOccurred: any = null; // Declare errorOccurred
 
-        const { data, error } = await supabase // Capture data and error directly
-            .from("withdrawal_requests")
-            .insert({
-                user_id: authUser.id,
-                payout_method_id: selectedWithdrawMethodId, // Corrected field name
-                amount_cents: withdrawAmountCents,
-                currency: 'USD',
-                user_notes: withdrawalUserNotes, // Add user notes
-                // status will default to 'pending' in the DB
-            })
-            .select();
+        setIsSubmittingWithdrawal(true); // Use specific loader
+        // Call the RPC function
+        const { data: newRequest, error: rpcError } = await supabase.rpc('create_withdrawal_request', {
+            p_user_id: authUser.id,
+            p_payout_method_id: selectedWithdrawMethodId,
+            p_amount_cents: withdrawAmountCents,
+            p_currency: 'USD', // Or make this dynamic if needed
+            p_user_notes: withdrawalUserNotes,
+        });
+        setIsSubmittingWithdrawal(false);
 
-        const resultData = data && data.length > 0 ? data[0] : null;
-        errorOccurred = error; // Assign error to errorOccurred
-        setIsLoading(false);
+        if (rpcError) {
+            console.error("Error creating withdrawal request via RPC:", rpcError);
+            alert(`Withdrawal request failed: ${rpcError.message}`);
+        } else if (newRequest && Array.isArray(newRequest) && newRequest.length > 0) {
+            // RPC returns an array with the new request object if successful (based on RETURNS TABLE)
+            const createdRequest = newRequest[0] as WithdrawalRequest;
+            alert(`Withdrawal request for ${formatCurrency(createdRequest.amount_cents)} submitted successfully!`);
 
-        if (errorOccurred) {
-            console.error("Error creating withdrawal request:", errorOccurred);
-            alert(`Withdrawal request failed: ${errorOccurred.message}`);
-        } else if (resultData) {
-            alert(`Withdrawal request for ${formatCurrency(resultData.amount_cents)} submitted successfully!`);
-            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: (prev.withdrawable_balance_cents || 0) - resultData.amount_cents }) : null);
+            // Update local state: add to withdrawal requests and update profile
+            setWithdrawalRequests(prev => [{ ...createdRequest, payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id) }, ...prev]);
+            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: (prev.withdrawable_balance_cents || 0) - createdRequest.amount_cents }) : null);
+
             setIsWithdrawModalOpen(false);
             setWithdrawAmountDollars(0);
             setSelectedWithdrawMethodId(null);
             setWithdrawalUserNotes("");
+        } else if (newRequest) { // Handle if RPC returns single object (less likely with RETURNS TABLE)
+            const createdRequest = newRequest as WithdrawalRequest; // Type assertion
+            alert(`Withdrawal request for ${formatCurrency(createdRequest.amount_cents)} submitted successfully! (single obj)`);
+            setWithdrawalRequests(prev => [{ ...createdRequest, payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id) }, ...prev]);
+            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: (prev.withdrawable_balance_cents || 0) - createdRequest.amount_cents }) : null);
+            setIsWithdrawModalOpen(false);
+            setWithdrawAmountDollars(0); // Reset form
+            setSelectedWithdrawMethodId(null);
+            setWithdrawalUserNotes("");
+        } else {
+            console.error("Withdrawal request RPC returned unexpected data:", newRequest);
+            alert("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
+            // Might be good to refetch profile and requests here to be safe
+            // await refetchAllData(); // You'd need to implement this
+        }
+    };
+
+    const handleCancelWithdrawal = async (requestId: string, amountCents: number) => {
+        if (!authUser || !profile) return;
+        if (!confirm("Are you sure you want to cancel this withdrawal request? The funds will be returned to your withdrawable balance.")) {
+            return;
+        }
+        setIsCancellingWithdrawal(requestId);
+
+        const { data: rpcSuccess, error: rpcError } = await supabase.rpc('cancel_withdrawal_request_by_user', {
+            p_request_id: requestId,
+            p_user_id: authUser.id
+        });
+
+        setIsCancellingWithdrawal(null);
+
+        if (rpcError) {
+            console.error("Error cancelling withdrawal request via RPC:", rpcError);
+            alert(`Failed to cancel request: ${rpcError.message}`);
+        } else if (rpcSuccess === true) { // Check for explicit true from RPC
+            // Optimistically update UI or refetch data
+            const newBalance = (profile.withdrawable_balance_cents || 0) + amountCents;
+            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: newBalance }) : null);
+            setWithdrawalRequests(prevReqs =>
+                prevReqs.map(req => req.id === requestId ? { ...req, status: 'cancelled', payout_method_summary: req.payout_method_summary || getPayoutMethodSummaryById(req.payout_method_id) } : req)
+            );
+            toast("Withdrawal Cancelled: The funds have been returned to your withdrawable balance.");
+        } else {
+            // RPC might have returned false or unexpected data
+            console.error("RPC call to cancel withdrawal did not return true. Response:", rpcSuccess);
+            alert("Failed to cancel the withdrawal request. Please try again or contact support if the issue persists.");
         }
     };
 
@@ -573,6 +640,67 @@ export default function EarningsClientPage({
                 </TabsContent>
             </Tabs>
 
+            {/* Withdrawal Requests Section */}
+            <Card className="mt-8">
+                <CardHeader>
+                    <CardTitle>Withdrawal Request History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Date Submitted</TableHead>
+                                <TableHead>Amount</TableHead>
+                                <TableHead>Method</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Your Notes</TableHead>
+                                <TableHead>Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {withdrawalRequests.length > 0 ? (
+                                withdrawalRequests.map((req) => (
+                                    <TableRow key={req.id}>
+                                        <TableCell>{formatDateTime(req.created_at)}</TableCell>
+                                        <TableCell>{formatCurrency(req.amount_cents)}</TableCell>
+                                        <TableCell>{req.payout_method_summary || getPayoutMethodSummaryById(req.payout_method_id)}</TableCell>
+                                        <TableCell>
+                                            <Badge variant={
+                                                req.status === "processed" ? "default" : // Use "processed" as the success state
+                                                    req.status === "pending" || req.status === "approved" ? "secondary" :
+                                                        req.status === "cancelled" ? "outline" :
+                                                            req.status === "rejected" || req.status === "failed" ? "destructive" : "outline"
+                                            } className="capitalize">
+                                                {req.status.replace(/_/g, ' ')}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="max-w-xs truncate">{req.user_notes || "N/A"}</TableCell>
+                                        <TableCell>
+                                            {req.status === 'pending' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleCancelWithdrawal(req.id, req.amount_cents)}
+                                                    disabled={isCancellingWithdrawal === req.id}
+                                                >
+                                                    {isCancellingWithdrawal === req.id ? (
+                                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        "Cancel"
+                                                    )}
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No withdrawal requests yet.</TableCell></TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+
             {/* Payout Methods Modal (Dialog) */}
             <Dialog open={isPayoutModalOpen} onOpenChange={(isOpen) => { if (isLoading && isOpen) return; setIsPayoutModalOpen(isOpen); if (!isOpen) resetPayoutForm(); }}>
                 <DialogContent className="sm:max-w-[625px]">
@@ -659,7 +787,7 @@ export default function EarningsClientPage({
             </Dialog>
 
             {/* Withdraw Balance Modal */}
-            <Dialog open={isWithdrawModalOpen} onOpenChange={(isOpen) => { if (isLoading && isOpen) return; setIsWithdrawModalOpen(isOpen); }}>
+            <Dialog open={isWithdrawModalOpen} onOpenChange={(isOpen) => { if (isSubmittingWithdrawal && isOpen) return; setIsWithdrawModalOpen(isOpen); }}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Withdraw Balance</DialogTitle>
@@ -719,14 +847,18 @@ export default function EarningsClientPage({
                         <Button
                             onClick={handleWithdraw}
                             disabled={
-                                isLoading ||
+                                isSubmittingWithdrawal ||
                                 !selectedWithdrawMethodId ||
                                 withdrawAmountDollars < 20 ||
                                 (Math.round(withdrawAmountDollars * 100)) > (profile.withdrawable_balance_cents || 0) ||
                                 payoutMethods.length === 0
                             }
                         >
-                            {isLoading ? "Processing..." : "Request Withdrawal"}
+                            {isSubmittingWithdrawal ? (
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
+                            ) : (
+                                "Request Withdrawal"
+                            )}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
