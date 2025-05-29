@@ -16,7 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type StatusFilterType = 'all' | 'live' | 'upcoming';
 type PlatformFilterType = 'all' | 'youtube' | 'instagram'; // Add more as needed
 type ContestTypeFilterType = 'all' | 'leaderboard' | 'cpm';
-type SortOptionType = 'newest_first' | 'end_date_asc' | 'value_high_low' | 'cpm_rate_high_low';
+type SortOptionType =
+  'created_at_desc' | 'created_at_asc' |
+  'end_date_asc' | 'end_date_desc' |
+  'value_desc' | 'value_asc' |
+  'cpm_rate_desc' | 'cpm_rate_asc';
 
 export default function OpportunitiesPage({
   user,
@@ -32,7 +36,7 @@ export default function OpportunitiesPage({
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilterType>('all');
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>('all');
-  const [sortOption, setSortOption] = useState<SortOptionType>('newest_first');
+  const [sortOption, setSortOption] = useState<SortOptionType>('created_at_desc');
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
 
   useEffect(() => {
@@ -123,30 +127,41 @@ export default function OpportunitiesPage({
     // Sorting
     contestsToDisplay.sort((a, b) => {
       switch (sortOption) {
-        case 'newest_first':
+        case 'created_at_desc':
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'created_at_asc':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         case 'end_date_asc':
-          if (!a.end_date) return 1;
+          if (!a.end_date) return 1; // push contests without end_date to the bottom
           if (!b.end_date) return -1;
           return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
-        case 'value_high_low': // Combined Prize/Budget
+        case 'end_date_desc':
+          if (!a.end_date) return 1;
+          if (!b.end_date) return -1;
+          return new Date(b.end_date).getTime() - new Date(a.end_date).getTime();
+        case 'value_desc':
+        case 'value_asc':
           let valueA = 0;
           let valueB = 0;
           if (a.contest_type === 'leaderboard' && a.contest_based_details?.leaderboard_contest?.total_prize) {
             valueA = a.contest_based_details.leaderboard_contest.total_prize;
           } else if (a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.total_budget) {
-            valueA = a.contest_based_details.cpm_contest.total_budget;
+            valueA = a.contest_based_details.cpm_contest.total_budget * 100; // Assuming budget is in dollars, convert to cents like prize money
           }
           if (b.contest_type === 'leaderboard' && b.contest_based_details?.leaderboard_contest?.total_prize) {
             valueB = b.contest_based_details.leaderboard_contest.total_prize;
           } else if (b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.total_budget) {
-            valueB = b.contest_based_details.cpm_contest.total_budget;
+            valueB = b.contest_based_details.cpm_contest.total_budget * 100; // Assuming budget is in dollars
           }
-          return valueB - valueA;
-        case 'cpm_rate_high_low': // CPM
-          const rateA = a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.cpm_rate_usd ? a.contest_based_details.cpm_contest.cpm_rate_usd : 0;
-          const rateB = b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.cpm_rate_usd ? b.contest_based_details.cpm_contest.cpm_rate_usd : 0;
-          return rateB - rateA;
+          return sortOption === 'value_desc' ? valueB - valueA : valueA - valueB;
+        case 'cpm_rate_desc':
+        case 'cpm_rate_asc':
+          const rateA = a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.cpm_rate_usd ? a.contest_based_details.cpm_contest.cpm_rate_usd : -1; // Use -1 to sort contests without CPM rate last
+          const rateB = b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.cpm_rate_usd ? b.contest_based_details.cpm_contest.cpm_rate_usd : -1;
+          if (rateA === -1 && rateB === -1) return 0;
+          if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
+          if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
+          return sortOption === 'cpm_rate_desc' ? rateB - rateA : rateA - rateB;
         default:
           return 0;
       }
@@ -228,10 +243,14 @@ export default function OpportunitiesPage({
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="newest_first">Newest First</SelectItem>
-            <SelectItem value="end_date_asc">End Date (Soonest)</SelectItem>
-            <SelectItem value="value_high_low">Prize/Budget (High to Low)</SelectItem>
-            <SelectItem value="cpm_rate_high_low">CPM Rate (High to Low)</SelectItem>
+            <SelectItem value="created_at_desc">Date Added: Newest First</SelectItem>
+            <SelectItem value="created_at_asc">Date Added: Oldest First</SelectItem>
+            <SelectItem value="end_date_asc">End Date: Soonest First</SelectItem>
+            <SelectItem value="end_date_desc">End Date: Furthest First</SelectItem>
+            <SelectItem value="value_desc">Prize/Budget: High to Low</SelectItem>
+            <SelectItem value="value_asc">Prize/Budget: Low to High</SelectItem>
+            <SelectItem value="cpm_rate_desc">CPM Rate: High to Low</SelectItem>
+            <SelectItem value="cpm_rate_asc">CPM Rate: Low to High</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -284,23 +303,31 @@ export default function OpportunitiesPage({
               </CardHeader>
               <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
                 <div className="space-y-2 text-sm mb-3">
-                  {contest.platform && (
+                  {/* Platform, Ends, Type, then Budget/Prize, then CPM Rate */}
+                  <div className="flex items-center text-slate-500 dark:text-slate-400">
+                    <Share2 className="h-4 w-4 mr-2 flex-shrink-0" /> {/* Assuming Share2 is for Platform */}
+                    <span>Platform: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
+                  </div>
+                  <div className="flex items-center text-slate-500 dark:text-slate-400">
+                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>Ends: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "N/A"}</span></span>
+                  </div>
+
+                  {/* Contest Type */}
+                  <div className="flex items-center text-slate-500 dark:text-slate-400">
+                    <Info className="h-4 w-4 mr-2 flex-shrink-0" /> {/* Assuming Info is for Type */}
+                    <span>Type: <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type ? contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1) : 'N/A'}
+                    </span></span>
+                  </div>
+                  {/* Display CPM Rate for CPM contests - MOVED HERE */}
+                  {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
                     <div className="flex items-center text-slate-500 dark:text-slate-400">
-                      <Share2 className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                      <span>Platform: <span className="font-semibold text-slate-700 dark:text-slate-300 capitalize">{contest.platform}</span></span>
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" /> {/* Re-using DollarSign, consider a different one */}
+                      <span>CPM Rate: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                     </div>
                   )}
-                  <div className="flex items-center text-slate-500 dark:text-slate-400">
-                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                    <span>
-                      Ends:
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {contest.end_date
-                          ? `${new Date(contest.end_date).toLocaleDateString()}`
-                          : "N/A"}
-                      </span>
-                    </span>
-                  </div>
+                  {/* Budget or Prize Pool - MOVED HERE */}
                   <div className="flex items-center text-slate-500 dark:text-slate-400">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
                     <span className="text-md">
@@ -308,33 +335,11 @@ export default function OpportunitiesPage({
                         <>Budget: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}</span></>
                       ) : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest ? (
                         <>Prize Pool: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</span></>
-                      ) : contest.total_prize ? (
-                        <>Prize Pool: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.total_prize || 0)}</span></>
                       ) : (
                         <>Budget/Prize: <span className="font-bold text-slate-800 dark:text-slate-100">N/A</span></>
                       )}
                     </span>
                   </div>
-                  {/* Display CPM Rate for CPM contests */}
-                  {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
-                    <div className="flex items-center text-slate-500 dark:text-slate-400">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" /> {/* Re-using DollarSign, consider a different one if available/better */}
-                      <span>CPM Rate: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
-                    </div>
-                  )}
-                  {/* Display Total Submissions for Leaderboard contests */}
-                  {/* {contest.contest_type === 'leaderboard' && contest.live_submission_count != null && (
-                    <div className="flex items-center text-slate-500 dark:text-slate-400">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                      <span>Submissions: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
-                    </div>
-                  )} */}
-                  {contest.contest_type && (
-                    <div className="flex items-center text-slate-500 dark:text-slate-400">
-                      <Info className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                      <span>Type: <span className="font-semibold text-slate-700 dark:text-slate-300 capitalize">{contest.contest_type === 'cpm' ? 'CPM Based' : 'Leaderboard'}</span></span>
-                    </div>
-                  )}
                 </div>
                 {/* Budget Spent Progress Bar for CPM contests */}
                 {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
