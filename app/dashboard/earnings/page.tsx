@@ -1,189 +1,139 @@
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@/utils/supabase/server"; // Changed to server client
 import { redirect } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { ArrowDownToLine, DollarSign, Trophy } from "lucide-react";
+import EarningsClientPage from "./EarningsClientPage"; // New client component
+import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, UserData } from "@/types/earnings"; // Assuming types are moved
 
-// Add the formatCurrency utility function
-// Add this utility function to convert cents to dollars for display
-const formatCurrency = (cents: number): string => {
-  return `$${(cents / 100).toFixed(2)}`;
+// Helper to safely parse numeric values from DB, converting to cents if they are dollars, or keeping as is if cents
+// For display, client component will convert cents to dollars
+const parseMoneyToCents = (value: any): number => {
+  const num = parseFloat(value); // Assuming value from creator_profiles is already in cents
+  if (isNaN(num)) return 0;
+  // Fields like total_money_won and withdrawable_balance are confirmed to be stored in cents.
+  return Math.round(num); // Value is already in cents, just ensure it's a rounded number.
 };
 
-export default async function CreatorEarningsPage() {
+
+export default async function CreatorEarningsServerPage() {
+  // Assuming createClient might be async based on linter errors.
+  // If createClient is synchronous, this await should be removed and the underlying issue with types investigated.
   const supabase = await createClient();
 
   const {
-    data: { user },
+    data: { user: authUser },
+    error: authError,
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  if (authError || !authUser) {
+    console.error("Auth error or no user, redirecting to login:", authError);
     redirect("/login");
   }
 
-  // Get user role from the database
-  const { data: userData } = await supabase
+  // Fetch user role, coins, and referral data
+  const { data: roleAndCoinsData, error: roleAndCoinsError } = await supabase
     .from("users")
-    .select("user_type")
-    .eq("id", user.id)
+    .select("user_type, coins, advertisers_referred, creators_referred, total_lifetime_coins_earned")
+    .eq("id", authUser.id)
     .single();
 
-  if (userData?.user_type !== "creator") {
-    redirect("/dashboard");
+  if (roleAndCoinsError || !roleAndCoinsData || roleAndCoinsData.user_type !== "creator") {
+    console.error("Error fetching user role/coins or not a creator:", roleAndCoinsError);
+    redirect("/dashboard?error=profile_fetch_failed"); // Or a more specific error page
   }
 
-  // Get creator profile
-  const { data: profile } = await supabase
+  const userData: UserData = {
+    coins: roleAndCoinsData.coins || 0,
+    advertisers_referred: roleAndCoinsData.advertisers_referred || 0,
+    creators_referred: roleAndCoinsData.creators_referred || 0,
+    total_lifetime_coins_earned: roleAndCoinsData.total_lifetime_coins_earned || 0,
+  };
+
+  // Fetch creator profile (money fields)
+  const { data: profileData, error: profileError } = await supabase
     .from("creator_profiles")
-    .select("*")
-    .eq("id", user.id)
+    .select("total_money_won, total_contests_won, withdrawable_balance")
+    .eq("id", authUser.id)
     .single();
 
-  // Get successful submissions (to simulate earnings)
-  const { data: submissions } = await supabase
-    .from("submissions")
-    .select("*, contests(title, prizes)")
-    .eq("creator_id", user.id)
-    .eq("status", "approved")
+  if (profileError || !profileData) {
+    console.error("Error fetching creator profile:", profileError);
+    // Allow page to load with possibly empty profile, client can show error or limited view
+    // Or redirect: redirect("/dashboard?error=profile_fetch_failed");
+  }
+
+  // IMPORTANT: Adjust parsing based on actual DB storage (cents vs dollars)
+  const initialProfile: CreatorProfileData | null = profileData ? {
+    total_money_won_cents: parseMoneyToCents(profileData.total_money_won),
+    total_contests_won: profileData.total_contests_won || 0,
+    withdrawable_balance_cents: parseMoneyToCents(profileData.withdrawable_balance),
+  } : null;
+
+
+  // Fetch Payout Methods (from payout_methods table)
+  const { data: methodsData, error: methodsError } = await supabase
+    .from("payout_methods") // Updated table name
+    .select("*")
+    .eq("user_id", authUser.id)
     .order("created_at", { ascending: false });
 
-  // Mock earnings data
-  const earnings = [
-    {
-      id: "earning-1",
-      date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 30).toISOString(),
-      contest: "Summer Product Launch",
-      amount: 15000,
-      status: "paid",
-    },
-    {
-      id: "earning-2",
-      date: new Date(Date.now() - 1000 * 60 * 60 * 24 * 15).toISOString(),
-      contest: "Holiday Campaign",
-      amount: 10000,
-      status: "pending",
-    },
-  ];
+  if (methodsError) {
+    console.error("Error fetching payout methods:", methodsError);
+    // Continue without methods, client can handle
+  }
+  const initialPayoutMethods: PayoutMethod[] = methodsData || [];
+
+  // Fetch Cash Transactions (from money_transactions table)
+  const { data: cashData, error: cashError } = await supabase
+    .from("money_transactions")
+    .select("id, created_at, description, amount, status, type") // 'amount' here is assumed to be in CENTS as per user's decision
+    .eq("user_id", authUser.id)
+    .order("created_at", { ascending: false });
+
+  if (cashError) {
+    console.error("Error fetching cash transactions:", cashError);
+  }
+  // Assuming 'amount' from money_transactions is already in CENTS
+  // Define an interface for the raw transaction data from the DB for typing 'tx'
+  interface DbCashTransaction {
+    id: string;
+    created_at: string;
+    description: string | null;
+    amount: string | number; // Raw amount from DB (already in cents)
+    status: string | null;
+    type: string | null;
+  }
+  const initialCashTransactions: CashTransaction[] = (cashData || []).map((tx: DbCashTransaction) => ({
+    id: tx.id,
+    created_at: tx.created_at,
+    description: tx.description,
+    amount_cents: Math.round(parseFloat(String(tx.amount))) || 0, // Ensure amount is a number (cents)
+    status: tx.status,
+    type: tx.type,
+  }));
+
+
+  // Fetch Coin Transactions (from coin_transactions table)
+  const { data: coinData, error: coinError } = await supabase
+    .from("coin_transactions")
+    .select("id, created_at, description, coins, status, type")
+    .eq("user_id", authUser.id)
+    .order("created_at", { ascending: false });
+
+  if (coinError) {
+    console.error("Error fetching coin transactions:", coinError);
+  }
+  const initialCoinTransactions: CoinTransaction[] = coinData || [];
+
+  // Remove Link import if not used here
+  // import Link from "next/link"; 
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Earnings</h1>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/settings">
-            <DollarSign className="h-4 w-4 mr-2" /> Update Payment Info
-          </Link>
-        </Button>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Earnings
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(profile?.prize_money_earned || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">Lifetime earnings</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Contests Won</CardTitle>
-            <Trophy className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {profile?.contests_won || 0}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total contest victories
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Available for Withdrawal
-            </CardTitle>
-            <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(
-                earnings
-                  .filter((e) => e.status === "pending")
-                  .reduce((sum, e) => sum + e.amount, 0)
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">Current balance</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Earnings History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Contest</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {earnings.length > 0 ? (
-                earnings.map((earning) => (
-                  <TableRow key={earning.id}>
-                    <TableCell>
-                      {new Date(earning.date).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{earning.contest}</TableCell>
-                    <TableCell>{formatCurrency(earning.amount)}</TableCell>
-                    <TableCell>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          earning.status === "paid"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {earning.status === "paid" ? "Paid" : "Pending"}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center py-4 text-muted-foreground"
-                  >
-                    No earnings yet
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+    <EarningsClientPage
+      initialAuthUser={authUser}
+      initialProfile={initialProfile}
+      initialUserData={userData}
+      initialCashTransactions={initialCashTransactions}
+      initialCoinTransactions={initialCoinTransactions}
+      initialPayoutMethods={initialPayoutMethods}
+    />
   );
 }

@@ -163,48 +163,80 @@ export default function ChooseUsernamePage() {
                 throw new Error(updateUserError.message || "Failed to set your username.")
             }
 
-            if (userData.referred_by_code) {
-                console.log("Attempting to process referral for code:", userData.referred_by_code);
-                try {
+            // --- NEW BONUS AND REFERRAL LOGIC ---
+            try {
+                if (userData.referred_by_code) {
+                    console.log("Attempting to process referral for code:", userData.referred_by_code);
                     // Fetch the referrer user by their referral code (which is their username)
                     const { data: referrerUser, error: fetchReferrerError } = await supabase
                         .from('users')
                         .select('id')
                         .eq('username', userData.referred_by_code) // Usernames are used as referral codes
+                        .neq('id', userData.id) // Prevent self-referral
                         .single();
 
-                    if (fetchReferrerError) {
-                        console.error("Error fetching referrer user:", fetchReferrerError);
-                        toast({ variant: "default", title: "Referral Issue", description: `Could not verify referrer: ${fetchReferrerError.message}. Bonus might not be applied.`, duration: 7000 });
-                        // Depending on policy, you might choose to not proceed or allow account creation without referral bonus to referrer
-                    } else if (!referrerUser) {
-                        console.warn("Referrer user not found for code:", userData.referred_by_code);
-                        toast({ variant: "default", title: "Referral Not Found", description: "The referral code used was not found. No bonus applied for referrer.", duration: 7000 });
+                    if (fetchReferrerError || !referrerUser) {
+                        console.warn("Referrer user not found or error fetching for code:", userData.referred_by_code, fetchReferrerError);
+                        toast({ variant: "default", title: "Referral Code Invalid", description: "The referral code used was not found or invalid. You will still receive a welcome bonus.", duration: 7000 });
+
+                        // Fallback: Grant welcome bonus to the current user
+                        const { error: welcomeError } = await supabase.rpc('grant_welcome_bonus', {
+                            new_user_id: userData.id,
+                            p_user_type: userData.userType,
+                            p_user_name: username // The username just set
+                        });
+                        if (welcomeError) {
+                            console.error("Error granting welcome bonus after invalid referral:", welcomeError);
+                            toast({ variant: "destructive", title: "Bonus Issue", description: `Welcome bonus might have failed: ${welcomeError.message}`, duration: 7000 });
+                        }
+
                     } else {
-                        // Referrer found, proceed with RPC call
-                        const { error: rpcError } = await supabase.rpc('handle_referral', {
-                            referrer_id: referrerUser.id,      // Referrer's actual ID
-                            referred_id: userData.id,          // Current user's ID (the one being referred)
-                            ref_code: userData.referred_by_code, // The referral code string
-                            referred_type: userData.userType   // Current user's type
+                        // Referrer found, proceed with the new process_referral_signup RPC call
+                        console.log(`Referrer ${referrerUser.id} found for code ${userData.referred_by_code}. Calling process_referral_signup for user ${userData.id}`);
+                        const { error: rpcError } = await supabase.rpc('process_referral_signup', {
+                            p_referred_id: userData.id,
+                            p_ref_code: userData.referred_by_code,
+                            p_referrer_id: referrerUser.id,
+                            p_referred_user_type: userData.userType,
+                            p_referred_user_name: username // The username just set
                         });
 
                         if (rpcError) {
-                            console.error("Error calling handle_referral RPC:", rpcError);
-                            // The original error message from the user log indicates this toast is shown:
-                            // hook.js:608 Error calling handle_referral RPC: {code: 'PGRST202', details: '...', hint: '...', message: '...'}
-                            // So, this part of the code is likely being reached when the error occurs.
-                            // The toast below is also important for user feedback.
-                            toast({ variant: "default", title: "Referral Note", description: "Could not automatically process bonus for the referrer due to: " + rpcError.message, duration: 7000 });
+                            console.error("Error calling process_referral_signup RPC. Full error object:", JSON.stringify(rpcError, null, 2));
+                            console.error("RPC Error Code:", rpcError.code);
+                            console.error("RPC Error Message:", rpcError.message);
+                            console.error("RPC Error Details:", rpcError.details);
+                            console.error("RPC Error Hint:", rpcError.hint);
+                            toast({ variant: "default", title: "Referral Processing Note", description: "Could not fully process referral bonus due to: " + (rpcError.message || "Unknown RPC error") + ". Welcome bonus should be applied.", duration: 7000 });
+                            // Note: process_referral_signup internally calls grant_welcome_bonus,
+                            // so even if this specific part fails, the welcome bonus might have succeeded.
+                            // The idempotency in the SQL functions helps.
                         } else {
-                            toast({ title: "Referral Applied!", description: "Referral bonus processed for the referrer.", duration: 5000 });
+                            toast({ title: "Referral Applied!", description: "Referral bonus processed.", duration: 5000 });
                         }
                     }
-                } catch (processingError: any) { // Catch errors from fetching referrer or the RPC call itself
-                    console.error("Exception during referral processing:", processingError);
-                    toast({ variant: "destructive", title: "Referral Error", description: "Unexpected error processing referral bonus: " + processingError.message, duration: 7000 });
+                } else {
+                    // No referral code used, just grant welcome bonus
+                    console.log(`No referral code for user ${userData.id}. Granting welcome bonus.`);
+                    const { error: rpcError } = await supabase.rpc('grant_welcome_bonus', {
+                        new_user_id: userData.id,
+                        p_user_type: userData.userType,
+                        p_user_name: username // The username just set
+                    });
+                    if (rpcError) {
+                        console.error("Error calling grant_welcome_bonus RPC:", rpcError);
+                        toast({ variant: "destructive", title: "Bonus Issue", description: `Welcome bonus might have failed: ${rpcError.message}`, duration: 7000 });
+                    } else {
+                        // No specific toast needed here if welcome bonus is silently applied,
+                        // or you can add one if desired.
+                        console.log("Welcome bonus granted for non-referred user:", userData.id);
+                    }
                 }
+            } catch (bonusProcessingError: any) {
+                console.error("Exception during bonus/referral processing:", bonusProcessingError);
+                toast({ variant: "destructive", title: "Bonus System Error", description: "Unexpected error processing bonuses: " + bonusProcessingError.message, duration: 7000 });
             }
+            // --- END OF NEW BONUS AND REFERRAL LOGIC ---
 
             toast({
                 title: "Username Set Successfully!",

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, DollarSign, Filter, Trophy, Info, Share2, Users } from "lucide-react";
+import { Calendar, DollarSign, Trophy, Info, Share2, Users } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
 import { formatMoney } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
@@ -20,7 +20,8 @@ type SortOptionType =
   'created_at_desc' | 'created_at_asc' |
   'end_date_asc' | 'end_date_desc' |
   'value_desc' | 'value_asc' |
-  'cpm_rate_desc' | 'cpm_rate_asc';
+  'cpm_rate_desc' | 'cpm_rate_asc' |
+  'submissions_desc' | 'submissions_asc';
 
 export default function OpportunitiesPage({
   user,
@@ -162,6 +163,14 @@ export default function OpportunitiesPage({
           if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
           if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
           return sortOption === 'cpm_rate_desc' ? rateB - rateA : rateA - rateB;
+        case 'submissions_desc':
+        case 'submissions_asc':
+          const countA = a.live_submission_count ?? -1; // Treat null/undefined as -1 to sort them last/first depending on order
+          const countB = b.live_submission_count ?? -1;
+          if (countA === -1 && countB === -1) return 0; // Both unknown, treat as equal
+          if (countA === -1) return 1; // a (unknown) comes after b (known)
+          if (countB === -1) return -1; // b (unknown) comes after a (known)
+          return sortOption === 'submissions_desc' ? countB - countA : countA - countB;
         default:
           return 0;
       }
@@ -251,6 +260,8 @@ export default function OpportunitiesPage({
             <SelectItem value="value_asc">Prize/Budget: Low to High</SelectItem>
             <SelectItem value="cpm_rate_desc">CPM Rate: High to Low</SelectItem>
             <SelectItem value="cpm_rate_asc">CPM Rate: Low to High</SelectItem>
+            <SelectItem value="submissions_desc">Submissions: High to Low</SelectItem>
+            <SelectItem value="submissions_asc">Submissions: Low to High</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -312,6 +323,14 @@ export default function OpportunitiesPage({
                     <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>Ends: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "N/A"}</span></span>
                   </div>
+
+                  {/* Live Submission Count - NEW */}
+                  {(contest.live_submission_count !== null && contest.live_submission_count >= 0) && (
+                    <div className="flex items-center text-slate-500 dark:text-slate-400">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>Submissions: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                    </div>
+                  )}
 
                   {/* Contest Type */}
                   <div className="flex items-center text-slate-500 dark:text-slate-400">
