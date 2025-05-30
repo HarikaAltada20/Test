@@ -4,15 +4,6 @@ import EarningsClientPage from "./EarningsClientPage"; // New client component
 import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, UserData, WithdrawalRequest } from "@/types/earnings"; // Assuming types are moved
 
 // Helper to safely parse numeric values from DB, converting to cents if they are dollars, or keeping as is if cents
-// For display, client component will convert cents to dollars
-const parseMoneyToCents = (value: any): number => {
-  const num = parseFloat(value); // Assuming value from creator_profiles is already in cents
-  if (isNaN(num)) return 0;
-  // Fields like total_money_won and withdrawable_balance are confirmed to be stored in cents.
-  return Math.round(num); // Value is already in cents, just ensure it's a rounded number.
-};
-
-
 export default async function CreatorEarningsServerPage() {
   // Assuming createClient might be async based on linter errors.
   // If createClient is synchronous, this await should be removed and the underlying issue with types investigated.
@@ -62,9 +53,9 @@ export default async function CreatorEarningsServerPage() {
 
   // IMPORTANT: Adjust parsing based on actual DB storage (cents vs dollars)
   const initialProfile: CreatorProfileData | null = profileData ? {
-    total_money_won_cents: profileData.total_money_won,
+    total_money_won: profileData.total_money_won,
     total_contests_won: profileData.total_contests_won || 0,
-    withdrawable_balance_cents: profileData.withdrawable_balance,
+    withdrawable_balance: profileData.withdrawable_balance,
   } : null;
 
 
@@ -126,7 +117,7 @@ export default async function CreatorEarningsServerPage() {
   // Fetch Withdrawal Requests
   const { data: withdrawalRequestsData, error: withdrawalRequestsError } = await supabase
     .from("withdrawal_requests")
-    .select("id, created_at, updated_at, amount_cents, currency, status, payout_method_id, user_notes, admin_notes")
+    .select("id, created_at, updated_at, amount_cents, currency, status, payout_method_id, user_notes, admin_notes, amount_type, processed_at, transaction_reference, cancelled_at, cancellation_reason")
     .eq("user_id", authUser.id)
     .order("created_at", { ascending: false });
 

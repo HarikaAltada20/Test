@@ -47,7 +47,7 @@ import {
 import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client"; // Client Supabase
-import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData, WithdrawalRequest } from "@/types/earnings"; // Centralized types
+import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData, WithdrawalRequest, PayoutMethodDetails } from "@/types/earnings"; // Centralized types
 import { formatCurrency } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner"; // Import toast
@@ -103,7 +103,7 @@ export default function EarningsClientPage({
     // Modal States (same as before)
     const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
     const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-    const [currentPayoutMethod, setCurrentPayoutMethod] = useState<Partial<PayoutMethod> & { details: any } | null>(null);
+    const [currentPayoutMethod, setCurrentPayoutMethod] = useState<PayoutMethod | null>(null);
     const [selectedPayoutType, setSelectedPayoutType] = useState<PayoutMethodType>("crypto");
 
     const [cryptoType, setCryptoType] = useState<'LTC' | 'USDT_BEP20'>('LTC');
@@ -111,7 +111,8 @@ export default function EarningsClientPage({
     const [paypalEmail, setPaypalEmail] = useState('');
     const [bankAccountHolder, setBankAccountHolder] = useState('');
     const [bankAccountNumber, setBankAccountNumber] = useState('');
-    const [bankCountry, setBankCountry] = useState('');
+    const [bankBranchName, setBankBranchName] = useState('');
+    const [bankCountry, setBankCountry] = useState('IN');
     const [bankSortCode, setBankSortCode] = useState('');
     const [bankName, setBankName] = useState('');
     const [bankRoutingNumber, setBankRoutingNumber] = useState('');
@@ -122,145 +123,206 @@ export default function EarningsClientPage({
     const [selectedWithdrawMethodId, setSelectedWithdrawMethodId] = useState<string | null>(null);
     const [withdrawalUserNotes, setWithdrawalUserNotes] = useState<string>(""); // New state for user notes
 
-    // Define getPayoutMethodSummaryById here, as it uses payoutMethods state
-    const getPayoutMethodSummaryById = (methodId: string): string => {
+    const [activeTab, setActiveTab] = useState<'cash' | 'coins'>('cash'); // State for current tab
+    const [withdrawAmountCoins, setWithdrawAmountCoins] = useState<number>(0); // Example for coin withdrawal amount
+
+    const [cryptoNetwork, setCryptoNetwork] = useState<string>('BNB_BEP20'); // Added for crypto network
+    const [payoutFriendlyName, setPayoutFriendlyName] = useState<string>(''); // Added for friendly name
+
+    const getPayoutMethodSummary = (method: PayoutMethod): string => {
+        switch (method.method_type) {
+            case "crypto":
+                return `${method.details?.network?.toUpperCase() || 'Crypto'} Wallet: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Crypto'})`;
+            case "upi":
+                return `UPI: ${method.details?.upi_id || 'N/A'} (${method.friendly_name || 'UPI'})`;
+            case "bank_transfer":
+                return `Bank: ...${method.details?.account_number?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Bank'})`;
+            default:
+                const exhaustiveCheck: never = method.method_type;
+                return "Unknown Method Type";
+        }
+    };
+
+    const getPayoutMethodSummaryById = (methodId: string | null): string => {
+        if (!methodId) return "Payout method deleted or N/A";
         const method = payoutMethods.find(p => p.id === methodId);
         return method ? getPayoutMethodSummary(method) : "Unknown Method";
     };
 
     useEffect(() => {
         if (!initialAuthUser) {
-            router.push("/login"); // Redirect if no auth user from server
+            router.push("/login");
+            return;
         }
-        // Set initial states from props
         setAuthUser(initialAuthUser);
         setProfile(initialProfile);
         setUserData(initialUserData);
         setCashTransactions(initialCashTransactions);
         setCoinTransactionsState(initialCoinTransactions);
         setPayoutMethods(initialPayoutMethods);
-        // Now that payoutMethods state is set (or about to be from initialPayoutMethods),
-        // map the summaries for withdrawalRequests.
-        setWithdrawalRequests(initialWithdrawalRequests.map(wr => ({
-            ...wr,
-            payout_method_summary: getPayoutMethodSummaryById(wr.payout_method_id)
-        })));
-    }, [initialAuthUser, initialProfile, initialUserData, initialCashTransactions, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
+        setWithdrawalRequests(
+            initialWithdrawalRequests.map(wr => ({
+                ...wr,
+                payout_method_summary: getPayoutMethodSummaryById(wr.payout_method_id)
+            }))
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialAuthUser, initialProfile, initialUserData, initialCashTransactions, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]); // Removed getPayoutMethodSummaryById from deps
 
     const handleSavePayoutMethod = async () => {
-        if (!authUser) return;
-        setIsLoading(true);
-        let detailsToSave = {};
-        switch (selectedPayoutType) {
-            case 'crypto':
-                detailsToSave = { coin_symbol: cryptoType, address: cryptoAddress };
-                if (!cryptoAddress) { alert("Crypto address is required."); setIsLoading(false); return; }
-                break;
-            case 'paypal':
-                detailsToSave = { email: paypalEmail };
-                if (!paypalEmail) { alert("PayPal email is required."); setIsLoading(false); return; }
-                break;
-            case 'bank':
-                detailsToSave = {
-                    account_holder_name: bankAccountHolder,
-                    account_number: bankAccountNumber,
-                    country: bankCountry,
-                    sort_code: bankSortCode,
-                    bank_name: bankName,
-                    routing_number: bankRoutingNumber,
-                    ifsc_code: bankIfscCode
-                };
-                if (!bankAccountHolder || !bankAccountNumber || !bankCountry || !bankName) {
-                    alert("Account holder name, account number, country, and bank name are required for bank transfers.");
-                    setIsLoading(false); return;
-                }
-                break;
-            case 'upi':
-                detailsToSave = { upi_id: upiId };
-                if (!upiId) { alert("UPI ID is required."); setIsLoading(false); return; }
-                break;
+        if (!authUser) {
+            toast.error("Authentication error.");
+            return;
+        }
+        if (!payoutFriendlyName.trim()) {
+            toast.error("Please provide a friendly name for this payout method.");
+            return;
         }
 
+        let details: PayoutMethodDetails;
+
+        if (selectedPayoutType === 'crypto') {
+            if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
+                toast.error("Crypto wallet address and network are required.");
+                return;
+            }
+            details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim() };
+        } else if (selectedPayoutType === 'upi') {
+            if (!upiId.trim()) {
+                toast.error("UPI ID is required.");
+                return;
+            }
+            details = { upi_id: upiId.trim() };
+        } else if (selectedPayoutType === 'bank_transfer') {
+            if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankName.trim() || !bankCountry.trim()) {
+                toast.error("Account holder name, account number, bank name, and country are required for bank transfer.");
+                return;
+            }
+            details = {
+                account_holder_name: bankAccountHolder.trim(),
+                account_number: bankAccountNumber.trim(),
+                ifsc_code: bankIfscCode.trim() || undefined,
+                swift_bic_code: bankRoutingNumber.trim() || undefined,
+                bank_name: bankName.trim(),
+                branch_name: bankBranchName.trim() || undefined,
+                country: bankCountry.trim(),
+            };
+        } else {
+            const exhaustiveCheck: never = selectedPayoutType;
+            toast.error("Invalid payout method type selected.");
+            return;
+        }
+
+        setIsLoading(true);
         const methodToSave = {
-            user_id: authUser.id, // Ensure this uses user_id for user_payout_info
+            user_id: authUser.id,
             method_type: selectedPayoutType,
-            details: detailsToSave,
-            is_default: payoutMethods.length === 0 ? true : (currentPayoutMethod?.is_default || false),
+            details: details,
+            friendly_name: payoutFriendlyName.trim(),
+            ...(currentPayoutMethod ? { id: currentPayoutMethod.id } : {}),
         };
 
-        let resultData: PayoutMethod | null = null;
-        let errorOccurred = null;
+        console.log("Attempting to save payout method:", JSON.stringify(methodToSave, null, 2)); // Log the object being sent
 
-        if (currentPayoutMethod?.id) { // Editing existing
+        try {
             const { data, error } = await supabase
-                .from("payout_methods") // Updated table name
-                .update(methodToSave)
-                .eq("id", currentPayoutMethod.id)
-                .select(); // Remove .single()
-            resultData = data && data.length > 0 ? data[0] : null; // Handle array result
-            errorOccurred = error;
-        } else { // Adding new
-            const { data, error } = await supabase
-                .from("payout_methods") // Updated table name
-                .insert(methodToSave)
-                .select(); // Remove .single()
-            resultData = data && data.length > 0 ? data[0] : null; // Handle array result
-            errorOccurred = error;
+                .from('payout_methods')
+                .upsert(methodToSave)
+                .select()
+                .single(); // Assuming upserting one record and expecting one back
+
+            if (error) throw error;
+
+            if (data) {
+                setPayoutMethods(prevMethods => {
+                    const index = prevMethods.findIndex(m => m.id === data.id);
+                    if (index !== -1) {
+                        const newMethods = [...prevMethods];
+                        newMethods[index] = data as PayoutMethod;
+                        return newMethods;
+                    } else {
+                        return [...prevMethods, data as PayoutMethod];
+                    }
+                });
+                toast.success(`Payout method ${currentPayoutMethod ? 'updated' : 'added'} successfully!`);
+                setIsPayoutModalOpen(false);
+                resetPayoutForm();
+            } else {
+                throw new Error("No data returned after saving payout method.")
+            }
+        } catch (error: any) {
+            console.error("---------------- ERROR SAVING PAYOUT METHOD ----------------");
+            console.error("Timestamp:", new Date().toISOString());
+            console.error("Method to save:", JSON.stringify(methodToSave, null, 2));
+            console.error("Raw error object:", error);
+            if (error) {
+                console.error("Error message:", error.message);
+                console.error("Error code:", error.code);
+                console.error("Error details:", error.details);
+                console.error("Error stack:", error.stack);
+                try {
+                    console.error("Stringified error:", JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+                } catch (e) {
+                    console.error("Could not stringify error with getOwnPropertyNames:", e);
+                    try {
+                        console.error("Stringified error (basic):", JSON.stringify(error, null, 2));
+                    } catch (e2) {
+                        console.error("Could not stringify error at all:", e2);
+                    }
+                }
+            }
+
+            let errorMessage = "An unknown error occurred. Check the console for details.";
+            if (error && typeof error.message === 'string' && error.message.trim() !== '') {
+                errorMessage = error.message;
+            } else if (typeof error === 'string' && error.trim() !== '') {
+                errorMessage = error;
+            } else if (error && error.details && typeof error.details === 'string' && error.details.trim() !== '') {
+                errorMessage = error.details;
+            } else if (error && error.code && typeof error.code === 'string' && error.code.trim() !== '') {
+                errorMessage = `Error code: ${error.code}`;
+            }
+
+            toast.error(`Failed to save payout method: ${errorMessage}`);
+            console.error("---------------- END ERROR SAVING PAYOUT METHOD ----------------");
         }
         setIsLoading(false);
-
-        if (errorOccurred) {
-            console.error("Error saving payout method:", errorOccurred);
-            alert(`Failed to save method: ${errorOccurred.message}`);
-        } else if (resultData) {
-            if (currentPayoutMethod?.id) {
-                setPayoutMethods(payoutMethods.map(p => p.id === resultData!.id ? resultData! : p));
-                alert("Payout method updated!");
-            } else {
-                setPayoutMethods([resultData!, ...payoutMethods]);
-                alert("Payout method added!");
-            }
-            resetPayoutForm();
-            setIsPayoutModalOpen(false);
-        }
     };
 
     const resetPayoutForm = () => {
-        // (Same as before)
         setCurrentPayoutMethod(null);
         setSelectedPayoutType('crypto');
-        setCryptoType('LTC');
         setCryptoAddress('');
-        setPaypalEmail('');
+        setCryptoNetwork('BNB_BEP20');
+        setUpiId('');
         setBankAccountHolder('');
         setBankAccountNumber('');
-        setBankCountry('');
-        setBankSortCode('');
-        setBankName('');
-        setBankRoutingNumber('');
         setBankIfscCode('');
-        setUpiId('');
+        setBankRoutingNumber('');
+        setBankName('');
+        setBankBranchName('');
+        setBankCountry('IN');
+        setPayoutFriendlyName('');
     };
 
-    const openEditPayoutModal = (method: PayoutMethod) => {
-        // (Same as before, ensure details match selectedPayoutType)
+    const handleEditPayoutMethod = (method: PayoutMethod) => {
         setCurrentPayoutMethod(method);
         setSelectedPayoutType(method.method_type);
-        if (method.method_type === 'crypto') {
-            setCryptoType(method.details.coin_symbol || 'LTC');
-            setCryptoAddress(method.details.address || '');
-        } else if (method.method_type === 'paypal') {
-            setPaypalEmail(method.details.email || '');
-        } else if (method.method_type === 'bank') {
+        setPayoutFriendlyName(method.friendly_name || '');
+
+        if (method.method_type === 'crypto' && method.details) {
+            setCryptoAddress(method.details.wallet_address || '');
+            setCryptoNetwork(method.details.network || 'BNB_BEP20');
+        } else if (method.method_type === 'upi' && method.details) {
+            setUpiId(method.details.upi_id || '');
+        } else if (method.method_type === 'bank_transfer' && method.details) {
             setBankAccountHolder(method.details.account_holder_name || '');
             setBankAccountNumber(method.details.account_number || '');
-            setBankCountry(method.details.country || '');
-            setBankSortCode(method.details.sort_code || '');
-            setBankName(method.details.bank_name || '');
-            setBankRoutingNumber(method.details.routing_number || '');
             setBankIfscCode(method.details.ifsc_code || '');
-        } else if (method.method_type === 'upi') {
-            setUpiId(method.details.upi_id || '');
+            setBankRoutingNumber(method.details.swift_bic_code || '');
+            setBankName(method.details.bank_name || '');
+            setBankBranchName(method.details.branch_name || '');
+            setBankCountry(method.details.country || 'IN');
         }
         setIsPayoutModalOpen(true);
     };
@@ -312,69 +374,84 @@ export default function EarningsClientPage({
     };
 
     const handleWithdraw = async () => {
-        if (!authUser || !selectedWithdrawMethodId || withdrawAmountDollars <= 0) {
-            alert("Please select a payout method and enter a valid amount.");
+        if (!authUser || !selectedWithdrawMethodId) {
+            toast.error("Please select a payout method.");
             return;
         }
-        const minWithdrawalDollars = 20;
-        const withdrawAmountCents = Math.round(withdrawAmountDollars * 100);
-
-        if (withdrawAmountDollars < minWithdrawalDollars) {
-            alert(`Minimum withdrawal amount is ${formatCurrency(minWithdrawalDollars * 100)}.`);
-            return;
-        }
-        if (!profile || withdrawAmountCents > (profile.withdrawable_balance_cents || 0)) {
-            alert("Insufficient balance (client-side check).");
+        if (!profile || !userData) {
+            toast.error("User profile or data not loaded.");
             return;
         }
 
-        setIsSubmittingWithdrawal(true); // Use specific loader
-        // Call the RPC function
-        const { data: newRequest, error: rpcError } = await supabase.rpc('create_withdrawal_request', {
+        const minWithdrawalDollars = MIN_WITHDRAWAL_AMOUNT / 100;
+        let amountToWithdraw = 0;
+        let currencyForRpc = 'USD';
+        let amountTypeForRpc: 'cash' | 'coins' = activeTab;
+
+        if (activeTab === 'cash') {
+            if (withdrawAmountDollars <= 0) {
+                toast.error("Please enter a valid withdrawal amount.");
+                return;
+            }
+            if (withdrawAmountDollars < minWithdrawalDollars) {
+                toast.error(`Minimum cash withdrawal amount is ${formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.`);
+                return;
+            }
+            amountToWithdraw = Math.round(withdrawAmountDollars * 100);
+            if (amountToWithdraw > (profile.withdrawable_balance || 0)) {
+                toast.error("Insufficient cash balance.");
+                return;
+            }
+        } else { // activeTab === 'coins'
+            if (withdrawAmountCoins <= 0) {
+                toast.error("Please enter a valid coin amount to redeem.");
+                return;
+            }
+            amountToWithdraw = withdrawAmountCoins;
+            currencyForRpc = 'COIN';
+            if (amountToWithdraw > (userData.coins || 0)) {
+                toast.error("Insufficient coin balance.");
+                return;
+            }
+        }
+
+        setIsSubmittingWithdrawal(true);
+        const { data: rpcResponse, error: rpcError } = await supabase.rpc('create_withdrawal_request', {
             p_user_id: authUser.id,
             p_payout_method_id: selectedWithdrawMethodId,
-            p_amount_cents: withdrawAmountCents,
-            p_currency: 'USD', // Or make this dynamic if needed
+            p_amount_cents: amountToWithdraw,
+            p_currency: currencyForRpc,
+            p_amount_type: amountTypeForRpc,
             p_user_notes: withdrawalUserNotes,
         });
         setIsSubmittingWithdrawal(false);
 
         if (rpcError) {
             console.error("Error creating withdrawal request via RPC:", rpcError);
-            alert(`Withdrawal request failed: ${rpcError.message}`);
-        } else if (newRequest && Array.isArray(newRequest) && newRequest.length > 0) {
-            // RPC returns an array with the new request object if successful (based on RETURNS TABLE)
-            const createdRequest = newRequest[0] as WithdrawalRequest;
-            alert(`Withdrawal request for ${formatCurrency(createdRequest.amount_cents)} submitted successfully!`);
-
-            // Update local state: add to withdrawal requests and update profile
+            toast.error(`Withdrawal request failed: ${rpcError.message}`);
+        } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
+            const createdRequest = rpcResponse[0] as WithdrawalRequest;
+            toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrency(createdRequest.amount_cents) : formatCoins(createdRequest.amount_cents) + ' coins'} submitted successfully!`);
             setWithdrawalRequests(prev => [{ ...createdRequest, payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id) }, ...prev]);
-            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: (prev.withdrawable_balance_cents || 0) - createdRequest.amount_cents }) : null);
-
+            if (activeTab === 'cash') {
+                setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) - createdRequest.amount_cents }) : null);
+            } else {
+                setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) - createdRequest.amount_cents }) : null);
+            }
             setIsWithdrawModalOpen(false);
             setWithdrawAmountDollars(0);
-            setSelectedWithdrawMethodId(null);
-            setWithdrawalUserNotes("");
-        } else if (newRequest) { // Handle if RPC returns single object (less likely with RETURNS TABLE)
-            const createdRequest = newRequest as WithdrawalRequest; // Type assertion
-            alert(`Withdrawal request for ${formatCurrency(createdRequest.amount_cents)} submitted successfully! (single obj)`);
-            setWithdrawalRequests(prev => [{ ...createdRequest, payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id) }, ...prev]);
-            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: (prev.withdrawable_balance_cents || 0) - createdRequest.amount_cents }) : null);
-            setIsWithdrawModalOpen(false);
-            setWithdrawAmountDollars(0); // Reset form
+            setWithdrawAmountCoins(0);
             setSelectedWithdrawMethodId(null);
             setWithdrawalUserNotes("");
         } else {
-            console.error("Withdrawal request RPC returned unexpected data:", newRequest);
-            alert("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
-            // Might be good to refetch profile and requests here to be safe
-            // await refetchAllData(); // You'd need to implement this
+            console.error("Withdrawal request RPC returned unexpected data:", rpcResponse);
+            toast.error("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
         }
     };
 
-    const handleCancelWithdrawal = async (requestId: string, amountCents: number) => {
-        if (!authUser || !profile) return;
-        if (!confirm("Are you sure you want to cancel this withdrawal request? The funds will be returned to your withdrawable balance.")) {
+    const handleCancelWithdrawal = async (requestId: string, amountCents: number, amountType: 'cash' | 'coins') => {
+        if (!authUser || !profile || !userData) return;
+        if (!confirm("Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance.")) {
             return;
         }
         setIsCancellingWithdrawal(requestId);
@@ -388,39 +465,32 @@ export default function EarningsClientPage({
 
         if (rpcError) {
             console.error("Error cancelling withdrawal request via RPC:", rpcError);
-            alert(`Failed to cancel request: ${rpcError.message}`);
-        } else if (rpcSuccess === true) { // Check for explicit true from RPC
-            // Optimistically update UI or refetch data
-            const newBalance = (profile.withdrawable_balance_cents || 0) + amountCents;
-            setProfile(prev => prev ? ({ ...prev, withdrawable_balance_cents: newBalance }) : null);
+            toast.error(`Failed to cancel request: ${rpcError.message}`);
+        } else if (rpcSuccess === true) {
+            if (amountType === 'cash') {
+                setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) + amountCents }) : null);
+            } else { // coins
+                setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) + amountCents }) : null);
+            }
             setWithdrawalRequests(prevReqs =>
-                prevReqs.map(req => req.id === requestId ? { ...req, status: 'cancelled', payout_method_summary: req.payout_method_summary || getPayoutMethodSummaryById(req.payout_method_id) } : req)
+                prevReqs.map(req =>
+                    req.id === requestId
+                        ? { ...req, status: 'cancelled', payout_method_summary: getPayoutMethodSummaryById(req.payout_method_id), cancelled_at: new Date().toISOString(), cancellation_reason: 'Cancelled by user' }
+                        : req
+                )
             );
-            toast("Withdrawal Cancelled: The funds have been returned to your withdrawable balance.");
+            toast.success("Withdrawal Cancelled: The funds have been returned to your balance.");
         } else {
-            // RPC might have returned false or unexpected data
             console.error("RPC call to cancel withdrawal did not return true. Response:", rpcSuccess);
-            alert("Failed to cancel the withdrawal request. Please try again or contact support if the issue persists.");
+            toast.error("Failed to cancel the withdrawal request. Please try again or contact support.");
         }
     };
 
     const PayoutMethodIcon = ({ type }: { type: PayoutMethodType }) => {
-        if (type === 'crypto') return <CryptoWalletIcon className="mr-2 h-5 w-5" />; // Renamed icon import
-        if (type === 'paypal') return <Power className="mr-2 h-5 w-5" />;
-        if (type === 'bank') return <Landmark className="mr-2 h-5 w-5" />;
+        if (type === 'crypto') return <CryptoWalletIcon className="mr-2 h-5 w-5" />;
+        if (type === 'bank_transfer') return <Landmark className="mr-2 h-5 w-5" />;
         if (type === 'upi') return <Sparkles className="mr-2 h-5 w-5" />;
         return <CreditCard className="mr-2 h-5 w-5" />;
-    };
-
-    const getPayoutMethodSummary = (method: PayoutMethod): string => {
-        // (Same as before)
-        switch (method.method_type) {
-            case 'crypto': return `${method.details.coin_symbol || 'Crypto'}: ...${(method.details.address || '').slice(-6)}`;
-            case 'paypal': return `PayPal: ${method.details.email || 'N/A'}`;
-            case 'bank': return `${method.details.bank_name || 'Bank'}: ...${(method.details.account_number || '').slice(-4)}`;
-            case 'upi': return `UPI: ${method.details.upi_id || 'N/A'}`;
-            default: return "Unknown Method";
-        }
     };
 
     if (!authUser || !profile || !userData) {
@@ -436,13 +506,17 @@ export default function EarningsClientPage({
     // Derived state for total referrals
     const totalReferrals = (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
 
+    // Filter withdrawal requests for display
+    const cashWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'cash');
+    const coinWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'coins');
+
     return (
         <div className="container mx-auto py-8 px-4 md:px-6">
             <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-bold">My Earnings</h1>
             </div>
 
-            <Tabs defaultValue="cash" className="w-full">
+            <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
                 <TabsList className="grid w-full grid-cols-2 mb-6">
                     <TabsTrigger value="cash">
                         <DollarSign className="h-5 w-5 mr-2" /> Cash Wallet
@@ -461,7 +535,7 @@ export default function EarningsClientPage({
                                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.total_money_won_cents)}</div>
+                                <div className="text-2xl font-bold">{formatCurrency(profile.total_money_won)}</div>
                                 <p className="text-xs text-muted-foreground">Lifetime cash earnings</p>
                             </CardContent>
                         </Card>
@@ -471,7 +545,7 @@ export default function EarningsClientPage({
                                 <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.withdrawable_balance_cents)}</div>
+                                <div className="text-2xl font-bold">{formatCurrency(profile.withdrawable_balance)}</div>
                                 <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}</p>
                             </CardContent>
                         </Card>
@@ -491,7 +565,7 @@ export default function EarningsClientPage({
                         <Button
                             onClick={() => setIsWithdrawModalOpen(true)}
                             className="flex-1"
-                            disabled={(profile.withdrawable_balance_cents || 0) < MIN_WITHDRAWAL_AMOUNT || payoutMethods.length === 0 || isLoading}
+                            disabled={!profile || (profile.withdrawable_balance || 0) < MIN_WITHDRAWAL_AMOUNT || payoutMethods.length === 0 || isLoading}
                         >
                             <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw Balance
                         </Button>
@@ -504,7 +578,7 @@ export default function EarningsClientPage({
                             <PlusCircle className="h-4 w-4 mr-2" /> Manage Payout Methods
                         </Button>
                     </div>
-                    {payoutMethods.length === 0 && (profile.withdrawable_balance_cents || 0) >= MIN_WITHDRAWAL_AMOUNT && (
+                    {payoutMethods.length === 0 && profile && (profile.withdrawable_balance || 0) >= MIN_WITHDRAWAL_AMOUNT && (
                         <p className="text-sm text-yellow-600 dark:text-yellow-500 mb-4 text-center">
                             Please add a payout method to withdraw your balance.
                         </p>
@@ -658,18 +732,17 @@ export default function EarningsClientPage({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {withdrawalRequests.length > 0 ? (
-                                withdrawalRequests.map((req) => (
+                            {cashWithdrawalRequests.length > 0 ? (
+                                cashWithdrawalRequests.map((req) => (
                                     <TableRow key={req.id}>
                                         <TableCell>{formatDateTime(req.created_at)}</TableCell>
                                         <TableCell>{formatCurrency(req.amount_cents)}</TableCell>
-                                        <TableCell>{req.payout_method_summary || getPayoutMethodSummaryById(req.payout_method_id)}</TableCell>
+                                        <TableCell>{req.payout_method_summary}</TableCell>
                                         <TableCell>
                                             <Badge variant={
-                                                req.status === "processed" ? "default" : // Use "processed" as the success state
+                                                req.status === "processed" ? "default" :
                                                     req.status === "pending" || req.status === "approved" ? "secondary" :
-                                                        req.status === "cancelled" ? "outline" :
-                                                            req.status === "rejected" || req.status === "failed" ? "destructive" : "outline"
+                                                        req.status === "cancelled" ? "outline" : "destructive"
                                             } className="capitalize">
                                                 {req.status.replace(/_/g, ' ')}
                                             </Badge>
@@ -680,7 +753,7 @@ export default function EarningsClientPage({
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() => handleCancelWithdrawal(req.id, req.amount_cents)}
+                                                    onClick={() => handleCancelWithdrawal(req.id, req.amount_cents, req.amount_type)}
                                                     disabled={isCancellingWithdrawal === req.id}
                                                 >
                                                     {isCancellingWithdrawal === req.id ? (
@@ -694,7 +767,7 @@ export default function EarningsClientPage({
                                     </TableRow>
                                 ))
                             ) : (
-                                <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No withdrawal requests yet.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No cash withdrawal requests yet.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -711,43 +784,48 @@ export default function EarningsClientPage({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
-                        {/* Tabs for payout types (crypto, paypal, bank, upi) */}
-                        <Tabs defaultValue={selectedPayoutType} onValueChange={(val) => setSelectedPayoutType(val as PayoutMethodType)} className="w-full">
-                            <TabsList className="grid w-full grid-cols-4">
+                        {/* Tabs for payout types (crypto, bank_transfer, upi) */}
+                        <Tabs defaultValue={selectedPayoutType} onValueChange={(value) => setSelectedPayoutType(value as PayoutMethodType)} className="w-full">
+                            <TabsList className="grid w-full grid-cols-3">
                                 <TabsTrigger value="crypto">Crypto</TabsTrigger>
-                                <TabsTrigger value="paypal">PayPal</TabsTrigger>
-                                <TabsTrigger value="bank">Bank</TabsTrigger>
+                                <TabsTrigger value="bank_transfer">Bank Transfer</TabsTrigger>
                                 <TabsTrigger value="upi">UPI</TabsTrigger>
                             </TabsList>
                             {/* Content for each payout type */}
                             <TabsContent value="crypto" className="pt-4 space-y-3">
-                                <Label htmlFor="cryptoType">Cryptocurrency</Label>
-                                <Select value={cryptoType} onValueChange={(val) => setCryptoType(val as 'LTC' | 'USDT_BEP20')} disabled={isLoading}>
+                                <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
+                                <Input id="payoutFriendlyNameCrypto" value={payoutFriendlyName} onChange={(e) => setPayoutFriendlyName(e.target.value)} placeholder="e.g., My Binance USDT" disabled={isLoading} />
+                                <Label htmlFor="cryptoNetwork">Network</Label>
+                                <Select value={cryptoNetwork} onValueChange={(val) => setCryptoNetwork(val)} disabled={isLoading}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="LTC">Litecoin (LTC)</SelectItem>
-                                        <SelectItem value="USDT_BEP20">USDT (BEP20)</SelectItem>
+                                        <SelectItem value="BNB_BEP20">BNB Smart Chain (BEP20)</SelectItem>
+                                        <SelectItem value="ETH_ERC20">Ethereum (ERC20)</SelectItem>
+                                        <SelectItem value="TRX_TRC20">Tron (TRC20)</SelectItem>
+                                        <SelectItem value="LTC">Litecoin</SelectItem>
+                                        {/* Add other relevant networks */}
                                     </SelectContent>
                                 </Select>
-                                <Label htmlFor="cryptoAddress">Your {cryptoType} Address</Label>
-                                <Input id="cryptoAddress" value={cryptoAddress} onChange={(e) => setCryptoAddress(e.target.value)} placeholder={`Enter your ${cryptoType} wallet address`} disabled={isLoading} />
+                                <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
+                                <Input id="cryptoAddress" value={cryptoAddress} onChange={(e) => setCryptoAddress(e.target.value)} placeholder={`Enter your ${cryptoNetwork} wallet address`} disabled={isLoading} />
                             </TabsContent>
-                            <TabsContent value="paypal" className="pt-4 space-y-3">
-                                <Label htmlFor="paypalEmail">PayPal Email</Label>
-                                <Input id="paypalEmail" type="email" value={paypalEmail} onChange={(e) => setPaypalEmail(e.target.value)} placeholder="Enter your PayPal email address" disabled={isLoading} />
-                            </TabsContent>
-                            <TabsContent value="bank" className="pt-4 space-y-3">
+                            <TabsContent value="bank_transfer" className="pt-4 space-y-3">
+                                <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
+                                <Input id="payoutFriendlyNameBank" value={payoutFriendlyName} onChange={(e) => setPayoutFriendlyName(e.target.value)} placeholder="e.g., My Savings Account" disabled={isLoading} />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div><Label htmlFor="bankAccountHolder">Account Holder Name</Label><Input id="bankAccountHolder" value={bankAccountHolder} onChange={(e) => setBankAccountHolder(e.target.value)} disabled={isLoading} /></div>
                                     <div><Label htmlFor="bankAccountNumber">Account Number</Label><Input id="bankAccountNumber" value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} disabled={isLoading} /></div>
                                     <div><Label htmlFor="bankCountry">Country</Label><Input id="bankCountry" value={bankCountry} onChange={(e) => setBankCountry(e.target.value)} disabled={isLoading} /></div>
                                     <div><Label htmlFor="bankName">Bank Name</Label><Input id="bankName" value={bankName} onChange={(e) => setBankName(e.target.value)} disabled={isLoading} /></div>
+                                    <div><Label htmlFor="bankBranchName">Branch Name</Label><Input id="bankBranchName" value={bankBranchName} onChange={(e) => setBankBranchName(e.target.value)} disabled={isLoading} /></div>
                                     <div><Label htmlFor="bankSortCode">Sort Code (UK)</Label><Input id="bankSortCode" value={bankSortCode} onChange={(e) => setBankSortCode(e.target.value)} disabled={isLoading} /></div>
                                     <div><Label htmlFor="bankRoutingNumber">Routing Number (US)</Label><Input id="bankRoutingNumber" value={bankRoutingNumber} onChange={(e) => setBankRoutingNumber(e.target.value)} disabled={isLoading} /></div>
                                     <div><Label htmlFor="bankIfscCode">IFSC Code (India)</Label><Input id="bankIfscCode" value={bankIfscCode} onChange={(e) => setBankIfscCode(e.target.value)} disabled={isLoading} /></div>
                                 </div>
                             </TabsContent>
                             <TabsContent value="upi" className="pt-4 space-y-3">
+                                <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
+                                <Input id="payoutFriendlyNameUpi" value={payoutFriendlyName} onChange={(e) => setPayoutFriendlyName(e.target.value)} placeholder="e.g., My PhonePe" disabled={isLoading} />
                                 <Label htmlFor="upiId">UPI ID (India)</Label>
                                 <Input id="upiId" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="Enter your UPI ID (e.g., yourname@bank)" disabled={isLoading} />
                             </TabsContent>
@@ -775,7 +853,7 @@ export default function EarningsClientPage({
                                         </div>
                                         <div className="flex items-center space-x-2">
                                             {!method.is_default && <Button variant="ghost" size="sm" onClick={() => handleSetDefaultPayoutMethod(method.id)} disabled={isLoading}>Set Default</Button>}
-                                            <Button variant="ghost" size="icon" onClick={() => openEditPayoutModal(method)} disabled={isLoading}><Edit3 className="h-4 w-4" /></Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleEditPayoutMethod(method)} disabled={isLoading}><Edit3 className="h-4 w-4" /></Button>
                                             <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => handleDeletePayoutMethod(method.id)} disabled={isLoading}><Trash2 className="h-4 w-4" /></Button>
                                         </div>
                                     </div>
@@ -790,26 +868,30 @@ export default function EarningsClientPage({
             <Dialog open={isWithdrawModalOpen} onOpenChange={(isOpen) => { if (isSubmittingWithdrawal && isOpen) return; setIsWithdrawModalOpen(isOpen); }}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>Withdraw Balance</DialogTitle>
+                        <DialogTitle>Withdraw {activeTab === 'cash' ? 'Balance' : 'Coins'}</DialogTitle>
                         <DialogDescription>
                             Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
-                        <div className="text-lg">Available: <span className="font-semibold">{formatCurrency(profile.withdrawable_balance_cents)}</span></div>
-                        <div>
-                            <Label htmlFor="withdrawAmountDollars">Amount to Withdraw (USD)</Label>
-                            <Input
-                                id="withdrawAmountDollars"
-                                type="number"
-                                value={withdrawAmountDollars <= 0 ? '' : withdrawAmountDollars}
-                                onChange={(e) => setWithdrawAmountDollars(parseFloat(e.target.value) || 0)}
-                                min="20" // Minimum in dollars
-                                step="0.01"
-                                placeholder="e.g., 50.00"
-                                disabled={isLoading}
-                            />
-                        </div>
+                        {activeTab === 'cash' && (
+                            <>
+                                <div className="text-lg">Available: <span className="font-semibold">{profile ? formatCurrency(profile.withdrawable_balance) : formatCurrency(0)}</span></div>
+                                <div>
+                                    <Label htmlFor="withdrawAmountDollars">Amount to Withdraw (USD)</Label>
+                                    <Input id="withdrawAmountDollars" type="number" value={withdrawAmountDollars <= 0 ? '' : withdrawAmountDollars} onChange={(e) => setWithdrawAmountDollars(parseFloat(e.target.value) || 0)} min={MIN_WITHDRAWAL_AMOUNT / 100} step="0.01" placeholder="e.g., 50.00" disabled={isLoading} />
+                                </div>
+                            </>
+                        )}
+                        {activeTab === 'coins' && (
+                            <>
+                                <div className="text-lg">Available Coins: <span className="font-semibold">{formatCoins(userData?.coins || 0)}</span></div>
+                                <div>
+                                    <Label htmlFor="withdrawAmountCoins">Coins to Redeem</Label>
+                                    <Input id="withdrawAmountCoins" type="number" value={withdrawAmountCoins <= 0 ? '' : withdrawAmountCoins} onChange={(e) => setWithdrawAmountCoins(parseInt(e.target.value, 10) || 0)} placeholder="e.g., 1000" disabled={isLoading} />
+                                </div>
+                            </>
+                        )}
                         <div>
                             <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
                             <Input
@@ -849,8 +931,9 @@ export default function EarningsClientPage({
                             disabled={
                                 isSubmittingWithdrawal ||
                                 !selectedWithdrawMethodId ||
-                                withdrawAmountDollars < 20 ||
-                                (Math.round(withdrawAmountDollars * 100)) > (profile.withdrawable_balance_cents || 0) ||
+                                (activeTab === 'cash' && withdrawAmountDollars < (MIN_WITHDRAWAL_AMOUNT / 100)) ||
+                                (activeTab === 'cash' && (!profile || (withdrawAmountDollars * 100) > (profile.withdrawable_balance || 0))) ||
+                                (activeTab === 'coins' && (!userData || withdrawAmountCoins > (userData.coins || 0) || withdrawAmountCoins <= 0)) ||
                                 payoutMethods.length === 0
                             }
                         >
@@ -865,4 +948,4 @@ export default function EarningsClientPage({
             </Dialog>
         </div>
     );
-} 
+}

@@ -375,7 +375,7 @@ export interface Database {
           id?: string
           user_id: string
           type: "referral_bonus" | "spent" | "earned" | "bonus"
-          status: "pending" | "success" | "failed"
+          status?: "pending" | "success" | "failed"
           coins: number
           description: string
           created_at?: string
@@ -388,6 +388,63 @@ export interface Database {
           coins?: number
           description?: string
           created_at?: string
+        }
+      }
+      withdrawal_requests: {
+        Row: {
+          id: string 
+          user_id: string 
+          payout_method_id: string | null
+          amount_cents: number 
+          currency: string 
+          status: "pending" | "approved" | "rejected" | "processed" | "failed" | "cancelled"
+          processed_at: string | null
+          transaction_reference: string | null
+          admin_notes: string | null 
+          user_notes: string | null 
+          created_at: string 
+          updated_at: string 
+          amount_type: "cash" | "coins"
+          payout_method_type_snapshot: string | null 
+          payout_method_details_snapshot: Json | null 
+          cancelled_at: string | null 
+          cancellation_reason: string | null 
+        }
+        Insert: {
+          id?: string 
+          user_id: string 
+          payout_method_id?: string | null
+          amount_cents: number 
+          currency?: string 
+          status?: "pending" | "approved" | "rejected" | "processed" | "failed" | "cancelled" 
+          processed_at?: string | null
+          transaction_reference?: string | null
+          admin_notes?: string | null 
+          user_notes?: string | null 
+          created_at?: string 
+          updated_at?: string 
+          amount_type: "cash" | "coins"
+          payout_method_type_snapshot?: string | null 
+          payout_method_details_snapshot?: Json | null 
+        }
+        Update: {
+          id?: string 
+          user_id?: string 
+          payout_method_id?: string | null 
+          amount_cents?: number 
+          currency?: string 
+          status?: "pending" | "approved" | "rejected" | "processed" | "failed" | "cancelled" 
+          processed_at?: string | null
+          transaction_reference?: string | null
+          admin_notes?: string | null 
+          user_notes?: string | null 
+          created_at?: string 
+          updated_at?: string 
+          amount_type?: "cash" | "coins" 
+          payout_method_type_snapshot?: string | null 
+          payout_method_details_snapshot?: Json | null 
+          cancelled_at?: string | null 
+          cancellation_reason?: string | null 
         }
       }
     }

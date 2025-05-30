@@ -2,9 +2,9 @@ import { User } from "@supabase/supabase-js";
 
 // Profile data, assuming money values are stored in CENTS in the DB
 export interface CreatorProfileData {
-  total_money_won_cents: number; 
+  total_money_won: number;
   total_contests_won: number;
-  withdrawable_balance_cents: number;
+  withdrawable_balance: number;
 }
 
 // Data fetched from the 'users' table
@@ -35,18 +35,40 @@ export interface CoinTransaction {
   type: string | null;
 }
 
-export type PayoutMethodType = "crypto" | "paypal" | "bank" | "upi";
+export type PayoutMethodType = "crypto" | "upi" | "bank_transfer";
 
 // For the 'user_payout_info' table
 export interface PayoutMethod {
   id: string;
   user_id: string;
   method_type: PayoutMethodType;
-  details: any; // Specific details based on method_type
+  details: PayoutMethodDetails | any;
   is_default: boolean;
   created_at: string;
-  updated_at?: string; // Optional
+  updated_at?: string;
+  friendly_name?: string | null;
 }
+
+export interface CryptoPayoutDetails {
+  wallet_address: string;
+  network: string;
+}
+
+export interface UpiPayoutDetails {
+  upi_id: string;
+}
+
+export interface BankPayoutDetails {
+  account_holder_name: string;
+  account_number: string;
+  ifsc_code?: string;
+  swift_bic_code?: string;
+  bank_name: string;
+  branch_name?: string;
+  country: string;
+}
+
+export type PayoutMethodDetails = CryptoPayoutDetails | UpiPayoutDetails | BankPayoutDetails;
 
 // For props passed to the client component
 export interface EarningsClientPageProps {
@@ -66,10 +88,16 @@ export interface WithdrawalRequest {
   updated_at?: string;
   amount_cents: number;
   currency: string;
-  status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed' | 'cancelled'; // Possible statuses
-  payout_method_id: string; 
+  amount_type: 'cash' | 'coins';
+  status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed' | 'cancelled';
+  payout_method_id: string | null;
   user_notes: string | null;
-  admin_notes?: string | null; // Optional, if you fetch it
-  // You might want to include a summary of the payout method if fetched/joined
-  payout_method_summary?: string; 
+  admin_notes?: string | null;
+  processed_at?: string | null;
+  transaction_reference?: string | null;
+  payout_method_type_snapshot?: PayoutMethodType | string | null;
+  payout_method_details_snapshot?: PayoutMethodDetails | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  payout_method_summary?: string;
 } 
