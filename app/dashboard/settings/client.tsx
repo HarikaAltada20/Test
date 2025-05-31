@@ -608,7 +608,7 @@ export default function SettingsPage({
       )}
 
       {/* Notifications */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Notifications</CardTitle>
           <CardDescription>
@@ -658,7 +658,7 @@ export default function SettingsPage({
             />
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Security */}
       <Card>
@@ -711,7 +711,7 @@ export default function SettingsPage({
       </Card>
 
       {/* Danger Zone */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle className="text-red-600">Danger Zone</CardTitle>
           <CardDescription>
@@ -724,7 +724,7 @@ export default function SettingsPage({
             Delete Account
           </Button>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 }

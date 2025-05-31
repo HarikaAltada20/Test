@@ -20,9 +20,10 @@ export interface CashTransaction {
   id: string;
   created_at: string;
   description: string | null;
-  amount_cents: number; // Stored as cents
+  amount: number; // Renamed from amount_cents
   status: string | null;
   type: string | null;
+  withdrawal_request_id?: string | null; // Added for linking to withdrawal requests
 }
 
 // From your 'coin_transactions' table
@@ -33,6 +34,7 @@ export interface CoinTransaction {
   coins: number; // Can be positive or negative
   status: string | null;
   type: string | null;
+  withdrawal_request_id?: string | null; // Added for linking to withdrawal requests
 }
 
 export type PayoutMethodType = "crypto" | "upi" | "bank_transfer";
@@ -86,18 +88,19 @@ export interface WithdrawalRequest {
   id: string;
   created_at: string;
   updated_at?: string;
-  amount_cents: number;
-  currency: string;
+  amount: number; // Renamed from amount_cents
+  currency: string; // e.g., 'USD', 'COIN'
   amount_type: 'cash' | 'coins';
-  status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed' | 'cancelled';
-  payout_method_id: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed' | 'cancelled' | 'in_review'; // Added 'in_review'
+  payout_method_id?: string | null; // Optional
   user_notes: string | null;
   admin_notes?: string | null;
   processed_at?: string | null;
   transaction_reference?: string | null;
-  payout_method_type_snapshot?: PayoutMethodType | string | null;
-  payout_method_details_snapshot?: PayoutMethodDetails | null;
+  payout_method_type_snapshot?: PayoutMethodType | string | null; // Optional
+  payout_method_details_snapshot?: PayoutMethodDetails | any | null; // Optional, allow 'any' for broader JSONB compatibility initially
+  redeemed_item_description?: any | null; // New field for JSONB data
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
-  payout_method_summary?: string;
+  payout_method_summary?: string; // This is a frontend-added field
 } 
