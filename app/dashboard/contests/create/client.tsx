@@ -50,6 +50,13 @@ import {
 } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
+import dynamic from 'next/dynamic';
+
+// Dynamically import the custom RichTextEditor
+const CustomRichTextEditor = dynamic(
+  () => import('@/components/rich-text-editor'), // Make sure this path is correct
+  { ssr: false }
+);
 
 // Re-added constants that were accidentally removed
 import {
@@ -101,6 +108,7 @@ export default function CreateContestPage({
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
+  const [showBriefPreview, setShowBriefPreview] = useState(false); // Add preview state
   const [rules, setRules] = useState(`Content must be in English
 Content must be similar in style to the inspiration content from the brief
 If you have earnings on Game Of Creators, please show your total earnings as well
@@ -180,8 +188,60 @@ You must show the Game Of Creators App Store listing in your video`);
   const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
   const [externalLinkError, setExternalLinkError] = useState<string | null>(null);
 
+  // Add ref for the rich text editor
+  const richTextEditorRef = useRef<any>(null);
+
   // Add this function for handling resource file uploads
 
+  useEffect(() => {
+    console.log("Brief state updated:", brief);
+    console.log("isQuillEmpty(brief) result:", isQuillEmpty(brief));
+  }, [brief]);
+
+  // Helper function to check if Quill editor content is effectively empty
+  const isQuillEmpty = (htmlString: string | null | undefined): boolean => {
+    console.log("isQuillEmpty received:", htmlString);
+    if (!htmlString) {
+      console.log("isQuillEmpty: htmlString is null/undefined, returning true");
+      return true;
+    }
+    if (typeof document !== 'undefined') { // Ensure document is available (client-side)
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlString;
+      const textContent = tempDiv.textContent || tempDiv.innerText || "";
+      const isEmpty = textContent.trim().length === 0;
+      console.log("isQuillEmpty: textContent='", textContent, "', trim().length=", textContent.trim().length, ", returning", isEmpty);
+      return isEmpty;
+    }
+    console.log("isQuillEmpty: document not available, returning false (assumes content if htmlString exists)");
+    return false; // Fallback for non-browser environments, or if htmlString is present but can't be parsed.
+  };
+
+  // Function to capture content from rich text editor
+  const captureBriefContent = () => {
+    if (richTextEditorRef.current) {
+      const content = richTextEditorRef.current.getContent();
+      console.log("Captured brief content:", content ? content.substring(0, 100) + "..." : content);
+      setBrief(content);
+      return content;
+    }
+    return brief; // fallback to current state
+  };
+
+  // Function to preview the brief content
+  const toggleBriefPreview = () => {
+    if (!showBriefPreview) {
+      // Always capture content before showing preview
+      captureBriefContent();
+    }
+    setShowBriefPreview(!showBriefPreview);
+  };
+
+  // Function to manually save content without toggling preview
+  const saveCurrentContent = () => {
+    captureBriefContent();
+    toast({ title: "Success", description: "Content saved successfully!" });
+  };
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -282,6 +342,12 @@ You must show the Game Of Creators App Store listing in your video`);
       setFormFeedbackType(null);
       setIsLoading(true);
       setUploadProgress("Saving draft...");
+
+      // Capture brief content if we're on the brief step and not showing preview
+      // If showing preview, the content is already captured
+      if ((step === "brief" || step === "resources" || step === "prize") && !showBriefPreview) {
+        captureBriefContent();
+      }
 
       // Add timeout to clear loading state if something goes wrong
       const draftTimeoutId = setTimeout(() => {
@@ -462,25 +528,45 @@ You must show the Game Of Creators App Store listing in your video`);
         }
       }
 
-      let thumbnailUrl = thumbnailPreview && !thumbnail ? thumbnailPreview : "";
-      if (thumbnail) {
+      let thumbnailUrl = thumbnailPreview && !thumbnail ? thumbnailPreview : ""; // Default to existing preview if no new file
+
+      // Only upload a new thumbnail if a new file is staged and it's different from the preview, or if no preview exists yet.
+      if (thumbnail) { // A new file has been selected by the user
         setUploadProgress(isDraft ? "Uploading thumbnail..." : "Uploading thumbnail (1/2)...");
         try {
           const isStorageAvailable = await checkStorageAvailability();
           if (!isStorageAvailable) {
-            setError("Unable to upload thumbnail due to storage configuration. Contest will be created without a thumbnail.");
+            if (!isDraft) {
+              toast({ title: "Storage Error", description: "Unable to upload thumbnail due to storage configuration. Contest will be created without a thumbnail.", variant: "destructive" });
+            } else {
+              // For drafts, we might allow saving without re-uploading if storage is temporarily down, relying on existing URL if present
+              console.warn("Storage not available for draft thumbnail upload. If a previous URL exists, it will be used.");
+              if (!thumbnailPreview || thumbnailPreview.startsWith("data:")) {
+                thumbnailUrl = ""; // No existing valid URL to reuse
+              }
+              // else, thumbnailUrl already holds thumbnailPreview from above, so it will be reused.
+            }
           } else {
-            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name}`;
+            // New upload logic
+            const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name.replace(/\s+/g, '_')}`;
             const { data: uploadData, error: uploadError } = await supabase.storage.from("contest-assets").upload(fileName, thumbnail);
             if (uploadError) throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
             const { data: publicUrlData } = supabase.storage.from("contest-assets").getPublicUrl(fileName);
             thumbnailUrl = publicUrlData?.publicUrl || "";
+            if (isDraft) {
+              setThumbnail(null); // Clear the File object
+              setThumbnailPreview(thumbnailUrl); // Update preview to use the URL
+            }
           }
         } catch (error: any) {
-          setError(`Thumbnail upload failed: ${error.message}`);
+          toast({ title: "Thumbnail Upload Error", description: `Thumbnail upload failed: ${error.message}`, variant: "destructive" });
           setIsLoading(false); setUploadProgress(null); return;
         }
+      } else if (!thumbnailPreview) {
+        // If no new file AND no existing preview (e.g., user removed it)
+        thumbnailUrl = "";
       }
+      // If thumbnail is null BUT thumbnailPreview has a URL (from a previous save), thumbnailUrl is already set to thumbnailPreview correctly.
 
       if (Object.keys(resourceFiles).length > 0) {
         setUploadProgress(isDraft ? "Uploading assets..." : "Uploading assets (2/2)...");
@@ -793,7 +879,10 @@ You must show the Game Of Creators App Store listing in your video`);
       }
       setStep("brief");
     } else if (step === "brief") {
-      if (!brief) {
+      // Capture content from rich text editor before validation
+      const currentBrief = captureBriefContent();
+
+      if (isQuillEmpty(currentBrief)) {
         setFormFeedback("Please enter a brief description for your contest"); // Footer feedback
         setFormFeedbackType("error");
         return;
@@ -822,8 +911,15 @@ You must show the Game Of Creators App Store listing in your video`);
   const isNextDisabled = () => {
     const planFeatures = getPlanFeatures(userPlan); // Add this line to fix undefined planFeatures
 
-    if (step === "basics") return !title;
-    if (step === "brief") return !brief || !rules;
+    if (step === "basics") return !title || (!thumbnail && !thumbnailPreview); // Updated to match nextStep validation
+    if (step === "brief") {
+      // For brief step, we'll allow proceeding and validate in nextStep
+      // This prevents the editor from being blocked while user is typing
+      return !rules; // Only check rules since brief will be captured on next
+    }
+    // For the "resources" step, no specific blocking validation for the entire step is defined for isNextDisabled
+    // Individual resource additions handle their own feedback internally.
+    // If you wanted to block "Next" if no resources are added, you'd check Object.keys(resources).length === 0 here.
     return false;
   };
 
@@ -2151,40 +2247,53 @@ You must show the Game Of Creators App Store listing in your video`);
           <>
             <CardHeader>
               <CardTitle>Project Overview</CardTitle>
+              {/* Optional: Add CardDescription if needed */}
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Removed general validationError Alert from CardContent */}
+              {/* formFeedback display removed from CardContent for brief step, it's in the CardFooter */}
 
               <div className="space-y-2">
-                <div className="border rounded p-4">
-                  <div className="flex mb-2 border-b pb-2">
-                    <button className="p-2 hover:bg-gray-100 rounded">
-                      <span className="font-semibold">Paragraph</span>
-                    </button>
-                    <div className="flex border-l mx-2"></div>
-                    <button className="p-2 hover:bg-gray-100 rounded font-bold">
-                      B
-                    </button>
-                    <button className="p-2 hover:bg-gray-100 rounded italic">
-                      I
-                    </button>
-                    <button className="p-2 hover:bg-gray-100 rounded underline">
-                      U
-                    </button>
-                    <button className="p-2 hover:bg-gray-100 rounded line-through">
-                      S
-                    </button>
-                    <div className="flex border-l mx-2"></div>
-                    {/* Add more rich text buttons here */}
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="project-brief">Brief / Project Description</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleBriefPreview}
+                    >
+                      {showBriefPreview ? 'Edit' : 'Preview'}
+                    </Button>
                   </div>
-                  <Textarea
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value)}
-                    placeholder="Game Of Creators is the app that pays creators! We help creators connect with brands & get paid to create content!"
-                    rows={8}
-                    className="border-none resize-none focus-visible:ring-0 p-0"
-                  />
                 </div>
+
+                {showBriefPreview ? (
+                  <div className="border rounded-lg p-4 min-h-[300px] bg-white">
+                    <h4 className="text-sm font-medium mb-2 text-gray-600">Preview:</h4>
+                    <div
+                      className="ql-editor"
+                      style={{
+                        padding: '12px 15px',
+                        minHeight: '250px',
+                        border: 'none',
+                        fontSize: '14px',
+                        lineHeight: '1.42'
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: brief || '<p class="text-gray-400">No content yet. Click "Edit" to add content.</p>'
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white rounded min-h-[300px]">
+                    <CustomRichTextEditor
+                      value={brief}
+                      placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
+                      height="250px"
+                      ref={richTextEditorRef}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-4">
