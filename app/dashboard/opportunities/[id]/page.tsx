@@ -1,6 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
 import { ContestClientPage } from "./client";
-import { use } from "react";
 
 export default async function OpportunityDetailPage({
   params,

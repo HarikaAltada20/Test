@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Image, Trash, Upload, ExternalLink } from "lucide-react"
+import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
@@ -116,6 +116,18 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const [maxViews, setMaxViews] = useState<number | string>("");
     const [totalBudget, setTotalBudget] = useState<number | string>("");
     const [termsConditions, setTermsConditions] = useState<string>("");
+
+    // Resources State Variables
+    const [resources, setResources] = useState<Record<string, string>>({});
+    const [resourceFiles, setResourceFiles] = useState<Record<string, File>>({}); // Stores files to be uploaded
+    const [newResourceUrl, setNewResourceUrl] = useState("");
+    const [resourceFile, setResourceFile] = useState<File | null>(null);
+    const [resourceFilePreview, setResourceFilePreview] = useState<string | null>(null);
+    const [resourceDescription, setResourceDescription] = useState("");
+    const [externalResourceDescription, setExternalResourceDescription] = useState("");
+    const resourceFileRef = useRef<HTMLInputElement>(null);
+    const [resourceSuccess, setResourceSuccess] = useState<string | null>(null);
+    const [resourceError, setResourceError] = useState<string | null>(null);
 
     // Fetch subscription plans from the database
     const fetchSubscriptionPlans = async () => {
@@ -319,10 +331,13 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                 setCpmRate(cpmDetails.cpm_rate_usd?.toString() || "");
                                 setMinViews(cpmDetails.min_views?.toString() || "");
                                 setMaxViews(cpmDetails.max_views?.toString() || "");
-                                setTotalBudget(cpmDetails.total_budget?.toString() || "");
+                                setTotalBudget(cpmDetails.total_budget ? (cpmDetails.total_budget / 100).toString() : "");
                                 setTermsConditions(cpmDetails.terms_conditions || "");
                             }
                         }
+
+                        // Load existing resources
+                        setResources(data.resources || {});
                     }
                 } else {
                     setError("Contest not found or you don't have permission to edit it.");
@@ -527,7 +542,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             }
             contestBasedDetails.cpm_contest = {
                 cpm_rate_usd: numCpmRate,
-                total_budget: numTotalBudget,
+                total_budget: numTotalBudget * 100, // Convert dollars to cents
                 min_views: numMinViews,
                 max_views: numMaxViews,
                 terms_conditions: termsConditions,
@@ -540,6 +555,9 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
         updatePayload.contest_type = contestType;
         updatePayload.contest_based_details = contestBasedDetails;
+
+        // Initialize final resources object for DB update
+        const finalDbResources: Record<string, string> = {};
 
         try {
             let finalThumbnailUrl = contest.thumbnail_url;
@@ -562,6 +580,68 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 }
             }
             updatePayload.thumbnail_url = finalThumbnailUrl;
+
+            // 1. Process Staged File Uploads (New Files)
+            for (const resourceName in resourceFiles) {
+                const fileToUpload = resourceFiles[resourceName];
+                const resourceFileName = `contest_resources/${user.id}/${contestId}/${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`;
+                const { error: resourceUploadError } = await supabase.storage
+                    .from('contest-assets') // Assuming same bucket as thumbnails, or a dedicated one
+                    .upload(resourceFileName, fileToUpload);
+                if (resourceUploadError) {
+                    throw new Error(`Failed to upload resource "${resourceName}": ${resourceUploadError.message}`);
+                }
+                const { data: publicUrlData } = supabase.storage
+                    .from('contest-assets')
+                    .getPublicUrl(resourceFileName);
+                finalDbResources[resourceName] = publicUrlData.publicUrl;
+            }
+
+            // 2. Add Existing External Links or Already Uploaded Files (that weren't re-staged)
+            // These are items in `resources` state that are not in `resourceFiles` (newly staged uploads)
+            for (const resourceName in resources) {
+                if (!resourceFiles[resourceName]) { // If it wasn't a new file upload handled above
+                    finalDbResources[resourceName] = resources[resourceName];
+                }
+            }
+
+            // 3. Handle Deletion of Resources previously in DB but now removed from UI
+            const originalDbResources = contest.resources || {};
+            for (const originalResourceName in originalDbResources) {
+                if (!finalDbResources[originalResourceName]) { // If this original resource is no longer in our final list
+                    const resourceUrlToDelete = originalDbResources[originalResourceName];
+                    // Check if it's a Supabase storage URL before attempting to delete from storage
+                    if (resourceUrlToDelete && resourceUrlToDelete.includes(supabase.storage.from('contest-assets').getPublicUrl('').data.publicUrl.split('/contest-assets/')[0] + '/contest-assets/')) {
+                        try {
+                            // Extract file path from URL. This needs to be robust.
+                            // Example: https://<project_ref>.supabase.co/storage/v1/object/public/contest-assets/contest_resources/....filePath
+                            const pathSegments = new URL(resourceUrlToDelete).pathname.split('/');
+                            // Find 'contest-assets' and take everything after it.
+                            const bucketName = 'contest-assets'; // Make sure this matches your bucket name
+                            const bucketIndex = pathSegments.indexOf(bucketName);
+                            if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
+                                const filePath = pathSegments.slice(bucketIndex + 1).join('/');
+                                console.log(`Attempting to delete from storage: ${filePath}`);
+                                const { error: deleteError } = await supabase.storage
+                                    .from(bucketName)
+                                    .remove([filePath]);
+                                if (deleteError) {
+                                    // Log error but don't block contest update for this, as the link will be removed from DB anyway
+                                    console.error(`Failed to delete resource "${originalResourceName}" from storage: ${deleteError.message}`);
+                                    // setError(`Failed to delete old resource "${originalResourceName}" from storage. Please check storage manually.`);
+                                    // setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                                }
+                            } else {
+                                console.warn(`Could not determine file path for deletion for: ${originalResourceName} with URL ${resourceUrlToDelete}`);
+                            }
+                        } catch (parseError) {
+                            console.warn(`Error parsing URL for deletion or deleting resource ${originalResourceName}:`, parseError);
+                        }
+                    }
+                }
+            }
+
+            updatePayload.resources = finalDbResources; // Add the final map of resources to the payload
 
             const { error: updateError } = await supabase
                 .from("contests")
@@ -615,6 +695,126 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const removeInspirationLink = (link: string) => {
         setInspirationLinks(inspirationLinks.filter(l => l !== link))
     }
+
+    // Resource Management Handlers
+    const handleResourceFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setResourceError(null);
+        setResourceSuccess(null);
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            if (file.size > 20 * 1024 * 1024) { // 20MB limit
+                setResourceError("File size should not exceed 20MB.");
+                setResourceFile(null); // Clear the invalid file
+                setResourceFilePreview(null);
+                if (resourceFileRef.current) resourceFileRef.current.value = "";
+                return;
+            }
+            setResourceFile(file);
+            if (file.type.startsWith("image/")) {
+                const reader = new FileReader();
+                reader.onload = (ev) => setResourceFilePreview(ev.target?.result as string);
+                reader.readAsDataURL(file);
+            } else {
+                setResourceFilePreview(`file-type:${file.type}::${file.name}`); // Include name for non-image preview
+            }
+        }
+    };
+
+    const removeResourceFile = () => {
+        setResourceFile(null);
+        setResourceFilePreview(null);
+        setResourceDescription("");
+        if (resourceFileRef.current) {
+            resourceFileRef.current.value = "";
+        }
+        setResourceError(null); // Clear any error related to file selection
+    };
+
+    const addFileResource = () => {
+        setResourceError(null);
+        setResourceSuccess(null);
+        if (!resourceFile) {
+            setResourceError("No file selected or file is too large.");
+            return;
+        }
+        if (!resourceDescription.trim()) {
+            setResourceError("Please provide a description for the asset.");
+            return;
+        }
+        const resourceName = resourceDescription.trim();
+        if (resources[resourceName] || resourceFiles[resourceName]) { // Check both current and staged
+            setResourceError(`A resource with the description "${resourceName}" already exists or is staged. Please use a unique description.`);
+            return;
+        }
+
+        // Add to resourceFiles for actual upload on submit
+        setResourceFiles(prev => ({
+            ...prev,
+            [resourceName]: resourceFile
+        }));
+        // Add to resources for immediate UI update with a temporary preview URL or file info
+        setResources(prev => ({
+            ...prev,
+            [resourceName]: resourceFilePreview || URL.createObjectURL(resourceFile)
+        }));
+
+        setResourceSuccess(`Asset "${resourceName}" staged for upload. Save changes to complete.`);
+        removeResourceFile(); // Clear the input fields (description, file, preview)
+    };
+
+    const addExternalResource = () => {
+        setResourceError(null);
+        setResourceSuccess(null);
+        if (!newResourceUrl.trim()) {
+            setResourceError("Please enter a URL for the external resource.");
+            return;
+        }
+        if (!externalResourceDescription.trim()) {
+            setResourceError("Please provide a description for the external resource.");
+            return;
+        }
+        const resourceName = externalResourceDescription.trim();
+        if (resources[resourceName] || resourceFiles[resourceName]) { // Check both current and staged
+            setResourceError(`A resource with the description "${resourceName}" already exists or is staged. Please use a unique description.`);
+            return;
+        }
+
+        try {
+            new URL(newResourceUrl); // Validate URL format
+        } catch (_) {
+            setResourceError("Invalid URL format.");
+            return;
+        }
+
+        setResources(prev => ({
+            ...prev,
+            [resourceName]: newResourceUrl
+        }));
+        setResourceSuccess(`External resource "${resourceName}" added to the list. Save changes to persist.`);
+        setNewResourceUrl("");
+        setExternalResourceDescription("");
+    };
+
+    const removeResource = (name: string) => {
+        setResourceError(null);
+        setResourceSuccess(null);
+
+        const newUiResources = { ...resources };
+        delete newUiResources[name];
+        setResources(newUiResources);
+
+        // If it was a newly staged file (not yet uploaded), remove it from resourceFiles
+        if (resourceFiles[name]) {
+            const newResourceFiles = { ...resourceFiles };
+            delete newResourceFiles[name];
+            setResourceFiles(newResourceFiles);
+            setResourceSuccess(`Staged asset "${name}" removed from the list.`);
+        } else {
+            // If it was an existing resource (either external link or previously uploaded file),
+            // its actual deletion from DB/storage will be handled by handleSubmit based on the final state of `resources`.
+            setResourceSuccess(`Resource "${name}" removed from the list. Save changes to persist this removal.`);
+        }
+    };
 
     if (isLoading || isPlansLoading || isUserPlanLoading) { // Check all loading states
         return (
@@ -853,6 +1053,147 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                     <Separator />
 
+                    {/* Resources Section START */}
+                    <div className="space-y-6"> {/* Main container for entire resources section */}
+                        <h3 className="text-lg font-medium">Resources for Participants</h3>
+                        <p className="text-sm text-muted-foreground">
+                            Add or remove resources that help participants understand your brand and contest requirements.
+                        </p>
+
+                        {resourceSuccess && (
+                            <Alert variant="default" className="bg-green-50 border-green-200 text-green-700">
+                                <Check className="h-4 w-4" />
+                                <AlertDescription>{resourceSuccess}</AlertDescription>
+                            </Alert>
+                        )}
+                        {/* General resourceError Alert removed from here */}
+
+                        {/* File Upload Container */}
+                        <div className="border rounded-lg p-4 space-y-4">
+                            {/* Section-specific error for Upload Asset */}
+                            {resourceError &&
+                                (resourceError.includes("No file selected") ||
+                                    resourceError.includes("File size") ||
+                                    resourceError.includes("description for the asset") ||
+                                    resourceError.includes("already exists")) && (
+                                    <Alert variant="destructive">
+                                        <AlertDescription>{resourceError}</AlertDescription>
+                                    </Alert>
+                                )}
+                            <h4 className="text-md font-medium">Upload New Asset</h4>
+                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
+                                {resourceFilePreview ? (
+                                    <div className="relative text-center">
+                                        {resourceFilePreview.startsWith("data:image") ? (
+                                            <img src={resourceFilePreview} alt="Asset preview" className="mx-auto max-h-40 object-contain mb-2" />
+                                        ) : resourceFilePreview.startsWith("file-type:") ? (
+                                            <div className="py-4">
+                                                <p className="text-sm font-medium">File: {resourceFilePreview.split("::")[2]}</p>
+                                                <p className="text-xs text-muted-foreground">Type: {resourceFilePreview.split("::")[1]}</p>
+                                            </div>
+                                        ) : ( /* Fallback for other previews like Object URLs for non-images if needed */
+                                            <div className="py-4">
+                                                <p className="text-sm font-medium">Preview not available</p>
+                                                {resourceFile && <p className="text-xs text-muted-foreground">File: {resourceFile.name}</p>}
+                                            </div>
+                                        )}
+                                        <Button variant="ghost" size="sm" onClick={removeResourceFile} className="text-red-500">
+                                            <Trash className="h-4 w-4 mr-1" /> Clear Selection
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-4">
+                                        <Upload className="h-10 w-10 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+                                        <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Max file size: 20MB</p>
+                                        <Button variant="outline" size="sm" onClick={() => { if (resourceFileRef.current) { resourceFileRef.current.click(); } }}>
+                                            Browse File
+                                        </Button>
+                                        <input type="file" ref={resourceFileRef} id="resourceFileInputEdit" className="hidden" onChange={handleResourceFileChange} />
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <Label htmlFor="resourceDescriptionEdit">Asset Description (Required)</Label>
+                                <Input
+                                    id="resourceDescriptionEdit"
+                                    placeholder="e.g., Brand Logo, Product Image"
+                                    value={resourceDescription}
+                                    onChange={(e) => setResourceDescription(e.target.value)}
+                                />
+                            </div>
+                            <Button type="button" onClick={addFileResource} disabled={!resourceFile || !resourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
+                                Add Asset to List
+                            </Button>
+                        </div>
+
+                        {/* External Resource Link */}
+                        <div className="border rounded-lg p-4 space-y-4">
+                            {/* Section-specific error for External Link */}
+                            {resourceError &&
+                                (resourceError.includes("Please enter a URL") ||
+                                    resourceError.includes("Invalid URL format") ||
+                                    resourceError.includes("description for the external resource") ||
+                                    resourceError.includes("already exists")) && (
+                                    <Alert variant="destructive">
+                                        <AlertDescription>{resourceError}</AlertDescription>
+                                    </Alert>
+                                )}
+                            <h4 className="text-md font-medium">Add External Resource Link</h4>
+                            <div>
+                                <Label htmlFor="newResourceUrlEdit">Resource URL (Required)</Label>
+                                <Input
+                                    id="newResourceUrlEdit"
+                                    type="url"
+                                    placeholder="https://example.com/resource-link"
+                                    value={newResourceUrl}
+                                    onChange={(e) => setNewResourceUrl(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="externalResourceDescriptionEdit">Link Description (Required)</Label>
+                                <Input
+                                    id="externalResourceDescriptionEdit"
+                                    placeholder="e.g., Company Website, Style Guide PDF"
+                                    value={externalResourceDescription}
+                                    onChange={(e) => setExternalResourceDescription(e.target.value)}
+                                />
+                            </div>
+                            <Button type="button" onClick={addExternalResource} disabled={!newResourceUrl.trim() || !externalResourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
+                                Add Link to List
+                            </Button>
+                        </div>
+
+                        {/* List of current/staged resources */}
+                        {Object.keys(resources).length > 0 && (
+                            <div className="space-y-3 pt-4">
+                                <h4 className="text-md font-medium">Current & Staged Resources:</h4>
+                                <ul className="space-y-2">
+                                    {Object.entries(resources).map(([name, url]) => (
+                                        <li key={name} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-800 rounded text-sm">
+                                            <div>
+                                                <p className="font-medium text-slate-800 dark:text-slate-100">{name}</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs md:max-w-md" title={url}>
+                                                    {url.startsWith("data:image") ? "Image Preview (Staged/Current)" :
+                                                        url.startsWith("file-type:") ? `File: ${url.split("::")[2]} (Staged)` :
+                                                            resourceFiles[name] ? `File: ${resourceFiles[name]!.name} (Staged)` :
+                                                                url.startsWith("blob:") ? "Local File Preview (Staged)" :
+                                                                    url /* Assumed to be an external link or existing DB URL */}
+                                                </p>
+                                            </div>
+                                            <Button variant="ghost" size="sm" onClick={() => removeResource(name)} className="text-red-500 hover:text-red-700" disabled={isSubmitting}>
+                                                <Trash className="h-4 w-4 mr-1" /> Remove
+                                            </Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                    {/* Resources Section END */}
+
+                    <Separator />
+
                     {/* Contest Type Display (Read-Only) */}
                     <div className="space-y-2">
                         <Label htmlFor="contest-type">Contest Type</Label>
@@ -989,16 +1330,16 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                         <Label className="w-48">Winner {i + 1}</Label>
                                         <Input
                                             type="number"
-                                            step="0.01"
-                                            value={(winnerAmounts[i] || MIN_PRIZE_PER_WINNER) / 100}
+                                            step="1"
+                                            value={winnerAmounts[i] / 100}
                                             onChange={(e) => {
                                                 const inputValue = e.target.value;
 
                                                 // Allow empty input for typing new values
-                                                if (inputValue === '') {
-                                                    const newAmounts = [...winnerAmounts];
-                                                    newAmounts[i] = 0; // Temporarily set to 0
-                                                    setWinnerAmounts(newAmounts);
+                                                if (inputValue === "") {
+                                                    const newWinnerAmounts = [...winnerAmounts];
+                                                    newWinnerAmounts[i] = 0; // Temporarily set to 0
+                                                    setWinnerAmounts(newWinnerAmounts);
                                                     return;
                                                 }
 

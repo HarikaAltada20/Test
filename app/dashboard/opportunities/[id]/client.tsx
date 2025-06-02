@@ -504,7 +504,7 @@ export function ContestClientPage({
                       {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
                         <div className="space-y-3 text-sm text-muted-foreground">
                           <p><strong className="font-semibold text-slate-700 dark:text-slate-300">CPM Rate:</strong> {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views</p>
-                          <p><strong className="font-semibold text-slate-700 dark:text-slate-300">Total Budget:</strong> {formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}</p>
+                          <p><strong className="font-semibold text-slate-700 dark:text-slate-300">Total Budget:</strong> {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</p>
                           {contest.contest_based_details.cpm_contest.min_views != null && (
                             <p><strong className="font-semibold text-slate-700 dark:text-slate-300">Minimum Views:</strong> {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}</p>
                           )}
@@ -673,7 +673,7 @@ export function ContestClientPage({
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
-                            ? formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)
+                            ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
                             : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
                               ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
                               : contest.total_prize // Fallback to old field if necessary for older data

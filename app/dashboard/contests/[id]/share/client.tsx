@@ -38,7 +38,7 @@ export default function ShareContestPage({
   user,
   contestId,
 }: {
-  user: UserResponse["data"]["user"];
+  user: UserResponse["data"]["user"] | null;
   contestId: string;
 }) {
   const router = useRouter();

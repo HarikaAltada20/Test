@@ -201,8 +201,8 @@ export default function ContestDetailClient({
                                                 <div>
                                                     <span className="text-sm text-muted-foreground">Total Budget: </span>
                                                     <span className="font-semibold">
-                                                        {formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}
-                                                        {/* Assuming total_budget is dollars, formatMoney expects cents */}
+                                                        {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}
+                                                        {/* Assuming total_budget is in cents from DB, formatMoney expects cents */}
                                                     </span>
                                                 </div>
                                                 {contest.contest_based_details.cpm_contest.min_views != null && (
@@ -522,8 +522,8 @@ export default function ContestDetailClient({
                                 <div>
                                     <h3 className="text-sm font-medium mb-1">Total Budget</h3>
                                     <p className="font-semibold">
-                                        {formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}
-                                        {/* Assuming total_budget is dollars, formatMoney expects cents */}
+                                        {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}
+                                        {/* Assuming total_budget is in cents from DB, formatMoney expects cents */}
                                     </p>
                                 </div>
                             )}

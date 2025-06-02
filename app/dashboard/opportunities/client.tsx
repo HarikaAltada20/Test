@@ -147,12 +147,12 @@ export default function OpportunitiesPage({
           if (a.contest_type === 'leaderboard' && a.contest_based_details?.leaderboard_contest?.total_prize) {
             valueA = a.contest_based_details.leaderboard_contest.total_prize;
           } else if (a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.total_budget) {
-            valueA = a.contest_based_details.cpm_contest.total_budget * 100; // Assuming budget is in dollars, convert to cents like prize money
+            valueA = a.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
           }
           if (b.contest_type === 'leaderboard' && b.contest_based_details?.leaderboard_contest?.total_prize) {
             valueB = b.contest_based_details.leaderboard_contest.total_prize;
           } else if (b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.total_budget) {
-            valueB = b.contest_based_details.cpm_contest.total_budget * 100; // Assuming budget is in dollars
+            valueB = b.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
           }
           return sortOption === 'value_desc' ? valueB - valueA : valueA - valueB;
         case 'cpm_rate_desc':
@@ -351,7 +351,7 @@ export default function OpportunitiesPage({
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
                     <span className="text-md">
                       {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest ? (
-                        <>Budget: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.cpm_contest.total_budget * 100)}</span></>
+                        <>Budget: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></>
                       ) : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest ? (
                         <>Prize Pool: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</span></>
                       ) : (
@@ -364,7 +364,7 @@ export default function OpportunitiesPage({
                 {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                   <div className="mt-2 mb-3">
                     <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-0.5">
-                      <span>Spent: {formatMoney((contest.budget_spent || 0) * 100)}</span>
+                      <span>Spent: {formatMoney(contest.budget_spent || 0)}</span>
                       <span>{(((contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">

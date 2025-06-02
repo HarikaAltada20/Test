@@ -49,6 +49,7 @@ import {
   formatLocalDateTime,
 } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency-utils";
+import { toast } from "@/hooks/use-toast"; // Added import
 
 // Re-added constants that were accidentally removed
 import {
@@ -140,7 +141,6 @@ You must show the Game Of Creators App Store listing in your video`);
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(10000); // Default total prize pool
   const [hasExceededBudgetThreshold, setHasExceededBudgetThreshold] =
     useState<boolean>(false);
@@ -172,24 +172,16 @@ You must show the Game Of Creators App Store listing in your video`);
   >([]);
   const [isPlansLoading, setIsPlansLoading] = useState(true); // Start as true
 
-  // Add this function for handling resource file uploads
-  const handleResourceFileUpload = async (name: string, file: File) => {
-    try {
-      // Store the file temporarily for preview
-      setResourceFiles((prev) => ({
-        ...prev,
-        [name]: file,
-      }));
+  // State for inline form feedback (especially for blocking validation errors)
+  const [formFeedback, setFormFeedback] = useState<string | null>(null);
+  const [formFeedbackType, setFormFeedbackType] = useState<"error" | "success" | null>(null);
 
-      // Update resources object with a temporary URL for preview
-      setResources((prev) => ({
-        ...prev,
-        [name]: URL.createObjectURL(file),
-      }));
-    } catch (error) {
-      console.error("Error handling resource file:", error);
-    }
-  };
+  // Section-specific error states for Assets step
+  const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
+  const [externalLinkError, setExternalLinkError] = useState<string | null>(null);
+
+  // Add this function for handling resource file uploads
+
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -244,8 +236,14 @@ You must show the Game Of Creators App Store listing in your video`);
   };
 
   const addFileResource = async () => {
+    setAssetUploadError(null); // Clear previous asset upload error
+
     if (!resourceFile) {
-      setError("No file selected");
+      setAssetUploadError("No file selected for upload.");
+      return;
+    }
+    if (!resourceDescription.trim()) {
+      setAssetUploadError("Asset description is required for the uploaded file.");
       return;
     }
 
@@ -268,10 +266,10 @@ You must show the Game Of Creators App Store listing in your video`);
 
       // Reset form
       removeResourceFile();
-      setSuccess("Resource added!");
+      toast({ title: "Success", description: "Asset added successfully!" });
     } catch (error: any) {
       console.error("Error adding resource:", error);
-      setError(`Failed to add resource: ${error.message}`);
+      toast({ title: "Error", description: `Failed to add asset: ${error.message}`, variant: "destructive" });
     }
   };
 
@@ -279,10 +277,9 @@ You must show the Game Of Creators App Store listing in your video`);
 
   const handleSaveDraft = async () => {
     try {
-      // Reset states
-      setError(null);
-      setValidationError(null);
-      setSuccess(null);
+      // Reset global form feedback
+      setFormFeedback(null);
+      setFormFeedbackType(null);
       setIsLoading(true);
       setUploadProgress("Saving draft...");
 
@@ -290,7 +287,7 @@ You must show the Game Of Creators App Store listing in your video`);
       const draftTimeoutId = setTimeout(() => {
         setIsLoading(false);
         setUploadProgress(null);
-        setError("Draft save timed out. Please try again.");
+        toast({ title: "Error", description: "Draft save timed out. Please try again.", variant: "destructive" });
       }, 30000); // 30 second timeout as safety measure
 
       // Get the authenticated user first to verify we're logged in
@@ -298,7 +295,7 @@ You must show the Game Of Creators App Store listing in your video`);
         await supabase.auth.getUser();
 
       if (authError || !authData.user) {
-        setError("You must be logged in to save drafts");
+        toast({ title: "Error", description: "You must be logged in to save drafts", variant: "destructive" });
         setIsLoading(false);
         setUploadProgress(null);
         clearTimeout(draftTimeoutId);
@@ -313,17 +310,16 @@ You must show the Game Of Creators App Store listing in your video`);
       clearTimeout(draftTimeoutId);
     } catch (error: any) {
       console.error("Error saving draft:", error);
-      setError(`Failed to save draft: ${error.message || "Unknown error"}`);
+      toast({ title: "Error", description: `Failed to save draft: ${error.message || "Unknown error"}`, variant: "destructive" });
       setIsLoading(false);
       setUploadProgress(null);
     }
   };
 
   const handleSubmit = async (isDraft: boolean = false) => {
-    // Reset states
-    setError(null);
-    setValidationError(null);
-    setSuccess(null);
+    // Reset global form feedback
+    setFormFeedback(null);
+    setFormFeedbackType(null);
     setIsLoading(true);
 
 
@@ -331,21 +327,19 @@ You must show the Game Of Creators App Store listing in your video`);
 
     try {
       if (isDraft && !title) {
-        setValidationError("Title is required even for drafts");
+        setFormFeedback("Title is required even for drafts"); // Footer feedback
+        setFormFeedbackType("error");
         setIsLoading(false);
         setUploadProgress(null);
-
         return;
       }
 
       const userId = user?.id;
       if (!isDraft && !userId) {
-        setError(
-          "User information not available. Please refresh the page and try again."
-        );
+        setFormFeedback("User information not available. Please refresh the page and try again."); // Footer feedback
+        setFormFeedbackType("error");
         setIsLoading(false);
         setUploadProgress(null);
-
         return;
       }
 
@@ -355,14 +349,10 @@ You must show the Game Of Creators App Store listing in your video`);
         // Client-side validation for prize amounts for leaderboard
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-            setValidationError(
-              `Prize for Winner ${i + 1} must be at least ${formatCurrency(
-                MIN_PRIZE_PER_WINNER
-              )}`
-            );
+            setFormFeedback(`Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`); // Footer feedback
+            setFormFeedbackType("error");
             setIsLoading(false);
             setUploadProgress(null);
-
             return;
           }
         }
@@ -380,15 +370,18 @@ You must show the Game Of Creators App Store listing in your video`);
       } else if (contestType === "cpm") {
         if (!isDraft) {
           if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
-            setValidationError("CPM Rate must be a positive number.");
+            setFormFeedback("CPM Rate must be a positive number."); // Footer feedback
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
           if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
-            setValidationError("Total Budget must be a positive number for CPM contests.");
+            setFormFeedback("Total Budget must be a positive number for CPM contests."); // Footer feedback
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
           if (!termsConditions) {
-            setValidationError("Terms & Conditions are required for CPM contests.");
+            setFormFeedback("Terms & Conditions are required for CPM contests."); // Footer feedback
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
         }
@@ -397,7 +390,7 @@ You must show the Game Of Creators App Store listing in your video`);
             cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
             min_views: minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null,
             max_views: maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null,
-            total_budget: parseFloat(totalBudget.toString()) || 0,
+            total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
             budget_spent: 0, // Initial value
             terms_conditions: termsConditions,
             // tiered_payouts: [] // Future use
@@ -416,21 +409,23 @@ You must show the Game Of Creators App Store listing in your video`);
         }, 5000);
 
         if (!thumbnail && !thumbnailPreview) {
-          setValidationError("Contest thumbnail is required");
+          setFormFeedback("Contest thumbnail is required");
+          setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
         if (!brief) {
-          setValidationError("Contest brief is required");
+          setFormFeedback("Contest brief is required");
+          setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
         if (!rules) {
-          setValidationError("Contest rules are required");
+          setFormFeedback("Contest rules are required");
+          setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
         if (!startDate || !startTime || !endDate || !endTime) {
-          setValidationError(
-            "Contest start and end dates/times are required for publishing"
-          );
+          setFormFeedback("Contest start and end dates/times are required for publishing");
+          setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
         try {
@@ -438,26 +433,31 @@ You must show the Game Of Creators App Store listing in your video`);
           const endDateTime = new Date(`${endDate}T${endTime}`);
           const now = new Date();
           if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-            setValidationError("Invalid date or time format. Please check your entries.");
+            setFormFeedback("Invalid date or time format. Please check your entries.");
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
           if (startDateTime < now) {
-            setValidationError("Contest start time must be in the future");
+            setFormFeedback("Contest start time must be in the future");
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
           if (endDateTime <= startDateTime) {
-            setValidationError("Contest end time must be after the start time");
+            setFormFeedback("Contest end time must be after the start time");
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
           const durationMs = endDateTime.getTime() - startDateTime.getTime();
           const oneDayMs = 24 * 60 * 60 * 1000;
           if (durationMs < oneDayMs) {
-            setValidationError("Contest duration must be at least 1 day");
+            setFormFeedback("Contest duration must be at least 1 day");
+            setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
         } catch (error) {
           console.error("Date validation error:", error);
-          setValidationError("There was an error with the date/time format. Please check your entries.");
+          setFormFeedback("There was an error with the date/time format. Please check your entries.");
+          setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
       }
@@ -545,6 +545,8 @@ You must show the Game Of Creators App Store listing in your video`);
         console.error("Error formatting dates for submission:", error);
         if (!isDraft) {
           setError("There was a problem with the date format. Please check the start and end dates.");
+          setFormFeedback("There was a problem with the date format. Please check the start and end dates.");
+          setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
       }
@@ -588,23 +590,24 @@ You must show the Game Of Creators App Store listing in your video`);
       if (!isDraft) {
         setUploadProgress("Contest created successfully! Redirecting...");
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
+        toast({ title: "Success", description: "Contest created successfully!" });
         setTimeout(() => { router.push("/dashboard/contests"); }, 1000);
       } else {
+        // This 'else' block is for draft saving if handleSubmit is directly called with isDraft=true.
         setResourceFiles({});
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
         setIsLoading(false);
         setUploadProgress(null);
-        setSuccess("Draft saved successfully!");
-        setTimeout(() => setSuccess(null), 3000);
+        toast({ title: "Success", description: "Draft saved successfully!" });
       }
     } catch (err: any) {
       console.error("Error submitting contest:", err);
-
       if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
+      // API errors use toast
       if (err.message && err.message.includes("timestamp with time zone")) {
-        setError("Invalid date format. Please make sure all dates and times are properly set.");
+        toast({ title: "Error", description: "Invalid date format. Please make sure all dates and times are properly set.", variant: "destructive" });
       } else {
-        setError(`Failed to ${isDraft ? "save draft" : "create contest"}: ${err.message || "Unknown error"}`);
+        toast({ title: "Error", description: `Failed to ${isDraft ? "save draft" : "create contest"}: ${err.message || "Unknown error"}`, variant: "destructive" });
       }
       setIsLoading(false);
       setUploadProgress(null);
@@ -612,16 +615,35 @@ You must show the Game Of Creators App Store listing in your video`);
   };
 
   const addResource = () => {
-    if (newResourceUrl) {
-      const resourceName = externalResourceDescription || "External Resource";
-      setResources({
-        ...resources,
-        [resourceName]: newResourceUrl,
-      });
-      setNewResourceUrl("");
-      setExternalResourceDescription("");
-      setSuccess("External resource added!");
+    setExternalLinkError(null); // Clear previous external link error
+
+    if (!newResourceUrl.trim()) {
+      setExternalLinkError("Resource link cannot be empty.");
+      return;
     }
+
+    // Basic URL validation
+    try {
+      new URL(newResourceUrl);
+    } catch (_) {
+      setExternalLinkError("Invalid URL format.");
+      return;
+    }
+
+    if (!externalResourceDescription.trim()) {
+      setExternalLinkError("Resource description cannot be empty for external link.");
+      return;
+    }
+
+    // If all checks pass, add the resource
+    const resourceName = externalResourceDescription || "External Resource";
+    setResources({
+      ...resources,
+      [resourceName]: newResourceUrl,
+    });
+    setNewResourceUrl("");
+    setExternalResourceDescription("");
+    toast({ title: "Success", description: "External resource added!" });
   };
 
   const removeResource = async (name: string) => {
@@ -703,35 +725,15 @@ You must show the Game Of Creators App Store listing in your video`);
 
       // Show validation errors only after a complete value is entered
       if (numValue < MIN_PRIZE_PER_WINNER) {
-        setValidationError(
-          `Prize amount for Winner ${index + 1
-          } cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`
-        );
+        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`, variant: "destructive" });
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
-        setValidationError(
-          `Prize amount for Winner ${index + 1} cannot exceed ${formatCurrency(
-            MAX_PRIZE_PER_WINNER
-          )}`
-        );
+        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`, variant: "destructive" });
       }
     }
   };
 
   // Keep the original function for backward compatibility
-  const updateWinnerAmount = (index: number, amount: number) => {
-    // Ensure amount is at least MIN_PRIZE_PER_WINNER and at most MAX_PRIZE_PER_WINNER
-    amount = Math.max(
-      Math.min(amount, MAX_PRIZE_PER_WINNER),
-      MIN_PRIZE_PER_WINNER
-    );
 
-    const newAmounts = [...winnerAmounts];
-    newAmounts[index] = amount;
-    setWinnerAmounts(newAmounts);
-
-    // Update total prize pool
-    updateTotalPrizePool(newAmounts);
-  };
 
   const updateTotalPrizePool = (amounts = winnerAmounts) => {
     const total = amounts.reduce((sum, amount) => sum + amount, 0);
@@ -744,10 +746,7 @@ You must show the Game Of Creators App Store listing in your video`);
     );
 
     if (count > planFeatures.maxWinnersPerContest) {
-      setValidationError(
-        `Your ${userPlan || "current"} plan is limited to ${planFeatures.maxWinnersPerContest
-        } winners per contest. Upgrade your plan for more.`
-      );
+      toast({ title: "Plan Limit", description: `Your ${userPlan || "current"} plan is limited to ${planFeatures.maxWinnersPerContest} winners per contest. Upgrade your plan for more.`, variant: "destructive" });
       return;
     }
 
@@ -777,39 +776,44 @@ You must show the Game Of Creators App Store listing in your video`);
   };
 
   const nextStep = () => {
-    setValidationError(null);
+    setFormFeedback(null); // Clear previous global form feedback
+    setFormFeedbackType(null);
 
     // Validate only what's needed for the current step
     if (step === "basics") {
-      // For basics step, only validate title and thumbnail if not a draft
       if (!title) {
-        setValidationError("Please enter a contest title");
+        setFormFeedback("Please enter a contest title"); // Footer feedback
+        setFormFeedbackType("error");
         return;
       }
-
-      // Only check for thumbnail if we don't have a preview (from a draft)
       if (!thumbnail && !thumbnailPreview) {
-        setValidationError("Please upload a thumbnail for your contest");
+        setFormFeedback("Please upload a thumbnail for your contest"); // Footer feedback
+        setFormFeedbackType("error");
         return;
       }
-
       setStep("brief");
     } else if (step === "brief") {
       if (!brief) {
-        setValidationError("Please enter a brief description for your contest");
+        setFormFeedback("Please enter a brief description for your contest"); // Footer feedback
+        setFormFeedbackType("error");
         return;
       }
       if (!rules) {
-        setValidationError("Please provide rules for your contest");
+        setFormFeedback("Please provide rules for your contest"); // Footer feedback
+        setFormFeedbackType("error");
         return;
       }
       setStep("resources");
     } else if (step === "resources") {
+      // No specific blocking validation for the entire "resources" step defined here for nextStep
+      // Individual resource additions handle their own feedback internally.
       setStep("prize");
     }
   };
 
   const prevStep = () => {
+    setFormFeedback(null); // Clear feedback when going back
+    setFormFeedbackType(null);
     if (step === "prize") setStep("resources");
     else if (step === "resources") setStep("brief");
     else if (step === "brief") setStep("basics");
@@ -1121,7 +1125,6 @@ You must show the Game Of Creators App Store listing in your video`);
     // Function to fetch subscription plans from the database
     const fetchSubscriptionPlans = async () => {
       setIsPlansLoading(true);
-      setError(null); // Clear previous errors
       try {
         const { data: plansData, error: plansError } = await supabase
           .from("subscription_plans")
@@ -1162,11 +1165,8 @@ You must show the Game Of Creators App Store listing in your video`);
         }
       } catch (error: any) {
         console.error("Error fetching subscription plans:", error);
-        setError(
-          `Failed to load subscription plans: ${error.message}. Using defaults.`
-        );
-        // Optionally set default plans or handle the error appropriately
-        setDbSubscriptionPlans([]); // Clear plans on error
+        toast({ title: "Error", description: `Failed to load subscription plans: ${error.message}. Using defaults.`, variant: "destructive" });
+        setDbSubscriptionPlans([]);
       } finally {
         setIsPlansLoading(false);
       }
@@ -1432,11 +1432,7 @@ You must show the Game Of Creators App Store listing in your video`);
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {validationError && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{validationError}</AlertDescription>
-            </Alert>
-          )}
+          {/* Removed inline validationError Alert (which was for general step validation) */}
 
           {/* Current Plan Details */}
           <div className="border rounded-lg p-6 mb-6">
@@ -1655,9 +1651,10 @@ You must show the Game Of Creators App Store listing in your video`);
                       <Label className="w-48">Winner {i + 1}</Label>
                       <Input
                         type="number"
-                        step="0.01"
+                        step="1"
                         // Ensure value is in dollars for display
-                        value={winnerAmounts[i] ? winnerAmounts[i] / 100 : (MIN_PRIZE_PER_WINNER / 100)}
+                        // value={winnerAmounts[i] ? winnerAmounts[i] / 100 : (MIN_PRIZE_PER_WINNER / 100)}
+                        value={winnerAmounts[i] / 100}
                         onChange={(e) =>
                           handleWinnerAmountChange(i, e.target.value) // Expects dollars
                         }
@@ -1951,31 +1948,9 @@ You must show the Game Of Creators App Store listing in your video`);
         </div>
       </div>
 
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       {/* Step Content */}
       <Card className="mx-auto max-w-4xl">
-        {/* Show success message when a draft is saved */}
-        {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-4 mx-4 mt-4 flex justify-between items-center">
-            <div className="flex items-center">
-              <Check className="h-5 w-5 mr-2" />
-              {success}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSuccess(null)}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
+        {/* Removed global success Alert (for draft save) that was at the top of the card */}
 
         {step === "basics" && (
           <>
@@ -1983,11 +1958,7 @@ You must show the Game Of Creators App Store listing in your video`);
               <CardTitle>Create a new contest</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {validationError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{validationError}</AlertDescription>
-                </Alert>
-              )}
+              {/* Removed general validationError Alert from CardContent */}
 
               {/* Contest Type Selection */}
               <div className="space-y-2">
@@ -2137,9 +2108,13 @@ You must show the Game Of Creators App Store listing in your video`);
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <div></div> {/* Empty div for spacing */}
-              <div className="flex gap-2">
+            <CardFooter className="flex justify-between items-center pt-6">
+              {formFeedback && formFeedbackType === 'error' && (
+                <div className="text-sm text-red-600 mr-auto flex items-center">
+                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                </div>
+              )}
+              <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}> {/* Adjust margin based on feedback presence */}
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
@@ -2178,11 +2153,7 @@ You must show the Game Of Creators App Store listing in your video`);
               <CardTitle>Project Overview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {validationError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{validationError}</AlertDescription>
-                </Alert>
-              )}
+              {/* Removed general validationError Alert from CardContent */}
 
               <div className="space-y-2">
                 <div className="border rounded p-4">
@@ -2268,16 +2239,22 @@ You must show the Game Of Creators App Store listing in your video`);
                 />
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
+            <CardFooter className="flex justify-between items-center pt-6">
+              {formFeedback && formFeedbackType === 'error' && (
+                <div className="text-sm text-red-600 mr-auto flex items-center">
+                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                </div>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 onClick={prevStep}
                 disabled={isLoading}
+                className={`${!(formFeedback && formFeedbackType === 'error') ? 'mr-auto' : ''}`}
               >
                 Back
               </Button>
-              <div className="flex gap-2">
+              <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
@@ -2316,11 +2293,7 @@ You must show the Game Of Creators App Store listing in your video`);
               <CardTitle>Assets</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {validationError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{validationError}</AlertDescription>
-                </Alert>
-              )}
+              {/* General Alerts for error/success/validation removed from top of CardContent */}
 
               {/* Resources Section */}
               <div className="mt-8">
@@ -2333,46 +2306,19 @@ You must show the Game Of Creators App Store listing in your video`);
                   external links.
                 </p>
 
-                {validationError && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertDescription>{validationError}</AlertDescription>
-                  </Alert>
-                )}
-
-                {success && (
-                  <Alert className="mb-4 bg-green-50 border-green-200 text-green-700">
-                    <Check className="h-4 w-4 mr-2" />
-                    <AlertDescription>{success}</AlertDescription>
-                  </Alert>
-                )}
-
-                {error && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertCircle className="h-4 w-4 mr-2" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-
                 <div className="space-y-6">
                   {/* File Upload Container */}
                   <div className="border rounded-lg p-4">
+                    {/* Section-specific feedback for Upload Asset */}
+                    {assetUploadError && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
+                        <AlertDescription>{assetUploadError}</AlertDescription>
+                      </Alert>
+                    )}
                     <h4 className="text-md font-medium mb-2">Upload Asset</h4>
 
-                    {/* Resource Description */}
-                    <div className="mb-4">
-                      <Label htmlFor="resourceDescription">
-                        Asset Description
-                      </Label>
-                      <Textarea
-                        id="resourceDescription"
-                        placeholder="Enter a description for this asset"
-                        className="mt-1"
-                        value={resourceDescription}
-                        onChange={(e) => setResourceDescription(e.target.value)}
-                      />
-                    </div>
-
-                    {/* File Uploader - Exactly like thumbnail uploader */}
+                    {/* File Uploader - Placed before description */}
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 mb-4">
                       {resourceFilePreview ? (
                         <div className="relative">
@@ -2383,6 +2329,7 @@ You must show the Game Of Creators App Store listing in your video`);
                               className="mx-auto max-h-64 object-contain"
                             />
                           ) : (
+                            // Display for non-image files (PDF, Video, Audio, etc.)
                             <div className="mx-auto py-4 text-center">
                               {resourceFilePreview.startsWith(
                                 "file-type:application/pdf"
@@ -2400,9 +2347,9 @@ You must show the Game Of Creators App Store listing in your video`);
                                     <span className="mt-2 font-medium">
                                       PDF Document
                                     </span>
+                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
                                   </div>
                                 )}
-                              {/* Rest of the file type renderers */}
                               {resourceFilePreview.startsWith(
                                 "file-type:video/"
                               ) && (
@@ -2419,6 +2366,7 @@ You must show the Game Of Creators App Store listing in your video`);
                                     <span className="mt-2 font-medium">
                                       Video File
                                     </span>
+                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
                                   </div>
                                 )}
                               {resourceFilePreview.startsWith(
@@ -2436,9 +2384,9 @@ You must show the Game Of Creators App Store listing in your video`);
                                     <span className="mt-2 font-medium">
                                       Audio File
                                     </span>
+                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
                                   </div>
                                 )}
-                              {/* Office document icon */}
                               {resourceFilePreview.startsWith(
                                 "file-type:application/vnd.openxmlformats-officedocument."
                               ) && (
@@ -2455,9 +2403,9 @@ You must show the Game Of Creators App Store listing in your video`);
                                     <span className="mt-2 font-medium">
                                       Office Document
                                     </span>
+                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
                                   </div>
                                 )}
-                              {/* Default file icon for other file types */}
                               {!resourceFilePreview.startsWith(
                                 "file-type:application/pdf"
                               ) &&
@@ -2481,20 +2429,23 @@ You must show the Game Of Creators App Store listing in your video`);
                                       <path d="M8 15h8v2H8zm0-4h8v2H8z" />
                                     </svg>
                                     <span className="mt-2 font-medium">
-                                      File
+                                      File ({resourceFile?.type || 'Unknown type'})
                                     </span>
+                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
                                   </div>
                                 )}
                             </div>
                           )}
                           <div className="mt-2 flex justify-between items-center">
-                            <p className="text-sm text-gray-500">
-                              {resourceFile?.name} ·{" "}
-                              {resourceFile?.size
-                                ? (resourceFile.size / (1024 * 1024)).toFixed(2)
-                                : "0"}
-                              MB
-                            </p>
+                            {resourceFile && (
+                              <p className="text-sm text-gray-500">
+                                {resourceFile.name} ·{" "}
+                                {resourceFile.size
+                                  ? (resourceFile.size / (1024 * 1024)).toFixed(2)
+                                  : "0"}
+                                MB
+                              </p>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -2532,19 +2483,32 @@ You must show the Game Of Creators App Store listing in your video`);
                       )}
                     </div>
 
-                    {/* Add Asset Button - Shows when file is selected */}
-                    {resourceFile && resourceDescription && (
-                      <Button
-                        type="button"
-                        onClick={addFileResource}
-                        className="w-full mt-4"
-                      >
-                        Add Asset
-                      </Button>
-                    )}
+                    {/* Resource Description - Moved below file uploader */}
+                    <div className="mb-4">
+                      <Label htmlFor="resourceDescription">
+                        Asset Description <span className="text-red-500">*</span> (Required)
+                      </Label>
+                      <Textarea
+                        id="resourceDescription"
+                        placeholder="Enter a description for this asset"
+                        className="mt-1"
+                        value={resourceDescription}
+                        onChange={(e) => setResourceDescription(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Add Asset Button - Always visible, conditionally disabled */}
+                    <Button
+                      type="button"
+                      onClick={addFileResource}
+                      className="w-full mt-4"
+                      disabled={!resourceFile || !resourceDescription.trim()}
+                    >
+                      Add Asset
+                    </Button>
                   </div>
 
-                  {/* External Resource Link - Allow multiple external links */}
+                  {/* External Resource Link */}
                   <div className="border rounded-lg p-4 mt-6">
                     <h4 className="text-md font-medium mb-2">
                       Add External Resource Links
@@ -2552,11 +2516,30 @@ You must show the Game Of Creators App Store listing in your video`);
                     <p className="text-sm text-gray-500 mb-4">
                       You can add any number of external resource links.
                     </p>
+                    {/* Section-specific feedback for External Link */}
+                    {externalLinkError && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
+                        <AlertDescription>{externalLinkError}</AlertDescription>
+                      </Alert>
+                    )}
 
-                    {/* External Resource Description */}
+                    {/* Resource Link Input - Moved above description */}
+                    <div className="mb-4">
+                      <Label htmlFor="resourceLinkInput">Resource Link</Label>
+                      <Input
+                        id="resourceLinkInput"
+                        type="url"
+                        placeholder="https://example.com/resource"
+                        value={newResourceUrl}
+                        onChange={(e) => setNewResourceUrl(e.target.value)}
+                      />
+                    </div>
+
+                    {/* External Resource Description - Moved below link input, marked as required */}
                     <div className="mb-4">
                       <Label htmlFor="externalResourceDescription">
-                        Resource Description
+                        Resource Description <span className="text-red-500">*</span> (Required)
                       </Label>
                       <Textarea
                         id="externalResourceDescription"
@@ -2569,22 +2552,10 @@ You must show the Game Of Creators App Store listing in your video`);
                       />
                     </div>
 
-                    {/* Resource Link Input */}
-                    <div className="mb-4">
-                      <Label htmlFor="resourceLink">Resource Link</Label>
-                      <Input
-                        id="resourceLinkInput"
-                        type="url"
-                        placeholder="https://example.com/resource"
-                        value={newResourceUrl}
-                        onChange={(e) => setNewResourceUrl(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Add External Resource Button */}
+                    {/* Add External Resource Button - Always visible, conditionally disabled */}
                     <Button
                       type="button"
-                      disabled={!newResourceUrl || !externalResourceDescription}
+                      disabled={!newResourceUrl.trim() || !externalResourceDescription.trim()}
                       onClick={addResource}
                       className="w-full"
                     >
@@ -2625,16 +2596,23 @@ You must show the Game Of Creators App Store listing in your video`);
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
+            <CardFooter className="flex justify-between items-center pt-6">
+              {/* General step feedback for "Resources" step, if any (excluding section-specific ones) */}
+              {formFeedback && formFeedbackType === 'error' && (
+                <div className="text-sm text-red-600 mr-auto flex items-center">
+                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                </div>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 onClick={prevStep}
                 disabled={isLoading}
+                className={`${!(formFeedback && formFeedbackType === 'error') ? 'mr-auto' : ''}`}
               >
                 Back
               </Button>
-              <div className="flex gap-2">
+              <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
@@ -2673,24 +2651,25 @@ You must show the Game Of Creators App Store listing in your video`);
               <CardTitle>Prize Distribution</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {validationError && (
-                <Alert variant="destructive">
-                  <AlertDescription>{validationError}</AlertDescription>
-                </Alert>
-              )}
-
+              {/* Removed general validationError Alert from CardContent */}
               {renderPrizeSection()}
             </CardContent>
-            <CardFooter className="flex justify-between">
+            <CardFooter className="flex justify-between items-center pt-6">
+              {formFeedback && formFeedbackType === 'error' && (
+                <div className="text-sm text-red-600 mr-auto flex items-center">
+                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                </div>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 onClick={prevStep}
                 disabled={isLoading}
+                className={`${!(formFeedback && formFeedbackType === 'error') ? 'mr-auto' : ''}`}
               >
                 Back
               </Button>
-              <div className="flex gap-2">
+              <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
