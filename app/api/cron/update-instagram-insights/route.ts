@@ -142,8 +142,8 @@ export async function GET(request: Request) {
     const metricsToUpdateDatabase: { id: string; views: number; other_stats: any; updated_at: string }[] = [];
     const tokenUpdatesToDatabase: { userId: string; newAccountData: InstagramAccount }[] = [];
 
-    // Updated metricsString based on user's successful manual API call and error message guidance
-    const metricsString = 'reach,likes,comments,ig_reels_video_view_total_time,ig_reels_avg_watch_time';
+    // Updated metricsString based on user's successful manual API call
+    const metricsString = 'reach,likes,comments,shares,saved,total_interactions,views';
 
     // 6. Process each creator and their submissions
     for (const creatorId of creatorIds) {
@@ -241,55 +241,65 @@ export async function GET(request: Request) {
             continue;
           }
           
-          let currentViews = 0;
+          let primaryViews = 0; // Changed from currentViews to align with client logic
           const newInstagramStats: any = {};
+
           insightsData.data.forEach((metric) => {
             const value = metric.values[0]?.value || 0;
-            newInstagramStats[metric.name] = value;
-            if (metric.name === 'reach') { // 'reach' is used for 'views' for Instagram Reels
-              currentViews = value;
+            newInstagramStats[metric.name] = value; // Store each metric by its name
+
+            if (metric.name === 'views') { // Primary source for views count
+              primaryViews = value;
             }
           });
 
-          // Only update if views have changed or other_stats are different (more robust check needed for other_stats)
-          // For simplicity, let's assume if reach is different, we update.
-          // A more robust check would involve comparing the whole newInstagramStats with submission.other_stats?.instagram
-          let hasChanged = (submission.views !== currentViews);
+          // Fallback logic for views, similar to client-side
+          if (primaryViews === 0 && newInstagramStats.reach !== undefined && newInstagramStats.reach > 0) {
+            console.log(`CRON Job (Instagram): Primary 'views' for media ${submission.video_id} was 0 or not found. Falling back to 'reach':`, newInstagramStats.reach);
+            primaryViews = newInstagramStats.reach;
+          } else if (primaryViews === 0) {
+            console.log(`CRON Job (Instagram): Primary 'views' and 'reach' for media ${submission.video_id} are 0 or not available. Submission views will be 0.`);
+          }
+
+          // Ensure all expected other_stats fields are at least defaulted if not present in API response
+          const defaultStats = { reach: 0, likes: 0, comments: 0, shares: 0, saved: 0, total_interactions: 0, views: 0 };
+          const finalInstagramStats = { ...defaultStats, ...newInstagramStats };
           
-          // Basic check for other_stats change (can be improved)
+          // Determine if stats have meaningfully changed
+          let hasChanged = (submission.views !== primaryViews); // Check against the new primaryViews
+          
           if (!hasChanged && submission.other_stats?.instagram) {
-             for (const key in newInstagramStats) {
-                 if (newInstagramStats[key] !== submission.other_stats.instagram[key]) {
+             // More robust check against all fields in finalInstagramStats vs submission.other_stats.instagram
+             for (const key in finalInstagramStats) {
+                 if (finalInstagramStats[key] !== submission.other_stats.instagram[key]) {
                      hasChanged = true;
                      break;
                  }
              }
-             // Check if keys were removed from newInstagramStats that existed in old
+             // Check if keys were removed from finalInstagramStats that existed in old (less likely here since we use defaultStats)
              if (!hasChanged) {
                 for (const key in submission.other_stats.instagram) {
-                    if (!(key in newInstagramStats)) {
+                    if (!(key in finalInstagramStats)) {
                          hasChanged = true;
                          break;
                     }
                 }
              }
-          } else if (!submission.other_stats?.instagram && Object.keys(newInstagramStats).length > 0) {
-             // If old stats didn't exist but new ones do
+          } else if (!submission.other_stats?.instagram && Object.keys(finalInstagramStats).length > 0) {
              hasChanged = true;
           }
-
 
           if (hasChanged) {
             metricsToUpdateDatabase.push({
               id: submission.id,
-              views: currentViews,
-              other_stats: { ...submission.other_stats, instagram: newInstagramStats },
+              views: primaryViews, // Use the determined primary views
+              other_stats: { ...submission.other_stats, instagram: finalInstagramStats }, // Store all new stats
               updated_at: new Date().toISOString(),
             });
             updatedSubmissionsCount++;
-            console.log(`CRON Job (Instagram): Insights updated for media ${submission.video_id} (submission ${submission.id}). New views: ${currentViews}`);
+            console.log(`CRON Job (Instagram): Insights updated for media ${submission.video_id} (submission ${submission.id}). New primary views: ${primaryViews}`);
           } else {
-            console.log(`CRON Job (Instagram): Insights for media ${submission.video_id} (submission ${submission.id}) have not changed. Views: ${currentViews}. Skipping DB update.`);
+            console.log(`CRON Job (Instagram): Insights for media ${submission.video_id} (submission ${submission.id}) have not changed. Primary views: ${primaryViews}. Skipping DB update.`);
           }
 
         } catch (fetchError: any) {
