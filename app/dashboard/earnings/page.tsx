@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server"; // Changed to server client
 import { redirect } from "next/navigation";
 import EarningsClientPage from "./EarningsClientPage"; // New client component
+import { RouteGuard } from "@/components/guards/RouteGuard";
 import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, UserData, WithdrawalRequest } from "@/types/earnings"; // Assuming types are moved
 
 // Helper to safely parse numeric values from DB, converting to cents if they are dollars, or keeping as is if cents
@@ -131,14 +132,16 @@ export default async function CreatorEarningsServerPage() {
   // import Link from "next/link"; 
 
   return (
-    <EarningsClientPage
-      initialAuthUser={authUser}
-      initialProfile={initialProfile}
-      initialUserData={userData}
-      initialCashTransactions={initialCashTransactions}
-      initialCoinTransactions={initialCoinTransactions}
-      initialPayoutMethods={initialPayoutMethods}
-      initialWithdrawalRequests={initialWithdrawalRequests}
-    />
+    <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard">
+      <EarningsClientPage
+        initialAuthUser={authUser}
+        initialProfile={initialProfile}
+        initialUserData={userData}
+        initialCashTransactions={initialCashTransactions}
+        initialCoinTransactions={initialCoinTransactions}
+        initialPayoutMethods={initialPayoutMethods}
+        initialWithdrawalRequests={initialWithdrawalRequests}
+      />
+    </RouteGuard>
   );
 }

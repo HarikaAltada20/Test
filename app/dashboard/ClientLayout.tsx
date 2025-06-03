@@ -9,6 +9,44 @@ interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
+// Simple loading bar component that doesn't cause React conflicts
+function SimpleLoadingBar() {
+  return (
+    <style jsx global>{`
+      .nav-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+        z-index: 9999;
+        animation: loadingBar 1.5s ease-in-out;
+        opacity: 0;
+      }
+      
+      .nav-loading.active {
+        opacity: 1;
+      }
+      
+      @keyframes loadingBar {
+        0% { 
+          width: 0%; 
+          left: 0%;
+        }
+        50% { 
+          width: 70%; 
+          left: 0%;
+        }
+        100% { 
+          width: 100%; 
+          left: 0%;
+        }
+      }
+    `}</style>
+  )
+}
+
 function DashboardContent({
   children,
   user,
@@ -21,6 +59,7 @@ function DashboardContent({
 
   return (
     <div className="flex min-h-screen">
+      <SimpleLoadingBar />
       <aside className="hidden w-64 border-r bg-background md:block">
         <div className="flex h-full flex-col">
           <div className="flex h-14 items-center border-b px-4">

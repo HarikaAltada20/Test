@@ -1,18 +1,22 @@
+import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ContestListClient } from "./ContestListClient";
+import { RouteGuard } from "@/components/guards/RouteGuard";
 
 export default async function ContestsPage() {
   const supabase = await createClient();
+  const { data, error } = await supabase.auth.getUser();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  if (error) {
+    console.error("Error getting user:", error);
+    return <div>Error loading page</div>;
+  }
 
-  if (!user) {
+  if (!data.user) {
     console.log("ContestsPage: No session found, redirecting to signin.");
     redirect("/auth/signin");
   }
@@ -20,7 +24,7 @@ export default async function ContestsPage() {
   const { data: userData } = await supabase
     .from("users")
     .select("user_type")
-    .eq("id", user.id)
+    .eq("id", data.user.id)
     .single();
 
   if (userData?.user_type === "creator") {
@@ -30,7 +34,7 @@ export default async function ContestsPage() {
   const { data: contests = [] } = await supabase
     .from("contests_with_status")
     .select("*")
-    .eq("advertiser_id", user.id)
+    .eq("advertiser_id", data.user.id)
     .order("created_at", { ascending: false });
 
   const typedContests = contests as any[];
@@ -39,20 +43,23 @@ export default async function ContestsPage() {
   const draftContests = typedContests.filter((contest) => contest.is_draft);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">My Contests</h1>
-        <Button className="bg-rose-600 hover:bg-rose-700" asChild>
-          <Link href="/dashboard/contests/create?new=true">
-            <Plus className="mr-2 h-4 w-4" /> Create Contest
-          </Link>
-        </Button>
+    <RouteGuard allowedUserTypes={['advertiser']} fallbackPath="/dashboard/opportunities">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight">My Contests</h1>
+          <Button className="bg-rose-600 hover:bg-rose-700" asChild>
+            <Link href="/dashboard/contests/create?new=true">
+              <Plus className="mr-2 h-4 w-4" /> Create Contest
+            </Link>
+          </Button>
+        </div>
+        <Suspense fallback={<div>Loading contests...</div>}>
+          <ContestListClient
+            publishedContests={publishedContests}
+            draftContests={draftContests}
+          />
+        </Suspense>
       </div>
-
-      <ContestListClient
-        publishedContests={publishedContests}
-        draftContests={draftContests}
-      />
-    </div>
+    </RouteGuard>
   );
 }

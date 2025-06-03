@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import SubmissionsClient from "./SubmissionsClient";
+import { RouteGuard } from "@/components/guards/RouteGuard";
 import { SubmissionWithContest } from "@/types/supabase";
 
-export default async function CreatorContentPage() {
+export default async function SubmissionsPage() {
   const supabase = await createClient();
 
   const {
@@ -11,7 +13,7 @@ export default async function CreatorContentPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/auth/signin");
   }
 
   // Get user role from the database
@@ -66,7 +68,11 @@ export default async function CreatorContentPage() {
 
   if (submissionsError) {
     console.error("Error fetching submissions:", submissionsError.message);
-    return <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />;
+    return (
+      <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
+        <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />
+      </RouteGuard>
+    );
   }
 
   const submissionsToFormat = submissionsData || [];
@@ -84,8 +90,10 @@ export default async function CreatorContentPage() {
   }));
 
   return (
-    <SubmissionsClient
-      initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
-    />
+    <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
+      <SubmissionsClient
+        initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
+      />
+    </RouteGuard>
   );
 }

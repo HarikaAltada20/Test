@@ -7,6 +7,15 @@ export interface CreatorProfileData {
   withdrawable_balance: number;
 }
 
+// Advertiser profile data for billing section
+export interface AdvertiserProfileData {
+  total_money_spent: number;
+  total_contests_run: number;
+  available_deposit_balance: number;
+  withdrawable_balance: number;
+  subscription_plan: string;
+}
+
 // Data fetched from the 'users' table
 export interface UserData {
   coins: number;
@@ -72,10 +81,21 @@ export interface BankPayoutDetails {
 
 export type PayoutMethodDetails = CryptoPayoutDetails | UpiPayoutDetails | BankPayoutDetails;
 
-// For props passed to the client component
+// For creator earnings props
 export interface EarningsClientPageProps {
   initialAuthUser: User | null;
   initialProfile: CreatorProfileData | null;
+  initialUserData: UserData | null;
+  initialCashTransactions: CashTransaction[];
+  initialCoinTransactions: CoinTransaction[];
+  initialPayoutMethods: PayoutMethod[];
+  initialWithdrawalRequests: WithdrawalRequest[];
+}
+
+// For advertiser billing props
+export interface BillingClientPageProps {
+  initialAuthUser: User | null;
+  initialProfile: AdvertiserProfileData | null;
   initialUserData: UserData | null;
   initialCashTransactions: CashTransaction[];
   initialCoinTransactions: CoinTransaction[];

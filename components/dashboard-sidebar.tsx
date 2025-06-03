@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,10 +12,10 @@ import {
   LogOut,
   Video,
   DollarSign,
+  CreditCard,
 } from "lucide-react";
-// import { createClient } from "@/utils/supabase/client";
+import { SidebarNavigationLink } from "@/components/navigation/NavigationLink";
 import { useClientAuth } from "@/hooks/use-client-auth";
-
 
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator";
@@ -26,11 +25,6 @@ export function DashboardSidebar({
   userRole = "advertiser",
 }: DashboardSidebarProps) {
   const pathname = usePathname();
-  // const supabase = createClient();
-  // const handleSignOut = async () => {
-  //   await supabase.auth.signOut();
-  // };
-
   const { logout } = useClientAuth();
 
   const handleSignOut = async () => {
@@ -54,14 +48,14 @@ export function DashboardSidebar({
       icon: Trophy,
     },
     {
-      name: "Creators",
-      href: "/dashboard/creators",
-      icon: Users,
-    },
-    {
       name: "Analytics",
       href: "/dashboard/analytics",
       icon: BarChart,
+    },
+    {
+      name: "Billing",
+      href: "/dashboard/billing",
+      icon: CreditCard,
     },
     {
       name: "Settings",
@@ -104,19 +98,13 @@ export function DashboardSidebar({
     <div className="flex flex-col h-full">
       <div className="space-y-1 py-4">
         {links.map((link) => (
-          <Link
+          <SidebarNavigationLink
             key={link.href}
             href={link.href}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all hover:bg-accent",
-              pathname === link.href
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground"
-            )}
+            icon={link.icon}
           >
-            <link.icon className="h-4 w-4" />
             {link.name}
-          </Link>
+          </SidebarNavigationLink>
         ))}
       </div>
       <div className="mt-auto">

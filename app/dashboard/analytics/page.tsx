@@ -1,28 +1,29 @@
-
-import { redirect } from "next/navigation"
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { RouteGuard } from "@/components/guards/RouteGuard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { createClient } from "@/utils/supabase/server"
 
 // Add the formatCurrency utility function
-// Add this utility function to convert cents to dollars for display
-const formatCurrency = (cents: number): string => {
-  return `$${(cents / 100).toFixed(2)}`;
+function formatCurrency(amountInCents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amountInCents / 100)
 }
 
 export default async function AnalyticsPage() {
   const supabase = await createClient()
 
-  // Verify user authentication with server
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (error || !user) {
-    console.log("AnalyticsPage: User is not authenticated, redirecting to signin, :2")
+  if (!user) {
     redirect("/auth/signin")
   }
 
-  // Get user data from the database
   const { data: userData, error: userError } = await supabase
     .from("users")
     .select("user_type")
@@ -31,200 +32,145 @@ export default async function AnalyticsPage() {
 
   if (userError) {
     console.error("Error fetching user data:", userError)
-    redirect("/auth/signin")
+    redirect("/dashboard?error=user_fetch_failed")
   }
 
   // Only allow advertisers to access this page
   if (userData?.user_type !== "advertiser") {
+    console.warn(`User ${user.id} with type ${userData?.user_type} attempted to access analytics page.`)
     redirect("/dashboard")
   }
 
-  // Get advertiser profile
-  const { data: profile } = await supabase
-    .from("advertiser_profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single()
-
-  // Get contests
+  // Fetch analytics data
   const { data: contests } = await supabase
-    .from("contests_with_status")
+    .from("contests")
     .select("*")
     .eq("advertiser_id", user.id)
-    .order("created_at", { ascending: false })
 
-  // Get submissions
   const { data: submissions } = await supabase
     .from("submissions")
     .select("*, contests!inner(*)")
     .eq("contests.advertiser_id", user.id)
 
-  // Calculate total views
-  const totalViews = submissions?.reduce((sum, sub) => sum + (sub.current_views || 0), 0) || 0
+  // Calculate analytics
+  const totalContests = contests?.length || 0
+  const totalSubmissions = submissions?.length || 0
+  const totalViews = submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) || 0
+  const totalSpent = contests?.reduce((sum, contest) => {
+    if (contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize) {
+      return sum + contest.contest_based_details.leaderboard_contest.total_prize
+    } else if (contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget) {
+      return sum + contest.contest_based_details.cpm_contest.total_budget
+    }
+    return sum
+  }, 0) || 0
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Analytics</h1>
-      </div>
+    <RouteGuard allowedUserTypes={['advertiser']} fallbackPath="/dashboard/opportunities">
+      <div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">Analytics</h1>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Views</CardTitle>
-            <EyeIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalViews.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Across all contests</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Creators</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{new Set(submissions?.map((s) => s.creator_id)).size || 0}</div>
-            <p className="text-xs text-muted-foreground">Participating creators</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg. Engagement Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">5.2%</div>
-            <p className="text-xs text-muted-foreground">Platform average: 3.1%</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Budget Spent</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(profile?.total_spent || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">Total budget</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="contests">Contests</TabsTrigger>
-          <TabsTrigger value="creators">Creators</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance Overview</CardTitle>
-                <CardDescription>Views and engagement across all contests</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] flex items-center justify-center bg-muted rounded-md">
-                  <BarChart className="h-8 w-8 text-muted-foreground" />
-                  <span className="ml-2 text-muted-foreground">Performance chart would appear here</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Platform Distribution</CardTitle>
-                <CardDescription>Content distribution by platform</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[300px] flex items-center justify-center bg-muted rounded-md">
-                  <BarChart className="h-8 w-8 text-muted-foreground" />
-                  <span className="ml-2 text-muted-foreground">Platform chart would appear here</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="contests">
+        {/* Analytics Cards */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Contest Performance</CardTitle>
-              <CardDescription>Performance metrics for all contests</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Contests</CardTitle>
+              <BarChart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {contests && contests.length > 0 ? (
-                  contests.map((contest) => {
-                    const contestSubmissions = submissions?.filter((s) => s.contest_id === contest.id) || []
-                    const contestViews = contestSubmissions.reduce((sum, sub) => sum + (sub.current_views || 0), 0)
-
-                    return (
-                      <div key={contest.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-medium">{contest.title}</h3>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${contest.status === "live"
-                              ? "bg-green-100 text-green-800"
-                              : contest.status === "upcoming"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-gray-100 text-gray-800"
-                              }`}
-                          >
-                            {contest.status}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4 mt-2">
-                          <div>
-                            <p className="text-sm text-muted-foreground">Submissions</p>
-                            <p className="text-lg font-medium">{contestSubmissions.length}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Total Views</p>
-                            <p className="text-lg font-medium">{contestViews.toLocaleString()}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm text-muted-foreground">Avg. Views</p>
-                            <p className="text-lg font-medium">
-                              {contestSubmissions.length
-                                ? Math.round(contestViews / contestSubmissions.length).toLocaleString()
-                                : "0"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <div className="text-center py-8">
-                    <p className="text-muted-foreground">No contests yet</p>
-                  </div>
-                )}
-              </div>
+              <div className="text-2xl font-bold">{totalContests}</div>
+              <p className="text-xs text-muted-foreground">Contests created</p>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="creators">
           <Card>
-            <CardHeader>
-              <CardTitle>Creator Performance</CardTitle>
-              <CardDescription>Performance metrics for top creators</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Submissions</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="h-[300px] flex items-center justify-center bg-muted rounded-md">
-                <BarChart className="h-8 w-8 text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Creator performance chart would appear here</span>
-              </div>
+              <div className="text-2xl font-bold">{totalSubmissions}</div>
+              <p className="text-xs text-muted-foreground">Creator submissions</p>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Views</CardTitle>
+              <EyeIcon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalViews.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">Across all submissions</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(totalSpent)}</div>
+              <p className="text-xs text-muted-foreground">Contest budgets</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Analytics Tabs */}
+        <Tabs defaultValue="overview" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="contests">Contests</TabsTrigger>
+            <TabsTrigger value="creators">Creators</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Overview</CardTitle>
+                <CardDescription>Your contest performance overview</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Detailed analytics coming soon. Track your contest performance, creator engagement, and ROI.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="contests" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Contest Performance</CardTitle>
+                <CardDescription>Individual contest analytics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Contest-specific analytics coming soon. View submissions, views, and engagement per contest.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="creators" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Creator Insights</CardTitle>
+                <CardDescription>Creator performance and demographics</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Creator analytics coming soon. Understand your creator audience and top performers.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </RouteGuard>
   )
 }
 
