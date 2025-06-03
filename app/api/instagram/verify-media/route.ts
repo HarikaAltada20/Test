@@ -58,6 +58,22 @@ async function getAppAccessToken() {
   return data.access_token;
 }
 
+export function extractInstagramShortcode(url: string): string | null {
+  if (!url) return null;
+
+  // Regex to capture the shortcode from various Instagram URL patterns
+  // Covers:
+  // - /p/SHORTCODE/
+  // - /reel/SHORTCODE/
+  // - /tv/SHORTCODE/
+  // - /reels/SHORTCODE/ (less common but good to cover)
+  // Ignores query parameters
+  const regex = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel|reels|tv)\/([a-zA-Z0-9_-]+)/i;
+  const match = url.match(regex);
+
+  return match ? match[1] : null;
+}
+
 export async function POST(request: Request) {
   try {
     const { mediaUrl, userAccessToken, userAppScopedId }: VerifyMediaRequest = await request.json();
@@ -65,6 +81,12 @@ export async function POST(request: Request) {
 
     if (!mediaUrl || !userAccessToken || !userAppScopedId) {
       return NextResponse.json({ error: 'Missing required parameters: mediaUrl, userAccessToken, or userAppScopedId' }, { status: 400 });
+    }
+
+    const shortcode = extractInstagramShortcode(mediaUrl);
+
+    if (!shortcode) {
+      return NextResponse.json({ error: 'Invalid Instagram URL format' }, { status: 400 });
     }
 
     // Define the fields you want to retrieve for the media
@@ -96,10 +118,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unexpected response structure from Instagram when fetching media.' }, { status: 500 });
     }
 
+    // The shortcode extracted from the user-provided URL
+    const userProvidedShortcode = extractInstagramShortcode(mediaUrl); 
+    // It should exist because we checked `if (!shortcode)` earlier, 
+    // but good to be defensive or ensure `shortcode` is used directly here.
+    if (!userProvidedShortcode) { 
+        // This case should ideally be caught by the earlier `if (!shortcode)` check
+        return NextResponse.json({ error: 'Could not extract shortcode from provided URL for comparison.' }, { status: 400 });
+    }
+
     let foundMedia: any = null;
     for (const mediaItem of igData.data) {
-      // Normalize or ensure exact match for permalinks if necessary
-      if (mediaItem.permalink === mediaUrl) {
+      const apiMediaShortcode = extractInstagramShortcode(mediaItem.permalink);
+      if (apiMediaShortcode && apiMediaShortcode === userProvidedShortcode) {
         foundMedia = mediaItem;
         break;
       }

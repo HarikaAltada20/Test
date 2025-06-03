@@ -53,9 +53,9 @@ interface YouTubeVideo {
     };
   };
   statistics?: { // Added for displaying views, likes, comments
-    viewCount?: string;
-    likeCount?: string;
-    commentCount?: string;
+    viewCount?: number;
+    likeCount?: number;
+    commentCount?: number;
   };
 }
 
@@ -452,18 +452,19 @@ export default function SubmitContentPage({
     setInstagramMediaPreview(null);
     setSelectedReel(null); // Clear selection from library
 
-    console.log("instagramAccount.access_token", instagramAccount.access_token);
+    // console.log("instagramAccount.access_token", instagramAccount.access_token);
     try {
       const response = await fetch("/api/instagram/verify-media", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mediaUrl: instagramLink,
+          mediaUrl: instagramLink, // Sending the raw link
           userAccessToken: instagramAccount.access_token,
           userAppScopedId: instagramAccount.app_scoped_user_id
         }),
       });
       const data = await response.json();
+      console.log("This is the data from the instagram verify-media route", data);
 
       if (!response.ok) throw new Error(data.error || "Failed to fetch or verify Instagram media.");
 
@@ -509,43 +510,59 @@ export default function SubmitContentPage({
 
       if (contestPlatform === 'instagram' && selectedReel && instagramAccount?.access_token && currentInstagramBusinessAccountID) {
         setMessage("Fetching Instagram Reel insights...");
+        console.log("This is the selectedReel from the instagram submit route", selectedReel);
+        console.log("This is the currentInstagramBusinessAccountID from the instagram submit route", currentInstagramBusinessAccountID);
+        console.log("This is the instagramAccount.access_token from the instagram submit route", instagramAccount.access_token);
         const insightsRes = await fetch(
-          `https://graph.instagram.com/${currentInstagramBusinessAccountID}/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,video_views,total_interactions&access_token=${instagramAccount.access_token}`
+          `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
         );
         const insightsData = await insightsRes.json();
+        console.log("This is the data from the instagram insights route", insightsData);
 
         if (!insightsRes.ok || insightsData.error) {
           console.warn("Failed to fetch Instagram insights, submitting with potentially partial/zero stats:", insightsData.error?.message);
+          // Even if there's an error, we proceed to construct payload with 0/default stats
         }
 
-        let views = 0;
-        const instagramStats: any = {};
-        if (insightsData?.data) {
+        let primaryViews = 0;
+        const instagramApiMetrics: any = {}; // To store all metrics from the API response
+
+        if (insightsData?.data && Array.isArray(insightsData.data)) {
           insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
             const value = metric.values[0]?.value || 0;
-            if (metric.name === "reach") {
-              views = value;
-              instagramStats.reach = views;
+            instagramApiMetrics[metric.name] = value; // Store each metric by its name
+
+            if (metric.name === "views") { // Primary source for views count
+              primaryViews = value;
             }
-            if (metric.name === "likes") instagramStats.likes = value;
-            if (metric.name === "comments") instagramStats.comments = value;
-            if (metric.name === "shares") instagramStats.shares = value;
-            if (metric.name === "saved") instagramStats.saved = value;
-            if (metric.name === "video_views" || metric.name === "plays") instagramStats.video_views = value;
-            if (metric.name === "total_interactions") instagramStats.total_interactions = value;
           });
+        } else {
+          console.warn("Instagram insights data field is missing, not an array, or empty. Instagram stats will be empty or defaults.");
         }
+
+        // Fallback logic: If 'views' metric was 0 or not found, and 'reach' is available and greater than 0, use 'reach'.
+        if (primaryViews === 0 && instagramApiMetrics.reach !== undefined && instagramApiMetrics.reach > 0) {
+          console.log("Primary 'views' metric from Instagram API was 0 or not found. Falling back to 'reach' metric value:", instagramApiMetrics.reach);
+          primaryViews = instagramApiMetrics.reach;
+        } else if (primaryViews === 0) {
+          console.log("Primary 'views' metric from Instagram API is 0 or not found, and 'reach' is also 0 or not available. Submission views will be 0.");
+        }
+
+        // Ensure all expected other_stats fields are at least defaulted if not present in API response
+        const defaultStats = { reach: 0, likes: 0, comments: 0, shares: 0, saved: 0, total_interactions: 0, views: 0 };
+        const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
 
         submissionPayload = {
           ...submissionPayload,
           platform: 'instagram',
-          views: views,
+          views: primaryViews, // Use the determined primary views count
           content_link: selectedReel.permalink,
           video_id: selectedReel.id,
-          video_title: selectedReel.caption || "Instagram Content", // Generic
+          video_title: selectedReel.caption || "Instagram Content",
           video_thumbnail_url: selectedReel.thumbnail_url,
-          other_stats: { instagram: instagramStats },
+          other_stats: { instagram: finalInstagramStats }, // Store all fetched/defaulted metrics
         };
+        console.log("This is the submissionPayload from the instagram submit route", submissionPayload);
 
       } else if (contestPlatform === 'youtube' && (selectedVideo || videoPreview)) {
         // YouTube Video Submission
@@ -558,27 +575,19 @@ export default function SubmitContentPage({
         }
 
         setMessage("Fetching YouTube video insights...");
+        console.log("videoToSubmit", videoToSubmit);
 
-        // Fetch YouTube video stats (views, likes, etc.) via API endpoint
-        // This part reuses your existing logic for /api/youtube/metrics or similar
-        const metricsResponse = await fetch(`/api/youtube/metrics?videoId=${videoToSubmit.id.videoId}`);
-        const metricsData = await metricsResponse.json();
-
-        if (!metricsResponse.ok) {
-          console.warn("Failed to fetch YouTube metrics, submitting with basic info.", metricsData.error);
-          // Proceed with submission using basic info, or handle error more strictly
-        }
 
         const youtubeStats = {
-          likes: metricsData?.statistics?.likeCount,
-          comments: metricsData?.statistics?.commentCount,
+          likes: videoToSubmit?.statistics?.likeCount,
+          comments: videoToSubmit?.statistics?.commentCount,
           // Add any other YouTube specific stats you want in other_stats.youtube
         };
 
         submissionPayload = {
           ...submissionPayload,
           platform: 'youtube',
-          views: metricsData?.statistics?.viewCount || 0, // Ensure this is a number
+          views: videoToSubmit?.statistics?.viewCount || 0,
           content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
           video_id: videoToSubmit.id.videoId,
           video_title: videoToSubmit.snippet.title,
@@ -879,13 +888,13 @@ export default function SubmitContentPage({
                                   {video.statistics && (
                                     <div className="text-xs text-muted-foreground mt-1 space-x-2">
                                       {video.statistics.viewCount && (
-                                        <span>Views: {parseInt(video.statistics.viewCount).toLocaleString()}</span>
+                                        <span>Views: {video.statistics.viewCount.toLocaleString()}</span>
                                       )}
                                       {video.statistics.likeCount && (
-                                        <span>Likes: {parseInt(video.statistics.likeCount).toLocaleString()}</span>
+                                        <span>Likes: {video.statistics.likeCount.toLocaleString()}</span>
                                       )}
                                       {video.statistics.commentCount && (
-                                        <span>Comments: {parseInt(video.statistics.commentCount).toLocaleString()}</span>
+                                        <span>Comments: {video.statistics.commentCount.toLocaleString()}</span>
                                       )}
                                     </div>
                                   )}
@@ -951,13 +960,13 @@ export default function SubmitContentPage({
                               {videoPreview.statistics && (
                                 <div className="text-xs text-muted-foreground mt-1 space-x-2">
                                   {videoPreview.statistics.viewCount && (
-                                    <span>Views: {parseInt(videoPreview.statistics.viewCount).toLocaleString()}</span>
+                                    <span>Views: {videoPreview.statistics.viewCount.toLocaleString()}</span>
                                   )}
                                   {videoPreview.statistics.likeCount && (
-                                    <span>Likes: {parseInt(videoPreview.statistics.likeCount).toLocaleString()}</span>
+                                    <span>Likes: {videoPreview.statistics.likeCount.toLocaleString()}</span>
                                   )}
                                   {videoPreview.statistics.commentCount && (
-                                    <span>Comments: {parseInt(videoPreview.statistics.commentCount).toLocaleString()}</span>
+                                    <span>Comments: {videoPreview.statistics.commentCount.toLocaleString()}</span>
                                   )}
                                 </div>
                               )}
