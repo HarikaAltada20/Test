@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check } from "lucide-react"
+import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
@@ -17,6 +17,15 @@ import { formatCurrency } from "@/lib/currency-utils"
 import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
+import { useToast } from "@/hooks/use-toast"
+import dynamic from 'next/dynamic'
+
+// Dynamically import the Novel editor
+const NovelEditor = dynamic(
+    () => import('@/components/novel-editor'),
+    { ssr: false }
+)
+
 type PlanFeatures = {
     maxActiveContests: number;
     minContestBudget: number;
@@ -54,6 +63,8 @@ type ContestData = {
     platform?: string;
     thumbnail_url: string | null;
     brief: string | null;
+    brief_html?: string | null;
+    brief_json?: any | null;
     rules: { list: string[] } | null;
     start_date: string | null;
     end_date: string | null;
@@ -75,6 +86,7 @@ type ContestData = {
 export default function EditContestPage({ user, contestId }: { user: UserResponse["data"]["user"], contestId: string }) {
     const router = useRouter()
     const supabase = createClient()
+    const { toast } = useToast()
 
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
@@ -92,6 +104,8 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const [title, setTitle] = useState("")
     const [category, setCategory] = useState<string>("technology") // Or consider platform if that's more accurate
     const [brief, setBrief] = useState("")
+    const [briefHtml, setBriefHtml] = useState("")
+    const [briefJson, setBriefJson] = useState<any>(null)
     const [rules, setRules] = useState("")
     const [startDate, setStartDate] = useState<string>("")
     const [startTime, setStartTime] = useState<string>("")
@@ -102,6 +116,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const [thumbnail, setThumbnail] = useState<File | null>(null)
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const richTextEditorRef = useRef<any>(null)
 
     // Contest Type and Specific Details
     const [contestType, setContestType] = useState<"leaderboard" | "cpm" | null>(null);
@@ -279,7 +294,26 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                         setContest(data as ContestData);
                         setTitle(data.title || "");
                         setCategory(data.category || "technology"); // Or data.platform
-                        setBrief(data.brief || "");
+
+                        // Handle rich text content loading
+                        if (data.brief_html && data.brief_json) {
+                            // Use new rich text format
+                            setBrief(data.brief_html);
+                            setBriefHtml(data.brief_html);
+                            setBriefJson(data.brief_json);
+                            // Set content in editor if ref is available
+                            setTimeout(() => {
+                                if (richTextEditorRef.current) {
+                                    richTextEditorRef.current.setContent(data.brief_json);
+                                }
+                            }, 100);
+                        } else if (data.brief) {
+                            // Fallback to legacy plain text format
+                            setBrief(data.brief);
+                            setBriefHtml(data.brief);
+                            setBriefJson(null);
+                        }
+
                         setRules(data.rules?.list?.join("\n") || "");
 
                         if (data.start_date) {
@@ -414,19 +448,31 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
         submitTimeoutId = setTimeout(() => {
             if (isSubmitting) {
                 console.log("Edit submission taking longer than expected...");
-                setValidationError("Operation is taking longer than expected. Please wait...");
+                toast({
+                    title: "Processing...",
+                    description: "Operation is taking longer than expected. Please wait...",
+                    variant: "default",
+                });
             }
         }, 10000);
 
         if (!user) {
-            setError("You must be logged in to update a contest");
+            toast({
+                title: "Authentication Error",
+                description: "You must be logged in to update a contest",
+                variant: "destructive",
+            });
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
         }
 
         if (!contest) {
-            setError("Contest data not loaded. Cannot save changes.");
+            toast({
+                title: "Contest Error",
+                description: "Contest data not loaded. Cannot save changes.",
+                variant: "destructive",
+            });
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
@@ -438,6 +484,8 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             title,
             category,
             brief,
+            brief_html: briefHtml,
+            brief_json: briefJson,
             rules: { list: rules.split('\n').filter(rule => rule.trim() !== "") },
             inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
         };
@@ -449,55 +497,95 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 const now = new Date();
 
                 if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
-                    setValidationError("Invalid date or time format. Please check your entries.");
+                    toast({
+                        title: "Invalid Date Format",
+                        description: "Please check your date and time entries.",
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
                 // Allow editing start time for contests not yet started, but it must still be in the future from now
                 // And if contest.start_date exists, it means we are editing an existing draft, so only check if it has not started.
                 const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
                 if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
-                    setValidationError("Contest start time must be in the future.");
+                    toast({
+                        title: "Invalid Start Time",
+                        description: "Contest start time must be in the future.",
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
                 if (endDateTime <= startDateTime) {
-                    setValidationError("Contest end time must be after the start time.");
+                    toast({
+                        title: "Invalid End Time",
+                        description: "Contest end time must be after the start time.",
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
                 const durationMs = endDateTime.getTime() - startDateTime.getTime();
                 const oneDayMs = 24 * 60 * 60 * 1000;
                 if (durationMs < oneDayMs) {
-                    setValidationError("Contest duration must be at least 1 day.");
+                    toast({
+                        title: "Invalid Duration",
+                        description: "Contest duration must be at least 1 day.",
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
                 updatePayload.start_date = toUTCISOString(startDate, startTime);
                 updatePayload.end_date = toUTCISOString(endDate, endTime);
             } catch (error) {
                 console.error("Date validation error:", error);
-                setValidationError("There was an error with the date/time format. Please check your entries.");
+                toast({
+                    title: "Date Error",
+                    description: "There was an error with the date/time format. Please check your entries.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
         } else {
-            setValidationError("Contest start and end dates/times are required.");
+            toast({
+                title: "Missing Dates",
+                description: "Contest start and end dates/times are required.",
+                variant: "destructive",
+            });
             setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
         }
 
         if (contestType === 'leaderboard') {
             const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
             if (winnerCount > planFeatures.maxWinnersPerContest) {
-                setValidationError(`Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
+                toast({
+                    title: "Plan Limit Exceeded",
+                    description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             if (currentTotalPrizePool < planFeatures.minContestBudget) {
-                setValidationError(`Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`);
+                toast({
+                    title: "Prize Pool Too Low",
+                    description: `Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`,
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             for (let i = 0; i < winnerCount; i++) {
                 if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-                    setValidationError(`Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
+                    toast({
+                        title: "Prize Amount Too Low",
+                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`,
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
                 if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-                    setValidationError(`Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
+                    toast({
+                        title: "Prize Amount Too High",
+                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`,
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
             }
@@ -517,27 +605,51 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             const numMaxViews = maxViews !== "" && maxViews !== null ? parseInt(maxViews as string, 10) : null;
 
             if (isNaN(numCpmRate) || numCpmRate <= 0) {
-                setValidationError("CPM Rate is required and must be a positive number.");
+                toast({
+                    title: "Invalid CPM Rate",
+                    description: "CPM Rate is required and must be a positive number.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             if (isNaN(numTotalBudget) || numTotalBudget <= 0) {
-                setValidationError("Total Budget is required and must be a positive number.");
+                toast({
+                    title: "Invalid Budget",
+                    description: "Total Budget is required and must be a positive number.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             if (numMinViews !== null && (isNaN(numMinViews) || numMinViews < 0)) {
-                setValidationError("Minimum Views, if provided, must be a non-negative number.");
+                toast({
+                    title: "Invalid Minimum Views",
+                    description: "Minimum Views, if provided, must be a non-negative number.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             if (numMaxViews !== null && (isNaN(numMaxViews) || numMaxViews < 0)) {
-                setValidationError("Maximum Views, if provided, must be a non-negative number.");
+                toast({
+                    title: "Invalid Maximum Views",
+                    description: "Maximum Views, if provided, must be a non-negative number.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             if (numMinViews !== null && numMaxViews !== null && numMinViews > numMaxViews) {
-                setValidationError("Minimum Views cannot be greater than Maximum Views.");
+                toast({
+                    title: "Invalid View Range",
+                    description: "Minimum Views cannot be greater than Maximum Views.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             if (!termsConditions || termsConditions.trim() === "") {
-                setValidationError("Terms & Conditions are required for CPM contests.");
+                toast({
+                    title: "Missing Terms & Conditions",
+                    description: "Terms & Conditions are required for CPM contests.",
+                    variant: "destructive",
+                });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
             contestBasedDetails.cpm_contest = {
@@ -549,7 +661,11 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
             };
         } else {
-            setValidationError("Invalid contest type selected. Please refresh and try again.");
+            toast({
+                title: "Invalid Contest Type",
+                description: "Invalid contest type selected. Please refresh and try again.",
+                variant: "destructive",
+            });
             setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
         }
 
@@ -568,14 +684,23 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                         .from('contest-assets')
                         .upload(fileName, thumbnail);
                     if (uploadError) {
-                        throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
+                        toast({
+                            title: "Thumbnail Upload Failed",
+                            description: uploadError.message,
+                            variant: "destructive",
+                        });
+                        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                     }
                     const { data: publicUrlData } = supabase.storage
                         .from('contest-assets')
                         .getPublicUrl(fileName);
                     finalThumbnailUrl = publicUrlData.publicUrl;
                 } catch (error: any) {
-                    setError(`Thumbnail upload failed: ${error.message}`);
+                    toast({
+                        title: "Thumbnail Upload Failed",
+                        description: error.message,
+                        variant: "destructive",
+                    });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
             }
@@ -654,9 +779,20 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 throw updateError;
             }
 
+            // Show success toast
+            toast({
+                title: "Contest Updated",
+                description: "Your contest has been successfully updated.",
+                variant: "default",
+            });
+
             router.push(`/dashboard/contests/${contestId}`);
         } catch (err: any) {
-            setError(err.message || "Failed to update contest");
+            toast({
+                title: "Update Failed",
+                description: err.message || "Failed to update contest",
+                variant: "destructive",
+            });
         } finally {
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             setIsSubmitting(false);
@@ -891,17 +1027,25 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 <h1 className="text-2xl font-bold">Edit Contest</h1>
             </div>
 
-            {error && (
-                <Alert variant="destructive" className="mb-6">
-                    <AlertDescription>{error}</AlertDescription>
+            {/* Current Plan Information */}
+            <div className="mb-6">
+                <Alert className="border-blue-200 bg-blue-50 text-blue-900">
+                    <Crown className="h-4 w-4" />
+                    <AlertDescription className="flex items-center justify-between">
+                        <div>
+                            <span className="font-medium">Current Plan: </span>
+                            {dbSubscriptionPlans.find(p => p.id === userPlan)?.name || 'Free'}
+                            <span className="ml-4 text-sm text-blue-700">
+                                • Max Winners: {planFeatures.maxWinnersPerContest}
+                                • Min Prize Pool: {formatCurrency(planFeatures.minContestBudget)}
+                            </span>
+                        </div>
+                        <Link href="/pricing" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                            Upgrade Plan
+                        </Link>
+                    </AlertDescription>
                 </Alert>
-            )}
-
-            {validationError && (
-                <Alert variant="destructive" className="mb-6">
-                    <AlertDescription>{validationError}</AlertDescription>
-                </Alert>
-            )}
+            </div>
 
             <Card className="mx-auto max-w-4xl">
                 <CardHeader>
@@ -993,13 +1137,19 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                     <div className="space-y-2">
                         <Label htmlFor="brief">Brief</Label>
-                        <Textarea
-                            id="brief"
-                            value={brief}
-                            onChange={(e) => setBrief(e.target.value)}
-                            placeholder="Game Of Creators is the app that pays creators! We help creators connect with brands & get paid to create content!"
-                            rows={6}
-                        />
+                        <div className="bg-white rounded min-h-[300px]">
+                            <NovelEditor
+                                value={brief}
+                                placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
+                                height="250px"
+                                ref={richTextEditorRef}
+                                onChange={(html: string, json: any) => {
+                                    setBrief(html); // Keep for backward compatibility
+                                    setBriefHtml(html);
+                                    setBriefJson(json);
+                                }}
+                            />
+                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -1271,6 +1421,17 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                 </div>
                             </div>
 
+                            {/* Plan Requirements Info */}
+                            <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                                <Info className="h-4 w-4" />
+                                <AlertDescription>
+                                    <span className="font-medium">Plan Requirements: </span>
+                                    Minimum total prize pool: <strong>{formatCurrency(planFeatures.minContestBudget)}</strong>
+                                    • Maximum winners: <strong>{planFeatures.maxWinnersPerContest}</strong>
+                                    • Minimum per winner: <strong>{formatCurrency(MIN_PRIZE_PER_WINNER)}</strong>
+                                </AlertDescription>
+                            </Alert>
+
                             <div className="bg-gray-50 p-4 rounded-lg">
                                 <div className="flex items-center gap-4 mb-4">
                                     <Label className="w-48">Number of Winners <span className="text-xs text-gray-500">(Required)</span></Label>
@@ -1307,10 +1468,13 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                                     const position = newCount;
                                                     newAmounts.push(DEFAULT_PRIZE_ALLOCATIONS[position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS] || MIN_PRIZE_PER_WINNER);
                                                     setWinnerAmounts(newAmounts);
-                                                    setValidationError(null); // Clear potential previous errors
                                                 } else {
-                                                    // Optionally show a temporary message or rely on validationError state
-                                                    setValidationError(`Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`);
+                                                    // Show toast notification instead of setValidationError
+                                                    toast({
+                                                        title: "Plan Limit Reached",
+                                                        description: `Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
+                                                        variant: "destructive",
+                                                    });
                                                 }
                                             }}
                                             // Disable based on planFeatures limit
@@ -1320,7 +1484,6 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                         </Button>
                                     </div>
                                     <div className="text-sm text-gray-500">
-                                        {/* Display planFeatures limit */}
                                         <span>Max: {planFeatures.maxWinnersPerContest}</span>
                                     </div>
                                 </div>
@@ -1356,13 +1519,19 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                                     newAmounts[i] = value;
                                                     setWinnerAmounts(newAmounts);
 
-                                                    // Show validation messages after updating
+                                                    // Show toast validation messages instead of setValidationError
                                                     if (value < MIN_PRIZE_PER_WINNER) {
-                                                        setValidationError(`Prize amount cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`);
+                                                        toast({
+                                                            title: "Prize Amount Too Low",
+                                                            description: `Prize amount cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`,
+                                                            variant: "destructive",
+                                                        });
                                                     } else if (value > MAX_PRIZE_PER_WINNER) {
-                                                        setValidationError(`Prize amount cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`);
-                                                    } else {
-                                                        setValidationError(null);
+                                                        toast({
+                                                            title: "Prize Amount Too High",
+                                                            description: `Prize amount cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`,
+                                                            variant: "destructive",
+                                                        });
                                                     }
                                                 }
                                             }}
@@ -1376,11 +1545,12 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                     </div>
                                 ))}
                             </div>
-                            {/* Add validation message for minimum total prize pool */}
+                            {/* Enhanced validation message for minimum total prize pool */}
                             {totalPrizePool < planFeatures.minContestBudget && (
                                 <Alert variant="destructive" className="mt-4">
                                     <AlertDescription>
-                                        The minimum prize pool for your current plan is {formatCurrency(planFeatures.minContestBudget)}. Please increase prize amounts.
+                                        ⚠️ The minimum prize pool for your current plan is {formatCurrency(planFeatures.minContestBudget)}.
+                                        Current total: {formatCurrency(totalPrizePool)}. Please increase prize amounts.
                                     </AlertDescription>
                                 </Alert>
                             )}

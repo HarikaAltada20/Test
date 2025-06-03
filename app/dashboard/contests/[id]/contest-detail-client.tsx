@@ -17,6 +17,8 @@ interface Contest {
     status: "Draft" | "upcoming" | "active" | "ended" | "Unknown"; // Corrected
     thumbnail_url?: string | null;
     brief?: string | null;
+    brief_html?: string | null;
+    brief_json?: any | null;
     platform: string;
     start_date: string | null; // Pass as ISO string or Date object
     end_date: string | null;   // Pass as ISO string or Date object
@@ -120,9 +122,14 @@ export default function ContestDetailClient({
 
                                     <div>
                                         <h3 className="font-medium mb-2">Brief</h3>
-                                        <p className="text-muted-foreground">
-                                            {contest.brief || "No brief provided"}
-                                        </p>
+                                        {(contest.brief_html || contest.brief) ? (
+                                            <div
+                                                className="prose prose-sm max-w-none text-muted-foreground"
+                                                dangerouslySetInnerHTML={{ __html: contest.brief_html || contest.brief || '' }}
+                                            />
+                                        ) : (
+                                            <p className="text-muted-foreground">No brief provided</p>
+                                        )}
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

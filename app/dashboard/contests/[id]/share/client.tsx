@@ -30,6 +30,7 @@ type ContestData = {
   id: string;
   title: string;
   brief: string | null;
+  brief_html?: string | null;
   thumbnail_url: string | null;
   status: "Draft" | "upcoming" | "active" | "ended" | "Unknown";
 };
@@ -66,7 +67,7 @@ export default function ShareContestPage({
       try {
         const { data, error } = await supabase
           .from("contests_with_status")
-          .select("id, title, brief, thumbnail_url, status")
+          .select("id, title, brief, brief_html, thumbnail_url, status")
           .eq("id", contestId)
           .eq("advertiser_id", user.id)
           .single();
@@ -197,7 +198,14 @@ export default function ShareContestPage({
                 </div>
               )}
               <h2 className="text-xl font-bold mb-2">{contest.title}</h2>
-              <p className="text-gray-600 line-clamp-3">{contest.brief}</p>
+              {(contest.brief_html || contest.brief) ? (
+                <div
+                  className="prose prose-sm max-w-none text-gray-600 line-clamp-3"
+                  dangerouslySetInnerHTML={{ __html: contest.brief_html || contest.brief || '' }}
+                />
+              ) : (
+                <p className="text-gray-600 line-clamp-3">No brief provided</p>
+              )}
               <div className="mt-4">
                 <Badge
                   className={

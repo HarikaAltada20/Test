@@ -52,9 +52,9 @@ import { formatCurrency } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from 'next/dynamic';
 
-// Dynamically import the custom RichTextEditor
-const CustomRichTextEditor = dynamic(
-  () => import('@/components/rich-text-editor'), // Make sure this path is correct
+// Dynamically import the Novel editor
+const NovelEditor = dynamic(
+  () => import('@/components/novel-editor'),
   { ssr: false }
 );
 
@@ -108,7 +108,9 @@ export default function CreateContestPage({
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
-  const [showBriefPreview, setShowBriefPreview] = useState(false); // Add preview state
+  const [briefHtml, setBriefHtml] = useState("");
+  const [briefJson, setBriefJson] = useState<any>(null);
+  const [showBriefPreview, setShowBriefPreview] = useState(false); // Default to editor mode for better UX
   const [rules, setRules] = useState(`Content must be in English
 Content must be similar in style to the inspiration content from the brief
 If you have earnings on Game Of Creators, please show your total earnings as well
@@ -198,34 +200,48 @@ You must show the Game Of Creators App Store listing in your video`);
     console.log("isQuillEmpty(brief) result:", isQuillEmpty(brief));
   }, [brief]);
 
-  // Helper function to check if Quill editor content is effectively empty
+  // Helper function to check if rich text editor content is effectively empty
   const isQuillEmpty = (htmlString: string | null | undefined): boolean => {
     console.log("isQuillEmpty received:", htmlString);
     if (!htmlString) {
       console.log("isQuillEmpty: htmlString is null/undefined, returning true");
       return true;
     }
+
+    // Remove common empty patterns from Novel/TipTap editor
+    let cleanHtml = htmlString
+      .replace(/<p><\/p>/g, '') // Remove empty paragraphs
+      .replace(/<p>\s*<\/p>/g, '') // Remove paragraphs with only whitespace
+      .replace(/<br\s*\/?>/g, '') // Remove line breaks
+      .replace(/&nbsp;/g, '') // Remove non-breaking spaces
+      .trim();
+
     if (typeof document !== 'undefined') { // Ensure document is available (client-side)
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = htmlString;
+      tempDiv.innerHTML = cleanHtml;
       const textContent = tempDiv.textContent || tempDiv.innerText || "";
       const isEmpty = textContent.trim().length === 0;
       console.log("isQuillEmpty: textContent='", textContent, "', trim().length=", textContent.trim().length, ", returning", isEmpty);
       return isEmpty;
     }
-    console.log("isQuillEmpty: document not available, returning false (assumes content if htmlString exists)");
-    return false; // Fallback for non-browser environments, or if htmlString is present but can't be parsed.
+
+    // Fallback for server-side: check if cleaned HTML has meaningful content
+    const hasContent = cleanHtml.length > 0 && !cleanHtml.match(/^[\s\<\>\/]*$/);
+    console.log("isQuillEmpty: server-side check, hasContent=", hasContent);
+    return !hasContent;
   };
 
   // Function to capture content from rich text editor
   const captureBriefContent = () => {
     if (richTextEditorRef.current) {
       const content = richTextEditorRef.current.getContent();
-      console.log("Captured brief content:", content ? content.substring(0, 100) + "..." : content);
-      setBrief(content);
-      return content;
+      console.log("Captured brief content:", content ? content.html.substring(0, 100) + "..." : content);
+      setBrief(content.html);
+      setBriefHtml(content.html);
+      setBriefJson(content.json);
+      return content.html;
     }
-    return brief; // fallback to current state
+    return "";
   };
 
   // Function to preview the brief content
@@ -645,6 +661,8 @@ You must show the Game Of Creators App Store listing in your video`);
         category,
         platform: platform,
         brief,
+        brief_html: briefHtml,
+        brief_json: briefJson,
         rules: { list: rules.split("\n") },
         resources,
         inspiration_links: inspirationLinks,
@@ -861,7 +879,7 @@ You must show the Game Of Creators App Store listing in your video`);
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     setFormFeedback(null); // Clear previous global form feedback
     setFormFeedbackType(null);
 
@@ -879,10 +897,20 @@ You must show the Game Of Creators App Store listing in your video`);
       }
       setStep("brief");
     } else if (step === "brief") {
+      // Small delay to ensure state is updated from editor
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       // Capture content from rich text editor before validation
       const currentBrief = captureBriefContent();
 
-      if (isQuillEmpty(currentBrief)) {
+      // Also check the current brief state as a fallback
+      const briefToCheck = currentBrief || brief || briefHtml;
+
+      console.log("Brief validation - currentBrief:", currentBrief?.substring(0, 50));
+      console.log("Brief validation - brief state:", brief?.substring(0, 50));
+      console.log("Brief validation - briefHtml state:", briefHtml?.substring(0, 50));
+
+      if (isQuillEmpty(briefToCheck)) {
         setFormFeedback("Please enter a brief description for your contest"); // Footer feedback
         setFormFeedbackType("error");
         return;
@@ -1138,7 +1166,22 @@ You must show the Game Of Creators App Store listing in your video`);
     console.log("Loading draft data:", draft); // For debugging
 
     // Pre-fill form fields with draft data
-    if (draft.brief) setBrief(draft.brief);
+    if (draft.brief_html && draft.brief_json) {
+      // Use new rich text format
+      setBrief(draft.brief_html);
+      setBriefHtml(draft.brief_html);
+      setBriefJson(draft.brief_json);
+      // Set content in editor if ref is available
+      if (richTextEditorRef.current) {
+        richTextEditorRef.current.setContent(draft.brief_json);
+      }
+    } else if (draft.brief) {
+      // Fallback to legacy plain text format
+      setBrief(draft.brief);
+      setBriefHtml(draft.brief);
+      setBriefJson(null);
+    }
+
     if (draft.rules?.list) setRules(draft.rules.list.join("\n"));
 
     // Set resources if available
@@ -2271,13 +2314,10 @@ You must show the Game Of Creators App Store listing in your video`);
                   <div className="border rounded-lg p-4 min-h-[300px] bg-white">
                     <h4 className="text-sm font-medium mb-2 text-gray-600">Preview:</h4>
                     <div
-                      className="ql-editor"
+                      className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
                       style={{
                         padding: '12px 15px',
                         minHeight: '250px',
-                        border: 'none',
-                        fontSize: '14px',
-                        lineHeight: '1.42'
                       }}
                       dangerouslySetInnerHTML={{
                         __html: brief || '<p class="text-gray-400">No content yet. Click "Edit" to add content.</p>'
@@ -2286,11 +2326,18 @@ You must show the Game Of Creators App Store listing in your video`);
                   </div>
                 ) : (
                   <div className="bg-white rounded min-h-[300px]">
-                    <CustomRichTextEditor
+                    <NovelEditor
                       value={brief}
                       placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
                       height="250px"
                       ref={richTextEditorRef}
+                      onChange={(html: string, json: any) => {
+                        console.log("Novel editor onChange - html:", html?.substring(0, 50));
+                        console.log("Novel editor onChange - json:", json);
+                        setBrief(html); // Keep for backward compatibility
+                        setBriefHtml(html);
+                        setBriefJson(json);
+                      }}
                     />
                   </div>
                 )}
