@@ -4,9 +4,9 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, DollarSign, Trophy, Info, Share2, Users } from "lucide-react";
+import { Calendar, DollarSign, Trophy, Info, Share2, Users, Clock } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, formatLocalDateTime } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,7 +17,7 @@ type StatusFilterType = 'all' | 'live' | 'upcoming';
 type PlatformFilterType = 'all' | 'youtube' | 'instagram'; // Add more as needed
 type ContestTypeFilterType = 'all' | 'leaderboard' | 'cpm';
 type SortOptionType =
-  'created_at_desc' | 'created_at_asc' |
+  'start_date_desc' | 'start_date_asc' |
   'end_date_asc' | 'end_date_desc' |
   'value_desc' | 'value_asc' |
   'cpm_rate_desc' | 'cpm_rate_asc' |
@@ -37,7 +37,7 @@ export default function OpportunitiesPage({
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilterType>('all');
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>('all');
-  const [sortOption, setSortOption] = useState<SortOptionType>('created_at_desc');
+  const [sortOption, setSortOption] = useState<SortOptionType>('start_date_desc');
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
 
   useEffect(() => {
@@ -128,10 +128,14 @@ export default function OpportunitiesPage({
     // Sorting
     contestsToDisplay.sort((a, b) => {
       switch (sortOption) {
-        case 'created_at_desc':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        case 'created_at_asc':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'start_date_desc':
+          if (!a.start_date) return 1; // push contests without start_date to the bottom
+          if (!b.start_date) return -1;
+          return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+        case 'start_date_asc':
+          if (!a.start_date) return 1; // push contests without start_date to the bottom
+          if (!b.start_date) return -1;
+          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
         case 'end_date_asc':
           if (!a.end_date) return 1; // push contests without end_date to the bottom
           if (!b.end_date) return -1;
@@ -252,8 +256,8 @@ export default function OpportunitiesPage({
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="created_at_desc">Date Added: Newest First</SelectItem>
-            <SelectItem value="created_at_asc">Date Added: Oldest First</SelectItem>
+            <SelectItem value="start_date_asc">Start Date: Soonest First</SelectItem>
+            <SelectItem value="start_date_desc">Start Date: Furthest First</SelectItem>
             <SelectItem value="end_date_asc">End Date: Soonest First</SelectItem>
             <SelectItem value="end_date_desc">End Date: Furthest First</SelectItem>
             <SelectItem value="value_desc">Prize/Budget: High to Low</SelectItem>
@@ -314,14 +318,36 @@ export default function OpportunitiesPage({
               </CardHeader>
               <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
                 <div className="space-y-2 text-sm mb-3">
-                  {/* Platform, Ends, Type, then Budget/Prize, then CPM Rate */}
+                  {/* Platform, Starts, Ends, Type, then Budget/Prize, then CPM Rate */}
                   <div className="flex items-center text-slate-500 dark:text-slate-400">
                     <Share2 className="h-4 w-4 mr-2 flex-shrink-0" /> {/* Assuming Share2 is for Platform */}
                     <span>Platform: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
                   </div>
+
+                  {/* Start Date & Time */}
+                  <div className="flex items-center text-slate-500 dark:text-slate-400">
+                    <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>Starts: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.start_date ? formatLocalDateTime(contest.start_date, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    }) : "N/A"}</span></span>
+                  </div>
+
+                  {/* End Date & Time */}
                   <div className="flex items-center text-slate-500 dark:text-slate-400">
                     <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>Ends: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.end_date ? new Date(contest.end_date).toLocaleDateString() : "N/A"}</span></span>
+                    <span>Ends: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.end_date ? formatLocalDateTime(contest.end_date, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    }) : "N/A"}</span></span>
                   </div>
 
                   {/* Live Submission Count - NEW */}
