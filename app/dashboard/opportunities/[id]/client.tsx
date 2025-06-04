@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
 
+// --- START DUMMY DATA CONFIGURATION ---
+const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
+const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
+const MY_DUMMY_SUBMISSION_USER_ID = "user_dummy_me_special_id_123"; // A consistent ID for 'my' dummy submission
+// --- END DUMMY DATA CONFIGURATION ---
+
 // Define type for prize objects globally within the file
 type PrizeInfo = {
   position: number;
@@ -37,31 +43,70 @@ type PrizeInfo = {
 
 // LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
-  // Submission fields
   id: string;
   creator_id: string;
   video_title: string;
+  video_thumbnail_url: string | null;
   views: number;
   earnings: number;
   status: string;
   created_at: string;
   content_link: string;
-  // Added 'users' field containing data from the joined users table
-  users: {
-    id: string;
-    username: string;
-    profile_picture_url: string | null; // It can be null
-    full_name: string | null; // It can be null
-  } | null;
-  // Added creator_profile data
-  creator_profile: {
-    id: string;
-    youtube_account: {
-      channel_thumbnail?: string; // Added optional youtube thumbnail
-      // Add other fields from youtube_account if needed
-    } | null;
-    // Add other creator_profile fields if needed
-  } | null;
+  platform: string;
+  user_platform_username: string;
+  user_full_name: string;
+  creator_pfp_url: string | null;
+  user_platform_pfp_url: string | null;
+};
+
+// Store for generated dummy data to avoid re-computation if count doesn't change
+let generatedDummyDataCache: { entries: LeaderboardEntry[], myRank: number | null, count: number } | null = null;
+
+const generateAllDummyLeaderboardData = (count: number): { entries: LeaderboardEntry[], myRank: number | null } => {
+  if (generatedDummyDataCache && generatedDummyDataCache.count === count) {
+    return { entries: generatedDummyDataCache.entries, myRank: generatedDummyDataCache.myRank };
+  }
+
+  const entries: LeaderboardEntry[] = [];
+  const platforms = ["youtube", "instagram"];
+  let tempMyRank: number | null = null;
+
+  for (let i = 0; i < count; i++) {
+    const isMyEntry = (i === Math.floor(count / 4)); // Place 'my' entry deterministically
+    const creatorId = isMyEntry ? MY_DUMMY_SUBMISSION_USER_ID : `user_dummy_${i}`;
+    const username = isMyEntry ? "MyAwesomeSelf" : `Creator${i}`;
+    const views = Math.floor(Math.random() * 750000) + 500; // Random views, wider range
+
+    entries.push({
+      id: `submission_dummy_${i}_${Math.random().toString(36).substring(7)}`,
+      creator_id: creatorId,
+      video_title: `Epic Content Vol. ${i + 1} - ${username}`,
+      video_thumbnail_url: `https://picsum.photos/seed/${username}${i}/200/120`,
+      views: views,
+      earnings: Math.random() > 0.65 ? Math.floor(Math.random() * 150) + 10 : 0,
+      status: "approved",
+      created_at: new Date(Date.now() - Math.random() * 45 * 24 * 60 * 60 * 1000).toISOString(), // random date in last 45 days
+      content_link: "https://www.example.com/watch?v=dQw4w9WgXcQ", // A familiar link for all :)
+      platform: platforms[i % platforms.length],
+      user_platform_username: username,
+      user_full_name: `${isMyEntry ? 'The One And Only' : 'Talented'} ${username.replace(/\d+/g, '')}`,
+      creator_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}`,
+      user_platform_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}_platform`,
+    });
+  }
+
+  entries.sort((a, b) => {
+    if (b.views !== a.views) return b.views - a.views;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+
+  const myEntryIndex = entries.findIndex(e => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID);
+  if (myEntryIndex !== -1) {
+    tempMyRank = myEntryIndex + 1;
+  }
+
+  generatedDummyDataCache = { entries, myRank: tempMyRank, count };
+  return { entries, myRank: tempMyRank };
 };
 
 // Client component that receives contestId as a prop
@@ -84,13 +129,45 @@ export function ContestClientPage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [activeTab, setActiveTab] = useState("details"); // State for controlling active tab
 
-  // Function to fetch leaderboard data
-  const fetchLeaderboard = async () => {
+  // Pagination state for leaderboard
+  const [leaderboardCurrentPage, setLeaderboardCurrentPage] = useState(1);
+  const [leaderboardItemsPerPage, setLeaderboardItemsPerPage] = useState(25); // Or your preferred default
+  const [totalLeaderboardEntries, setTotalLeaderboardEntries] = useState(0);
+  const [totalLeaderboardPages, setTotalLeaderboardPages] = useState(0);
+
+  // State for logged-in user's submission and rank
+  const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<(LeaderboardEntry & { rank: number }) | null>(null);
+  const [loadingMySubmission, setLoadingMySubmission] = useState(false);
+
+  const fetchLeaderboard = async (pageToFetch: number = 1) => {
     if (!isMounted) return;
     setLoadingLeaderboard(true);
+
+    if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
+      const { entries: allEntries } = generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
+      const totalEntries = allEntries.length;
+      const totalPages = Math.ceil(totalEntries / leaderboardItemsPerPage);
+      const startIndex = (pageToFetch - 1) * leaderboardItemsPerPage;
+      const endIndex = startIndex + leaderboardItemsPerPage;
+      const paginatedEntries = allEntries.slice(startIndex, endIndex);
+
+      setTimeout(() => {
+        if (isMounted) {
+          setLeaderboard(paginatedEntries);
+          setLastUpdated(new Date().toISOString()); // Static for dummy
+          setLeaderboardCurrentPage(pageToFetch);
+          setTotalLeaderboardPages(totalPages);
+          setTotalLeaderboardEntries(totalEntries);
+          setLoadingLeaderboard(false);
+        }
+      }, 300); // Shorter delay for dummy data
+      return;
+    }
+
+    // Real API Call
     let leaderboardFetchError = null;
     try {
-      const response = await fetch(`/api/leaderboard/${contestId}`);
+      const response = await fetch(`/api/leaderboard/${contestId}?page=${pageToFetch}&limit=${leaderboardItemsPerPage}`);
       const data = await response.json();
       if (!response.ok) {
         leaderboardFetchError = data.error || "Failed to fetch leaderboard";
@@ -99,6 +176,9 @@ export function ContestClientPage({
       if (isMounted) {
         setLeaderboard(data.leaderboard || []);
         setLastUpdated(data.lastUpdated);
+        setLeaderboardCurrentPage(data.currentPage);
+        setTotalLeaderboardPages(data.totalPages);
+        setTotalLeaderboardEntries(data.totalEntries);
       }
     } catch (err: any) {
       console.error("Error fetching leaderboard:", err);
@@ -110,137 +190,130 @@ export function ContestClientPage({
 
   let isMounted = true; // Flag to track component mount status
 
+  const fetchMySubmissionData = async () => {
+    if (!isMounted) return;
+    // Removed user check for dummy data path, as 'my' entry is predefined
+    // contestId is also not strictly needed for dummy path if MY_DUMMY_SUBMISSION_USER_ID is unique enough
+
+    setLoadingMySubmission(true);
+
+    if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
+      const { entries: allEntries, myRank } = generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
+      const myEntryData = allEntries.find(e => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID);
+
+      setTimeout(() => {
+        if (isMounted) {
+          if (myEntryData && myRank !== null) {
+            setMyLeaderboardEntry({ ...myEntryData, rank: myRank });
+          } else {
+            setMyLeaderboardEntry(null);
+          }
+          setLoadingMySubmission(false);
+        }
+      }, 150); // Shorter delay
+      return;
+    }
+
+    // Real API Call
+    if (!user || !contestId) { // user and contestId ARE needed for real API call
+      if (isMounted) setLoadingMySubmission(false);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+      const data = await response.json();
+      if (!response.ok) {
+        console.warn('Failed to fetch user submission data:', data.error || "Unknown error");
+        if (isMounted) setMyLeaderboardEntry(null);
+        return;
+      }
+      if (isMounted) {
+        if (data.mySubmission && data.rank) {
+          setMyLeaderboardEntry({ ...data.mySubmission, rank: data.rank });
+        } else {
+          setMyLeaderboardEntry(null);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error fetching user's submission data:", err);
+      if (isMounted) setMyLeaderboardEntry(null);
+    } finally {
+      if (isMounted) setLoadingMySubmission(false);
+    }
+  };
+
   useEffect(() => {
     isMounted = true;
 
-    // Only run fetch logic if the user object is available
-    if (!user) {
-      // Keep showing the initial loading state
+    // If NOT using dummy data for leaderboard, and user is not available, show loading.
+    if (!USE_DUMMY_DATA_FOR_LEADERBOARD && !user) {
       setLoading(true);
       return;
     }
 
-    // User object exists, proceed to fetch data
     async function fetchData() {
       if (!isMounted) return;
-      setLoading(true);
+      setLoading(true); // Start with loading true for both paths initially
       setError(null);
 
+      // Fetch contest details - this is usually needed for prize info, title, etc.
+      // regardless of where leaderboard data comes from.
       try {
-        // Explicit check inside try block, though outer check should suffice
-        if (!user) {
-          throw new Error("User not available for fetching data.");
-        }
-
-        // Get user role from the database
-        const { data: userData } = await supabase
-          .from("users")
-          .select("user_type")
-          .eq("id", user.id)
-          .single(); // Can remove assertion now
-
-        if (userData?.user_type !== "creator") {
-          // Keep redirect for wrong user type
-          router.push("/dashboard");
-          return;
-        }
-
-        // Fetch contest details using maybeSingle()
         const { data: contestData, error: contestError } = await supabase
-          .from("contests_with_status") // Use the view
-          .select(
-            `
-                        *,
-                        advertiser_profiles ( company_name )
-                    `
-          )
+          .from("contests_with_status")
+          .select(`*, advertiser_profiles ( company_name )`)
           .eq("id", contestId)
-          .maybeSingle(); // Handles not found gracefully
+          .maybeSingle();
 
-        // Handle potential errors during fetch
-        if (contestError) {
-          console.error("Error fetching contest details:", contestError);
-          if (isMounted) {
-            setError(`Contest fetch error: ${contestError.message}`);
-            setLoading(false);
+        if (contestError) throw contestError;
+        if (!contestData) throw new Error("Contest not found.");
+
+        if (["draft", "incomplete"].includes(contestData.status) || contestData.is_draft) {
+          throw new Error("This contest is not available.");
+        }
+        if (isMounted) setContest(contestData);
+
+        // Fetch existing submission status for the current user (if logged in)
+        // This is separate from the main leaderboard logic.
+        if (user) {
+          const { data: submissionData, error: submissionError } = await supabase
+            .from("submissions")
+            .select("id, created_at")
+            .eq("contest_id", contestId)
+            .eq("creator_id", user.id)
+            .limit(1);
+
+          if (submissionError) console.error("Error checking existing submission:", submissionError);
+          else if (submissionData && submissionData.length > 0 && isMounted) {
+            setHasSubmitted(true);
+            setExistingSubmission(submissionData[0]);
           }
-          return; // Stop execution if there was a DB error
-        }
-
-        // Handle case where contest is not found (maybeSingle returns null data)
-        if (!contestData) {
-          if (isMounted) {
-            setError("Contest not found.");
-            setLoading(false);
-          }
-          return; // Stop execution if contest not found
-        }
-
-        // Check contest status
-        if (
-          ["draft", "incomplete"].includes(contestData.status) ||
-          contestData.is_draft
-        ) {
-          if (isMounted) {
-            setError("This contest is not available.");
-            setLoading(false);
-          }
-          return;
-        }
-
-        // Fetch existing submission (only if contest data is valid)
-        let submissionResult = null;
-        // Ensure user.id is accessed safely (already handled by initial !user check)
-        const { data: submissionData, error: submissionError } = await supabase
-          .from("submissions")
-          .select("id, created_at")
-          .eq("contest_id", contestId)
-          .eq("creator_id", user.id) // user is guaranteed non-null here
-          .limit(1);
-        submissionResult =
-          submissionData && submissionData.length > 0
-            ? submissionData[0]
-            : null;
-
-        if (submissionError) {
-          console.error("Error checking existing submission:", submissionError);
-          // Handle error appropriately, maybe show a toast
-        } else if (submissionResult) {
-          setHasSubmitted(true);
-          // Store the timestamp as well if needed, e.g., for display
-          // setSubmissionTime(submissionResult.created_at);
-        }
-
-        // Update state if component is still mounted
-        if (isMounted) {
-          setContest(contestData);
-          setExistingSubmission(submissionResult);
-          setLoading(false);
-          fetchLeaderboard(); // Fetch leaderboard after contest details are confirmed
         }
       } catch (err: any) {
-        console.error("Error fetching contest data:", err);
+        console.error("Error fetching initial page data:", err);
+        if (isMounted) setError(err.message || "Failed to load page data");
+      } finally {
+        // Call leaderboard fetches after initial contest/user data attempt
         if (isMounted) {
-          setError(
-            err.message || "An unexpected error occurred during contest fetch"
-          );
-          setLoading(false);
+          fetchLeaderboard(1);
+          fetchMySubmissionData(); // This will use dummy data if flag is true
+          setLoading(false); // Done with initial loading phase
         }
       }
     }
 
     fetchData();
 
-    // Set up auto-refresh for leaderboard every 5 minutes
+    // Auto-refresh for leaderboard (only if NOT using dummy data)
     const intervalId = setInterval(() => {
-      if (isMounted && lastUpdated && !loadingLeaderboard) {
+      if (isMounted && lastUpdated && !loadingLeaderboard && !USE_DUMMY_DATA_FOR_LEADERBOARD) {
         const lastUpdateTime = new Date(lastUpdated).getTime();
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
         if (lastUpdateTime < fiveMinutesAgo) {
-          fetchLeaderboard();
+          fetchLeaderboard(leaderboardCurrentPage);
         }
       }
-    }, 60 * 1000); // Check every minute if refresh is needed
+    }, 60 * 1000);
 
     // Check for URL hash to set active tab
     if (typeof window !== 'undefined') {
@@ -254,7 +327,8 @@ export function ContestClientPage({
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [contestId, user, router, supabase]);
+    // Added leaderboardItemsPerPage to dependencies as it affects dummy data pagination
+  }, [contestId, user, router, supabase, leaderboardItemsPerPage]);
 
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
@@ -740,148 +814,184 @@ export function ContestClientPage({
           </TabsContent>
 
           <TabsContent value="leaderboard">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="font-bold text-slate-900 dark:text-slate-100">Leaderboard</CardTitle>
-                <div className="text-right">
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Last updated: {formatTimeAgo(lastUpdated)}
-                  </p>
-                  {loadingLeaderboard && (
-                    <p className="text-xs text-blue-500 animate-pulse">
-                      Updating...
-                    </p>
+            {loadingLeaderboard ? (
+              <p className="text-center py-4">Loading leaderboard...</p>
+            ) : error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
+              <p className="text-center py-4">No submissions yet. Be the first!</p>
+            ) : (
+              <div className="space-y-3">
+                {/* Logged-in User's Rank Card */}
+                {loadingMySubmission && (
+                  <div className="text-center py-3">
+                    <p>Loading your rank...</p>
+                  </div>
+                )}
+                {myLeaderboardEntry && (
+                  <Card key={`my-rank-${myLeaderboardEntry.id}`} className="shadow-lg border-2 border-primary/50 bg-primary/5 dark:bg-primary/10 overflow-hidden mb-6">
+                    <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
+                      <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
+                        #{myLeaderboardEntry.rank}
+                      </div>
+                      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                        <AvatarImage
+                          src={myLeaderboardEntry.creator_pfp_url ?? myLeaderboardEntry.user_platform_pfp_url ?? undefined}
+                          alt={myLeaderboardEntry.user_platform_username}
+                        />
+                        <AvatarFallback className="bg-primary/20 text-primary">
+                          {myLeaderboardEntry.user_platform_username?.[0]?.toUpperCase() || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+
+                      <div className="flex-grow min-w-0">
+                        <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate" title={myLeaderboardEntry.user_platform_username}>
+                          {myLeaderboardEntry.user_platform_username} (You)
+                        </p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Submitted: {formatTimeAgo(myLeaderboardEntry.created_at)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                        <div className="flex items-center space-x-2">
+                          <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
+                            {myLeaderboardEntry.views.toLocaleString()} views
+                          </p>
+                          {myLeaderboardEntry.content_link && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground" asChild>
+                              <Link href={myLeaderboardEntry.content_link} target="_blank" rel="noopener noreferrer" title="View Your Content">
+                                <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                              </Link>
+                            </Button>
+                          )}
+                        </div>
+                        {(() => {
+                          let prizeDisplay = null;
+                          if (myLeaderboardEntry.earnings > 0) {
+                            prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(myLeaderboardEntry.earnings)}</span>;
+                          } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
+                            const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
+                              .find(p => p.position === myLeaderboardEntry.rank);
+                            if (prizeInfo) {
+                              const prizeText = contest.status === 'active' ? "Winning Zone" : "Prize";
+                              prizeDisplay = (
+                                <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                  {prizeText}: {formatMoney(prizeInfo.amount)}
+                                </span>
+                              );
+                            }
+                          }
+                          return prizeDisplay ? <div className="text-xs sm:text-sm">{prizeDisplay}</div> : null;
+                        })()}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Main Leaderboard List */}
+                <div className="text-sm text-muted-foreground text-right mb-2">
+                  Last updated: {lastUpdated ? formatTimeAgo(lastUpdated) : "Never"}
+                  {totalLeaderboardEntries > 0 && (
+                    <span className="ml-2">| Total Submissions: {totalLeaderboardEntries.toLocaleString()}</span>
                   )}
                 </div>
-              </CardHeader>
-              <CardContent>
-                {/* Handle overall fetch error affecting leaderboard */}
-                {error && !loadingLeaderboard && leaderboard.length === 0 && (
-                  <Alert variant="destructive" className="mb-4">
-                    <AlertDescription>
-                      Error loading leaderboard: {error}
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {
-                  loadingLeaderboard && leaderboard.length === 0 ? (
-                    <div className="text-center py-8 text-slate-600 dark:text-slate-400">
-                      Loading leaderboard...
-                    </div>
-                  ) : !error && leaderboard.length === 0 ? (
-                    <div className="text-center py-8 text-slate-600 dark:text-slate-400">
-                      No submissions yet. Be the first!
-                    </div>
-                  ) : leaderboard.length > 0 ? (
-                    <div className="space-y-3">
-                      {leaderboard.map((entry, index) => {
-                        const rank = index + 1;
-                        // Use contest.prizes for prize lookup
-                        let prizeInfo = null;
-                        if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
-                          prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[]).find(
-                            (p) => p.position === rank
-                          );
-                        }
-                        const prizeAmount = prizeInfo ? prizeInfo.amount : null;
-                        const userData = entry.users; // Use entry.users
-                        const creatorProfileData = entry.creator_profile;
-                        const videoUrl = entry.content_link || "#";
-                        const displayName =
-                          userData?.full_name ||
-                          userData?.username ||
-                          "Unknown Creator";
-                        // Prioritize profile_picture_url, then youtube thumbnail
-                        const profilePicUrl = userData?.profile_picture_url;
-                        const youtubeThumbnail =
-                          creatorProfileData?.youtube_account?.channel_thumbnail;
+                {leaderboard.map((entry, index) => {
+                  const rank = ((leaderboardCurrentPage - 1) * leaderboardItemsPerPage) + index + 1;
+                  let prizeDisplay = null;
 
-                        return (
-                          <div
-                            key={entry.id}
-                            className="flex items-center gap-3 p-3 border rounded-md bg-background hover:bg-muted/50 transition-colors"
-                          >
-                            {/* Rank */}
-                            <span
-                              className={`font-bold text-lg w-8 text-center flex-shrink-0 ${prizeAmount
-                                ? "text-primary"
-                                : "text-muted-foreground"
-                                }`}
-                            >
-                              {rank}
-                            </span>
+                  if (entry.earnings > 0) {
+                    prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(entry.earnings)}</span>;
+                  } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
+                    const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
+                      .find(p => p.position === rank);
+                    if (prizeInfo) {
+                      const prizeText = contest.status === 'active' ? "Winning Zone" : "Prize";
+                      prizeDisplay = (
+                        <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                          <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                          {prizeText}: {formatMoney(prizeInfo.amount)}
+                        </span>
+                      );
+                    }
+                  }
 
-                            {/* --- Use Avatar Component --- */}
-                            <Avatar className="h-10 w-10 rounded-full flex-shrink-0 border">
-                              <AvatarImage
-                                src={
-                                  profilePicUrl || youtubeThumbnail || undefined
-                                }
-                                alt={displayName}
-                              />
-                              <AvatarFallback>
-                                {displayName?.[0]?.toUpperCase() || "U"}
-                              </AvatarFallback>
-                            </Avatar>
-                            {/* --- End Avatar Component --- */}
+                  return (
+                    <Card key={entry.id} className="shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                      <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
+                        <div className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">{rank}</div>
+                        <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                          <AvatarImage
+                            src={entry.creator_pfp_url ?? entry.user_platform_pfp_url ?? undefined}
+                            alt={entry.user_platform_username}
+                          />
+                          <AvatarFallback>
+                            {entry.user_platform_username?.[0]?.toUpperCase() || "U"}
+                          </AvatarFallback>
+                        </Avatar>
 
-                            {/* Info using full_name / username */}
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className="font-semibold text-sm truncate"
-                                title={displayName}
-                              >
-                                {displayName}
-                              </p>
-                              {userData?.full_name &&
-                                userData?.username &&
-                                userData.full_name !== userData.username && (
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    @{userData.username}
-                                  </p>
-                                )}
-                            </div>
-                            {/* Right Aligned Section */}
-                            <div className="flex items-center gap-3 ml-auto pl-2 flex-shrink-0">
-                              {/* Play Button */}
-                              <Link
-                                href={videoUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Watch Video"
-                              >
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                >
-                                  <PlayCircle className="h-5 w-5" />
-                                </Button>
-                              </Link>
+                        <div className="flex-grow min-w-0">
+                          <p className="text-sm sm:text-base font-semibold truncate text-slate-800 dark:text-slate-100">
+                            {entry.user_platform_username}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Submitted: {formatTimeAgo(entry.created_at)}
+                          </p>
+                        </div>
 
-                              {/* Views & Prize */}
-                              <div className="text-right w-24 space-y-0.5">
-                                <p className="font-semibold text-sm truncate">
-                                  {entry.views?.toLocaleString() || 0} views
-                                </p>
-                                {prizeAmount && contest.contest_type === 'leaderboard' && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-xs font-medium bg-green-100 text-green-700 border-green-200 px-1.5 py-0.5 whitespace-nowrap"
-                                  >
-                                    Winning Zone: {formatMoney(prizeAmount)}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                        <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                          <div className="flex items-center space-x-2">
+                            <p className="text-base sm:text-lg font-bold text-slate-700 dark:text-slate-200">
+                              {entry.views.toLocaleString()} views
+                            </p>
+                            {entry.content_link && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-primary" asChild>
+                                <Link href={entry.content_link} target="_blank" rel="noopener noreferrer" title="View Content">
+                                  <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                </Link>
+                              </Button>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : null /* Should be covered by loading/error/empty states */
-                }
-              </CardContent>
-            </Card>
+                          {prizeDisplay && (
+                            <div className="text-xs sm:text-sm">
+                              {prizeDisplay}
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {/* Pagination Controls */}
+                {totalLeaderboardPages > 1 && (
+                  <div className="flex items-center justify-center space-x-4 py-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchLeaderboard(leaderboardCurrentPage - 1)}
+                      disabled={leaderboardCurrentPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Page {leaderboardCurrentPage} of {totalLeaderboardPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fetchLeaderboard(leaderboardCurrentPage + 1)}
+                      disabled={leaderboardCurrentPage >= totalLeaderboardPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>
