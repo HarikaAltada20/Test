@@ -20,6 +20,9 @@ import {
   Lightbulb,
   PlayCircle,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatMoney } from "@/lib/utils";
@@ -138,6 +141,7 @@ export function ContestClientPage({
   // State for logged-in user's submission and rank
   const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<(LeaderboardEntry & { rank: number }) | null>(null);
   const [loadingMySubmission, setLoadingMySubmission] = useState(false);
+  const [contestType, setContestType] = useState<string | null>(null); // Track contest type for verification badges
 
   const fetchLeaderboard = async (pageToFetch: number = 1) => {
     if (!isMounted) return;
@@ -154,13 +158,14 @@ export function ContestClientPage({
       setTimeout(() => {
         if (isMounted) {
           setLeaderboard(paginatedEntries);
-          setLastUpdated(new Date().toISOString()); // Static for dummy
+          setLastUpdated(new Date().toISOString());
           setLeaderboardCurrentPage(pageToFetch);
           setTotalLeaderboardPages(totalPages);
           setTotalLeaderboardEntries(totalEntries);
+          setContestType('leaderboard'); // Set dummy contest type
           setLoadingLeaderboard(false);
         }
-      }, 300); // Shorter delay for dummy data
+      }, 300);
       return;
     }
 
@@ -179,6 +184,7 @@ export function ContestClientPage({
         setLeaderboardCurrentPage(data.currentPage);
         setTotalLeaderboardPages(data.totalPages);
         setTotalLeaderboardEntries(data.totalEntries);
+        setContestType(data.contestType || null); // Set contest type from API
       }
     } catch (err: any) {
       console.error("Error fetching leaderboard:", err);
@@ -190,10 +196,48 @@ export function ContestClientPage({
 
   let isMounted = true; // Flag to track component mount status
 
+  // Helper function to render verification badge
+  const renderVerificationBadge = (status: string) => {
+    if (contestType !== 'cpm') return null; // Only show for CPM contests
+
+    switch (status) {
+      case 'verified':
+        return (
+          <Badge
+            variant="default"
+            className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs font-medium"
+          >
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Verified
+          </Badge>
+        );
+      case 'pending':
+        return (
+          <Badge
+            variant="secondary"
+            className="bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800 text-xs font-medium"
+          >
+            <Info className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      case 'rejected':
+        return (
+          <Badge
+            variant="destructive"
+            className="bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 text-xs font-medium"
+          >
+            <ExternalLink className="h-3 w-3 mr-1" />
+            Rejected
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
+
   const fetchMySubmissionData = async () => {
     if (!isMounted) return;
-    // Removed user check for dummy data path, as 'my' entry is predefined
-    // contestId is also not strictly needed for dummy path if MY_DUMMY_SUBMISSION_USER_ID is unique enough
 
     setLoadingMySubmission(true);
 
@@ -204,18 +248,19 @@ export function ContestClientPage({
       setTimeout(() => {
         if (isMounted) {
           if (myEntryData && myRank !== null) {
-            setMyLeaderboardEntry({ ...myEntryData, rank: myRank });
+            // Add dummy verified status for testing
+            setMyLeaderboardEntry({ ...myEntryData, rank: myRank, status: 'verified' });
           } else {
             setMyLeaderboardEntry(null);
           }
           setLoadingMySubmission(false);
         }
-      }, 150); // Shorter delay
+      }, 150);
       return;
     }
 
     // Real API Call
-    if (!user || !contestId) { // user and contestId ARE needed for real API call
+    if (!user || !contestId) {
       if (isMounted) setLoadingMySubmission(false);
       return;
     }
@@ -821,7 +866,9 @@ export function ContestClientPage({
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
-              <p className="text-center py-4">No submissions yet. Be the first!</p>
+              <div className="text-center py-8">
+                <p className="text-slate-600 dark:text-slate-400 mb-2">No submissions yet. Be the first!</p>
+              </div>
             ) : (
               <div className="space-y-3">
                 {/* Logged-in User's Rank Card */}
@@ -847,9 +894,12 @@ export function ContestClientPage({
                       </Avatar>
 
                       <div className="flex-grow min-w-0">
-                        <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate" title={myLeaderboardEntry.user_platform_username}>
-                          {myLeaderboardEntry.user_platform_username} (You)
-                        </p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate" title={myLeaderboardEntry.user_platform_username}>
+                            {myLeaderboardEntry.user_platform_username} (You)
+                          </p>
+                          {renderVerificationBadge(myLeaderboardEntry.status)}
+                        </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Submitted: {formatTimeAgo(myLeaderboardEntry.created_at)}
                         </p>
@@ -871,8 +921,10 @@ export function ContestClientPage({
                         {(() => {
                           let prizeDisplay = null;
                           if (myLeaderboardEntry.earnings > 0) {
-                            prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(myLeaderboardEntry.earnings)}</span>;
-                          } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
+                            // Show actual earnings for verified submissions, expected for pending
+                            const earningsLabel = myLeaderboardEntry.status === 'verified' ? 'Earned' : 'Expected';
+                            prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">{earningsLabel}: {formatMoney(myLeaderboardEntry.earnings)}</span>;
+                          } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && myLeaderboardEntry.rank) {
                             const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
                               .find(p => p.position === myLeaderboardEntry.rank);
                             if (prizeInfo) {
@@ -904,7 +956,13 @@ export function ContestClientPage({
                   let prizeDisplay = null;
 
                   if (entry.earnings > 0) {
-                    prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(entry.earnings)}</span>;
+                    // For CPM contests, show Expected vs Earned based on verification status
+                    if (contestType === 'cpm') {
+                      const earningsLabel = entry.status === 'verified' ? 'Earned' : 'Expected';
+                      prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">{earningsLabel}: {formatMoney(entry.earnings)}</span>;
+                    } else {
+                      prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(entry.earnings)}</span>;
+                    }
                   } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
                     const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
                       .find(p => p.position === rank);
@@ -934,9 +992,12 @@ export function ContestClientPage({
                         </Avatar>
 
                         <div className="flex-grow min-w-0">
-                          <p className="text-sm sm:text-base font-semibold truncate text-slate-800 dark:text-slate-100">
-                            {entry.user_platform_username}
-                          </p>
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm sm:text-base font-semibold truncate text-slate-800 dark:text-slate-100">
+                              {entry.user_platform_username}
+                            </p>
+                            {renderVerificationBadge(entry.status)}
+                          </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
                             Submitted: {formatTimeAgo(entry.created_at)}
                           </p>

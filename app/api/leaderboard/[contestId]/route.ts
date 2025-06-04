@@ -25,21 +25,45 @@ export async function GET(
   }
 
   try {
-    // 1. Fetch total count of submissions for the contest
-    const { count: totalEntries, error: countError } = await supabase
+    // 1. First fetch contest details to determine contest type and verification rules
+    const { data: contestData, error: contestError } = await supabase
+      .from('contests')
+      .select('id, contest_type, contest_based_details')
+      .eq('id', contestId)
+      .single();
+
+    if (contestError) {
+      console.error('Error fetching contest details:', contestError);
+      throw new Error(`Failed to fetch contest details: ${contestError.message}`);
+    }
+
+    if (!contestData) {
+      throw new Error('Contest not found');
+    }
+
+    // 2. Fetch total count of submissions for the contest
+    // For CPM contests, count verified and pending submissions (exclude rejected)
+    let countQuery = supabase
       .from('submissions')
       .select('id', { count: 'exact', head: true })
       .eq('contest_id', contestId);
 
+    // For CPM contests, exclude only rejected submissions (show verified + pending)
+    if (contestData.contest_type === 'cpm') {
+      countQuery = countQuery.neq('status', 'rejected');
+    }
+
+    const { count: totalEntries, error: countError } = await countQuery;
+
     if (countError) {
-      console.error('(Anon Client) Error fetching submission count:', countError);
+      console.error('Error fetching submission count:', countError);
       throw new Error(`Failed to fetch submission count: ${countError.message}`);
     }
     
     const totalPages = totalEntries ? Math.ceil(totalEntries / limit) : 0;
 
-    // 2. Fetch paginated submissions for the contest
-    const { data: submissions, error: submissionsError } = await supabase
+    // 3. Fetch paginated submissions for the contest
+    let submissionsQuery = supabase
       .from('submissions')
       .select(`
         id,
@@ -53,13 +77,21 @@ export async function GET(
         content_link,
         platform
       `)
-      .eq('contest_id', contestId)
+      .eq('contest_id', contestId);
+
+    // For CPM contests, show verified and pending submissions (exclude only rejected)
+    // For leaderboard contests, show all submissions regardless of status
+    if (contestData.contest_type === 'cpm') {
+      submissionsQuery = submissionsQuery.neq('status', 'rejected');
+    }
+
+    const { data: submissions, error: submissionsError } = await submissionsQuery
       .order('views', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: true })
-      .range(from, to); // Apply pagination
+      .range(from, to);
 
     if (submissionsError) {
-      console.error('(Anon Client) Error fetching submissions:', submissionsError);
+      console.error('Error fetching submissions:', submissionsError);
       throw new Error(`Failed to fetch submissions: ${submissionsError.message}`);
     }
 
@@ -69,38 +101,39 @@ export async function GET(
             lastUpdated: new Date().toISOString(),
             currentPage: page,
             totalPages: totalPages,
-            totalEntries: totalEntries || 0
+            totalEntries: totalEntries || 0,
+            contestType: contestData.contest_type // Include contest type for frontend
         });
     }
 
-    // 3. Extract unique creator IDs from the current page of submissions
+    // 4. Extract unique creator IDs from the current page of submissions
     const creatorIds = [...new Set(submissions.map(sub => sub.creator_id))];
 
-    // 4. Fetch corresponding user profiles from the 'users' table
+    // 5. Fetch corresponding user profiles from the 'users' table
     const { data: usersData, error: usersError } = await supabase
         .from('users')
         .select('id, username, profile_picture_url, full_name')
         .in('id', creatorIds);
 
      if (usersError) {
-        console.error('(Anon Client) Error fetching users data:', usersError);
+        console.error('Error fetching users data:', usersError);
      }
      
-    // 5. Fetch corresponding creator profiles from 'creator_profiles'
+    // 6. Fetch corresponding creator profiles from 'creator_profiles'
     const { data: creatorProfilesData, error: creatorProfilesError } = await supabase
         .from('creator_profiles')
         .select('id, youtube_account, instagram_account')
         .in('id', creatorIds);
 
     if (creatorProfilesError) {
-        console.error('(Anon Client) Error fetching creator profiles data:', creatorProfilesError);
+        console.error('Error fetching creator profiles data:', creatorProfilesError);
     }
 
-    // 6. Create lookup maps
+    // 7. Create lookup maps
     const usersMap = new Map(usersData?.map(user => [user.id, user]) || []);
     const creatorProfilesMap = new Map(creatorProfilesData?.map(profile => [profile.id, profile]) || []);
 
-    // 7. Combine submissions with user and creator profile data
+    // 8. Combine submissions with user and creator profile data
     const leaderboardData = submissions.map(submission => {
       const userProfile = usersMap.get(submission.creator_id) || null;
       const creatorProfile = creatorProfilesMap.get(submission.creator_id) || null;
@@ -123,17 +156,18 @@ export async function GET(
       };
     });
 
-    // 8. Return the combined data with pagination info
+    // 9. Return the combined data with pagination info
     return NextResponse.json({ 
       leaderboard: leaderboardData,
       lastUpdated: new Date().toISOString(),
       currentPage: page,
       totalPages: totalPages,
-      totalEntries: totalEntries || 0
+      totalEntries: totalEntries || 0,
+      contestType: contestData.contest_type // Include contest type for frontend
     });
 
   } catch (error: any) {
-    console.error('(Anon Client) Error in leaderboard endpoint:', error);
+    console.error('Error in leaderboard endpoint:', error);
     return NextResponse.json(
       { error: `Failed to fetch leaderboard: ${error.message || 'Unknown error'}` },
       { status: 500 }

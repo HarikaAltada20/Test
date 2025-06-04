@@ -134,6 +134,7 @@ export default function SubmitContentPage({
   const [isLoadingContest, setIsLoadingContest] = useState(true);
   const [instagramMediaPreview, setInstagramMediaPreview] = useState<InstagramReel | null>(null);
   const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] = useState(false);
+  const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
 
   // Derived state for paginated YouTube videos - Reinstated for client-side pagination
   const paginatedUserVideos = userVideos.slice(
@@ -416,7 +417,7 @@ export default function SubmitContentPage({
       // Get contest details
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
-        .select("platform") // Only select platform, or '*' if other contest details are needed here
+        .select("platform, contest_type") // Include contest_type for verification logic
         .eq("id", contestId)
         .single();
 
@@ -424,11 +425,15 @@ export default function SubmitContentPage({
         console.error("Error fetching contest:", contestError);
         setError("Failed to load contest details. The contest might not exist or an error occurred.");
         setContestPlatform(null);
+        setContest(null);
         setIsLoadingContest(false);
         // Optionally redirect, or let the UI handle the error state
         // redirect("/dashboard/opportunities"); 
         return;
       }
+
+      // Store full contest data
+      setContest(contestData);
 
       if (contestData.platform) {
         setContestPlatform(contestData.platform.toLowerCase());
@@ -630,10 +635,15 @@ export default function SubmitContentPage({
     }
 
     try {
+      // Determine initial status based on contest type
+      // For leaderboard contests: auto-verify since no verification is required during contest
+      // For CPM contests: start as pending and require manual verification
+      const initialStatus = contest?.contest_type === 'leaderboard' ? 'verified' : 'pending';
+
       let submissionPayload: any = {
         contest_id: contestId,
         creator_id: user.id,
-        status: "pending",
+        status: initialStatus,
       };
 
       if (contestPlatform === 'instagram' && selectedReel && instagramAccount?.access_token && currentInstagramBusinessAccountID) {
@@ -1045,30 +1055,13 @@ export default function SubmitContentPage({
                                     href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="font-medium text-sm hover:underline flex items-center"
-                                    title={video.snippet.title}
-                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-sm font-medium text-primary hover:underline truncate"
                                   >
                                     {video.snippet.title}
-                                    <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
                                   </a>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    Published: {dayjs(video.snippet.publishedAt).format("MMM D, YYYY h:mm A")}
+                                  <p className="text-sm text-muted-foreground">
+                                    {new Date(video.snippet.publishedAt).toLocaleDateString()}
                                   </p>
-                                  {/* Display additional video statistics */}
-                                  {video.statistics && (
-                                    <div className="text-xs text-muted-foreground mt-1 space-x-2">
-                                      {video.statistics.viewCount !== undefined && (
-                                        <span>Views: {Number(video.statistics.viewCount).toLocaleString()}</span>
-                                      )}
-                                      {video.statistics.likeCount !== undefined && (
-                                        <span>Likes: {Number(video.statistics.likeCount).toLocaleString()}</span>
-                                      )}
-                                      {video.statistics.commentCount !== undefined && (
-                                        <span>Comments: {Number(video.statistics.commentCount).toLocaleString()}</span>
-                                      )}
-                                    </div>
-                                  )}
                                 </div>
                               </CardContent>
                             </Card>
@@ -1078,69 +1071,57 @@ export default function SubmitContentPage({
                     )}
                   </TabsContent>
                   <TabsContent value="youtube-link" className="mt-4">
-                    <div className="space-y-3">
-                      <Label htmlFor="youtubeLink">YouTube Video URL</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="youtubeLink"
-                          value={contentLink}
-                          onChange={(e) => {
-                            setContentLink(e.target.value);
-                            setSelectedVideo(null); // Clear library selection
-                            setVideoPreview(null);  // Clear existing preview
-                            setSubmissionType(null);
-                          }}
-                          placeholder="https://www.youtube.com/watch?v=..."
-                          disabled={isFetchingVideo}
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={handleFetchVideo}
-                          disabled={isFetchingVideo || !contentLink}
-                        >
-                          {isFetchingVideo ? <RefreshCw className="animate-spin mr-1 h-4 w-4" /> : null}
-                          Fetch Video
-                        </Button>
-                      </div>
-                      {videoPreview && (
-                        <Card className="mt-3">
-                          <CardHeader><CardTitle className="text-base">Video Preview</CardTitle></CardHeader>
-                          <CardContent className="flex gap-3 items-start">
-                            <Image src={videoPreview.snippet.thumbnails.default.url} alt={videoPreview.snippet.title} width={120} height={68} className="rounded-sm object-cover aspect-video" />
-                            <div className="flex-1 min-w-0">
-                              <a
-                                href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-medium text-sm hover:underline flex items-center"
-                                title={videoPreview.snippet.title}
-                              >
-                                {videoPreview.snippet.title}
-                                <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
-                              </a>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Published: {dayjs(videoPreview.snippet.publishedAt).format("MMM D, YYYY h:mm A")}
-                              </p>
-                              {/* Display statistics for videoPreview */}
-                              {videoPreview.statistics && (
-                                <div className="text-xs text-muted-foreground mt-1 space-x-2">
-                                  {videoPreview.statistics.viewCount !== undefined && (
-                                    <span>Views: {Number(videoPreview.statistics.viewCount).toLocaleString()}</span>
-                                  )}
-                                  {videoPreview.statistics.likeCount !== undefined && (
-                                    <span>Likes: {Number(videoPreview.statistics.likeCount).toLocaleString()}</span>
-                                  )}
-                                  {videoPreview.statistics.commentCount !== undefined && (
-                                    <span>Comments: {Number(videoPreview.statistics.commentCount).toLocaleString()}</span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
+                    <div className="flex space-x-2">
+                      <Input
+                        type="text"
+                        placeholder="Enter YouTube video URL"
+                        value={contentLink}
+                        onChange={(e) => setContentLink(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleFetchVideo}
+                        disabled={isFetchingVideo || isLoadingVideos}
+                      >
+                        {isFetchingVideo ? <RefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
+                        Fetch Video
+                      </Button>
                     </div>
+                    {videoPreview && (
+                      <Card
+                        className={`mt-4 cursor-pointer ${selectedVideo?.id.videoId === videoPreview.id.videoId ? "border-primary ring-2 ring-primary" : ""}`}
+                        onClick={() => {
+                          setSelectedVideo(videoPreview);
+                          setSelectedReel(null); setInstagramMediaPreview(null); setInstagramLink("");
+                          setSubmissionType('youtube');
+                          setContentLink(`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`);
+                          setVideoPreview(null); // Clear manual link preview
+                        }}
+                      >
+                        <CardContent className="p-3 flex items-start space-x-3">
+                          <Image
+                            src={videoPreview.snippet.thumbnails.default.url}
+                            alt={videoPreview.snippet.title}
+                            width={120} // Adjusted for consistency
+                            height={68}  // Adjusted for consistency
+                            className="rounded-sm object-cover aspect-video"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <a
+                              href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-medium text-primary hover:underline truncate"
+                            >
+                              {videoPreview.snippet.title}
+                            </a>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(videoPreview.snippet.publishedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                   </TabsContent>
                 </Tabs>
               )}
@@ -1154,29 +1135,22 @@ export default function SubmitContentPage({
                 <Alert variant="destructive" className="mb-4 text-center">
                   <AlertDescription>Your Instagram connection has expired.</AlertDescription>
                   <Link href="/dashboard/settings">
-                    <Button variant="link" className="text-destructive dark:text-red-400 mt-1">Reconnect Instagram in Settings</Button>
+                    <Button variant="link" className="text-destructive dark:text-red-400 mt-1">
+                      Reconnect Instagram Account
+                    </Button>
                   </Link>
                 </Alert>
               )}
               {!instagramAccount && !isInstagramTokenExpired && (
                 <Alert variant="default" className="mb-4 text-center">
-                  <AlertDescription>Connect your Instagram Business/Creator account.</AlertDescription>
+                  <AlertDescription>Connect your Instagram account to submit content.</AlertDescription>
                   <Link href="/dashboard/settings">
                     <Button variant="link" className="mt-1">Connect Instagram in Settings</Button>
                   </Link>
                 </Alert>
               )}
-              {instagramAccount && (instagramAccount.account_type !== 'BUSINESS' && instagramAccount.account_type !== 'MEDIA_CREATOR') && !isInstagramTokenExpired && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>
-                    Your connected Instagram account is a '{instagramAccount.account_type || 'Personal'}' account.
-                    You need a Business or Creator account to submit Reels/Videos for contests.
-                    Please update your account type on Instagram or connect a different account in settings.
-                  </AlertDescription>
-                </Alert>
-              )}
 
-              {instagramAccount && (instagramAccount.account_type === 'BUSINESS' || instagramAccount.account_type === 'MEDIA_CREATOR') && !isInstagramTokenExpired && (
+              {instagramAccount && !isInstagramTokenExpired && (
                 <Tabs defaultValue="instagram-library" className="w-full">
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="instagram-library">Your Reels & Videos</TabsTrigger>
@@ -1184,7 +1158,7 @@ export default function SubmitContentPage({
                   </TabsList>
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (
-                      <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading Instagram content...</div>
+                      <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading Instagram Reels...</div>
                     ) : userReels.length === 0 ? (
                       libraryMessage ? (
                         <Alert variant="default" className="text-center">
@@ -1192,11 +1166,10 @@ export default function SubmitContentPage({
                         </Alert>
                       ) : (
                         <div className="text-center py-4">
-                          <p>No Reels or Videos found on your Instagram account. Or, try fetching again if you recently posted.</p>
-                          <Button variant="outline" onClick={() => fetchInstagramReels(instagramAccount.access_token, currentInstagramBusinessAccountID!)} className="mt-2" disabled={isLoadingReels || !currentInstagramBusinessAccountID}>
-                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingReels ? 'animate-spin' : ''}`} /> Reload Instagram Content
+                          <p>No Reels or Videos found on your Instagram account.</p>
+                          <Button variant="outline" onClick={() => fetchInstagramReels(instagramAccount.access_token, currentInstagramBusinessAccountID || "")} className="mt-2" disabled={isLoadingReels}>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingReels ? 'animate-spin' : ''}`} /> Reload Reels
                           </Button>
-                          <p className="text-xs text-muted-foreground mt-2">Alternatively, you can always use the "Instagram Link" tab to submit a specific post by its URL.</p>
                         </div>
                       )
                     ) : (
@@ -1208,18 +1181,18 @@ export default function SubmitContentPage({
                               variant="outline"
                               size="sm"
                               onClick={() => setInstagramCurrentPage(prev => Math.max(1, prev - 1))}
-                              disabled={instagramCurrentPage === 1}
+                              disabled={instagramCurrentPage === 1 || isLoadingReels}
                             >
                               Previous
                             </Button>
                             <span className="text-sm text-muted-foreground">
-                              Page {instagramCurrentPage} of {totalInstagramPages}
+                              Page {instagramCurrentPage} of {totalInstagramPages > 0 ? totalInstagramPages : 1}
                             </span>
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => setInstagramCurrentPage(prev => Math.min(totalInstagramPages, prev + 1))}
-                              disabled={instagramCurrentPage === totalInstagramPages}
+                              disabled={instagramCurrentPage === totalInstagramPages || totalInstagramPages === 0 || isLoadingReels}
                             >
                               Next
                             </Button>
@@ -1229,135 +1202,101 @@ export default function SubmitContentPage({
                           {paginatedUserReels.map((reel) => (
                             <Card
                               key={reel.id}
-                              className={`cursor-pointer ${selectedReel?.id === reel.id && !instagramMediaPreview ? "border-primary ring-2 ring-primary" : ""}`}
+                              className={`cursor-pointer ${selectedReel?.id === reel.id ? "border-primary ring-2 ring-primary" : ""}`}
                               onClick={() => {
                                 setSelectedReel(reel);
-                                setInstagramMediaPreview(null); // Clear link preview
-                                setInstagramLink("");      // Clear link input
-                                setSelectedVideo(null); setContentLink(""); setVideoPreview(null); // Clear YT
+                                setSelectedVideo(null); setVideoPreview(null); setContentLink("");
                                 setSubmissionType('instagram');
+                                setInstagramLink(reel.permalink);
+                                setInstagramMediaPreview(null); // Clear manual link preview
                               }}
                             >
                               <CardContent className="p-3 flex items-start space-x-3">
-                                {reel.thumbnail_url ? (
-                                  <Image
-                                    src={reel.thumbnail_url}
-                                    alt={reel.caption || "Instagram media"}
-                                    width={120}
-                                    height={120} // Reels are often more square/portrait in previews
-                                    className="rounded-sm object-cover aspect-square" // Changed aspect
-                                  />
-                                ) : (
-                                  <div className="w-[120px] h-[120px] bg-muted rounded-sm flex items-center justify-center text-xs text-muted-foreground">No thumbnail</div>
-                                )}
+                                <Image
+                                  src={reel.thumbnail_url || ""}
+                                  alt={reel.caption || "Instagram Reel"}
+                                  width={120} // Adjusted for consistency
+                                  height={68}  // Adjusted for consistency
+                                  className="rounded-sm object-cover aspect-video"
+                                />
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-sm" title={reel.caption || "Instagram media"}>
-                                    {reel.caption || "No caption"}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    Published: {dayjs(reel.timestamp).format("MMM D, YYYY h:mm A")}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    Type: {reel.media_type === 'REEL' ? 'Reel' : reel.media_type === 'VIDEO' ? 'Video Post' : reel.media_type || 'Unknown'}
-                                  </p>
-                                  <a href={reel.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1 flex items-center" onClick={(e) => e.stopPropagation()}>
-                                    View on Instagram
-                                    <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
+                                  <a
+                                    href={reel.permalink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm font-medium text-primary hover:underline truncate"
+                                  >
+                                    {reel.caption || "Instagram Reel"}
                                   </a>
+                                  <p className="text-sm text-muted-foreground">
+                                    {new Date(reel.timestamp).toLocaleDateString()}
+                                  </p>
                                 </div>
                               </CardContent>
                             </Card>
                           ))}
                         </div>
-                        {/* Instagram Pagination Controls (Bottom as well, optional) */}
-                        {totalInstagramPages > 1 && (
-                          <div className="flex justify-between items-center mt-3">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setInstagramCurrentPage(prev => Math.max(1, prev - 1))}
-                              disabled={instagramCurrentPage === 1}
-                            >
-                              Previous
-                            </Button>
-                            <span className="text-sm text-muted-foreground">
-                              Page {instagramCurrentPage} of {totalInstagramPages}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setInstagramCurrentPage(prev => Math.min(totalInstagramPages, prev + 1))}
-                              disabled={instagramCurrentPage === totalInstagramPages}
-                            >
-                              Next
-                            </Button>
-                          </div>
-                        )}
                       </>
                     )}
                   </TabsContent>
                   <TabsContent value="instagram-link" className="mt-4">
-                    <div className="space-y-3">
-                      <Label htmlFor="instagramLink">Instagram Media URL</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="instagramLink"
-                          value={instagramLink}
-                          onChange={(e) => {
-                            setInstagramLink(e.target.value);
-                            setSelectedReel(null); // Clear library selection
-                            setInstagramMediaPreview(null); // Clear existing preview
-                            setSubmissionType(null);
-                          }}
-                          placeholder="https://www.instagram.com/p/your_post_id/"
-                          disabled={isFetchingInstagramMedia}
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={handleFetchInstagramByLink}
-                          disabled={isFetchingInstagramMedia || !instagramLink}
-                        >
-                          {isFetchingInstagramMedia ? <RefreshCw className="animate-spin mr-1 h-4 w-4" /> : null}
-                          Fetch Media
-                        </Button>
-                      </div>
-                      {instagramMediaPreview && (
-                        <Card className="mt-3">
-                          <CardHeader><CardTitle className="text-base">Media Preview</CardTitle></CardHeader>
-                          <CardContent className="flex gap-3 items-start">
-                            {instagramMediaPreview.thumbnail_url ? (
-                              <Image src={instagramMediaPreview.thumbnail_url} alt={instagramMediaPreview.caption || "Instagram Media"} width={120} height={120} className="rounded-sm object-cover aspect-square" />
-                            ) : (
-                              <div className="w-[120px] h-[120px] bg-muted rounded-sm flex items-center justify-center text-xs text-muted-foreground">No thumbnail</div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-medium text-sm" title={instagramMediaPreview.caption || undefined}>{instagramMediaPreview.caption || "No Caption"}</h4>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Published: {dayjs(instagramMediaPreview.timestamp).format("MMM D, YYYY h:mm A")}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Type: {instagramMediaPreview.media_type === 'REEL' ? 'Reel' : instagramMediaPreview.media_type === 'VIDEO' ? 'Video Post' : instagramMediaPreview.media_type || 'Unknown'}
-                              </p>
-                              <a href={instagramMediaPreview.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1 flex items-center">
-                                View on Instagram
-                                <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
-                              </a>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
+                    <div className="flex space-x-2">
+                      <Input
+                        type="text"
+                        placeholder="Enter Instagram media URL"
+                        value={instagramLink}
+                        onChange={(e) => setInstagramLink(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={handleFetchInstagramByLink}
+                        disabled={isFetchingInstagramMedia || isLoadingReels}
+                      >
+                        {isFetchingInstagramMedia ? <RefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
+                        Fetch Media
+                      </Button>
                     </div>
+                    {instagramMediaPreview && (
+                      <Card
+                        className={`mt-4 cursor-pointer ${selectedReel?.id === instagramMediaPreview.id ? "border-primary ring-2 ring-primary" : ""}`}
+                        onClick={() => {
+                          setSelectedReel(instagramMediaPreview);
+                          setSelectedVideo(null); setVideoPreview(null); setContentLink("");
+                          setSubmissionType('instagram');
+                          setInstagramLink(instagramMediaPreview.permalink);
+                          setInstagramMediaPreview(null); // Clear manual link preview
+                        }}
+                      >
+                        <CardContent className="p-3 flex items-start space-x-3">
+                          <Image
+                            src={instagramMediaPreview.thumbnail_url || ""}
+                            alt={instagramMediaPreview.caption || "Instagram Reel"}
+                            width={120} // Adjusted for consistency
+                            height={68}  // Adjusted for consistency
+                            className="rounded-sm object-cover aspect-video"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <a
+                              href={instagramMediaPreview.permalink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm font-medium text-primary hover:underline truncate"
+                            >
+                              {instagramMediaPreview.caption || "Instagram Reel"}
+                            </a>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(instagramMediaPreview.timestamp).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
                   </TabsContent>
                 </Tabs>
               )}
             </>
           )}
-
         </CardContent>
-        <CardFooter className="flex justify-end space-x-2">
-          {/* Buttons moved to CardContent above the tabs */}
-        </CardFooter>
       </Card>
     </div>
   );

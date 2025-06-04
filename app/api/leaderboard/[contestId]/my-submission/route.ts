@@ -22,7 +22,23 @@ export async function GET(
   }
 
   try {
-    // 1. Fetch the user's submission for the contest
+    // 1. First fetch contest details to determine contest type
+    const { data: contestData, error: contestError } = await supabase
+      .from('contests')
+      .select('id, contest_type')
+      .eq('id', contestId)
+      .single();
+
+    if (contestError) {
+      console.error('Error fetching contest details:', contestError);
+      throw new Error(`Failed to fetch contest details: ${contestError.message}`);
+    }
+
+    if (!contestData) {
+      throw new Error('Contest not found');
+    }
+
+    // 2. Fetch the user's submission for the contest
     const { data: mySubmission, error: submissionError } = await supabase
       .from('submissions')
       .select(`
@@ -52,13 +68,20 @@ export async function GET(
       return NextResponse.json({ mySubmission: null, rank: null });
     }
 
-    // 2. Calculate the user's rank
-    // Rank is based on views (desc) then created_at (asc for tie-breaking)
-    // Count submissions with more views OR same views but earlier submission time
-    const { count: higherRankedCount, error: rankError } = await supabase
+    // 3. Calculate the user's rank based on contest type
+    // For CPM contests: Rank against verified and pending submissions (exclude rejected)
+    // For leaderboard contests: Rank against all submissions
+    let rankQuery = supabase
       .from('submissions')
       .select('id', { count: 'exact', head: true })
-      .eq('contest_id', contestId)
+      .eq('contest_id', contestId);
+
+    // For CPM contests, exclude only rejected submissions (include verified + pending)
+    if (contestData.contest_type === 'cpm') {
+      rankQuery = rankQuery.neq('status', 'rejected');
+    }
+
+    const { count: higherRankedCount, error: rankError } = await rankQuery
       .or(`views.gt.${mySubmission.views},and(views.eq.${mySubmission.views},created_at.lt.${mySubmission.created_at})`);
 
     if (rankError) {
@@ -66,9 +89,10 @@ export async function GET(
       throw new Error(`Failed to calculate rank: ${rankError.message}`);
     }
 
+    // Now both verified and pending submissions get ranks in CPM contests
     const rank = (higherRankedCount ?? 0) + 1;
 
-    // 3. Fetch user's general profile info from 'users' table
+    // 4. Fetch user's general profile info from 'users' table
     const { data: userProfile, error: userProfileError } = await supabase
       .from('users')
       .select('id, username, profile_picture_url, full_name')
@@ -79,7 +103,7 @@ export async function GET(
         console.warn(`Warning: Could not fetch user profile for ${user.id}: ${userProfileError.message}`);
     }
     
-    // 4. Fetch user's creator profile info for PFP
+    // 5. Fetch user's creator profile info for PFP
     const { data: creatorProfile, error: creatorProfileError } = await supabase
       .from('creator_profiles')
       .select('id, youtube_account, instagram_account')
