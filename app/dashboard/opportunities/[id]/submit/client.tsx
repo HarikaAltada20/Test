@@ -27,7 +27,7 @@ import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from 'dayjs';
 
 // --- Submission Window Constants ---
-const SUBMISSION_WINDOW_VALUE: number = 5;
+const SUBMISSION_WINDOW_VALUE: number = 3;
 const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = 'year';
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
 const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${IS_SUBMISSION_WINDOW_SINGULAR ? '' : 's'}`;
