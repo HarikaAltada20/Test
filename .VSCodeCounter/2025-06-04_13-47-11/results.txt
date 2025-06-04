@@ -1,0 +1,330 @@
+Date : 2025-06-04 13:47:11
+Directory : d:\Persist Ventures\GoViral
+Total : 208 files,  37040 codes, 1711 comments, 3522 blanks, all 42273 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| TypeScript JSX     |        131 |     21,848 |      1,156 |      2,112 |     25,116 |
+| JSON               |          4 |      8,103 |          0 |          2 |      8,105 |
+| TypeScript         |         29 |      3,064 |        318 |        510 |      3,892 |
+| MS SQL             |         23 |      1,802 |        196 |        480 |      2,478 |
+| XML                |          6 |      1,374 |          1 |        235 |      1,610 |
+| Markdown           |          5 |        416 |          0 |        130 |        546 |
+| JavaScript         |          5 |        197 |         36 |         37 |        270 |
+| CSS                |          2 |        180 |          0 |         10 |        190 |
+| JSON with Comments |          1 |         27 |          0 |          1 |         28 |
+| Shell Script       |          1 |         25 |          4 |          4 |         33 |
+| YAML               |          1 |          4 |          0 |          1 |          5 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                                                | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                                   |        208 |     37,040 |      1,711 |      3,522 |     42,273 |
+| . (Files)                                                                                                           |         13 |      8,636 |         25 |         50 |      8,711 |
+| app                                                                                                                 |         71 |     16,360 |        925 |      1,598 |     18,883 |
+| app (Files)                                                                                                         |          3 |        154 |          2 |         18 |        174 |
+| app\about                                                                                                           |          1 |         91 |          0 |          8 |         99 |
+| app\api                                                                                                             |         13 |      1,382 |        171 |        289 |      1,842 |
+| app\api\cron                                                                                                        |          3 |        539 |         81 |        100 |        720 |
+| app\api\cron (Files)                                                                                                |          1 |         82 |         20 |         19 |        121 |
+| app\api\cron\update-instagram-insights                                                                              |          1 |        274 |         31 |         52 |        357 |
+| app\api\cron\update-youtube-metrics                                                                                 |          1 |        183 |         30 |         29 |        242 |
+| app\api\instagram                                                                                                   |          3 |        290 |         37 |         70 |        397 |
+| app\api\instagram\callback                                                                                          |          1 |        111 |         11 |         30 |        152 |
+| app\api\instagram\refresh-token                                                                                     |          1 |         54 |          2 |         16 |         72 |
+| app\api\instagram\verify-media                                                                                      |          1 |        125 |         24 |         24 |        173 |
+| app\api\leaderboard                                                                                                 |          1 |         75 |         13 |         18 |        106 |
+| app\api\leaderboard\[contestId]                                                                                     |          1 |         75 |         13 |         18 |        106 |
+| app\api\youtube                                                                                                     |          6 |        478 |         40 |        101 |        619 |
+| app\api\youtube\auth                                                                                                |          1 |         35 |          9 |          8 |         52 |
+| app\api\youtube\callback                                                                                            |          1 |        109 |          2 |         25 |        136 |
+| app\api\youtube\metrics                                                                                             |          1 |        107 |         13 |         20 |        140 |
+| app\api\youtube\refresh                                                                                             |          1 |         61 |          5 |         14 |         80 |
+| app\api\youtube\verify                                                                                              |          1 |        107 |         11 |         22 |        140 |
+| app\api\youtube\videos                                                                                              |          1 |         59 |          0 |         12 |         71 |
+| app\auth                                                                                                            |          6 |        799 |         20 |         73 |        892 |
+| app\auth\forgot-password                                                                                            |          1 |        169 |          2 |         17 |        188 |
+| app\auth\reset-password                                                                                             |          1 |        239 |          5 |         15 |        259 |
+| app\auth\signin                                                                                                     |          1 |         14 |          0 |          4 |         18 |
+| app\auth\signup                                                                                                     |          1 |         13 |          0 |          3 |         16 |
+| app\auth\verify-otp                                                                                                 |          2 |        364 |         13 |         34 |        411 |
+| app\brands                                                                                                          |          1 |        163 |          7 |         10 |        180 |
+| app\choose-username                                                                                                 |          1 |        379 |         11 |         36 |        426 |
+| app\contact                                                                                                         |          1 |        144 |          8 |         19 |        171 |
+| app\creators                                                                                                        |          1 |        233 |          9 |         12 |        254 |
+| app\dashboard                                                                                                       |         36 |     12,297 |        666 |      1,070 |     14,033 |
+| app\dashboard (Files)                                                                                               |          3 |        424 |          1 |         37 |        462 |
+| app\dashboard\analytics                                                                                             |          1 |        150 |          6 |         21 |        177 |
+| app\dashboard\billing                                                                                               |          3 |      1,252 |         31 |         90 |      1,373 |
+| app\dashboard\coin-transactions                                                                                     |          1 |          0 |          0 |          1 |          1 |
+| app\dashboard\contests                                                                                              |         11 |      5,198 |        299 |        452 |      5,949 |
+| app\dashboard\contests (Files)                                                                                      |          3 |        259 |          3 |         19 |        281 |
+| app\dashboard\contests\[id]                                                                                         |          6 |      2,449 |         98 |        203 |      2,750 |
+| app\dashboard\contests\[id] (Files)                                                                                 |          2 |        657 |          9 |         46 |        712 |
+| app\dashboard\contests\[id]\edit                                                                                    |          2 |      1,465 |         80 |        128 |      1,673 |
+| app\dashboard\contests\[id]\share                                                                                   |          2 |        327 |          9 |         29 |        365 |
+| app\dashboard\contests\create                                                                                       |          2 |      2,490 |        198 |        230 |      2,918 |
+| app\dashboard\earnings                                                                                              |          3 |      1,008 |         47 |         89 |      1,144 |
+| app\dashboard\opportunities                                                                                         |          7 |      2,436 |        144 |        202 |      2,782 |
+| app\dashboard\opportunities (Files)                                                                                 |          3 |        431 |         24 |         42 |        497 |
+| app\dashboard\opportunities\[id]                                                                                    |          4 |      2,005 |        120 |        160 |      2,285 |
+| app\dashboard\opportunities\[id] (Files)                                                                            |          2 |        810 |         49 |         46 |        905 |
+| app\dashboard\opportunities\[id]\submit                                                                             |          2 |      1,195 |         71 |        114 |      1,380 |
+| app\dashboard\profile                                                                                               |          2 |        777 |         30 |         62 |        869 |
+| app\dashboard\settings                                                                                              |          2 |        577 |         95 |         69 |        741 |
+| app\dashboard\submissions                                                                                           |          3 |        475 |         13 |         47 |        535 |
+| app\forgot-password                                                                                                 |          1 |          4 |          0 |          1 |          5 |
+| app\instagram-connection-faq                                                                                        |          1 |        105 |          0 |          7 |        112 |
+| app\login                                                                                                           |          1 |          4 |          0 |          3 |          7 |
+| app\pricing                                                                                                         |          1 |        458 |         31 |         31 |        520 |
+| app\privacy-policy                                                                                                  |          1 |         64 |          0 |          7 |         71 |
+| app\reset-password                                                                                                  |          1 |          4 |          0 |          1 |          5 |
+| app\signup                                                                                                          |          1 |          4 |          0 |          3 |          7 |
+| app\terms-of-service                                                                                                |          1 |         75 |          0 |         10 |         85 |
+| components                                                                                                          |         73 |      7,036 |        404 |        821 |      8,261 |
+| components (Files)                                                                                                  |         17 |      1,466 |        354 |        136 |      1,956 |
+| components\auth                                                                                                     |          2 |        638 |         20 |         47 |        705 |
+| components\dashboard                                                                                                |          1 |        102 |          0 |         11 |        113 |
+| components\guards                                                                                                   |          1 |        161 |          4 |         26 |        191 |
+| components\loading                                                                                                  |          1 |         83 |          2 |          6 |         91 |
+| components\navigation                                                                                               |          1 |         78 |          6 |         12 |         96 |
+| components\ui                                                                                                       |         50 |      4,508 |         18 |        583 |      5,109 |
+| constants                                                                                                           |          1 |         78 |          0 |          5 |         83 |
+| db                                                                                                                  |          1 |          9 |          2 |          0 |         11 |
+| db\functions                                                                                                        |          1 |          9 |          2 |          0 |         11 |
+| docs                                                                                                                |          4 |        355 |          0 |        112 |        467 |
+| hooks                                                                                                               |          3 |        249 |          5 |         52 |        306 |
+| lib                                                                                                                 |          6 |        436 |         97 |         98 |        631 |
+| public                                                                                                              |          6 |      1,374 |          1 |        235 |      1,610 |
+| public (Files)                                                                                                      |          3 |         54 |          1 |          4 |         59 |
+| public\images                                                                                                       |          3 |      1,320 |          0 |        231 |      1,551 |
+| scripts                                                                                                             |          4 |        156 |         32 |         33 |        221 |
+| sql                                                                                                                 |          9 |        214 |         58 |         31 |        303 |
+| styles                                                                                                              |          1 |         90 |          0 |          5 |         95 |
+| supabase                                                                                                            |         11 |      1,357 |        127 |        444 |      1,928 |
+| supabase\migrations                                                                                                 |         10 |      1,357 |        127 |        443 |      1,927 |
+| supabase\supabase                                                                                                   |          1 |          0 |          0 |          1 |          1 |
+| supabase\supabase\migrations                                                                                        |          1 |          0 |          0 |          1 |          1 |
+| types                                                                                                               |          2 |        595 |         19 |         20 |        634 |
+| utils                                                                                                               |          3 |         95 |         16 |         18 |        129 |
+| utils\supabase                                                                                                      |          3 |         95 |         16 |         18 |        129 |
++---------------------------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                                            | language           | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| d:\Persist Ventures\GoViral\app\about\page.tsx                                                                      | TypeScript JSX     |         91 |          0 |          8 |         99 |
+| d:\Persist Ventures\GoViral\app\api\cron\update-contests.ts                                                         | TypeScript         |         82 |         20 |         19 |        121 |
+| d:\Persist Ventures\GoViral\app\api\cron\update-instagram-insights\route.ts                                         | TypeScript         |        274 |         31 |         52 |        357 |
+| d:\Persist Ventures\GoViral\app\api\cron\update-youtube-metrics\route.ts                                            | TypeScript         |        183 |         30 |         29 |        242 |
+| d:\Persist Ventures\GoViral\app\api\instagram\callback\route.ts                                                     | TypeScript         |        111 |         11 |         30 |        152 |
+| d:\Persist Ventures\GoViral\app\api\instagram\refresh-token\route.ts                                                | TypeScript         |         54 |          2 |         16 |         72 |
+| d:\Persist Ventures\GoViral\app\api\instagram\verify-media\route.ts                                                 | TypeScript         |        125 |         24 |         24 |        173 |
+| d:\Persist Ventures\GoViral\app\api\leaderboard\[contestId]\route.ts                                                | TypeScript         |         75 |         13 |         18 |        106 |
+| d:\Persist Ventures\GoViral\app\api\youtube\auth\route.ts                                                           | TypeScript         |         35 |          9 |          8 |         52 |
+| d:\Persist Ventures\GoViral\app\api\youtube\callback\route.ts                                                       | TypeScript         |        109 |          2 |         25 |        136 |
+| d:\Persist Ventures\GoViral\app\api\youtube\metrics\route.ts                                                        | TypeScript         |        107 |         13 |         20 |        140 |
+| d:\Persist Ventures\GoViral\app\api\youtube\refresh\route.ts                                                        | TypeScript         |         61 |          5 |         14 |         80 |
+| d:\Persist Ventures\GoViral\app\api\youtube\verify\route.ts                                                         | TypeScript         |        107 |         11 |         22 |        140 |
+| d:\Persist Ventures\GoViral\app\api\youtube\videos\route.ts                                                         | TypeScript         |         59 |          0 |         12 |         71 |
+| d:\Persist Ventures\GoViral\app\auth\forgot-password\page.tsx                                                       | TypeScript JSX     |        169 |          2 |         17 |        188 |
+| d:\Persist Ventures\GoViral\app\auth\reset-password\page.tsx                                                        | TypeScript JSX     |        239 |          5 |         15 |        259 |
+| d:\Persist Ventures\GoViral\app\auth\signin\page.tsx                                                                | TypeScript JSX     |         14 |          0 |          4 |         18 |
+| d:\Persist Ventures\GoViral\app\auth\signup\page.tsx                                                                | TypeScript JSX     |         13 |          0 |          3 |         16 |
+| d:\Persist Ventures\GoViral\app\auth\verify-otp\page.tsx                                                            | TypeScript JSX     |         39 |          5 |          2 |         46 |
+| d:\Persist Ventures\GoViral\app\auth\verify-otp\verify-otp-form.tsx                                                 | TypeScript JSX     |        325 |          8 |         32 |        365 |
+| d:\Persist Ventures\GoViral\app\brands\page.tsx                                                                     | TypeScript JSX     |        163 |          7 |         10 |        180 |
+| d:\Persist Ventures\GoViral\app\choose-username\page.tsx                                                            | TypeScript JSX     |        379 |         11 |         36 |        426 |
+| d:\Persist Ventures\GoViral\app\contact\page.tsx                                                                    | TypeScript JSX     |        144 |          8 |         19 |        171 |
+| d:\Persist Ventures\GoViral\app\creators\page.tsx                                                                   | TypeScript JSX     |        233 |          9 |         12 |        254 |
+| d:\Persist Ventures\GoViral\app\dashboard\ClientLayout.tsx                                                          | TypeScript JSX     |         73 |          1 |          7 |         81 |
+| d:\Persist Ventures\GoViral\app\dashboard\analytics\page.tsx                                                        | TypeScript JSX     |        150 |          6 |         21 |        177 |
+| d:\Persist Ventures\GoViral\app\dashboard\billing\BillingClientPage.tsx                                             | TypeScript JSX     |      1,093 |         20 |         64 |      1,177 |
+| d:\Persist Ventures\GoViral\app\dashboard\billing\loading.tsx                                                       | TypeScript JSX     |         49 |          4 |          6 |         59 |
+| d:\Persist Ventures\GoViral\app\dashboard\billing\page.tsx                                                          | TypeScript JSX     |        110 |          7 |         20 |        137 |
+| d:\Persist Ventures\GoViral\app\dashboard\coin-transactions\page.tsx                                                | TypeScript JSX     |          0 |          0 |          1 |          1 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\ContestListClient.tsx                                            | TypeScript JSX     |        175 |          3 |          6 |        184 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\[id]\contest-detail-client.tsx                                   | TypeScript JSX     |        540 |          6 |         28 |        574 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\[id]\edit\client.tsx                                             | TypeScript JSX     |      1,456 |         80 |        126 |      1,662 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\[id]\edit\page.tsx                                               | TypeScript JSX     |          9 |          0 |          2 |         11 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\[id]\page.tsx                                                    | TypeScript JSX     |        117 |          3 |         18 |        138 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\[id]\share\client.tsx                                            | TypeScript JSX     |        318 |          9 |         26 |        353 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\[id]\share\page.tsx                                              | TypeScript JSX     |          9 |          0 |          3 |         12 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\create\client.tsx                                                | TypeScript JSX     |      2,477 |        198 |        227 |      2,902 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\create\page.tsx                                                  | TypeScript JSX     |         13 |          0 |          3 |         16 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\loading.tsx                                                      | TypeScript JSX     |         28 |          0 |          3 |         31 |
+| d:\Persist Ventures\GoViral\app\dashboard\contests\page.tsx                                                         | TypeScript JSX     |         56 |          0 |         10 |         66 |
+| d:\Persist Ventures\GoViral\app\dashboard\earnings\EarningsClientPage.tsx                                           | TypeScript JSX     |        855 |         26 |         62 |        943 |
+| d:\Persist Ventures\GoViral\app\dashboard\earnings\loading.tsx                                                      | TypeScript JSX     |         45 |          3 |          5 |         53 |
+| d:\Persist Ventures\GoViral\app\dashboard\earnings\page.tsx                                                         | TypeScript JSX     |        108 |         18 |         22 |        148 |
+| d:\Persist Ventures\GoViral\app\dashboard\layout.tsx                                                                | TypeScript JSX     |         11 |          0 |          2 |         13 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\[id]\client.tsx                                             | TypeScript JSX     |        798 |         49 |         44 |        891 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\[id]\page.tsx                                               | TypeScript JSX     |         12 |          0 |          2 |         14 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\[id]\submit\client.tsx                                      | TypeScript JSX     |      1,182 |         71 |        112 |      1,365 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\[id]\submit\page.tsx                                        | TypeScript JSX     |         13 |          0 |          2 |         15 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\client.tsx                                                  | TypeScript JSX     |        375 |         22 |         31 |        428 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\loading.tsx                                                 | TypeScript JSX     |         43 |          2 |          8 |         53 |
+| d:\Persist Ventures\GoViral\app\dashboard\opportunities\page.tsx                                                    | TypeScript JSX     |         13 |          0 |          3 |         16 |
+| d:\Persist Ventures\GoViral\app\dashboard\page.tsx                                                                  | TypeScript JSX     |        340 |          0 |         28 |        368 |
+| d:\Persist Ventures\GoViral\app\dashboard\profile\client.tsx                                                        | TypeScript JSX     |        769 |         30 |         60 |        859 |
+| d:\Persist Ventures\GoViral\app\dashboard\profile\page.tsx                                                          | TypeScript JSX     |          8 |          0 |          2 |         10 |
+| d:\Persist Ventures\GoViral\app\dashboard\settings\client.tsx                                                       | TypeScript JSX     |        569 |         95 |         67 |        731 |
+| d:\Persist Ventures\GoViral\app\dashboard\settings\page.tsx                                                         | TypeScript JSX     |          8 |          0 |          2 |         10 |
+| d:\Persist Ventures\GoViral\app\dashboard\submissions\SubmissionsClient.tsx                                         | TypeScript JSX     |        336 |          9 |         30 |        375 |
+| d:\Persist Ventures\GoViral\app\dashboard\submissions\loading.tsx                                                   | TypeScript JSX     |         53 |          2 |          6 |         61 |
+| d:\Persist Ventures\GoViral\app\dashboard\submissions\page.tsx                                                      | TypeScript JSX     |         86 |          2 |         11 |         99 |
+| d:\Persist Ventures\GoViral\app\forgot-password\page.tsx                                                            | TypeScript JSX     |          4 |          0 |          1 |          5 |
+| d:\Persist Ventures\GoViral\app\globals.css                                                                         | CSS                |         90 |          0 |          5 |         95 |
+| d:\Persist Ventures\GoViral\app\instagram-connection-faq\page.tsx                                                   | TypeScript JSX     |        105 |          0 |          7 |        112 |
+| d:\Persist Ventures\GoViral\app\layout.tsx                                                                          | TypeScript JSX     |         55 |          1 |          9 |         65 |
+| d:\Persist Ventures\GoViral\app\login\page.tsx                                                                      | TypeScript JSX     |          4 |          0 |          3 |          7 |
+| d:\Persist Ventures\GoViral\app\page.tsx                                                                            | TypeScript JSX     |          9 |          1 |          4 |         14 |
+| d:\Persist Ventures\GoViral\app\pricing\page.tsx                                                                    | TypeScript JSX     |        458 |         31 |         31 |        520 |
+| d:\Persist Ventures\GoViral\app\privacy-policy\page.tsx                                                             | TypeScript JSX     |         64 |          0 |          7 |         71 |
+| d:\Persist Ventures\GoViral\app\reset-password\page.tsx                                                             | TypeScript JSX     |          4 |          0 |          1 |          5 |
+| d:\Persist Ventures\GoViral\app\signup\page.tsx                                                                     | TypeScript JSX     |          4 |          0 |          3 |          7 |
+| d:\Persist Ventures\GoViral\app\terms-of-service\page.tsx                                                           | TypeScript JSX     |         75 |          0 |         10 |         85 |
+| d:\Persist Ventures\GoViral\auth-architecture.md                                                                    | Markdown           |         61 |          0 |         18 |         79 |
+| d:\Persist Ventures\GoViral\components.json                                                                         | JSON               |         21 |          0 |          0 |         21 |
+| d:\Persist Ventures\GoViral\components\auth-nav.tsx                                                                 | TypeScript JSX     |          0 |         33 |          5 |         38 |
+| d:\Persist Ventures\GoViral\components\auth\SignInPage.tsx                                                          | TypeScript JSX     |        245 |         20 |         22 |        287 |
+| d:\Persist Ventures\GoViral\components\auth\SignUpPage.tsx                                                          | TypeScript JSX     |        393 |          0 |         25 |        418 |
+| d:\Persist Ventures\GoViral\components\brand-logo.tsx                                                               | TypeScript JSX     |          0 |         75 |          6 |         81 |
+| d:\Persist Ventures\GoViral\components\dashboard-nav.tsx                                                            | TypeScript JSX     |          0 |         80 |          5 |         85 |
+| d:\Persist Ventures\GoViral\components\dashboard-sidebar.tsx                                                        | TypeScript JSX     |        121 |          0 |          9 |        130 |
+| d:\Persist Ventures\GoViral\components\dashboard\wallet-summary.tsx                                                 | TypeScript JSX     |        102 |          0 |         11 |        113 |
+| d:\Persist Ventures\GoViral\components\delete-contest-button.tsx                                                    | TypeScript JSX     |        211 |         20 |         24 |        255 |
+| d:\Persist Ventures\GoViral\components\footer.tsx                                                                   | TypeScript JSX     |         90 |          0 |          2 |         92 |
+| d:\Persist Ventures\GoViral\components\guards\RouteGuard.tsx                                                        | TypeScript JSX     |        161 |          4 |         26 |        191 |
+| d:\Persist Ventures\GoViral\components\hero-section.tsx                                                             | TypeScript JSX     |        232 |         18 |         13 |        263 |
+| d:\Persist Ventures\GoViral\components\loading-placeholder.tsx                                                      | TypeScript JSX     |         20 |          0 |          1 |         21 |
+| d:\Persist Ventures\GoViral\components\loading\LoadingSpinner.tsx                                                   | TypeScript JSX     |         83 |          2 |          6 |         91 |
+| d:\Persist Ventures\GoViral\components\main-nav.tsx                                                                 | TypeScript JSX     |         29 |          9 |          5 |         43 |
+| d:\Persist Ventures\GoViral\components\mobile-nav.tsx                                                               | TypeScript JSX     |          0 |         83 |          8 |         91 |
+| d:\Persist Ventures\GoViral\components\mode-toggle.tsx                                                              | TypeScript JSX     |         36 |          0 |          4 |         40 |
+| d:\Persist Ventures\GoViral\components\nav.tsx                                                                      | TypeScript JSX     |        218 |         12 |         17 |        247 |
+| d:\Persist Ventures\GoViral\components\navigation\NavigationLink.tsx                                                | TypeScript JSX     |         78 |          6 |         12 |         96 |
+| d:\Persist Ventures\GoViral\components\novel-editor.tsx                                                             | TypeScript JSX     |        235 |         11 |         12 |        258 |
+| d:\Persist Ventures\GoViral\components\rich-text-editor.tsx                                                         | TypeScript JSX     |        174 |          5 |         11 |        190 |
+| d:\Persist Ventures\GoViral\components\site-header.tsx                                                              | TypeScript JSX     |         20 |          8 |          6 |         34 |
+| d:\Persist Ventures\GoViral\components\theme-toggle.tsx                                                             | TypeScript JSX     |         24 |          0 |          5 |         29 |
+| d:\Persist Ventures\GoViral\components\ui\accordion.tsx                                                             | TypeScript JSX     |         50 |          0 |          9 |         59 |
+| d:\Persist Ventures\GoViral\components\ui\alert-dialog.tsx                                                          | TypeScript JSX     |        127 |          0 |         15 |        142 |
+| d:\Persist Ventures\GoViral\components\ui\alert.tsx                                                                 | TypeScript JSX     |         53 |          0 |          7 |         60 |
+| d:\Persist Ventures\GoViral\components\ui\aspect-ratio.tsx                                                          | TypeScript JSX     |          4 |          0 |          4 |          8 |
+| d:\Persist Ventures\GoViral\components\ui\avatar.tsx                                                                | TypeScript JSX     |         44 |          0 |          7 |         51 |
+| d:\Persist Ventures\GoViral\components\ui\badge.tsx                                                                 | TypeScript JSX     |         31 |          0 |          6 |         37 |
+| d:\Persist Ventures\GoViral\components\ui\breadcrumb.tsx                                                            | TypeScript JSX     |        105 |          0 |         11 |        116 |
+| d:\Persist Ventures\GoViral\components\ui\button.tsx                                                                | TypeScript JSX     |         51 |          0 |          6 |         57 |
+| d:\Persist Ventures\GoViral\components\ui\calendar.tsx                                                              | TypeScript JSX     |         61 |          0 |          6 |         67 |
+| d:\Persist Ventures\GoViral\components\ui\card.tsx                                                                  | TypeScript JSX     |         71 |          0 |          9 |         80 |
+| d:\Persist Ventures\GoViral\components\ui\carousel.tsx                                                              | TypeScript JSX     |        232 |          0 |         31 |        263 |
+| d:\Persist Ventures\GoViral\components\ui\chart.tsx                                                                 | TypeScript JSX     |        327 |          2 |         37 |        366 |
+| d:\Persist Ventures\GoViral\components\ui\checkbox.tsx                                                              | TypeScript JSX     |         26 |          0 |          5 |         31 |
+| d:\Persist Ventures\GoViral\components\ui\collapsible.tsx                                                           | TypeScript JSX     |          6 |          0 |          6 |         12 |
+| d:\Persist Ventures\GoViral\components\ui\command.tsx                                                               | TypeScript JSX     |        136 |          0 |         18 |        154 |
+| d:\Persist Ventures\GoViral\components\ui\context-menu.tsx                                                          | TypeScript JSX     |        182 |          0 |         19 |        201 |
+| d:\Persist Ventures\GoViral\components\ui\dialog.tsx                                                                | TypeScript JSX     |        109 |          0 |         14 |        123 |
+| d:\Persist Ventures\GoViral\components\ui\drawer.tsx                                                                | TypeScript JSX     |        105 |          0 |         14 |        119 |
+| d:\Persist Ventures\GoViral\components\ui\dropdown-menu.tsx                                                         | TypeScript JSX     |        182 |          0 |         19 |        201 |
+| d:\Persist Ventures\GoViral\components\ui\form.tsx                                                                  | TypeScript JSX     |        153 |          0 |         26 |        179 |
+| d:\Persist Ventures\GoViral\components\ui\hover-card.tsx                                                            | TypeScript JSX     |         23 |          0 |          7 |         30 |
+| d:\Persist Ventures\GoViral\components\ui\input-otp.tsx                                                             | TypeScript JSX     |         63 |          0 |          9 |         72 |
+| d:\Persist Ventures\GoViral\components\ui\input.tsx                                                                 | TypeScript JSX     |         19 |          0 |          4 |         23 |
+| d:\Persist Ventures\GoViral\components\ui\label.tsx                                                                 | TypeScript JSX     |         21 |          0 |          6 |         27 |
+| d:\Persist Ventures\GoViral\components\ui\menubar.tsx                                                               | TypeScript JSX     |        217 |          0 |         20 |        237 |
+| d:\Persist Ventures\GoViral\components\ui\navigation-menu.tsx                                                       | TypeScript JSX     |        117 |          0 |         12 |        129 |
+| d:\Persist Ventures\GoViral\components\ui\pagination.tsx                                                            | TypeScript JSX     |        107 |          0 |         11 |        118 |
+| d:\Persist Ventures\GoViral\components\ui\popover.tsx                                                               | TypeScript JSX     |         25 |          0 |          7 |         32 |
+| d:\Persist Ventures\GoViral\components\ui\progress.tsx                                                              | TypeScript JSX     |         24 |          0 |          5 |         29 |
+| d:\Persist Ventures\GoViral\components\ui\radio-group.tsx                                                           | TypeScript JSX     |         39 |          0 |          6 |         45 |
+| d:\Persist Ventures\GoViral\components\ui\resizable.tsx                                                             | TypeScript JSX     |         39 |          0 |          7 |         46 |
+| d:\Persist Ventures\GoViral\components\ui\scroll-area.tsx                                                           | TypeScript JSX     |         43 |          0 |          6 |         49 |
+| d:\Persist Ventures\GoViral\components\ui\select.tsx                                                                | TypeScript JSX     |        146 |          0 |         15 |        161 |
+| d:\Persist Ventures\GoViral\components\ui\separator.tsx                                                             | TypeScript JSX     |         27 |          0 |          5 |         32 |
+| d:\Persist Ventures\GoViral\components\ui\sheet.tsx                                                                 | TypeScript JSX     |        125 |          0 |         16 |        141 |
+| d:\Persist Ventures\GoViral\components\ui\sidebar.tsx                                                               | TypeScript JSX     |        709 |         12 |         55 |        776 |
+| d:\Persist Ventures\GoViral\components\ui\skeleton.tsx                                                              | TypeScript JSX     |         13 |          0 |          3 |         16 |
+| d:\Persist Ventures\GoViral\components\ui\slider.tsx                                                                | TypeScript JSX     |         24 |          0 |          5 |         29 |
+| d:\Persist Ventures\GoViral\components\ui\sonner.tsx                                                                | TypeScript JSX     |         26 |          0 |          6 |         32 |
+| d:\Persist Ventures\GoViral\components\ui\switch.tsx                                                                | TypeScript JSX     |         25 |          0 |          5 |         30 |
+| d:\Persist Ventures\GoViral\components\ui\table.tsx                                                                 | TypeScript JSX     |        107 |          0 |         11 |        118 |
+| d:\Persist Ventures\GoViral\components\ui\tabs.tsx                                                                  | TypeScript JSX     |         48 |          0 |          8 |         56 |
+| d:\Persist Ventures\GoViral\components\ui\textarea.tsx                                                              | TypeScript JSX     |         19 |          0 |          4 |         23 |
+| d:\Persist Ventures\GoViral\components\ui\toast.tsx                                                                 | TypeScript JSX     |        126 |          1 |         15 |        142 |
+| d:\Persist Ventures\GoViral\components\ui\toaster.tsx                                                               | TypeScript JSX     |         32 |          0 |          4 |         36 |
+| d:\Persist Ventures\GoViral\components\ui\toggle-group.tsx                                                          | TypeScript JSX     |         52 |          0 |         10 |         62 |
+| d:\Persist Ventures\GoViral\components\ui\toggle.tsx                                                                | TypeScript JSX     |         39 |          0 |          7 |         46 |
+| d:\Persist Ventures\GoViral\components\ui\tooltip.tsx                                                               | TypeScript JSX     |         23 |          0 |          8 |         31 |
+| d:\Persist Ventures\GoViral\components\ui\use-mobile.tsx                                                            | TypeScript JSX     |         15 |          0 |          5 |         20 |
+| d:\Persist Ventures\GoViral\components\ui\use-toast.ts                                                              | TypeScript         |        160 |          3 |         32 |        195 |
+| d:\Persist Ventures\GoViral\components\youtube-metrics.tsx                                                          | TypeScript JSX     |         56 |          0 |          3 |         59 |
+| d:\Persist Ventures\GoViral\constants\subscriptionPlans.ts                                                          | TypeScript         |         78 |          0 |          5 |         83 |
+| d:\Persist Ventures\GoViral\db\functions\add_coins_to_user.sql                                                      | MS SQL             |          9 |          2 |          0 |         11 |
+| d:\Persist Ventures\GoViral\docs\Go Viral – FAQ.md                                                                  | Markdown           |         45 |          0 |         35 |         80 |
+| d:\Persist Ventures\GoViral\docs\Step1.md                                                                           | Markdown           |         92 |          0 |         30 |        122 |
+| d:\Persist Ventures\GoViral\docs\issues_fixed.md                                                                    | Markdown           |         51 |          0 |         17 |         68 |
+| d:\Persist Ventures\GoViral\docs\v2.md                                                                              | Markdown           |        167 |          0 |         30 |        197 |
+| d:\Persist Ventures\GoViral\hooks\use-client-auth.tsx                                                               | TypeScript JSX     |         69 |          1 |         14 |         84 |
+| d:\Persist Ventures\GoViral\hooks\use-mobile.tsx                                                                    | TypeScript JSX     |         15 |          0 |          5 |         20 |
+| d:\Persist Ventures\GoViral\hooks\use-toast.ts                                                                      | TypeScript         |        165 |          4 |         33 |        202 |
+| d:\Persist Ventures\GoViral\lib\auth-utils.ts                                                                       | TypeScript         |         38 |         15 |          6 |         59 |
+| d:\Persist Ventures\GoViral\lib\currency-utils.ts                                                                   | TypeScript         |          6 |         13 |          3 |         22 |
+| d:\Persist Ventures\GoViral\lib\date-utils.ts                                                                       | TypeScript         |         27 |         24 |         10 |         61 |
+| d:\Persist Ventures\GoViral\lib\utils.ts                                                                            | TypeScript         |         57 |         21 |         14 |         92 |
+| d:\Persist Ventures\GoViral\lib\youtube-api.ts                                                                      | TypeScript         |        263 |         22 |         56 |        341 |
+| d:\Persist Ventures\GoViral\lib\youtube-utils.ts                                                                    | TypeScript         |         45 |          2 |          9 |         56 |
+| d:\Persist Ventures\GoViral\middleware.ts                                                                           | TypeScript         |         58 |          8 |         13 |         79 |
+| d:\Persist Ventures\GoViral\next.config.mjs                                                                         | JavaScript         |         60 |          7 |          6 |         73 |
+| d:\Persist Ventures\GoViral\package-lock.json                                                                       | JSON               |      7,978 |          0 |          1 |      7,979 |
+| d:\Persist Ventures\GoViral\package.json                                                                            | JSON               |         92 |          0 |          1 |         93 |
+| d:\Persist Ventures\GoViral\pnpm-lock.yaml                                                                          | YAML               |          4 |          0 |          1 |          5 |
+| d:\Persist Ventures\GoViral\postcss.config.mjs                                                                      | JavaScript         |          6 |          1 |          2 |          9 |
+| d:\Persist Ventures\GoViral\public\images\gold_logo_horizontal.svg                                                  | XML                |        629 |          0 |        115 |        744 |
+| d:\Persist Ventures\GoViral\public\images\gold_logo_vertical.svg                                                    | XML                |        629 |          0 |        115 |        744 |
+| d:\Persist Ventures\GoViral\public\images\social_pair.svg                                                           | XML                |         62 |          0 |          1 |         63 |
+| d:\Persist Ventures\GoViral\public\placeholder-logo.svg                                                             | XML                |          1 |          0 |          0 |          1 |
+| d:\Persist Ventures\GoViral\public\placeholder.svg                                                                  | XML                |          1 |          0 |          0 |          1 |
+| d:\Persist Ventures\GoViral\public\sitemap.xml                                                                      | XML                |         52 |          1 |          4 |         57 |
+| d:\Persist Ventures\GoViral\scripts\apply_changes.sh                                                                | Shell Script       |         25 |          4 |          4 |         33 |
+| d:\Persist Ventures\GoViral\scripts\update_all.js                                                                   | JavaScript         |          2 |          5 |          2 |          9 |
+| d:\Persist Ventures\GoViral\scripts\update_db_views.js                                                              | JavaScript         |         53 |         12 |         14 |         79 |
+| d:\Persist Ventures\GoViral\scripts\update_storage_config.js                                                        | JavaScript         |         76 |         11 |         13 |        100 |
+| d:\Persist Ventures\GoViral\sql\001_add_cpm_contests.sql                                                            | MS SQL             |         39 |         26 |         10 |         75 |
+| d:\Persist Ventures\GoViral\sql\apply_all_changes.sql                                                               | MS SQL             |         31 |          6 |          5 |         42 |
+| d:\Persist Ventures\GoViral\sql\contest_views.sql                                                                   | MS SQL             |         16 |          3 |          2 |         21 |
+| d:\Persist Ventures\GoViral\sql\create_contests_view.sql                                                            | MS SQL             |         15 |          3 |          2 |         20 |
+| d:\Persist Ventures\GoViral\sql\create_exec_sql_function.sql                                                        | MS SQL             |          9 |          2 |          0 |         11 |
+| d:\Persist Ventures\GoViral\sql\create_increment_function.sql                                                       | MS SQL             |         10 |          2 |          0 |         12 |
+| d:\Persist Ventures\GoViral\sql\initialize_database.sql                                                             | MS SQL             |         49 |          2 |          1 |         52 |
+| d:\Persist Ventures\GoViral\sql\storage_setup.sql                                                                   | MS SQL             |         21 |          6 |          4 |         31 |
+| d:\Persist Ventures\GoViral\sql\table_permissions.sql                                                               | MS SQL             |         24 |          8 |          7 |         39 |
+| d:\Persist Ventures\GoViral\styles\globals.css                                                                      | CSS                |         90 |          0 |          5 |         95 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250524072227_remote_schema.sql                                    | MS SQL             |          0 |          0 |          1 |          1 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250524072600_remote_schema.sql                                    | MS SQL             |        673 |          5 |        349 |      1,027 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250603082120_populate_brief_html_field.sql                        | MS SQL             |          6 |          4 |          2 |         12 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250603124847_add_rich_text_fields.sql                             | MS SQL             |          6 |          3 |          2 |         11 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250603162804_create_advertiser_withdrawal_functions.sql           | MS SQL             |        166 |         21 |         21 |        208 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250603163339_fix_advertiser_withdrawal_amount_storage.sql         | MS SQL             |        159 |         18 |         21 |        198 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250603164056_fix_advertiser_withdrawal_balance_and_request_id.sql | MS SQL             |        170 |         28 |         24 |        222 |
+| d:\Persist Ventures\GoViral\supabase\migrations\20250603170000_update_contests_view.sql                             | MS SQL             |         38 |          3 |          3 |         44 |
+| d:\Persist Ventures\GoViral\supabase\migrations\YYYYMMDDHHMMSS_enhance_withdrawal_requests.sql                      | MS SQL             |          7 |         11 |          4 |         22 |
+| d:\Persist Ventures\GoViral\supabase\migrations\YYYYMMDDHHMMSS_update_withdrawal_functions.sql                      | MS SQL             |        132 |         34 |         16 |        182 |
+| d:\Persist Ventures\GoViral\supabase\supabase\migrations\20250603082120_populate_brief_html_field.sql               | MS SQL             |          0 |          0 |          1 |          1 |
+| d:\Persist Ventures\GoViral\supabase_policy.sql                                                                     | MS SQL             |        159 |          0 |          0 |        159 |
+| d:\Persist Ventures\GoViral\supabase_policy_fix.sql                                                                 | MS SQL             |         63 |          9 |          5 |         77 |
+| d:\Persist Ventures\GoViral\tailwind.config.ts                                                                      | TypeScript         |         95 |          0 |          2 |         97 |
+| d:\Persist Ventures\GoViral\tsconfig.json                                                                           | JSON with Comments |         27 |          0 |          1 |         28 |
+| d:\Persist Ventures\GoViral\types\earnings.ts                                                                       | TypeScript         |        103 |          9 |         14 |        126 |
+| d:\Persist Ventures\GoViral\types\supabase.ts                                                                       | TypeScript         |        492 |         10 |          6 |        508 |
+| d:\Persist Ventures\GoViral\utils\supabase\client.ts                                                                | TypeScript         |          7 |          0 |          0 |          7 |
+| d:\Persist Ventures\GoViral\utils\supabase\middleware.ts                                                            | TypeScript         |         63 |         16 |         16 |         95 |
+| d:\Persist Ventures\GoViral\utils\supabase\server.ts                                                                | TypeScript         |         25 |          0 |          2 |         27 |
+| d:\Persist Ventures\GoViral\vercel.json                                                                             | JSON               |         12 |          0 |          0 |         12 |
+| Total                                                                                                               |                    |     37,040 |      1,711 |      3,522 |     42,273 |
++---------------------------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

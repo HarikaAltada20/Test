@@ -26,6 +26,13 @@ import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from 'dayjs';
 
+// --- Submission Window Constants ---
+const SUBMISSION_WINDOW_VALUE: number = 5;
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = 'year';
+const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
+const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${IS_SUBMISSION_WINDOW_SINGULAR ? '' : 's'}`;
+// -----------------------------------
+
 interface YouTubeVideo {
   id: {
     videoId: string;
@@ -109,6 +116,8 @@ export default function SubmitContentPage({
   // If IG also needs server-side, similar token states would be added for instagram
 
   const [error, setError] = useState<string | null>(null);
+  const [submissionTimingError, setSubmissionTimingError] = useState<string | null>(null);
+  const [libraryMessage, setLibraryMessage] = useState<string | null>(null); // Added for library-specific messages
   const [isLoading, setIsLoading] = useState(false);
   const [isTokenExpired, setIsTokenExpired] = useState(false);
   const [isInstagramTokenExpired, setIsInstagramTokenExpired] = useState(false);
@@ -139,6 +148,48 @@ export default function SubmitContentPage({
     instagramCurrentPage * ITEMS_PER_PAGE
   );
   const totalInstagramPages = Math.ceil(userReels.length / ITEMS_PER_PAGE);
+
+  // Helper function for 2-hour validation
+  const isContentTooOld = (publishedAt: string): boolean => {
+    const windowAgo = dayjs().subtract(SUBMISSION_WINDOW_VALUE, SUBMISSION_WINDOW_UNIT);
+    return dayjs(publishedAt).isBefore(windowAgo);
+  };
+
+  useEffect(() => {
+    if (selectedVideo) {
+      if (selectedVideo.snippet?.publishedAt) {
+        if (isContentTooOld(selectedVideo.snippet.publishedAt)) {
+          setSubmissionTimingError(`This video was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted. Please submit the content within ${SUBMISSION_WINDOW_UNIT_DISPLAY} of publishing.`);
+        } else {
+          setSubmissionTimingError(null);
+        }
+      } else {
+        setSubmissionTimingError("The selected video's publication date is missing and cannot be validated.");
+      }
+    } else {
+      if (submissionTimingError?.includes("This video was published") || submissionTimingError?.startsWith("The selected video's publication date is missing")) {
+        setSubmissionTimingError(null);
+      }
+    }
+  }, [selectedVideo]);
+
+  useEffect(() => {
+    if (selectedReel) {
+      if (selectedReel.timestamp) {
+        if (isContentTooOld(selectedReel.timestamp)) {
+          setSubmissionTimingError(`This Reel was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`);
+        } else {
+          setSubmissionTimingError(null);
+        }
+      } else {
+        setSubmissionTimingError("The selected Reel's publication date is missing and cannot be validated.");
+      }
+    } else {
+      if (submissionTimingError?.includes("This Reel was published") || submissionTimingError?.startsWith("The selected Reel's publication date is missing")) {
+        setSubmissionTimingError(null);
+      }
+    }
+  }, [selectedReel]);
 
   // Check if user has connected YouTube account
   useEffect(() => {
@@ -259,11 +310,12 @@ export default function SubmitContentPage({
     if (contestPlatform !== 'youtube') return;
     setIsLoadingVideos(true);
     setError(null);
+    setLibraryMessage(null); // Clear previous library message
 
     try {
       // Reverted: No longer sending pagination query parameters
       const response = await fetch(`/api/youtube/videos`);
-      const data = await response.json(); // Expects { videos: [...] }
+      const data = await response.json(); // Expects { videos: [...], nextPageToken?: string, prevPageToken?: string, totalResults?: number }
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -280,9 +332,14 @@ export default function SubmitContentPage({
         return;
       }
 
-      setUserVideos(data.videos || []);
+      const allFetchedVideos: YouTubeVideo[] = data.videos || []; // Ensure type
+      const filteredVideos = allFetchedVideos.filter((video: YouTubeVideo) => video.snippet?.publishedAt && !isContentTooOld(video.snippet.publishedAt));
+      setUserVideos(filteredVideos); // Set userVideos with the filtered list
       setYoutubeCurrentPage(1); // Reset to first page on new data load
-      // Removed setting of page tokens and totalResults from API response
+
+      if ((data.videos && data.videos.length > 0) && filteredVideos.length === 0) {
+        setLibraryMessage(`No videos found in your YouTube channel that were published in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch an older video by pasting its link directly, but it must have been published within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible for the submission/ contest.`);
+      }
 
     } catch (err: any) {
       console.error("Error fetching YouTube videos:", err);
@@ -390,21 +447,23 @@ export default function SubmitContentPage({
 
   const handleFetchVideo = async () => {
     if (!contentLink) {
-      setError("Please enter a YouTube URL");
+      setError("Please enter a YouTube video link.");
+      return;
+    }
+    const videoId = extractYoutubeId(contentLink);
+    if (!videoId) {
+      setError("Invalid YouTube URL");
+      setIsFetchingVideo(false);
       return;
     }
 
     setIsFetchingVideo(true);
     setError(null);
+    setSubmissionTimingError(null);
+    setVideoPreview(null);
+    setSelectedVideo(null);
 
     try {
-      const videoId = extractYoutubeId(contentLink);
-      if (!videoId) {
-        setError("Invalid YouTube URL");
-        return;
-      }
-
-      // Validate and fetch video details
       const response = await fetch("/api/youtube/verify", {
         method: "POST",
         headers: {
@@ -413,23 +472,50 @@ export default function SubmitContentPage({
         body: JSON.stringify({ videoUrl: contentLink }),
       });
 
-      const data = await response.json();
+      const responseData = await response.json(); // Call .json() ONCE
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to verify video");
+        let errorMessage = "Failed to verify YouTube video"; // Default message
+        if (responseData && typeof responseData.error === 'string') {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === 'string') {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
       }
 
-      if (data.valid && data.videoInfo) {
-        setVideoPreview(data.videoInfo);
-        setSelectedVideo(data.videoInfo);
-        setSelectedReel(null);
-        setSubmissionType('youtube');
+      // response.ok is true here
+      if (responseData && responseData.valid && responseData.videoInfo) {
+        const videoData: YouTubeVideo = responseData.videoInfo;
+        if (videoData?.snippet?.publishedAt) {
+          if (isContentTooOld(videoData.snippet.publishedAt)) {
+            setSubmissionTimingError(`This video was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted. Please submit the content within ${SUBMISSION_WINDOW_UNIT_DISPLAY} of publishing.`);
+            setVideoPreview(videoData);
+          } else {
+            setSubmissionTimingError(null);
+            setVideoPreview(videoData);
+            setSelectedVideo(videoData);
+            setSubmissionType('youtube');
+            setError(null);
+          }
+        } else {
+          setVideoPreview(videoData || null);
+          setSelectedVideo(null);
+          setSubmissionTimingError(videoData ? "Could not determine the video's publication date." : "Video not found or invalid link.");
+        }
       } else {
-        throw new Error("This video does not belong to your YouTube channel");
+        // Response was OK, but data structure is not as expected for a valid video
+        let errorMessage = "YouTube video verification failed or video information not found.";
+        if (responseData && typeof responseData.error === 'string') {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === 'string') {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
       }
     } catch (err: any) {
-      console.error("Error fetching video:", err);
-      setError(err.message || "Failed to fetch video details");
+      // This will catch errors from fetch itself (network error) or SyntaxError from response.json() if body is not valid JSON, or errors thrown above.
+      setError(err.message || "An unexpected error occurred while fetching YouTube video.");
       setVideoPreview(null);
       setSelectedVideo(null);
     } finally {
@@ -444,46 +530,79 @@ export default function SubmitContentPage({
     }
     if (!instagramAccount?.access_token || !instagramAccount?.app_scoped_user_id) {
       setError("Instagram account not connected, token missing, or user ID missing.");
+      setIsFetchingInstagramMedia(false);
+      return;
+    }
+    if (!user) {
+      setError("User not available. Please ensure you are logged in.");
+      setIsFetchingInstagramMedia(false);
       return;
     }
 
     setIsFetchingInstagramMedia(true);
     setError(null);
+    setSubmissionTimingError(null);
     setInstagramMediaPreview(null);
-    setSelectedReel(null); // Clear selection from library
+    setSelectedReel(null);
 
-    // console.log("instagramAccount.access_token", instagramAccount.access_token);
     try {
       const response = await fetch("/api/instagram/verify-media", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mediaUrl: instagramLink, // Sending the raw link
+          mediaUrl: instagramLink,
           userAccessToken: instagramAccount.access_token,
-          userAppScopedId: instagramAccount.app_scoped_user_id
+          userAppScopedId: instagramAccount.app_scoped_user_id,
         }),
       });
-      const data = await response.json();
-      console.log("This is the data from the instagram verify-media route", data);
 
-      if (!response.ok) throw new Error(data.error || "Failed to fetch or verify Instagram media.");
+      const responseData = await response.json(); // Call .json() ONCE
 
-      if (data.valid && data.mediaInfo) {
-        const reelData = data.mediaInfo as InstagramReel; // Assuming mediaInfo matches InstagramReel structure
-        setInstagramMediaPreview(reelData);
-        setSelectedReel(reelData); // Also set the main selectedReel
+      if (!response.ok) {
+        let errorMessage = "Failed to verify Instagram media"; // Default message
+        if (responseData && typeof responseData.error === 'string') {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === 'string') {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
+      }
 
-        // Clear YouTube selections
-        setSelectedVideo(null);
-        setContentLink("");
-        setVideoPreview(null);
-        setSubmissionType('instagram');
+      // response.ok is true here
+      if (responseData && responseData.valid && responseData.mediaInfo) {
+        const mediaDetails: InstagramReel = responseData.mediaInfo;
+        if (mediaDetails?.timestamp) {
+          if (isContentTooOld(mediaDetails.timestamp)) {
+            setSubmissionTimingError(`This Reel was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`);
+            setInstagramMediaPreview(mediaDetails);
+          } else {
+            setSubmissionTimingError(null);
+            setInstagramMediaPreview(mediaDetails);
+            setSelectedReel(mediaDetails);
+            setSubmissionType('instagram');
+            setError(null);
+          }
+        } else {
+          setInstagramMediaPreview(mediaDetails || null);
+          setSelectedReel(null);
+          setSubmissionTimingError(mediaDetails ? "Could not determine the Reel's publication date." : "Reel not found or invalid link.");
+        }
       } else {
-        throw new Error(data.error || "This media does not belong to your connected Instagram account, is not a Reel/Video, or is invalid.");
+        // Response was OK, but data structure is not as expected for valid media
+        let errorMessage = "Instagram media verification failed or media info not found.";
+        if (responseData && typeof responseData.error === 'string') {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === 'string') {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
       }
     } catch (err: any) {
-      console.error("Error fetching Instagram media by link:", err);
-      setError(err.message);
+      // This will catch errors from fetch itself, SyntaxError from response.json(), or errors thrown above.
+      console.error("Error in handleFetchInstagramByLink:", err); // Keep user's console.error for this one
+      setError(err.message || "An unexpected error occurred while fetching Instagram media.");
+      setInstagramMediaPreview(null);
+      setSelectedReel(null);
     } finally {
       setIsFetchingInstagramMedia(false);
     }
@@ -491,8 +610,17 @@ export default function SubmitContentPage({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    setError(null);
+
+    if (submissionTimingError) {
+      setError(submissionTimingError);
+      setIsLoading(false);
+      // Optionally scroll to error or use toast
+      // toast.error(submissionTimingError);
+      return;
+    }
+
     setIsLoading(true);
+    setError(null);
     setMessage(null); // Clear previous messages
 
     if (!user) {
@@ -510,18 +638,34 @@ export default function SubmitContentPage({
 
       if (contestPlatform === 'instagram' && selectedReel && instagramAccount?.access_token && currentInstagramBusinessAccountID) {
         setMessage("Fetching Instagram Reel insights...");
-        console.log("This is the selectedReel from the instagram submit route", selectedReel);
-        console.log("This is the currentInstagramBusinessAccountID from the instagram submit route", currentInstagramBusinessAccountID);
-        console.log("This is the instagramAccount.access_token from the instagram submit route", instagramAccount.access_token);
+        // console.log("This is the selectedReel from the instagram submit route", selectedReel);
+        // console.log("This is the currentInstagramBusinessAccountID from the instagram submit route", currentInstagramBusinessAccountID);
+        // console.log("This is the instagramAccount.access_token from the instagram submit route", instagramAccount.access_token);
+
         const insightsRes = await fetch(
           `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
         );
         const insightsData = await insightsRes.json();
-        console.log("This is the data from the instagram insights route", insightsData);
+        // console.log("This is the data from the instagram insights route", insightsData);
 
         if (!insightsRes.ok || insightsData.error) {
-          console.warn("Failed to fetch Instagram insights, submitting with potentially partial/zero stats:", insightsData.error?.message);
-          // Even if there's an error, we proceed to construct payload with 0/default stats
+          const specificConversionErrorMessage = "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select and submit a different Reel.";
+          const genericInsightErrorMessage = "Failed to fetch Instagram Reel insights. Submission cannot proceed without metrics.";
+
+          if (insightsData.error) {
+            console.error("Error fetching Instagram insights:", insightsData.error);
+            if (insightsData.error.error_subcode === 2108006 ||
+              (insightsData.error.message && insightsData.error.message.includes("The media was posted before the most recent time that the user's account was converted"))) {
+              setError(specificConversionErrorMessage);
+            } else {
+              setError(insightsData.error.message || genericInsightErrorMessage);
+            }
+          } else { // !insightsRes.ok but no insightsData.error
+            setError(genericInsightErrorMessage + ` (Status: ${insightsRes.status})`);
+          }
+          setIsLoading(false);
+          setMessage(null);
+          return; // Prevent submission
         }
 
         let primaryViews = 0;
@@ -645,6 +789,7 @@ export default function SubmitContentPage({
     // If it succeeds, this function is called, and this function's finally block will set it to false.
 
     setError(null); // Clear previous errors specific to reel fetching
+    setLibraryMessage(null); // Clear previous library message
     setUserReels([]);
     console.log("[fetchInstagramReels] Starting fetch for IGBA ID:", igBusinessAccountID);
 
@@ -671,7 +816,7 @@ export default function SubmitContentPage({
       console.log(`[fetchInstagramReels] Received ${potentialContent.length} items from /media endpoint. Full list:`, JSON.stringify(potentialContent, null, 2));
 
 
-      const fetchedReels: InstagramReel[] = [];
+      const allFetchedReels: InstagramReel[] = [];
       // The /media endpoint returns a mix. We need to filter for Reels.
       // Reels often have media_product_type === 'REELS' or media_type === 'VIDEO'
       // The structure from /media might be slightly different than direct /media_id calls.
@@ -686,7 +831,7 @@ export default function SubmitContentPage({
         if (item.media_product_type === 'REELS' || item.media_type === 'VIDEO') {
           console.log(`[fetchInstagramReels] ✅ Including item id=${item.id} as a Reel/Video.`);
           // Create a reel object matching our InstagramReel interface
-          fetchedReels.push({
+          allFetchedReels.push({
             id: item.id,
             media_type: (item.media_product_type === 'REELS') ? 'REEL' : 'VIDEO', // Be more specific based on product type if REELS
             media_url: item.permalink, // permalink is better for media_url in this context
@@ -699,9 +844,15 @@ export default function SubmitContentPage({
           console.log(`[fetchInstagramReels] ❌ Skipping item id=${item.id} - media_type: ${item.media_type}, media_product_type: ${item.media_product_type}`);
         }
       }
-      console.log(`[fetchInstagramReels] Filtered down to ${fetchedReels.length} reels.`);
+      console.log(`[fetchInstagramReels] Filtered down to ${allFetchedReels.length} reels.`);
 
-      setUserReels(fetchedReels.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf()));
+      // Client-side filter based on submission window
+      const filteredReels = allFetchedReels.filter(reel => reel.timestamp && !isContentTooOld(reel.timestamp));
+      setUserReels(filteredReels.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf()));
+
+      if (allFetchedReels.length > 0 && filteredReels.length === 0) {
+        setLibraryMessage(`No Reels or Videos found on your Instagram account that were posted in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still submit older content by pasting its link directly, but it must have been posted within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible.`);
+      }
 
     } catch (err: any) {
       console.error("Error fetching Instagram Reels:", err);
@@ -769,6 +920,11 @@ export default function SubmitContentPage({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+          {submissionTimingError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{submissionTimingError}</AlertDescription>
+            </Alert>
+          )}
           {message && (
             <Alert variant="default" className="mb-4">
               <AlertDescription>{message}</AlertDescription>
@@ -824,7 +980,20 @@ export default function SubmitContentPage({
                   <TabsContent value="youtube-library" className="mt-4">
                     {isLoadingVideos ? (
                       <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading YouTube videos...</div>
-                    ) : userVideos.length > 0 ? (
+                    ) : userVideos.length === 0 ? (
+                      libraryMessage ? (
+                        <Alert variant="default" className="text-center">
+                          <AlertDescription>{libraryMessage}</AlertDescription>
+                        </Alert>
+                      ) : (
+                        <div className="text-center py-4">
+                          <p>No videos found in your YouTube channel.</p>
+                          <Button variant="outline" onClick={() => fetchYouTubeVideos()} className="mt-2" disabled={isLoadingVideos}>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingVideos ? 'animate-spin' : ''}`} /> Reload Videos
+                          </Button>
+                        </div>
+                      )
+                    ) : (
                       <>
                         {/* YouTube Pagination Controls */}
                         {totalYoutubePages > 1 && (
@@ -871,30 +1040,32 @@ export default function SubmitContentPage({
                                   height={68}  // Adjusted for consistency
                                   className="rounded-sm object-cover aspect-video"
                                 />
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                   <a
                                     href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="font-medium text-sm truncate hover:underline flex items-center"
+                                    className="font-medium text-sm hover:underline flex items-center"
                                     title={video.snippet.title}
-                                    onClick={(e) => e.stopPropagation()} // Prevent card click when link is clicked
+                                    onClick={(e) => e.stopPropagation()}
                                   >
                                     {video.snippet.title}
                                     <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
                                   </a>
-                                  <p className="text-xs text-muted-foreground">{new Date(video.snippet.publishedAt).toLocaleDateString()}</p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Published: {dayjs(video.snippet.publishedAt).format("MMM D, YYYY h:mm A")}
+                                  </p>
                                   {/* Display additional video statistics */}
                                   {video.statistics && (
                                     <div className="text-xs text-muted-foreground mt-1 space-x-2">
-                                      {video.statistics.viewCount && (
-                                        <span>Views: {video.statistics.viewCount.toLocaleString()}</span>
+                                      {video.statistics.viewCount !== undefined && (
+                                        <span>Views: {Number(video.statistics.viewCount).toLocaleString()}</span>
                                       )}
-                                      {video.statistics.likeCount && (
-                                        <span>Likes: {video.statistics.likeCount.toLocaleString()}</span>
+                                      {video.statistics.likeCount !== undefined && (
+                                        <span>Likes: {Number(video.statistics.likeCount).toLocaleString()}</span>
                                       )}
-                                      {video.statistics.commentCount && (
-                                        <span>Comments: {video.statistics.commentCount.toLocaleString()}</span>
+                                      {video.statistics.commentCount !== undefined && (
+                                        <span>Comments: {Number(video.statistics.commentCount).toLocaleString()}</span>
                                       )}
                                     </div>
                                   )}
@@ -904,13 +1075,6 @@ export default function SubmitContentPage({
                           ))}
                         </div>
                       </>
-                    ) : (
-                      <div className="text-center py-4">
-                        <p>No videos found in your YouTube channel.</p>
-                        <Button variant="outline" onClick={() => fetchYouTubeVideos()} className="mt-2" disabled={isLoadingVideos}>
-                          <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingVideos ? 'animate-spin' : ''}`} /> Reload Videos
-                        </Button>
-                      </div>
                     )}
                   </TabsContent>
                   <TabsContent value="youtube-link" className="mt-4">
@@ -949,24 +1113,26 @@ export default function SubmitContentPage({
                                 href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-medium text-sm truncate hover:underline flex items-center"
+                                className="font-medium text-sm hover:underline flex items-center"
                                 title={videoPreview.snippet.title}
                               >
                                 {videoPreview.snippet.title}
                                 <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
                               </a>
-                              <p className="text-xs text-muted-foreground mt-1">Published: {new Date(videoPreview.snippet.publishedAt).toLocaleDateString()}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Published: {dayjs(videoPreview.snippet.publishedAt).format("MMM D, YYYY h:mm A")}
+                              </p>
                               {/* Display statistics for videoPreview */}
                               {videoPreview.statistics && (
                                 <div className="text-xs text-muted-foreground mt-1 space-x-2">
-                                  {videoPreview.statistics.viewCount && (
-                                    <span>Views: {videoPreview.statistics.viewCount.toLocaleString()}</span>
+                                  {videoPreview.statistics.viewCount !== undefined && (
+                                    <span>Views: {Number(videoPreview.statistics.viewCount).toLocaleString()}</span>
                                   )}
-                                  {videoPreview.statistics.likeCount && (
-                                    <span>Likes: {videoPreview.statistics.likeCount.toLocaleString()}</span>
+                                  {videoPreview.statistics.likeCount !== undefined && (
+                                    <span>Likes: {Number(videoPreview.statistics.likeCount).toLocaleString()}</span>
                                   )}
-                                  {videoPreview.statistics.commentCount && (
-                                    <span>Comments: {videoPreview.statistics.commentCount.toLocaleString()}</span>
+                                  {videoPreview.statistics.commentCount !== undefined && (
+                                    <span>Comments: {Number(videoPreview.statistics.commentCount).toLocaleString()}</span>
                                   )}
                                 </div>
                               )}
@@ -1019,7 +1185,21 @@ export default function SubmitContentPage({
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (
                       <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading Instagram content...</div>
-                    ) : userReels.length > 0 ? (
+                    ) : userReels.length === 0 ? (
+                      libraryMessage ? (
+                        <Alert variant="default" className="text-center">
+                          <AlertDescription>{libraryMessage}</AlertDescription>
+                        </Alert>
+                      ) : (
+                        <div className="text-center py-4">
+                          <p>No Reels or Videos found on your Instagram account. Or, try fetching again if you recently posted.</p>
+                          <Button variant="outline" onClick={() => fetchInstagramReels(instagramAccount.access_token, currentInstagramBusinessAccountID!)} className="mt-2" disabled={isLoadingReels || !currentInstagramBusinessAccountID}>
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingReels ? 'animate-spin' : ''}`} /> Reload Instagram Content
+                          </Button>
+                          <p className="text-xs text-muted-foreground mt-2">Alternatively, you can always use the "Instagram Link" tab to submit a specific post by its URL.</p>
+                        </div>
+                      )
+                    ) : (
                       <>
                         {/* Instagram Pagination Controls */}
                         {totalInstagramPages > 1 && (
@@ -1070,10 +1250,20 @@ export default function SubmitContentPage({
                                 ) : (
                                   <div className="w-[120px] h-[120px] bg-muted rounded-sm flex items-center justify-center text-xs text-muted-foreground">No thumbnail</div>
                                 )}
-                                <div className="flex-1">
-                                  <p className="font-medium text-sm truncate" title={reel.caption || "Instagram media"}>{reel.caption || "No caption"}</p>
-                                  <p className="text-xs text-muted-foreground">{dayjs(reel.timestamp).format("MMM D, YYYY")}</p>
-                                  <a href={reel.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1" onClick={(e) => e.stopPropagation()}>View on Instagram</a>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm" title={reel.caption || "Instagram media"}>
+                                    {reel.caption || "No caption"}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Published: {dayjs(reel.timestamp).format("MMM D, YYYY h:mm A")}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    Type: {reel.media_type === 'REEL' ? 'Reel' : reel.media_type === 'VIDEO' ? 'Video Post' : reel.media_type || 'Unknown'}
+                                  </p>
+                                  <a href={reel.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1 flex items-center" onClick={(e) => e.stopPropagation()}>
+                                    View on Instagram
+                                    <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
+                                  </a>
                                 </div>
                               </CardContent>
                             </Card>
@@ -1104,15 +1294,6 @@ export default function SubmitContentPage({
                           </div>
                         )}
                       </>
-                    ) : (
-                      <div className="text-center py-4">
-                        <p>No Reels or Videos found on your Instagram account. Or, try fetching again if you recently posted.</p>
-                        <Button variant="outline" onClick={() => fetchInstagramReels(instagramAccount.access_token, currentInstagramBusinessAccountID!)} className="mt-2" disabled={isLoadingReels || !currentInstagramBusinessAccountID}>
-                          <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingReels ? 'animate-spin' : ''}`} /> Reload Instagram Content
-                        </Button>
-                        {/* Add a reminder for manual link submission for IG as well if desired */}
-                        <p className="text-xs text-muted-foreground mt-2">Alternatively, you can always use the "Instagram Link" tab to submit a specific post by its URL.</p>
-                      </div>
                     )}
                   </TabsContent>
                   <TabsContent value="instagram-link" className="mt-4">
@@ -1150,10 +1331,18 @@ export default function SubmitContentPage({
                             ) : (
                               <div className="w-[120px] h-[120px] bg-muted rounded-sm flex items-center justify-center text-xs text-muted-foreground">No thumbnail</div>
                             )}
-                            <div className="flex-1">
-                              <h4 className="font-medium text-sm truncate" title={instagramMediaPreview.caption || undefined}>{instagramMediaPreview.caption || "No Caption"}</h4>
-                              <p className="text-xs text-muted-foreground mt-1">Published: {dayjs(instagramMediaPreview.timestamp).format("MMM D, YYYY")}</p>
-                              <a href={instagramMediaPreview.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1">View on Instagram</a>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-sm" title={instagramMediaPreview.caption || undefined}>{instagramMediaPreview.caption || "No Caption"}</h4>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Published: {dayjs(instagramMediaPreview.timestamp).format("MMM D, YYYY h:mm A")}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Type: {instagramMediaPreview.media_type === 'REEL' ? 'Reel' : instagramMediaPreview.media_type === 'VIDEO' ? 'Video Post' : instagramMediaPreview.media_type || 'Unknown'}
+                              </p>
+                              <a href={instagramMediaPreview.permalink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline mt-1 flex items-center">
+                                View on Instagram
+                                <ExternalLink className="h-3 w-3 ml-1.5 flex-shrink-0" />
+                              </a>
                             </div>
                           </CardContent>
                         </Card>
