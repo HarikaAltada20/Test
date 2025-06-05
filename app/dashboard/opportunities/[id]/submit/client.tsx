@@ -1,20 +1,16 @@
 "use client";
 
 import type React from "react";
-
-
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -60,9 +56,9 @@ interface YouTubeVideo {
     };
   };
   statistics?: { // Added for displaying views, likes, comments
-    viewCount?: number;
-    likeCount?: number;
-    commentCount?: number;
+    viewCount?: string;
+    likeCount?: string;
+    commentCount?: string;
   };
 }
 
@@ -363,34 +359,34 @@ export default function SubmitContentPage({
   };
 
   // Validate YouTube URL belongs to user using server endpoint
-  const validateYoutubeUrl = async (url: string) => {
-    try {
-      const response = await fetch("/api/youtube/verify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ videoUrl: url }),
-      });
+  // const validateYoutubeUrl = async (url: string) => {
+  //   try {
+  //     const response = await fetch("/api/youtube/verify", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({ videoUrl: url }),
+  //     });
 
-      const data = await response.json();
+  //     const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to verify video");
-      }
+  //     if (!response.ok) {
+  //       throw new Error(data.error || "Failed to verify video");
+  //     }
 
-      if (data.valid && data.videoInfo) {
-        // If valid, update the selected video
-        setSelectedVideo(data.videoInfo as YouTubeVideo);
-        return true;
-      }
+  //     if (data.valid && data.videoInfo) {
+  //       // If valid, update the selected video
+  //       setSelectedVideo(data.videoInfo as YouTubeVideo);
+  //       return true;
+  //     }
 
-      return false;
-    } catch (err) {
-      console.error("Error validating YouTube URL:", err);
-      return false;
-    }
-  };
+  //     return false;
+  //   } catch (err) {
+  //     console.error("Error validating YouTube URL:", err);
+  //     return false;
+  //   }
+  // };
 
   useEffect(() => {
     async function fetchData() {
@@ -635,10 +631,8 @@ export default function SubmitContentPage({
     }
 
     try {
-      // Determine initial status based on contest type
-      // For leaderboard contests: auto-verify since no verification is required during contest
-      // For CPM contests: start as pending and require manual verification
-      const initialStatus = contest?.contest_type === 'leaderboard' ? 'verified' : 'pending';
+      // All submissions start as pending for manual verification regardless of contest type
+      const initialStatus = 'pending';
 
       let submissionPayload: any = {
         contest_id: contestId,
@@ -655,6 +649,7 @@ export default function SubmitContentPage({
         const insightsRes = await fetch(
           `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
         );
+
         const insightsData = await insightsRes.json();
         // console.log("This is the data from the instagram insights route", insightsData);
 
@@ -733,15 +728,15 @@ export default function SubmitContentPage({
 
 
         const youtubeStats = {
-          likes: videoToSubmit?.statistics?.likeCount,
-          comments: videoToSubmit?.statistics?.commentCount,
+          likes: videoToSubmit?.statistics?.likeCount ? parseInt(videoToSubmit.statistics.likeCount) : 0,
+          comments: videoToSubmit?.statistics?.commentCount ? parseInt(videoToSubmit.statistics.commentCount) : 0,
           // Add any other YouTube specific stats you want in other_stats.youtube
         };
 
         submissionPayload = {
           ...submissionPayload,
           platform: 'youtube',
-          views: videoToSubmit?.statistics?.viewCount || 0,
+          views: videoToSubmit?.statistics?.viewCount ? parseInt(videoToSubmit.statistics.viewCount) : 0,
           content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
           video_id: videoToSubmit.id.videoId,
           video_title: videoToSubmit.snippet.title,
@@ -806,6 +801,7 @@ export default function SubmitContentPage({
     try {
       const mediaRes = await fetch(`https://graph.instagram.com/${igBusinessAccountID}/media?fields=id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp&access_token=${accessToken}`);
       // Added media_product_type, video_title to fields if available, to better identify reels.
+
       const mediaData = await mediaRes.json();
       console.log("[fetchInstagramReels] Raw mediaData from API:", JSON.stringify(mediaData, null, 2));
 
@@ -1029,11 +1025,11 @@ export default function SubmitContentPage({
                             </Button>
                           </div>
                         )}
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
                           {paginatedUserVideos.map((video) => (
                             <Card
                               key={video.id.videoId}
-                              className={`cursor-pointer ${selectedVideo?.id.videoId === video.id.videoId ? "border-primary ring-2 ring-primary" : ""}`}
+                              className={`cursor-pointer transition-all hover:shadow-md ${selectedVideo?.id.videoId === video.id.videoId ? "border-primary ring-2 ring-primary bg-primary/5" : ""}`}
                               onClick={() => {
                                 setSelectedVideo(video);
                                 setSelectedReel(null); setInstagramMediaPreview(null); setInstagramLink("");
@@ -1042,26 +1038,70 @@ export default function SubmitContentPage({
                                 setVideoPreview(null); // Clear manual link preview
                               }}
                             >
-                              <CardContent className="p-3 flex items-start space-x-3">
-                                <Image
-                                  src={video.snippet.thumbnails.default.url}
-                                  alt={video.snippet.title}
-                                  width={120} // Adjusted for consistency
-                                  height={68}  // Adjusted for consistency
-                                  className="rounded-sm object-cover aspect-video"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <a
-                                    href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm font-medium text-primary hover:underline truncate"
-                                  >
-                                    {video.snippet.title}
-                                  </a>
-                                  <p className="text-sm text-muted-foreground">
-                                    {new Date(video.snippet.publishedAt).toLocaleDateString()}
-                                  </p>
+                              <CardContent className="p-4">
+                                <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
+                                  {/* Thumbnail */}
+                                  <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                    <Image
+                                      src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default.url}
+                                      alt={video.snippet.title}
+                                      width={160}
+                                      height={90}
+                                      className="rounded-lg object-cover aspect-video shadow-sm"
+                                    />
+                                  </div>
+
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0 space-y-2">
+                                    {/* Title */}
+                                    <div className="space-y-1">
+                                      <h3
+                                        className="font-medium text-sm leading-5 text-center sm:text-left line-clamp-2"
+                                        title={video.snippet.title}
+                                      >
+                                        {video.snippet.title}
+                                      </h3>
+                                      <a
+                                        href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center text-xs text-red-600 hover:text-red-800 hover:underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Open on YouTube
+                                      </a>
+                                    </div>
+
+                                    {/* Date */}
+                                    <p className="text-xs text-muted-foreground text-center sm:text-left">
+                                      Published: {dayjs(video.snippet.publishedAt).format('MMM D, YYYY [at] h:mm A')}
+                                    </p>
+
+                                    {/* Statistics */}
+                                    {video.statistics && (
+                                      <div className="flex flex-wrap justify-center sm:justify-start gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                        {video.statistics.viewCount && (
+                                          <div className="flex items-center">
+                                            <span className="font-medium">👁️ {parseInt(video.statistics.viewCount.toString()).toLocaleString()}</span>
+                                            <span className="ml-1">views</span>
+                                          </div>
+                                        )}
+                                        {video.statistics.likeCount && (
+                                          <div className="flex items-center">
+                                            <span className="font-medium">👍 {parseInt(video.statistics.likeCount.toString()).toLocaleString()}</span>
+                                            <span className="ml-1">likes</span>
+                                          </div>
+                                        )}
+                                        {video.statistics.commentCount && (
+                                          <div className="flex items-center">
+                                            <span className="font-medium">💬 {parseInt(video.statistics.commentCount.toString()).toLocaleString()}</span>
+                                            <span className="ml-1">comments</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </CardContent>
                             </Card>
@@ -1089,35 +1129,82 @@ export default function SubmitContentPage({
                     </div>
                     {videoPreview && (
                       <Card
-                        className={`mt-4 cursor-pointer ${selectedVideo?.id.videoId === videoPreview.id.videoId ? "border-primary ring-2 ring-primary" : ""}`}
+                        className={`mt-4 cursor-pointer transition-all hover:shadow-md ${selectedVideo?.id.videoId === videoPreview.id.videoId ? "border-primary ring-2 ring-primary bg-primary/5" : ""}`}
                         onClick={() => {
                           setSelectedVideo(videoPreview);
                           setSelectedReel(null); setInstagramMediaPreview(null); setInstagramLink("");
                           setSubmissionType('youtube');
                           setContentLink(`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`);
-                          setVideoPreview(null); // Clear manual link preview
+                          // Keep videoPreview to show the card remains visible when selected
                         }}
                       >
-                        <CardContent className="p-3 flex items-start space-x-3">
-                          <Image
-                            src={videoPreview.snippet.thumbnails.default.url}
-                            alt={videoPreview.snippet.title}
-                            width={120} // Adjusted for consistency
-                            height={68}  // Adjusted for consistency
-                            className="rounded-sm object-cover aspect-video"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <a
-                              href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm font-medium text-primary hover:underline truncate"
-                            >
-                              {videoPreview.snippet.title}
-                            </a>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(videoPreview.snippet.publishedAt).toLocaleDateString()}
-                            </p>
+                        <CardHeader>
+                          <CardTitle className="text-base">Video Preview</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
+                            {/* Thumbnail */}
+                            <div className="flex-shrink-0 mx-auto sm:mx-0">
+                              <Image
+                                src={videoPreview.snippet.thumbnails.medium?.url || videoPreview.snippet.thumbnails.default.url}
+                                alt={videoPreview.snippet.title}
+                                width={160}
+                                height={90}
+                                className="rounded-lg object-cover aspect-video shadow-sm"
+                              />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 space-y-2">
+                              {/* Title */}
+                              <div className="space-y-1">
+                                <h3
+                                  className="font-medium text-sm leading-5 text-center sm:text-left line-clamp-2"
+                                  title={videoPreview.snippet.title}
+                                >
+                                  {videoPreview.snippet.title}
+                                </h3>
+                                <a
+                                  href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center text-xs text-red-600 hover:text-red-800 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Open on YouTube
+                                </a>
+                              </div>
+
+                              {/* Date */}
+                              <p className="text-xs text-muted-foreground text-center sm:text-left">
+                                Published: {dayjs(videoPreview.snippet.publishedAt).format('MMM D, YYYY [at] h:mm A')}
+                              </p>
+
+                              {/* Statistics */}
+                              {videoPreview.statistics && (
+                                <div className="flex flex-wrap justify-center sm:justify-start gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                  {videoPreview.statistics.viewCount && (
+                                    <div className="flex items-center">
+                                      <span className="font-medium">👁️ {parseInt(videoPreview.statistics.viewCount.toString()).toLocaleString()}</span>
+                                      <span className="ml-1">views</span>
+                                    </div>
+                                  )}
+                                  {videoPreview.statistics.likeCount && (
+                                    <div className="flex items-center">
+                                      <span className="font-medium">👍 {parseInt(videoPreview.statistics.likeCount.toString()).toLocaleString()}</span>
+                                      <span className="ml-1">likes</span>
+                                    </div>
+                                  )}
+                                  {videoPreview.statistics.commentCount && (
+                                    <div className="flex items-center">
+                                      <span className="font-medium">💬 {parseInt(videoPreview.statistics.commentCount.toString()).toLocaleString()}</span>
+                                      <span className="ml-1">comments</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -1198,11 +1285,11 @@ export default function SubmitContentPage({
                             </Button>
                           </div>
                         )}
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
                           {paginatedUserReels.map((reel) => (
                             <Card
                               key={reel.id}
-                              className={`cursor-pointer ${selectedReel?.id === reel.id ? "border-primary ring-2 ring-primary" : ""}`}
+                              className={`cursor-pointer transition-all hover:shadow-md ${selectedReel?.id === reel.id ? "border-primary ring-2 ring-primary bg-primary/5" : ""}`}
                               onClick={() => {
                                 setSelectedReel(reel);
                                 setSelectedVideo(null); setVideoPreview(null); setContentLink("");
@@ -1211,26 +1298,59 @@ export default function SubmitContentPage({
                                 setInstagramMediaPreview(null); // Clear manual link preview
                               }}
                             >
-                              <CardContent className="p-3 flex items-start space-x-3">
-                                <Image
-                                  src={reel.thumbnail_url || ""}
-                                  alt={reel.caption || "Instagram Reel"}
-                                  width={120} // Adjusted for consistency
-                                  height={68}  // Adjusted for consistency
-                                  className="rounded-sm object-cover aspect-video"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <a
-                                    href={reel.permalink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm font-medium text-primary hover:underline truncate"
-                                  >
-                                    {reel.caption || "Instagram Reel"}
-                                  </a>
-                                  <p className="text-sm text-muted-foreground">
-                                    {new Date(reel.timestamp).toLocaleDateString()}
-                                  </p>
+                              <CardContent className="p-4">
+                                <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
+                                  {/* Thumbnail */}
+                                  <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                    {reel.thumbnail_url ? (
+                                      <Image
+                                        src={reel.thumbnail_url}
+                                        alt={reel.caption || "Instagram media"}
+                                        width={120}
+                                        height={120}
+                                        className="rounded-lg object-cover aspect-square shadow-sm"
+                                      />
+                                    ) : (
+                                      <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                        📷 No thumbnail
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0 space-y-2">
+                                    {/* Caption/Title */}
+                                    <div className="space-y-1">
+                                      <h3
+                                        className="font-medium text-sm leading-5 text-center sm:text-left line-clamp-3"
+                                        title={reel.caption || "Instagram media"}
+                                      >
+                                        {reel.caption || "No caption available"}
+                                      </h3>
+                                      <a
+                                        href={reel.permalink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center text-xs text-pink-600 hover:text-pink-800 hover:underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Open on Instagram
+                                      </a>
+                                    </div>
+
+                                    {/* Date and Type */}
+                                    <div className="space-y-1">
+                                      <p className="text-xs text-muted-foreground text-center sm:text-left">
+                                        Posted: {dayjs(reel.timestamp).format('MMM D, YYYY [at] h:mm A')}
+                                      </p>
+                                      <div className="flex justify-center sm:justify-start">
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200">
+                                          🎬 {reel.media_type === 'REEL' ? 'Instagram Reel' : 'Video'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               </CardContent>
                             </Card>
@@ -1258,35 +1378,71 @@ export default function SubmitContentPage({
                     </div>
                     {instagramMediaPreview && (
                       <Card
-                        className={`mt-4 cursor-pointer ${selectedReel?.id === instagramMediaPreview.id ? "border-primary ring-2 ring-primary" : ""}`}
+                        className={`mt-4 cursor-pointer transition-all hover:shadow-md ${selectedReel?.id === instagramMediaPreview.id ? "border-primary ring-2 ring-primary bg-primary/5" : ""}`}
                         onClick={() => {
                           setSelectedReel(instagramMediaPreview);
                           setSelectedVideo(null); setVideoPreview(null); setContentLink("");
                           setSubmissionType('instagram');
                           setInstagramLink(instagramMediaPreview.permalink);
-                          setInstagramMediaPreview(null); // Clear manual link preview
+                          // Keep instagramMediaPreview to show the card remains visible when selected
                         }}
                       >
-                        <CardContent className="p-3 flex items-start space-x-3">
-                          <Image
-                            src={instagramMediaPreview.thumbnail_url || ""}
-                            alt={instagramMediaPreview.caption || "Instagram Reel"}
-                            width={120} // Adjusted for consistency
-                            height={68}  // Adjusted for consistency
-                            className="rounded-sm object-cover aspect-video"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <a
-                              href={instagramMediaPreview.permalink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm font-medium text-primary hover:underline truncate"
-                            >
-                              {instagramMediaPreview.caption || "Instagram Reel"}
-                            </a>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(instagramMediaPreview.timestamp).toLocaleDateString()}
-                            </p>
+                        <CardHeader>
+                          <CardTitle className="text-base">Media Preview</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
+                            {/* Thumbnail */}
+                            <div className="flex-shrink-0 mx-auto sm:mx-0">
+                              {instagramMediaPreview.thumbnail_url ? (
+                                <Image
+                                  src={instagramMediaPreview.thumbnail_url}
+                                  alt={instagramMediaPreview.caption || "Instagram media"}
+                                  width={120}
+                                  height={120}
+                                  className="rounded-lg object-cover aspect-square shadow-sm"
+                                />
+                              ) : (
+                                <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                  📷 No thumbnail
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 space-y-2">
+                              {/* Caption/Title */}
+                              <div className="space-y-1">
+                                <h3
+                                  className="font-medium text-sm leading-5 text-center sm:text-left line-clamp-3"
+                                  title={instagramMediaPreview.caption || "Instagram media"}
+                                >
+                                  {instagramMediaPreview.caption || "No caption available"}
+                                </h3>
+                                <a
+                                  href={instagramMediaPreview.permalink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center text-xs text-pink-600 hover:text-pink-800 hover:underline"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Open on Instagram
+                                </a>
+                              </div>
+
+                              {/* Date and Type */}
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground text-center sm:text-left">
+                                  Posted: {dayjs(instagramMediaPreview.timestamp).format('MMM D, YYYY [at] h:mm A')}
+                                </p>
+                                <div className="flex justify-center sm:justify-start">
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200">
+                                    🎬 {instagramMediaPreview.media_type === 'REEL' ? 'Instagram Reel' : 'Video'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
