@@ -20,6 +20,101 @@ function chunkArray<T>(array: T[], size: number): T[][] {
     return result;
 }
 
+// Function to update budget spent for CPM contests
+async function updateCpmContestBudgets(supabaseAdmin: any) {
+    console.log('CRON Job: Starting CPM budget updates...');
+    
+    try {
+        // Get all active CPM contests
+        const { data: cpmContests, error: contestsError } = await supabaseAdmin
+            .from('contests')
+            .select('id, contest_based_details')
+            .eq('contest_type', 'cpm')
+            .not('contest_based_details', 'is', null);
+
+        if (contestsError) {
+            console.error('CRON Job: Error fetching CPM contests:', contestsError);
+            return;
+        }
+
+        if (!cpmContests || cpmContests.length === 0) {
+            console.log('CRON Job: No CPM contests found to update.');
+            return;
+        }
+
+        console.log(`CRON Job: Found ${cpmContests.length} CPM contests to process.`);
+
+        for (const contest of cpmContests) {
+            const cpmConfig = contest.contest_based_details?.cpm_contest;
+            if (!cpmConfig || !cpmConfig.cpm_rate_usd) {
+                console.warn(`CRON Job: Contest ${contest.id} has invalid CPM config. Skipping.`);
+                continue;
+            }
+
+            // Get all verified submissions for this contest
+            const { data: verifiedSubmissions, error: submissionsError } = await supabaseAdmin
+                .from('submissions')
+                .select('views')
+                .eq('contest_id', contest.id)
+                .eq('status', 'verified');
+
+            if (submissionsError) {
+                console.error(`CRON Job: Error fetching submissions for contest ${contest.id}:`, submissionsError);
+                continue;
+            }
+
+            if (!verifiedSubmissions || verifiedSubmissions.length === 0) {
+                console.log(`CRON Job: No verified submissions for contest ${contest.id}. Budget spent: $0.00`);
+                continue;
+            }
+
+            // Calculate total budget spent
+            let totalSpent = 0;
+            for (const submission of verifiedSubmissions) {
+                let effectiveViews = submission.views || 0;
+                
+                // Apply min/max view constraints
+                if (cpmConfig.min_views != null && effectiveViews < cpmConfig.min_views) {
+                    effectiveViews = 0;
+                } else if (cpmConfig.max_views != null && effectiveViews > cpmConfig.max_views) {
+                    effectiveViews = cpmConfig.max_views;
+                }
+                
+                const earnings = (effectiveViews * cpmConfig.cpm_rate_usd) / 1000;
+                totalSpent += earnings;
+            }
+
+            // Convert to cents for storage consistency
+            const totalSpentCents = Math.round(totalSpent * 100);
+
+            // Update the contest with new budget_spent value
+            const updatedContestDetails = {
+                ...contest.contest_based_details,
+                cpm_contest: {
+                    ...cpmConfig,
+                    budget_spent: totalSpentCents
+                }
+            };
+
+            const { error: updateError } = await supabaseAdmin
+                .from('contests')
+                .update({ 
+                    contest_based_details: updatedContestDetails,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', contest.id);
+
+            if (updateError) {
+                console.error(`CRON Job: Error updating budget for contest ${contest.id}:`, updateError);
+            } else {
+                console.log(`CRON Job: Updated budget for contest ${contest.id}. Budget spent: $${totalSpent.toFixed(2)} (${verifiedSubmissions.length} verified submissions)`);
+            }
+        }
+    } catch (error: any) {
+        console.error('CRON Job: Error updating CPM contest budgets:', error.message);
+    }
+}
+
 export async function GET(request: Request) {
     // 1. Verify Cron Secret
     const authHeader = request.headers.get('authorization');
@@ -51,7 +146,11 @@ export async function GET(request: Request) {
 
         if (!submissions || submissions.length === 0) {
             console.log('CRON Job: No relevant submissions found to update.');
-            return NextResponse.json({ message: 'No submissions to update' }, { status: 200 });
+            
+            // Still run budget updates even if no submissions to process
+            await updateCpmContestBudgets(supabaseAdmin);
+            
+            return NextResponse.json({ message: 'No submissions to update, budget tracking completed' }, { status: 200 });
         }
 
         console.log(`CRON Job: Found ${submissions.length} submissions to potentially update.`);
@@ -87,7 +186,11 @@ export async function GET(request: Request) {
 
         if (!creatorsData || creatorsData.length === 0) {
             console.log('CRON Job: No users with connected YouTube accounts found for these submissions.');
-            return NextResponse.json({ message: 'No connected YouTube accounts found' }, { status: 200 });
+            
+            // Still run budget updates
+            await updateCpmContestBudgets(supabaseAdmin);
+            
+            return NextResponse.json({ message: 'No connected YouTube accounts found, budget tracking completed' }, { status: 200 });
         }
         
         let updatedSubmissionsCount = 0;
@@ -232,8 +335,11 @@ export async function GET(request: Request) {
             console.log(`CRON Job: Token updates attempted. Errors: ${tokenUpdateErrors}`);
         }
 
+        // 12. Update CPM Contest Budgets
+        await updateCpmContestBudgets(supabaseAdmin);
+
         console.log(`CRON Job: YouTube metrics update finished. Updated ${updatedSubmissionsCount} submission views.`);
-        return NextResponse.json({ message: `OK. Updated ${updatedSubmissionsCount} submission views.` });
+        return NextResponse.json({ message: `OK. Updated ${updatedSubmissionsCount} submission views and CPM contest budgets.` });
 
     } catch (error: any) {
         console.error('CRON Job: Unhandled error during execution:', error);

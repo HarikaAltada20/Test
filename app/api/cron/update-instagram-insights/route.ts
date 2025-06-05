@@ -52,7 +52,7 @@ interface InstagramTokenRefreshResponse {
   expires_in: number; // Lifespan of new token in seconds
 }
 
-const TOKEN_REFRESH_THRESHOLD_DAYS = 7; // Refresh if token expires within this many days
+const TOKEN_REFRESH_THRESHOLD_DAYS = 10; // Refresh if expiring within 10 days
 
 // Helper function to chunk array (if needed for batching, though IG insights are per media)
 function chunkArray<T>(array: T[], size: number): T[][] {
@@ -61,6 +61,101 @@ function chunkArray<T>(array: T[], size: number): T[][] {
     chunks.push(array.slice(i, i + size));
   }
   return chunks;
+}
+
+// Function to update budget spent for CPM contests
+async function updateCpmContestBudgets(supabaseAdmin: any) {
+    console.log('CRON Job (Instagram): Starting CPM budget updates...');
+    
+    try {
+        // Get all active CPM contests
+        const { data: cpmContests, error: contestsError } = await supabaseAdmin
+            .from('contests')
+            .select('id, contest_based_details')
+            .eq('contest_type', 'cpm')
+            .not('contest_based_details', 'is', null);
+
+        if (contestsError) {
+            console.error('CRON Job (Instagram): Error fetching CPM contests:', contestsError);
+            return;
+        }
+
+        if (!cpmContests || cpmContests.length === 0) {
+            console.log('CRON Job (Instagram): No CPM contests found to update.');
+            return;
+        }
+
+        console.log(`CRON Job (Instagram): Found ${cpmContests.length} CPM contests to process.`);
+
+        for (const contest of cpmContests) {
+            const cpmConfig = contest.contest_based_details?.cpm_contest;
+            if (!cpmConfig || !cpmConfig.cpm_rate_usd) {
+                console.warn(`CRON Job (Instagram): Contest ${contest.id} has invalid CPM config. Skipping.`);
+                continue;
+            }
+
+            // Get all verified submissions for this contest
+            const { data: verifiedSubmissions, error: submissionsError } = await supabaseAdmin
+                .from('submissions')
+                .select('views')
+                .eq('contest_id', contest.id)
+                .eq('status', 'verified');
+
+            if (submissionsError) {
+                console.error(`CRON Job (Instagram): Error fetching submissions for contest ${contest.id}:`, submissionsError);
+                continue;
+            }
+
+            if (!verifiedSubmissions || verifiedSubmissions.length === 0) {
+                console.log(`CRON Job (Instagram): No verified submissions for contest ${contest.id}. Budget spent: $0.00`);
+                continue;
+            }
+
+            // Calculate total budget spent
+            let totalSpent = 0;
+            for (const submission of verifiedSubmissions) {
+                let effectiveViews = submission.views || 0;
+                
+                // Apply min/max view constraints
+                if (cpmConfig.min_views != null && effectiveViews < cpmConfig.min_views) {
+                    effectiveViews = 0;
+                } else if (cpmConfig.max_views != null && effectiveViews > cpmConfig.max_views) {
+                    effectiveViews = cpmConfig.max_views;
+                }
+                
+                const earnings = (effectiveViews * cpmConfig.cpm_rate_usd) / 1000;
+                totalSpent += earnings;
+            }
+
+            // Convert to cents for storage consistency
+            const totalSpentCents = Math.round(totalSpent * 100);
+
+            // Update the contest with new budget_spent value
+            const updatedContestDetails = {
+                ...contest.contest_based_details,
+                cpm_contest: {
+                    ...cpmConfig,
+                    budget_spent: totalSpentCents
+                }
+            };
+
+            const { error: updateError } = await supabaseAdmin
+                .from('contests')
+                .update({ 
+                    contest_based_details: updatedContestDetails,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', contest.id);
+
+            if (updateError) {
+                console.error(`CRON Job (Instagram): Error updating budget for contest ${contest.id}:`, updateError);
+            } else {
+                console.log(`CRON Job (Instagram): Updated budget for contest ${contest.id}. Budget spent: $${totalSpent.toFixed(2)} (${verifiedSubmissions.length} verified submissions)`);
+            }
+        }
+    } catch (error: any) {
+        console.error('CRON Job (Instagram): Error updating CPM contest budgets:', error.message);
+    }
 }
 
 export async function GET(request: Request) {
@@ -81,16 +176,12 @@ export async function GET(request: Request) {
 
   try {
     // 3. Fetch relevant submissions
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     
     const { data: submissions, error: submissionError } = await supabaseAdmin
       .from('submissions')
       .select('id, creator_id, video_id, views, other_stats, platform')
       .eq('platform', 'instagram')
       .not('video_id', 'is', null)
-      // Optional: Filter for submissions that haven't been updated recently or are part of active contests
-      // For example, update submissions created/updated in the last 7 days, or link to active contests
-      // .gte('updated_at', sevenDaysAgo) // Example: only submissions updated recently
       .returns<Submission[]>(); // Ensure the return type
 
     if (submissionError) {
@@ -100,7 +191,11 @@ export async function GET(request: Request) {
 
     if (!submissions || submissions.length === 0) {
       console.log('CRON Job (Instagram): No relevant Instagram submissions found to update.');
-      return NextResponse.json({ message: 'No Instagram submissions to update' }, { status: 200 });
+      
+      // Still run budget updates even if no submissions to process
+      await updateCpmContestBudgets(supabaseAdmin);
+      
+      return NextResponse.json({ message: 'No Instagram submissions to update, budget tracking completed' }, { status: 200 });
     }
 
     console.log(`CRON Job (Instagram): Found ${submissions.length} Instagram submissions to potentially update.`);
@@ -132,7 +227,11 @@ export async function GET(request: Request) {
 
     if (!creatorsData || creatorsData.length === 0) {
       console.log('CRON Job (Instagram): No creator profiles with connected Instagram accounts found for these submissions.');
-      return NextResponse.json({ message: 'No connected Instagram accounts found for submissions' }, { status: 200 });
+      
+      // Still run budget updates
+      await updateCpmContestBudgets(supabaseAdmin);
+      
+      return NextResponse.json({ message: 'No connected Instagram accounts found for submissions, budget tracking completed' }, { status: 200 });
     }
 
     // Create a map for easy lookup of creator profiles
@@ -266,7 +365,7 @@ export async function GET(request: Request) {
           const finalInstagramStats = { ...defaultStats, ...newInstagramStats };
           
           // Determine if stats have meaningfully changed
-          let hasChanged = (submission.views !== primaryViews); // Check against the new primaryViews
+          let hasChanged = (submission.views !== primaryViews);
           
           if (!hasChanged && submission.other_stats?.instagram) {
              // More robust check against all fields in finalInstagramStats vs submission.other_stats.instagram
@@ -347,8 +446,11 @@ export async function GET(request: Request) {
       console.log(`CRON Job (Instagram): Database updates attempted for ${metricsToUpdateDatabase.length} submissions. Errors: ${updateErrors}`);
     }
 
+    // 8. Update CPM Contest Budgets
+    await updateCpmContestBudgets(supabaseAdmin);
+
     console.log(`CRON Job (Instagram): Instagram insights update finished. Updated ${updatedSubmissionsCount} submissions.`);
-    return NextResponse.json({ message: `OK. Updated ${updatedSubmissionsCount} Instagram submission insights.` });
+    return NextResponse.json({ message: `OK. Updated ${updatedSubmissionsCount} Instagram submission insights and CPM contest budgets.` });
 
   } catch (error: any) {
     console.error('CRON Job (Instagram): Unhandled error during execution:', error);

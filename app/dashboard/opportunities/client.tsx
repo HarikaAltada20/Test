@@ -390,13 +390,13 @@ export default function OpportunitiesPage({
                 {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                   <div className="mt-2 mb-3">
                     <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-0.5">
-                      <span>Spent: {formatMoney(contest.budget_spent || 0)}</span>
-                      <span>{(((contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
+                      <span>Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
+                      <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                       <div
                         className="bg-rose-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(((contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
+                        style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
                       ></div>
                     </div>
                   </div>
