@@ -20,14 +20,14 @@ Great question. All content is posted on creators’ real social media accounts,
 
 Click to verify views yourself.
 
-See platform-specific analytics (like TikTok view count or Instagram reels stats).
+See platform-specific analytics (like view count or Instagram reels stats).
 
 Check for comments and audience interaction.
 
 We only count views that are native to the platform—so no bots, no boosts, just genuine engagement.
 
 4. Where will the videos be posted?
-Creators publish their contest entries on their own public social media profiles—such as TikTok, Instagram Reels, or YouTube Shorts.
+Creators publish their contest entries on their own public social media profiles—such as, Instagram Reels, or YouTube Shorts.
 
 You can specify preferred platforms in your contest brief. All content is organically distributed, so you're tapping into the creator’s actual audience—no need for paid ads (unless you want to repurpose content later).
 

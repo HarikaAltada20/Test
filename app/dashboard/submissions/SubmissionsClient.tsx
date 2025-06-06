@@ -19,7 +19,7 @@ interface SubmissionsClientProps {
 
 type ContestTypeFilter = 'all' | 'leaderboard' | 'cpm';
 type StatusFilter = 'all' | 'active' | 'pending' | 'verified' | 'rejected' | 'ended' | 'paid';
-type PlatformFilter = 'all' | 'youtube' | 'instagram' | 'tiktok' | 'other';
+type PlatformFilter = 'all' | 'youtube' | 'instagram' | 'other';
 
 export default function SubmissionsClient({
     initialSubmissions,

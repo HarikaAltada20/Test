@@ -2402,7 +2402,7 @@ You must show the Game Of Creators App Store listing in your video`);
                 </ul>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Add TikTok inspiration link"
+                    placeholder="Add any video inspiration link (e.g., instagram, YouTube)"
                     value={newInspirationLink}
                     onChange={(e) => setNewInspirationLink(e.target.value)}
                   />

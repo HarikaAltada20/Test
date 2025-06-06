@@ -1182,7 +1182,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                             )}
                             <div className="flex gap-2">
                                 <Input
-                                    placeholder="Add inspiration link (e.g., TikTok, YouTube)"
+                                    placeholder="Add inspiration link (e.g., instagram, YouTube)"
                                     value={newInspirationLink}
                                     onChange={(e) => setNewInspirationLink(e.target.value)}
                                 />

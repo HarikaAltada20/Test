@@ -22,8 +22,7 @@ import {
     Users,
     DollarSign,
     ExternalLink, // For View button icon
-    Trash2, // For Delete button icon (optional, as DeleteContestButton has its own)
-    Plus // Add Plus icon for Create Contest button
+
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, formatMoney, cn } from "@/lib/utils";
@@ -374,15 +373,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                     </div>
                 </div>
 
-                {/* Create Contest Button */}
-                {!isAdminView && (
-                    <Button className="bg-rose-600 hover:bg-rose-700 text-white shadow-sm w-full sm:w-auto" asChild>
-                        <Link href="/dashboard/contests/create?new=true">
-                            <Plus className="mr-2 h-4 w-4" />
-                            Create Contest
-                        </Link>
-                    </Button>
-                )}
+
             </div>
 
             <Tabs defaultValue={draftContests.length === 0 ? "published" : "drafts"} className="w-full">
