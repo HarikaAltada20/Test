@@ -18,7 +18,7 @@ import { useToast } from "@/components/ui/use-toast";
 interface DeleteContestButtonProps {
   contestId: string;
   contestTitle: string;
-  isLive: boolean;
+  isDeletable: boolean;
   variant?: "outline" | "destructive" | "ghost" | "link";
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
@@ -27,7 +27,7 @@ interface DeleteContestButtonProps {
 export function DeleteContestButton({
   contestId,
   contestTitle,
-  isLive,
+  isDeletable,
   variant = "outline",
   size = "sm",
   className = "",
@@ -38,8 +38,8 @@ export function DeleteContestButton({
   const { toast } = useToast();
   const supabase = createClient();
 
-  // Don't show delete button for live contests
-  if (isLive) {
+  // Don't show delete button if it's not deletable (e.g., live or ended contests)
+  if (!isDeletable) {
     return null;
   }
 

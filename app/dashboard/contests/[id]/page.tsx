@@ -9,6 +9,7 @@ export default async function ContestDetailPage({
 }) {
   const resolvedParams = await params;
   const contestId = resolvedParams.id;
+  console.log(`[page.tsx] Processing request for Contest ID: ${contestId}`);
   const supabase = await createClient();
 
   const {
@@ -66,11 +67,51 @@ export default async function ContestDetailPage({
     finalInspirationLinks = null;
   }
 
-  const { data: submissionsData } = await supabase // Renamed to avoid conflict
+  // Fetch submissions first
+  const { data: submissionsData, error: submissionsError } = await supabase
     .from("submissions")
-    .select("*, creator_profiles(username)")
+    .select(`
+      id,
+      created_at,
+      content_link,
+      status,
+      views, 
+      other_stats,
+      platform,
+      video_thumbnail_url,
+      creator_id
+    `)
     .eq("contest_id", contestId)
-    .order("current_views", { ascending: false });
+    .order("created_at", { ascending: false });
+
+  if (submissionsError) {
+    console.error(`[page.tsx] Supabase error fetching submissions for contest ${contestId}:`, submissionsError);
+  }
+
+  console.log(`[page.tsx] Raw submissionsData for contest ${contestId}:`, JSON.stringify(submissionsData, null, 2));
+
+  // Fetch creator profiles for the submissions
+  let creatorProfilesData: any[] = [];
+  if (submissionsData && submissionsData.length > 0) {
+    const creatorIds = [...new Set(submissionsData.map(sub => sub.creator_id).filter(Boolean))];
+
+    if (creatorIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("creator_profiles")
+        .select(`
+          id,
+          youtube_account,
+          instagram_account
+        `)
+        .in("id", creatorIds);
+
+      if (profilesError) {
+        console.error(`[page.tsx] Supabase error fetching creator profiles:`, profilesError);
+      } else {
+        creatorProfilesData = profilesData || [];
+      }
+    }
+  }
 
   const isLive = contestData.status === "active";
 
@@ -104,6 +145,7 @@ export default async function ContestDetailPage({
     status: contestData.status,
     thumbnail_url: contestData.thumbnail_url,
     brief: contestData.brief,
+    brief_html: contestData.brief_html,
     platform: contestData.platform,
     start_date: contestData.start_date,
     end_date: contestData.end_date,
@@ -115,21 +157,63 @@ export default async function ContestDetailPage({
   };
 
   const submissions = submissionsData
-    ? submissionsData.map((sub) => ({
-      id: sub.id,
-      creator_profiles: sub.creator_profiles,
-      created_at: sub.created_at, // Pass as string or Date
-      current_views: sub.current_views,
-      status: sub.status,
-      content_link: sub.content_link,
-    }))
-    : null;
+    ? submissionsData.map((sub: any) => {
+      let creatorUsername: string | null = null;
+      let creatorAvatarUrl: string | null = null;
+      const actualCreatorProfileId: string | null = sub.creator_id;
+
+      // Find the creator profile for this submission
+      const creatorProfile = creatorProfilesData.find(profile => profile.id === sub.creator_id);
+
+      if (creatorProfile) {
+        const platform = sub.platform?.toLowerCase();
+
+        try {
+          if (platform?.includes('youtube') && creatorProfile.youtube_account) {
+            const ytAccount = typeof creatorProfile.youtube_account === 'string' ? JSON.parse(creatorProfile.youtube_account) : creatorProfile.youtube_account;
+            creatorUsername = ytAccount?.channel_title;
+            creatorAvatarUrl = ytAccount?.channel_thumbnail;
+          } else if (platform?.includes('instagram') && creatorProfile.instagram_account) {
+            const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
+            creatorUsername = igAccount?.username;
+            creatorAvatarUrl = igAccount?.profile_picture_url;
+          }
+        } catch (e) {
+          console.error("[page.tsx] Error parsing social account JSON:", e);
+          // Keep username/avatar as null if parsing fails
+        }
+
+        // Fallback if platform-specific data extraction failed or platform is different
+        if (!creatorUsername && creatorProfile.username) creatorUsername = creatorProfile.username; // Generic username if exists
+        if (!creatorAvatarUrl && creatorProfile.avatar_url) creatorAvatarUrl = creatorProfile.avatar_url; // Generic avatar if exists
+        if (!creatorUsername) creatorUsername = 'N/A'; // Final fallback
+
+      } else {
+        creatorUsername = 'Unknown Creator'; // Fallback if no creator_profile found
+      }
+
+      return {
+        id: sub.id,
+        created_at: sub.created_at,
+        content_link: sub.content_link,
+        status: sub.status,
+        views: sub.views,
+        other_stats: sub.other_stats,
+        platform: sub.platform,
+        video_thumbnail_url: sub.video_thumbnail_url,
+        creator_username: creatorUsername,
+        creator_avatar_url: creatorAvatarUrl,
+        creator_id: actualCreatorProfileId
+      };
+    })
+    : [];
+
+  console.log(`[page.tsx] Mapped submissions for contest ${contestId}:`, JSON.stringify(submissions, null, 2));
 
   return (
     <ContestDetailClient
       contest={contest}
-      submissions={submissions}
-      isLive={isLive}
+      initialSubmissions={submissions}
       durationDays={durationDays}
       contestId={contestId}
     />

@@ -31,13 +31,23 @@ export default async function ContestsPage() {
     redirect("/dashboard/opportunities");
   }
 
-  const { data: contests = [] } = await supabase
+  const { data: contestsData = [] } = await supabase
     .from("contests_with_status")
-    .select("*")
+    .select("*, contest_based_details")
     .eq("advertiser_id", data.user.id)
     .order("created_at", { ascending: false });
 
-  const typedContests = contests as any[];
+  const typedContests = (contestsData || []).map(contest => {
+    let total_prize_money_sortable: number | null = null;
+    if (contest.contest_type === 'leaderboard' &&
+      contest.contest_based_details &&
+      typeof contest.contest_based_details === 'object' &&
+      (contest.contest_based_details as any).leaderboard_contest &&
+      typeof (contest.contest_based_details as any).leaderboard_contest.total_prize === 'number') {
+      total_prize_money_sortable = (contest.contest_based_details as any).leaderboard_contest.total_prize;
+    }
+    return { ...contest, total_prize_money_sortable };
+  }) as any[];
 
   const publishedContests = typedContests.filter((contest) => !contest.is_draft);
   const draftContests = typedContests.filter((contest) => contest.is_draft);
