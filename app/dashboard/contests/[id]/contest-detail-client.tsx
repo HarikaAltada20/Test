@@ -63,7 +63,8 @@ import {
     Instagram,
     Youtube,
     Loader2,
-    Info
+    Info,
+    RefreshCw
 } from "lucide-react";
 
 // --- Local Type Definitions ---
@@ -104,6 +105,7 @@ interface ContestDetailClientProps {
     initialSubmissions: Submission[] | null;
     durationDays: number | null;
     contestId: string;
+    isAdminView?: boolean;
 }
 
 export default function ContestDetailClient({
@@ -111,11 +113,19 @@ export default function ContestDetailClient({
     initialSubmissions,
     durationDays,
     contestId,
+    isAdminView = false,
 }: ContestDetailClientProps) {
     const supabase = createClient();
     const { toast } = useToast();
     const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(initialSubmissions || []);
     const [isLoadingSubmission, setIsLoadingSubmission] = useState<Record<string, boolean>>({});
+
+    // Refresh metrics state
+    const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
+    const [lastRefreshTime, setLastRefreshTime] = useState<number | null>(null);
+    const [nextRefreshAllowed, setNextRefreshAllowed] = useState<number | null>(null);
+
+    const REFRESH_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes for contest owners
 
     useEffect(() => {
         setCurrentSubmissions(initialSubmissions || []);
@@ -124,6 +134,8 @@ export default function ContestDetailClient({
     if (!contest) {
         return <p>Loading contest details or contest not found...</p>;
     }
+
+    { console.log("contest data", contest) }
 
     const getStatusBadgeProps = (status: Contest['status']) => {
         switch (status) {
@@ -183,6 +195,63 @@ export default function ContestDetailClient({
             });
         } finally {
             setIsLoadingSubmission(prev => ({ ...prev, [submissionId]: false }));
+        }
+    };
+
+    const handleRefreshMetrics = async () => {
+        const now = Date.now();
+
+        // Check rate limiting
+        if (lastRefreshTime && (now - lastRefreshTime) < REFRESH_COOLDOWN_MS) {
+            const remainingMs = REFRESH_COOLDOWN_MS - (now - lastRefreshTime);
+            const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
+            toast({
+                title: "Please Wait",
+                description: `You can refresh again in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`,
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setIsRefreshingMetrics(true);
+
+        try {
+            const response = await fetch(`/api/contests/${contestId}/refresh-metrics`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to refresh metrics');
+            }
+
+            // Update rate limiting state
+            setLastRefreshTime(now);
+            setNextRefreshAllowed(now + REFRESH_COOLDOWN_MS);
+
+            toast({
+                title: "Success! 🎉",
+                description: `${result.message}. Budget and leaderboard updated!`,
+            });
+
+            // Refresh the page to show updated data
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+
+        } catch (error: any) {
+            console.error('Failed to refresh metrics:', error);
+            toast({
+                title: "Refresh Failed",
+                description: error.message || "Could not refresh metrics. Please try again.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsRefreshingMetrics(false);
         }
     };
 
@@ -257,7 +326,7 @@ export default function ContestDetailClient({
         <div>
             <div className="flex items-center gap-2 mb-6">
                 <Button variant="ghost" size="icon" asChild>
-                    <Link href="/dashboard/contests">
+                    <Link href={isAdminView ? "/dashboard/admin/contests" : "/dashboard/contests"}>
                         <ArrowLeft className="h-5 w-5" />
                     </Link>
                 </Button>
@@ -785,33 +854,58 @@ export default function ContestDetailClient({
                             </CardContent>
                         </Card>
 
-                        {/* Conditionally render Manage Contest card */}
-                        {(isContestEditable || isContestDeletable) && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Manage Contest</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    {isContestEditable && (
-                                        <Button className="w-full" asChild>
-                                            <Link href={`/dashboard/contests/${contestId}/edit`}>
-                                                <Edit className="mr-2 h-4 w-4" /> Edit Contest
-                                            </Link>
-                                        </Button>
-                                    )}
-                                    {isContestDeletable && (
-                                        <DeleteContestButton
-                                            contestId={contestId}
-                                            contestTitle={contest.title || "Untitled Contest"}
-                                            isDeletable={true}
-                                            variant="outline"
-                                            size="default"
-                                            className="w-full"
-                                        />
-                                    )}
-                                </CardContent>
-                            </Card>
-                        )}
+                        {/* Manage Contest card - Always show with Share, conditionally show Edit/Delete */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Manage Contest</CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {/* Refresh Metrics button - for active contests with submissions */}
+                                {(contest.status === 'active' || contest.status === 'ended') && currentSubmissions && currentSubmissions.length > 0 && (
+                                    <Button
+                                        variant="default"
+                                        className="w-full bg-blue-600 hover:bg-blue-700"
+                                        onClick={handleRefreshMetrics}
+                                        disabled={isRefreshingMetrics}
+                                    >
+                                        {isRefreshingMetrics ? (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="mr-2 h-4 w-4" />
+                                        )}
+                                        {isRefreshingMetrics ? 'Updating...' : 'Refresh Metrics'}
+                                    </Button>
+                                )}
+
+                                {/* Share button - always visible */}
+                                <Button variant="outline" className="w-full" asChild>
+                                    <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/share` : `/dashboard/contests/${contestId}/share`}>
+                                        <Share2 className="mr-2 h-4 w-4" /> Share Contest
+                                    </Link>
+                                </Button>
+
+                                {/* Edit button - only if contest is editable */}
+                                {isContestEditable && (
+                                    <Button className="w-full" asChild>
+                                        <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/edit` : `/dashboard/contests/${contestId}/edit`}>
+                                            <Edit className="mr-2 h-4 w-4" /> Edit Contest
+                                        </Link>
+                                    </Button>
+                                )}
+
+                                {/* Delete button - only if contest is deletable */}
+                                {isContestDeletable && (
+                                    <DeleteContestButton
+                                        contestId={contestId}
+                                        contestTitle={contest.title || "Untitled Contest"}
+                                        isDeletable={true}
+                                        variant="outline"
+                                        size="default"
+                                        className="w-full"
+                                    />
+                                )}
+                            </CardContent>
+                        </Card>
                     </div>
                 </div>
             </div>

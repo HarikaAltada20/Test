@@ -21,6 +21,7 @@ import dayjs from 'dayjs';
 import { useRouter } from "next/navigation";
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import Link from "next/link";
+import { useToast } from "@/hooks/use-toast";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -63,14 +64,14 @@ export default function SettingsPage({
 }: {
   user: UserResponse["data"]["user"];
 }) {
+  const { toast } = useToast();
   const [profile, setProfile] = useState<
     CreatorProfile | AdvertiserProfile | null
   >(null);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [companyProfileLoading, setCompanyProfileLoading] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
@@ -133,11 +134,19 @@ export default function SettingsPage({
           setProfile(data);
         } else {
           console.error("Unknown user type:", userData.user_type);
-          setError("Unknown user type encountered.");
+          toast({
+            title: "Error",
+            description: "Unknown user type encountered.",
+            variant: "destructive",
+          });
         }
       } catch (err) {
         console.error("Error loading profile:", err);
-        setError("Failed to load profile information.");
+        toast({
+          title: "Error",
+          description: "Failed to load profile information.",
+          variant: "destructive",
+        });
       } finally {
         setPageLoading(false);
       }
@@ -175,8 +184,6 @@ export default function SettingsPage({
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
     setPasswordChangeLoading(true);
 
     try {
@@ -186,11 +193,19 @@ export default function SettingsPage({
 
       if (error) throw error;
 
-      setSuccess("Password updated successfully");
+      toast({
+        title: "Success",
+        description: "Password updated successfully",
+        variant: "default",
+      });
       setCurrentPassword("");
       setNewPassword("");
     } catch (err: any) {
-      setError(err.message || "Failed to update password");
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update password",
+        variant: "destructive",
+      });
     } finally {
       setPasswordChangeLoading(false);
     }
@@ -233,21 +248,24 @@ export default function SettingsPage({
           : null
       );
 
-      setSuccess(
-        `${platform.charAt(0).toUpperCase() + platform.slice(1)
-        } account disconnected`
-      );
+      toast({
+        title: "Success",
+        description: `${platform.charAt(0).toUpperCase() + platform.slice(1)} account disconnected`,
+        variant: "default",
+      });
     } catch (err: any) {
-      setError(err.message || `Failed to disconnect ${platform} account`);
+      toast({
+        title: "Error",
+        description: err.message || `Failed to disconnect ${platform} account`,
+        variant: "destructive",
+      });
     }
   };
 
   const updateCompanyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("updateCompanyProfile: Starting");
-    setError(null);
-    setSuccess(null);
-    setPasswordChangeLoading(true);
+    setCompanyProfileLoading(true);
 
     try {
       // Log values right before the update attempt
@@ -300,14 +318,22 @@ export default function SettingsPage({
         throw error;
       }
 
-      setSuccess("Company profile updated successfully");
+      toast({
+        title: "Success",
+        description: "Company profile updated successfully",
+        variant: "default",
+      });
       console.log("updateCompanyProfile: Set success message");
     } catch (err: any) {
       console.error("updateCompanyProfile: OUTER CATCH - Error caught:", err);
-      setError(err.message || "Failed to update company profile");
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update company profile",
+        variant: "destructive",
+      });
     } finally {
       console.log("updateCompanyProfile: Reached finally block");
-      setPasswordChangeLoading(false);
+      setCompanyProfileLoading(false);
     }
   };
 
@@ -347,7 +373,11 @@ export default function SettingsPage({
       // Handle token refresh error, e.g., notify user, attempt disconnect, or ask to re-authenticate
       // For now, we'll log the error. Depending on the error type (e.g. token revoked), 
       // you might want to nullify the instagram_account or prompt for re-login.
-      setError(`Failed to refresh Instagram token: ${err.message}. Please try reconnecting your account.`);
+      toast({
+        title: "Error",
+        description: `Failed to refresh Instagram token: ${err.message}. Please try reconnecting your account.`,
+        variant: "destructive",
+      });
     }
   };
 
@@ -356,11 +386,19 @@ export default function SettingsPage({
     const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
     if (!instagramClientId) {
-      setError("Instagram Client ID is not configured. Please contact support.");
+      toast({
+        title: "Error",
+        description: "Instagram Client ID is not configured. Please contact support.",
+        variant: "destructive",
+      });
       return;
     }
     if (!appBaseUrl) {
-      setError("Application Base URL is not configured. Please contact support.");
+      toast({
+        title: "Error",
+        description: "Application Base URL is not configured. Please contact support.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -377,13 +415,21 @@ export default function SettingsPage({
       // Set a timeout to reset loading state if redirect doesn't happen
       const timeoutId = setTimeout(() => {
         setIsLoading(false);
-        setError("Connection timed out. Please try again.");
+        toast({
+          title: "Error",
+          description: "Connection timed out. Please try again.",
+          variant: "destructive",
+        });
       }, 5000);
 
       window.location.href = authUrl;
     } catch (err: any) {
       setIsLoading(false);
-      setError(err.message || "Failed to initiate Instagram connection");
+      toast({
+        title: "Error",
+        description: err.message || "Failed to initiate Instagram connection",
+        variant: "destructive",
+      });
     }
   };
 
@@ -394,7 +440,11 @@ export default function SettingsPage({
       // Set a timeout to prevent infinite loading
       const timeoutId = setTimeout(() => {
         setIsLoading(false);
-        setError("Disconnection timed out. Please try again.");
+        toast({
+          title: "Error",
+          description: "Disconnection timed out. Please try again.",
+          variant: "destructive",
+        });
       }, 5000);
 
       const { error: updateError } = await supabase
@@ -408,9 +458,17 @@ export default function SettingsPage({
 
       setInstagramAccount(null);
       setProfile(prev => prev ? { ...prev, instagram_account: null } : null);
-      setSuccess("Instagram account disconnected successfully.");
+      toast({
+        title: "Success",
+        description: "Instagram account disconnected successfully.",
+        variant: "default",
+      });
     } catch (err: any) {
-      setError(err.message || "Failed to disconnect Instagram account.");
+      toast({
+        title: "Error",
+        description: err.message || "Failed to disconnect Instagram account.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -424,7 +482,11 @@ export default function SettingsPage({
     }
 
     if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, 'day'))) {
-      setSuccess("Instagram token is nearing expiry. Ideally, this would trigger a server-side refresh or prompt for re-authentication.");
+      toast({
+        title: "Info",
+        description: "Instagram token is nearing expiry. Ideally, this would trigger a server-side refresh or prompt for re-authentication.",
+        variant: "default",
+      });
       // In a real app, you might call a backend endpoint that securely refreshes the token.
       // e.g., await fetch('/api/instagram/refresh-token', { method: 'POST' });
       // For now, this is a client-side notice. The cron job will handle the actual refresh.
@@ -569,17 +631,6 @@ export default function SettingsPage({
           </CardHeader>
           <CardContent>
             <form onSubmit={updateCompanyProfile} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              {success && (
-                <Alert>
-                  <AlertDescription>{success}</AlertDescription>
-                </Alert>
-              )}
-
               <div className="space-y-2">
                 <Label htmlFor="company_name">Company Name</Label>
                 <Input
@@ -599,8 +650,8 @@ export default function SettingsPage({
                 />
               </div>
 
-              <Button type="submit" disabled={passwordChangeLoading}>
-                {passwordChangeLoading ? "Updating..." : "Update Profile"}
+              <Button type="submit" disabled={companyProfileLoading}>
+                {companyProfileLoading ? "Updating..." : "Update Profile"}
               </Button>
             </form>
           </CardContent>
@@ -670,17 +721,6 @@ export default function SettingsPage({
         </CardHeader>
         <CardContent>
           <form onSubmit={handlePasswordChange} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            {success && (
-              <Alert>
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="current-password">Current Password</Label>
               <Input

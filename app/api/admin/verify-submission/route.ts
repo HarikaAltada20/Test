@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
+import { verifyAdminAccess } from '@/utils/admin-auth';
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -15,27 +16,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid action. Must be verified, rejected, or pending' }, { status: 400 });
     }
 
-    // Get current user and check if they have admin privileges
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Verify admin access first
+    const { isAdmin, error: adminError, user: adminUser } = await verifyAdminAccess();
     
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
+    let currentUserId: string;
+    
+    if (!isAdmin) {
+      // If not admin, check if it's an advertiser managing their own contest
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !authUser) {
+        return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+      }
 
-    // Check if user is admin (assuming you have an admin role system)
-    const { data: userData, error: userDataError } = await supabase
-      .from('users')
-      .select('user_type, email')
-      .eq('id', user.id)
-      .single();
+      const { data: userData, error: userDataError } = await supabase
+        .from('users')
+        .select('user_type')
+        .eq('id', authUser.id)
+        .single();
 
-    if (userDataError || !userData) {
-      return NextResponse.json({ error: 'User data not found' }, { status: 404 });
-    }
+      if (userDataError || !userData || userData.user_type !== 'advertiser') {
+        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
 
-    // Check if user has admin privileges (adjust this logic based on your admin system)
-    if (userData.user_type !== 'admin' && userData.user_type !== 'advertiser') {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      // For advertisers, verify they own the contest associated with this submission
+      const { data: submission, error: submissionError } = await supabase
+        .from('submissions')
+        .select('contest_id, contests!inner(advertiser_id)')
+        .eq('id', submissionId)
+        .single();
+
+      if (submissionError || !submission) {
+        return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
+      }
+
+      if ((submission as any).contests.advertiser_id !== authUser.id) {
+        return NextResponse.json({ error: 'You can only manage submissions for your own contests' }, { status: 403 });
+      }
+      
+      currentUserId = authUser.id;
+    } else {
+      currentUserId = adminUser?.id || '';
     }
 
     // Fetch the submission to verify it exists
@@ -96,19 +117,21 @@ export async function POST(request: Request) {
     // Only rejected submissions are hidden from public view
 
     // Log the verification action (optional - for audit trail)
-    const { error: logError } = await supabase
-      .from('verification_logs')
-      .insert({
-        submission_id: submissionId,
-        admin_id: user.id,
-        action: action,
-        reason: reason || null,
-        performed_at: new Date().toISOString()
-      });
+    if (currentUserId) {
+      const { error: logError } = await supabase
+        .from('verification_logs')
+        .insert({
+          submission_id: submissionId,
+          admin_id: currentUserId,
+          action: action,
+          reason: reason || null,
+          performed_at: new Date().toISOString()
+        });
 
-    if (logError) {
-      console.warn('Failed to log verification action:', logError);
-      // Don't fail the request if logging fails
+      if (logError) {
+        console.warn('Failed to log verification action:', logError);
+        // Don't fail the request if logging fails
+      }
     }
 
     return NextResponse.json({ 

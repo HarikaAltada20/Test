@@ -490,6 +490,36 @@ You must show the Game Of Creators App Store listing in your video`);
           }
         }, 5000);
 
+        // Validate subscription plan requirements
+        const planFeatures = getPlanFeatures(userPlan);
+
+        // Validate budget requirements
+        if (contestType === "leaderboard") {
+          if (totalPrizePool < planFeatures.minContestBudget) {
+            setFormFeedback(`The minimum prize pool for your plan is ${formatCurrency(planFeatures.minContestBudget)}. Please increase your prize amounts.`);
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+
+          // Validate maximum winners
+          if (winnerCount > planFeatures.maxWinnersPerContest) {
+            setFormFeedback(`Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners. Please reduce the number of winners.`);
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+        } else if (contestType === "cpm") {
+          const budgetInCents = (parseFloat(totalBudget.toString()) || 0) * 100;
+          if (budgetInCents < planFeatures.minContestBudget) {
+            setFormFeedback(`The minimum contest budget for your plan is ${formatCurrency(planFeatures.minContestBudget)}. Please increase your total budget.`);
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+        }
+
+        // TODO: Add validation for maximum active contests if needed
+        // This would require fetching the current count of active contests for the user
+        // and comparing it against planFeatures.maxActiveContests
+
         if (!thumbnail && !thumbnailPreview) {
           setFormFeedback("Contest thumbnail is required");
           setFormFeedbackType("error");

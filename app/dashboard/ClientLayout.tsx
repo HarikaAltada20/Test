@@ -52,10 +52,9 @@ function DashboardContent({
   user,
 }: {
   children: React.ReactNode;
-  user: UserResponse["data"]["user"];
+  user: (UserResponse["data"]["user"] & { user_type?: string | null }) | null;
 }) {
-  const userRole =
-    (user?.user_metadata?.user_type as "advertiser" | "creator") || null;
+  const userRole = user?.user_type as "advertiser" | "creator" | "admin" || null;
 
   return (
     <div className="flex min-h-screen">

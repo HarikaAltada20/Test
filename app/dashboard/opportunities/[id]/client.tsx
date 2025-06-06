@@ -143,6 +143,53 @@ export function ContestClientPage({
   const [loadingMySubmission, setLoadingMySubmission] = useState(false);
   const [contestType, setContestType] = useState<string | null>(null); // Track contest type for verification badges
 
+  // Refresh metrics state for opportunities
+  const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
+  const [lastMetricsUpdate, setLastMetricsUpdate] = useState<string | null>(null);
+  const [canRefreshMetrics, setCanRefreshMetrics] = useState(true);
+
+  const REFRESH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
+  const handleRefreshMetrics = async () => {
+    if (!contest?.id) return;
+
+    setIsRefreshingMetrics(true);
+
+    try {
+      const response = await fetch(`/api/contests/${contest.id}/refresh-metrics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-refresh-source': 'opportunities', // Identify this as opportunities refresh
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to refresh metrics');
+      }
+
+      // Update states after successful refresh
+      setLastMetricsUpdate(new Date().toISOString());
+      setCanRefreshMetrics(false);
+
+      // Re-enable refresh after 1 hour
+      setTimeout(() => setCanRefreshMetrics(true), REFRESH_COOLDOWN_MS);
+
+      // Refresh the leaderboard to show updated data
+      await fetchLeaderboard(leaderboardCurrentPage);
+
+      console.log('Metrics refreshed successfully from opportunities side');
+
+    } catch (error: any) {
+      console.error('Failed to refresh metrics:', error);
+      // In opportunities page, we'll silently handle errors or show a subtle notification
+    } finally {
+      setIsRefreshingMetrics(false);
+    }
+  };
+
   const fetchLeaderboard = async (pageToFetch: number = 1) => {
     if (!isMounted) return;
     setLoadingLeaderboard(true);
@@ -316,7 +363,17 @@ export function ContestClientPage({
         if (["draft", "incomplete"].includes(contestData.status) || contestData.is_draft) {
           throw new Error("This contest is not available.");
         }
-        if (isMounted) setContest(contestData);
+        if (isMounted) {
+          setContest(contestData);
+
+          // Set initial refresh state based on last_metrics_updated
+          if (contestData.last_metrics_updated) {
+            const lastUpdate = new Date(contestData.last_metrics_updated);
+            const timeSinceUpdate = Date.now() - lastUpdate.getTime();
+            setLastMetricsUpdate(contestData.last_metrics_updated);
+            setCanRefreshMetrics(timeSinceUpdate >= REFRESH_COOLDOWN_MS);
+          }
+        }
 
         // Fetch existing submission status for the current user (if logged in)
         // This is separate from the main leaderboard logic.
@@ -945,10 +1002,26 @@ export function ContestClientPage({
                 )}
 
                 {/* Main Leaderboard List */}
-                <div className="text-sm text-muted-foreground text-right mb-2">
-                  Last updated: {lastUpdated ? formatTimeAgo(lastUpdated) : "Never"}
-                  {totalLeaderboardEntries > 0 && (
-                    <span className="ml-2">| Total Submissions: {totalLeaderboardEntries.toLocaleString()}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm text-muted-foreground">
+                    Last updated: {lastMetricsUpdate ? formatTimeAgo(lastMetricsUpdate) : (lastUpdated ? formatTimeAgo(lastUpdated) : "Never")}
+                    {totalLeaderboardEntries > 0 && (
+                      <span className="ml-2">| Total Submissions: {totalLeaderboardEntries.toLocaleString()}</span>
+                    )}
+                  </div>
+
+                  {/* Refresh Metrics Button - Only show for active contests with submissions */}
+                  {contest?.status === 'active' && totalLeaderboardEntries > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRefreshMetrics}
+                      disabled={isRefreshingMetrics || !canRefreshMetrics}
+                      className="ml-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
+                      {isRefreshingMetrics ? 'Updating...' : 'Refresh Metrics'}
+                    </Button>
                   )}
                 </div>
                 {leaderboard.map((entry, index) => {

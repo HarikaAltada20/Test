@@ -18,7 +18,7 @@ import { SidebarNavigationLink } from "@/components/navigation/NavigationLink";
 import { useClientAuth } from "@/hooks/use-client-auth";
 
 interface DashboardSidebarProps {
-  userRole?: "advertiser" | "creator";
+  userRole?: "advertiser" | "creator" | "admin";
 }
 
 export function DashboardSidebar({
@@ -64,6 +64,24 @@ export function DashboardSidebar({
     },
   ];
 
+  const adminLinks = [
+    {
+      name: "Admin Dashboard",
+      href: "/dashboard/admin",
+      icon: LayoutDashboard,
+    },
+    {
+      name: "All Contests",
+      href: "/dashboard/admin/contests",
+      icon: Trophy,
+    },
+    // {
+    //   name: "Settings",
+    //   href: "/dashboard/admin/settings",
+    //   icon: Settings,
+    // },
+  ];
+
   const creatorLinks = [
     {
       name: "Dashboard",
@@ -92,7 +110,7 @@ export function DashboardSidebar({
     },
   ];
 
-  const links = userRole === "advertiser" ? advertiserLinks : creatorLinks;
+  const links = userRole === "advertiser" ? advertiserLinks : userRole === 'admin' ? adminLinks : creatorLinks;
 
   return (
     <div className="flex flex-col h-full">

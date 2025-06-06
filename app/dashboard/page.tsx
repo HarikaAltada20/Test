@@ -10,11 +10,13 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Trophy, DollarSign, Plus, Video, Coins } from "lucide-react";
-import { formatLocalDateTime, formatMoney } from "@/lib/utils";
+import { Trophy, DollarSign, Plus, Video, User, Building } from "lucide-react";
+import { formatLocalDateTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
+import { formatCurrency } from "@/lib/currency-utils";
+
 
 function DashboardPage() {
   const [profile, setProfile] = useState<any>(null);
@@ -62,6 +64,7 @@ function DashboardPage() {
         setUserCoins(userData?.coins || 0);
 
         if (userType === "advertiser") {
+          // Fetch advertiser profile
           const { data: advertiserProfile, error: profileError } =
             await supabase
               .from("advertiser_profiles")
@@ -72,23 +75,59 @@ function DashboardPage() {
           if (!isMounted) return;
           if (profileError) {
             console.error("Error fetching advertiser profile:", profileError);
-          } else {
-            setProfile(advertiserProfile);
           }
 
+          // Fetch contests data for accurate calculations
           const { data: contests, error: contestsError } = await supabase
-            .from("contests_with_status")
+            .from("contests")
             .select("*")
-            .eq("advertiser_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(3);
+            .eq("advertiser_id", user.id);
 
           if (!isMounted) return;
           if (contestsError) {
             console.error("Error fetching contests:", contestsError);
-          } else {
-            setRecentContests(contests || []);
           }
+
+          // Fetch submissions for views calculation
+          const { data: submissions, error: submissionsError } = await supabase
+            .from("submissions")
+            .select("*, contests!inner(*)")
+            .eq("contests.advertiser_id", user.id);
+
+          if (!isMounted) return;
+          if (submissionsError) {
+            console.error("Error fetching submissions:", submissionsError);
+          }
+
+          // Calculate actual statistics
+          const totalContests = contests?.length || 0;
+          const totalViews = submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) || 0;
+          const totalSpent = contests?.reduce((sum, contest) => {
+            if (contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize) {
+              return sum + contest.contest_based_details.leaderboard_contest.total_prize;
+            } else if (contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget) {
+              return sum + contest.contest_based_details.cpm_contest.total_budget;
+            }
+            return sum;
+          }, 0) || 0;
+
+          // Update profile with calculated values
+          const updatedProfile = {
+            ...advertiserProfile,
+            total_contests_run: totalContests,
+            total_money_spent: totalSpent,
+            total_views: totalViews
+          };
+
+          setProfile(updatedProfile);
+
+          // Get recent contests for display
+          const recentContests = contests?.slice(0, 3)?.sort((a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ) || [];
+
+          setRecentContests(recentContests);
+
         } else if (userType === "creator") {
           const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
@@ -119,6 +158,10 @@ function DashboardPage() {
               .filter(Boolean);
             setRecentContests(contests || []);
           }
+        } else if (userType === "admin") {
+          // Redirect admin users to their dedicated admin dashboard
+          router.push("/dashboard/admin");
+          return;
         }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -183,7 +226,7 @@ function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatMoney(profile?.total_money_spent || 0)}
+                  {formatCurrency(profile?.total_money_spent || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Total money spent on contests
@@ -218,7 +261,7 @@ function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatMoney(profile?.total_money_won || 0)}
+                  {formatCurrency(profile?.total_money_won || 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Total money earned from contests
@@ -252,7 +295,7 @@ function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {profile?.total_views || 0}
+              {(profile?.total_views || 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">
               {isAdvertiser

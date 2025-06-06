@@ -25,7 +25,7 @@ export default function ContestsLoading() {
                 </div>
             </div>
 
-            <PageLoadingSpinner text="Loading your contests..." />
+            <PageLoadingSpinner text="Loading contests..." />
         </div>
     )
 } 

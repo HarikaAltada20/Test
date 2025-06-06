@@ -26,19 +26,36 @@ export default async function ContestDetailPage({
     .eq("id", user.id)
     .single();
 
-  if (userData?.user_type !== "advertiser") {
+  const isAdmin = userData?.user_type === "admin";
+  const isAdvertiser = userData?.user_type === "advertiser";
+
+  if (!isAdmin && !isAdvertiser) {
     redirect("/dashboard");
   }
 
-  const { data: contestData } = await supabase // Renamed to avoid conflict with component prop
+  // For admin users, fetch any contest. For advertisers, only their contests
+  let contestQuery = supabase
     .from("contests_with_status")
     .select("*")
-    .eq("id", contestId)
-    .single();
+    .eq("id", contestId);
+
+  if (isAdvertiser) {
+    // Advertisers can only access their own contests
+    contestQuery = contestQuery.eq("advertiser_id", user.id);
+  }
+  // Admin users can access any contest (no additional filter)
+
+  const { data: contestData } = await contestQuery.single();
 
   console.log("contestData", contestData);
 
   if (!contestData) {
+    redirect("/dashboard/contests");
+  }
+
+  // Additional security check: if contest doesn't belong to user and user is not admin, deny access
+  if (!isAdmin && contestData.advertiser_id !== user.id) {
+    console.log(`Access denied: User ${user.id} attempted to access contest ${contestId} owned by ${contestData.advertiser_id}`);
     redirect("/dashboard/contests");
   }
 
@@ -216,6 +233,7 @@ export default async function ContestDetailPage({
       initialSubmissions={submissions}
       durationDays={durationDays}
       contestId={contestId}
+      isAdminView={isAdmin}
     />
   );
 }

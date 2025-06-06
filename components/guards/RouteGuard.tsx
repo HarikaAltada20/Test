@@ -10,7 +10,7 @@ import { Shield, ArrowLeft } from 'lucide-react'
 
 interface RouteGuardProps {
     children: React.ReactNode
-    allowedUserTypes: ('advertiser' | 'creator')[]
+    allowedUserTypes: ('advertiser' | 'creator' | 'admin')[]
     fallbackPath?: string
 }
 
@@ -66,7 +66,9 @@ export function RouteGuard({
                     // Redirect to appropriate fallback
                     const defaultFallback = fetchedUserType === 'creator'
                         ? '/dashboard/opportunities'
-                        : '/dashboard/contests'
+                        : fetchedUserType === 'admin'
+                            ? '/dashboard'
+                            : '/dashboard/contests'
 
                     setTimeout(() => {
                         router.push(fallbackPath || defaultFallback)
@@ -105,9 +107,9 @@ export function RouteGuard({
     }
 
     if (!isAuthorized) {
-        const userTypeDisplay = userType === 'advertiser' ? 'Brand' : 'Creator'
+        const userTypeDisplay = userType === 'advertiser' ? 'Brand' : userType === 'admin' ? 'Admin' : 'Creator'
         const allowedDisplay = allowedUserTypes.map(type =>
-            type === 'advertiser' ? 'Brand' : 'Creator'
+            type === 'advertiser' ? 'Brand' : type === 'admin' ? 'Admin' : 'Creator'
         ).join(' and ')
 
         return (
@@ -137,7 +139,9 @@ export function RouteGuard({
                                     onClick={() => {
                                         const defaultPath = userType === 'creator'
                                             ? '/dashboard/opportunities'
-                                            : '/dashboard/contests'
+                                            : userType === 'admin'
+                                                ? '/dashboard'
+                                                : '/dashboard/contests'
                                         router.push(fallbackPath || defaultPath)
                                     }}
                                 >

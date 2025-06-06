@@ -39,12 +39,20 @@ export async function middleware(request: NextRequest) {
             '/dashboard/earnings'
           ]
 
+          const adminOnlyRoutes = [
+            '/dashboard/admin'
+          ]
+
           // Check if current path matches any restricted routes
           const isAccessingBrandRoute = brandOnlyRoutes.some(route => 
             pathname.startsWith(route)
           )
           
           const isAccessingCreatorRoute = creatorOnlyRoutes.some(route => 
+            pathname.startsWith(route)
+          )
+
+          const isAccessingAdminRoute = adminOnlyRoutes.some(route => 
             pathname.startsWith(route)
           )
 
@@ -58,6 +66,19 @@ export async function middleware(request: NextRequest) {
           if (userType === 'advertiser' && isAccessingCreatorRoute) {
             const redirectUrl = new URL('/dashboard/contests', request.url)
             redirectUrl.searchParams.set('error', 'unauthorized')
+            return NextResponse.redirect(redirectUrl)
+          }
+
+          // Admin route protection - only admins can access admin routes
+          if (isAccessingAdminRoute && userType !== 'admin') {
+            const redirectUrl = new URL('/dashboard', request.url)
+            redirectUrl.searchParams.set('error', 'admin_access_required')
+            return NextResponse.redirect(redirectUrl)
+          }
+
+          // Prevent admins from accessing brand/creator specific routes
+          if (userType === 'admin' && (isAccessingBrandRoute || isAccessingCreatorRoute)) {
+            const redirectUrl = new URL('/dashboard/admin', request.url)
             return NextResponse.redirect(redirectUrl)
           }
         }

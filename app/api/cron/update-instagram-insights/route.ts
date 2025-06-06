@@ -139,11 +139,13 @@ async function updateCpmContestBudgets(supabaseAdmin: any) {
                 }
             };
 
+            const now = new Date().toISOString();
             const { error: updateError } = await supabaseAdmin
                 .from('contests')
                 .update({ 
                     contest_based_details: updatedContestDetails,
-                    updated_at: new Date().toISOString()
+                    last_metrics_updated: now,
+                    updated_at: now
                 })
                 .eq('id', contest.id);
 
