@@ -226,13 +226,11 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
                       </DropdownMenuItem>
                       <DropdownMenuSeparator className="bg-violet-400/20" />
                       <DropdownMenuItem
-                        asChild
                         className="text-red-300 hover:text-red-200 hover:bg-red-600/10 focus:bg-red-600/10 focus:text-red-200 cursor-pointer"
+                        onClick={handleSignOut}
                       >
-                        <Link href="/auth/signout" className="flex items-center">
-                          <LogOut className="mr-2 h-4 w-4" />
-                          Log out
-                        </Link>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Log out
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -353,13 +351,13 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
                           <Settings className="h-5 w-5" />
                           Settings
                         </Link>
-                        <Link
-                          href="/auth/signout"
-                          className="flex items-center gap-3 text-red-300 hover:text-red-200 p-4 rounded-xl hover:bg-red-600/10 transition-colors"
+                        <button
+                          onClick={handleSignOut}
+                          className="flex items-center gap-3 text-red-300 hover:text-red-200 p-4 rounded-xl hover:bg-red-600/10 transition-colors w-full text-left"
                         >
                           <LogOut className="h-5 w-5" />
                           Log out
-                        </Link>
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-4 border-t border-violet-400/20 pt-6">
