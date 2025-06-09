@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { getMetricsRefreshCooldownInfo, formatRemainingTime } from "@/lib/constants";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest"; 
@@ -124,25 +125,8 @@ export default function ContestDetailClient({
 
     // Refresh metrics state
     const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
-    const REFRESH_COOLDOWN_MS = 60 * 60 * 1000; // 60 minutes cooldown (matches server-side)
 
-    // Calculate cooldown based on database last_metrics_updated value
-    const getRefreshCooldownInfo = () => {
-        if (!contest.last_metrics_updated) {
-            return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
-        }
-
-        const lastUpdate = new Date(contest.last_metrics_updated).getTime();
-        const now = Date.now();
-        const timeSinceLastUpdate = now - lastUpdate;
-        const remainingMs = Math.max(0, REFRESH_COOLDOWN_MS - timeSinceLastUpdate);
-        const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
-        const canRefresh = remainingMs === 0;
-
-        return { canRefresh, remainingMs, remainingMinutes, lastUpdate };
-    };
-
-    const cooldownInfo = getRefreshCooldownInfo();
+    const cooldownInfo = getMetricsRefreshCooldownInfo(contest.last_metrics_updated);
 
     useEffect(() => {
         setCurrentSubmissions(initialSubmissions || []);

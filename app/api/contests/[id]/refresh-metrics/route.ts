@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-
-const REFRESH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour for opportunities side
+import { METRICS_REFRESH_COOLDOWN_MS } from '@/lib/constants';
 
 export async function POST(
   request: Request,
@@ -46,12 +45,12 @@ export async function POST(
       const lastUpdate = new Date(contest.last_metrics_updated);
       const timeSinceLastUpdate = now.getTime() - lastUpdate.getTime();
       
-      if (timeSinceLastUpdate < REFRESH_COOLDOWN_MS) {
-        const remainingMs = REFRESH_COOLDOWN_MS - timeSinceLastUpdate;
+      if (timeSinceLastUpdate < METRICS_REFRESH_COOLDOWN_MS) {
+        const remainingMs = METRICS_REFRESH_COOLDOWN_MS - timeSinceLastUpdate;
         const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
         return NextResponse.json({ 
           error: `Metrics were updated ${Math.floor(timeSinceLastUpdate / 1000 / 60)} minutes ago. Please wait ${remainingMinutes} more minutes before refreshing again.`,
-          nextRefreshAvailable: new Date(lastUpdate.getTime() + REFRESH_COOLDOWN_MS).toISOString()
+          nextRefreshAvailable: new Date(lastUpdate.getTime() + METRICS_REFRESH_COOLDOWN_MS).toISOString()
         }, { status: 429 });
       }
     }
@@ -123,7 +122,7 @@ export async function POST(
       contestId,
       contestTitle: contest.title,
       platform: contest.platform,
-      nextRefreshAvailable: new Date(now.getTime() + REFRESH_COOLDOWN_MS).toISOString(),
+      nextRefreshAvailable: new Date(now.getTime() + METRICS_REFRESH_COOLDOWN_MS).toISOString(),
       timeSinceLastUpdate: contest.last_metrics_updated ? 
         Math.floor((now.getTime() - new Date(contest.last_metrics_updated).getTime()) / 1000 / 60) : null,
       lastMetricsUpdated: currentTime,

@@ -30,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/utils/supabase/client";
+import { getMetricsRefreshCooldownInfo, formatRemainingTime } from "@/lib/constants";
 import type { UserResponse } from "@supabase/supabase-js";
 
 // --- START DUMMY DATA CONFIGURATION ---
@@ -146,9 +147,6 @@ export function ContestClientPage({
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
   const [lastMetricsUpdate, setLastMetricsUpdate] = useState<string | null>(null);
-  const [canRefreshMetrics, setCanRefreshMetrics] = useState(true);
-
-  const REFRESH_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -170,15 +168,17 @@ export function ContestClientPage({
         throw new Error(result.error || 'Failed to refresh metrics');
       }
 
-      // Update states after successful refresh
-      setLastMetricsUpdate(new Date().toISOString());
-      setCanRefreshMetrics(false);
+      // Update contest with new last_metrics_updated timestamp
+      setContest((prev: any) => ({
+        ...prev,
+        last_metrics_updated: result.lastMetricsUpdated
+      }));
 
-      // Re-enable refresh after 1 hour
-      setTimeout(() => setCanRefreshMetrics(true), REFRESH_COOLDOWN_MS);
-
-      // Refresh the leaderboard to show updated data
-      await fetchLeaderboard(leaderboardCurrentPage);
+      // Refresh BOTH the leaderboard AND the user's own submission data
+      await Promise.all([
+        fetchLeaderboard(leaderboardCurrentPage),
+        fetchMySubmissionData()
+      ]);
 
       console.log('Metrics refreshed successfully from opportunities side');
 
@@ -368,10 +368,7 @@ export function ContestClientPage({
 
           // Set initial refresh state based on last_metrics_updated
           if (contestData.last_metrics_updated) {
-            const lastUpdate = new Date(contestData.last_metrics_updated);
-            const timeSinceUpdate = Date.now() - lastUpdate.getTime();
             setLastMetricsUpdate(contestData.last_metrics_updated);
-            setCanRefreshMetrics(timeSinceUpdate >= REFRESH_COOLDOWN_MS);
           }
         }
 
@@ -1011,18 +1008,22 @@ export function ContestClientPage({
                   </div>
 
                   {/* Refresh Metrics Button - Only show for active contests with submissions */}
-                  {contest?.status === 'active' && totalLeaderboardEntries > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRefreshMetrics}
-                      disabled={isRefreshingMetrics || !canRefreshMetrics}
-                      className="ml-2"
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
-                      {isRefreshingMetrics ? 'Updating...' : 'Refresh Metrics'}
-                    </Button>
-                  )}
+                  {contest?.status === 'active' && totalLeaderboardEntries > 0 && (() => {
+                    const cooldownInfo = getMetricsRefreshCooldownInfo(contest?.last_metrics_updated);
+                    return (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefreshMetrics}
+                        disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
+                        className="ml-2"
+                        title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
+                        {isRefreshingMetrics ? 'Updating...' : 'Refresh Metrics'}
+                      </Button>
+                    );
+                  })()}
                 </div>
                 {leaderboard.map((entry, index) => {
                   const rank = ((leaderboardCurrentPage - 1) * leaderboardItemsPerPage) + index + 1;
