@@ -84,7 +84,7 @@ export default function SettingsPage({
   const [isLoading, setIsLoading] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
-  const [youtubeAuthUrl, setYoutubeAuthUrl] = useState<string | null>(null);
+
 
   useEffect(() => {
     if (!user) {
@@ -645,7 +645,7 @@ export default function SettingsPage({
                 </Button>
               ) : (
                 <Button asChild>
-                  <Link href={youtubeAuthUrl || "/api/youtube/auth"}>
+                  <Link href="/api/youtube/auth" prefetch={false}>
                     Connect YouTube
                   </Link>
                 </Button>
