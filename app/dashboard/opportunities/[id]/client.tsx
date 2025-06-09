@@ -169,10 +169,13 @@ export function ContestClientPage({
       }
 
       // Update contest with new last_metrics_updated timestamp
+      const newTimestamp = result.lastMetricsUpdated || new Date().toISOString();
       setContest((prev: any) => ({
         ...prev,
-        last_metrics_updated: result.lastMetricsUpdated
+        last_metrics_updated: newTimestamp
       }));
+
+      console.log('Updated contest last_metrics_updated to:', newTimestamp);
 
       // Refresh BOTH the leaderboard AND the user's own submission data
       await Promise.all([
@@ -1001,7 +1004,7 @@ export function ContestClientPage({
                 {/* Main Leaderboard List */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-sm text-muted-foreground">
-                    Last updated: {lastMetricsUpdate ? formatTimeAgo(lastMetricsUpdate) : (lastUpdated ? formatTimeAgo(lastUpdated) : "Never")}
+                    Last updated: {contest?.last_metrics_updated ? formatTimeAgo(contest.last_metrics_updated) : (lastUpdated ? formatTimeAgo(lastUpdated) : "Never")}
                     {totalLeaderboardEntries > 0 && (
                       <span className="ml-2">| Total Submissions: {totalLeaderboardEntries.toLocaleString()}</span>
                     )}
@@ -1010,6 +1013,8 @@ export function ContestClientPage({
                   {/* Refresh Metrics Button - Only show for active contests with submissions */}
                   {contest?.status === 'active' && totalLeaderboardEntries > 0 && (() => {
                     const cooldownInfo = getMetricsRefreshCooldownInfo(contest?.last_metrics_updated);
+                    console.log('Cooldown info:', cooldownInfo, 'Contest last_metrics_updated:', contest?.last_metrics_updated);
+
                     return (
                       <Button
                         variant="outline"
@@ -1020,7 +1025,12 @@ export function ContestClientPage({
                         title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
                       >
                         <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
-                        {isRefreshingMetrics ? 'Updating...' : 'Refresh Metrics'}
+                        {isRefreshingMetrics
+                          ? 'Updating...'
+                          : !cooldownInfo.canRefresh
+                            ? `Wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
+                            : 'Refresh Metrics'
+                        }
                       </Button>
                     );
                   })()}
