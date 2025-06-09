@@ -157,36 +157,40 @@ export function DashboardSidebar({
       {/* User Profile Section */}
       {!collapsed && (
         <div className="p-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/20 dark:to-pink-950/20 border border-rose-100 dark:border-rose-800/30">
-            <Avatar className="h-12 w-12 ring-2 ring-rose-200 dark:ring-rose-800">
-              <AvatarImage src={avatarSrc} alt={displayName} />
-              <AvatarFallback className="bg-gradient-to-br from-rose-500 to-purple-500 text-white font-semibold">
-                {avatarFallback}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-sidebar-foreground truncate">{displayName}</p>
-              <p className="text-xs text-sidebar-foreground/70 truncate">{displayEmail}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                  roleInfo.color, roleInfo.textColor)}>
-                  {roleInfo.label}
-                </span>
+          <Link href="/dashboard/profile" className="block">
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/20 dark:to-pink-950/20 border border-rose-100 dark:border-rose-800/30 hover:from-rose-100 hover:to-pink-100 dark:hover:from-rose-950/30 dark:hover:to-pink-950/30 hover:border-rose-200 dark:hover:border-rose-700/50 transition-all duration-200 cursor-pointer">
+              <Avatar className="h-12 w-12 ring-2 ring-rose-200 dark:ring-rose-800">
+                <AvatarImage src={avatarSrc} alt={displayName} />
+                <AvatarFallback className="bg-gradient-to-br from-rose-500 to-purple-500 text-white font-semibold">
+                  {avatarFallback}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-sidebar-foreground truncate">{displayName}</p>
+                <p className="text-xs text-sidebar-foreground/70 truncate">{displayEmail}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
+                    roleInfo.color, roleInfo.textColor)}>
+                    {roleInfo.label}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          </Link>
         </div>
       )}
 
       {/* Collapsed User Avatar */}
       {collapsed && (
         <div className="p-2 border-b border-sidebar-border">
-          <Avatar className="h-8 w-8 mx-auto ring-2 ring-rose-200 dark:ring-rose-800">
-            <AvatarImage src={avatarSrc} alt={displayName} />
-            <AvatarFallback className="bg-gradient-to-br from-rose-500 to-purple-500 text-white font-semibold text-xs">
-              {avatarFallback}
-            </AvatarFallback>
-          </Avatar>
+          <Link href="/dashboard/profile" className="block">
+            <Avatar className="h-8 w-8 mx-auto ring-2 ring-rose-200 dark:ring-rose-800 hover:ring-rose-300 dark:hover:ring-rose-700 transition-all duration-200 cursor-pointer">
+              <AvatarImage src={avatarSrc} alt={displayName} />
+              <AvatarFallback className="bg-gradient-to-br from-rose-500 to-purple-500 text-white font-semibold text-xs">
+                {avatarFallback}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
         </div>
       )}
 

@@ -28,14 +28,17 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { subscriptionPlans } from "@/constants/subscriptionPlans";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
   profileFullName?: string | null;
   profilePictureUrl?: string | null;
+  userType?: "advertiser" | "creator" | "admin" | null;
+  subscriptionPlan?: string | null;
 }
 
-export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
+export function Nav({ user, profileFullName, profilePictureUrl, userType, subscriptionPlan }: NavProps) {
   const pathname = usePathname();
   const { logout } = useClientAuth();
 
@@ -46,6 +49,14 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
     } catch (error) {
       console.error("Sign out error in sidebar:", error);
     }
+  };
+
+  // Function to get plan name from plan ID
+  const getPlanName = (planId: string | null | undefined): string => {
+    if (!planId) return "Free Plan";
+
+    const plan = subscriptionPlans.find(p => p.id === planId);
+    return plan ? plan.name : "Free Plan";
   };
 
   // Enhanced user info with fallbacks
@@ -183,19 +194,33 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
                       className="w-64 bg-slate-900/95 border border-violet-400/20 backdrop-blur-md shadow-2xl shadow-violet-500/20"
                       align="end"
                     >
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-2">
+                      <DropdownMenuLabel className="font-normal p-0">
+                        <Link
+                          href="/dashboard/profile"
+                          className="flex flex-col space-y-2 p-3 hover:bg-violet-600/10 rounded-lg transition-colors cursor-pointer"
+                        >
                           <div className="flex items-center space-x-2">
                             <Star className="h-4 w-4 text-slate-400" />
                             <p className="text-sm font-medium text-white">{displayName}</p>
                           </div>
                           <p className="text-xs text-slate-400">{displayEmail}</p>
-                          <Badge className="bg-gradient-to-r from-slate-600 to-slate-700 text-white text-xs w-fit border border-slate-500/30">
-                            Free Plan
-                          </Badge>
-                        </div>
+                          {userType === "advertiser" && (
+                            <Badge className="bg-gradient-to-r from-slate-600 to-slate-700 text-white text-xs w-fit border border-slate-500/30">
+                              {getPlanName(subscriptionPlan)}
+                            </Badge>
+                          )}
+                        </Link>
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator className="bg-violet-400/20" />
+                      <DropdownMenuItem
+                        asChild
+                        className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
+                      >
+                        <Link href="/dashboard/profile" className="flex items-center">
+                          <User className="mr-2 h-4 w-4" />
+                          Profile
+                        </Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
@@ -214,16 +239,20 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
                           Settings
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-violet-400/20" />
-                      <DropdownMenuItem
-                        asChild
-                        className="text-violet-300 hover:text-violet-200 hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-violet-200 cursor-pointer"
-                      >
-                        <Link href="/dashboard/upgrade" className="flex items-center">
-                          <Crown className="mr-2 h-4 w-4" />
-                          Upgrade Plan
-                        </Link>
-                      </DropdownMenuItem>
+                      {userType === "advertiser" && (
+                        <>
+                          <DropdownMenuSeparator className="bg-violet-400/20" />
+                          <DropdownMenuItem
+                            asChild
+                            className="text-violet-300 hover:text-violet-200 hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-violet-200 cursor-pointer"
+                          >
+                            <Link href="/pricing" className="flex items-center">
+                              <Crown className="mr-2 h-4 w-4" />
+                              Upgrade Plan
+                            </Link>
+                          </DropdownMenuItem>
+                        </>
+                      )}
                       <DropdownMenuSeparator className="bg-violet-400/20" />
                       <DropdownMenuItem
                         className="text-red-300 hover:text-red-200 hover:bg-red-600/10 focus:bg-red-600/10 focus:text-red-200 cursor-pointer"
@@ -318,7 +347,10 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
                     {/* Mobile User Section or Auth */}
                     {user ? (
                       <div className="space-y-3 border-t border-violet-400/20 pt-6">
-                        <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-xl border border-violet-400/20">
+                        <Link
+                          href="/dashboard/profile"
+                          className="flex items-center gap-3 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-xl border border-violet-400/20 hover:from-slate-700/50 hover:to-slate-600/50 transition-all duration-300 cursor-pointer"
+                        >
                           {avatarSrc ? (
                             <Image
                               src={avatarSrc}
@@ -336,7 +368,14 @@ export function Nav({ user, profileFullName, profilePictureUrl }: NavProps) {
                             <div className="text-sm font-semibold text-white">{displayName}</div>
                             <div className="text-xs text-slate-400">{displayEmail}</div>
                           </div>
-                        </div>
+                        </Link>
+                        <Link
+                          href="/dashboard/profile"
+                          className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
+                        >
+                          <User className="h-5 w-5" />
+                          Profile
+                        </Link>
                         <Link
                           href="/dashboard"
                           className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"

@@ -134,11 +134,11 @@ function DashboardContent({
   const currentPageTitle = getPageTitle(pathname);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       <SimpleLoadingBar />
 
       {/* Main Layout Container */}
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex min-h-[calc(100vh-theme(spacing.16))]">
         {/* Desktop Sidebar */}
         <aside className={cn(
           "hidden lg:flex flex-col bg-sidebar border-r border-border transition-all duration-300 ease-in-out",
@@ -160,7 +160,7 @@ function DashboardContent({
           </div>
 
           {/* Sidebar Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1">
             {userRole && (
               <DashboardSidebar
                 userRole={userRole}
@@ -174,7 +174,7 @@ function DashboardContent({
         </aside>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <header className="flex h-16 items-center gap-4 border-b border-border bg-background px-6">
             {/* Mobile Menu Trigger */}
@@ -199,7 +199,7 @@ function DashboardContent({
                     Dashboard navigation menu
                   </SheetDescription>
                 </SheetHeader>
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1">
                   {userRole && (
                     <DashboardSidebar
                       userRole={userRole}
@@ -236,7 +236,7 @@ function DashboardContent({
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1">
             <div className="p-6 md:p-8">
               <Suspense fallback={<LoadingPlaceholder />}>{children}</Suspense>
             </div>

@@ -26,22 +26,42 @@ export default async function RootLayout({
 
   let profileFullName: string | null = null;
   let profilePictureUrl: string | null = null;
+  let userType: "advertiser" | "creator" | "admin" | null = null;
+  let subscriptionPlan: string | null = null;
 
   if (user) {
+    // Fetch basic user profile data
     const { data: userData, error: userError } = await supabase
       .from("users")
-      .select("full_name, profile_picture_url")
+      .select("full_name, profile_picture_url, user_type")
       .eq("id", user.id)
       .maybeSingle();
 
     if (userError) {
       console.error("Error fetching user profile data in layout:", userError.message);
-      // Decide if you want to handle this error more gracefully
     }
 
     if (userData) {
       profileFullName = userData.full_name;
       profilePictureUrl = userData.profile_picture_url;
+      userType = userData.user_type as "advertiser" | "creator" | "admin" | null;
+    }
+
+    // Fetch subscription plan only for advertisers
+    if (userType === "advertiser") {
+      const { data: advertiserData, error: advertiserError } = await supabase
+        .from("advertiser_profiles")
+        .select("subscription_plan")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (advertiserError && advertiserError.code !== 'PGRST116') {
+        console.error("Error fetching advertiser profile in layout:", advertiserError.message);
+      }
+
+      if (advertiserData) {
+        subscriptionPlan = advertiserData.subscription_plan;
+      }
     }
   }
 
@@ -53,6 +73,8 @@ export default async function RootLayout({
             user={user}
             profileFullName={profileFullName}
             profilePictureUrl={profilePictureUrl}
+            userType={userType}
+            subscriptionPlan={subscriptionPlan}
           />
           <main className="flex-1">{children}</main>
           <Footer />
