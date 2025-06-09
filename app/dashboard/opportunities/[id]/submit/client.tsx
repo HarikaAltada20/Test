@@ -358,36 +358,6 @@ export default function SubmitContentPage({
     );
   };
 
-  // Validate YouTube URL belongs to user using server endpoint
-  // const validateYoutubeUrl = async (url: string) => {
-  //   try {
-  //     const response = await fetch("/api/youtube/verify", {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //       },
-  //       body: JSON.stringify({ videoUrl: url }),
-  //     });
-
-  //     const data = await response.json();
-
-  //     if (!response.ok) {
-  //       throw new Error(data.error || "Failed to verify video");
-  //     }
-
-  //     if (data.valid && data.videoInfo) {
-  //       // If valid, update the selected video
-  //       setSelectedVideo(data.videoInfo as YouTubeVideo);
-  //       return true;
-  //     }
-
-  //     return false;
-  //   } catch (err) {
-  //     console.error("Error validating YouTube URL:", err);
-  //     return false;
-  //   }
-  // };
-
   useEffect(() => {
     async function fetchData() {
       if (!user) {
