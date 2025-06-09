@@ -10,8 +10,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
 import { Bell, LogOut, Mail, ExternalLink, RefreshCw } from "lucide-react";
@@ -32,13 +30,14 @@ interface SocialAccount {
   profile_picture_url?: string;
   access_token?: string;
   refresh_token?: string;
-  token_expiry?: string; // ISO string
+  expires_at?: string; // ISO string - YouTube
   // YouTube specific
   channel_id?: string;
   channel_title?: string;
   subscriber_count?: number;
   video_count?: number;
   // Instagram specific
+  token_expiry?: string; // ISO string - Instagram
   instagram_user_id?: string; // Actual global IG User ID
   app_scoped_user_id?: string; // IGBA ID or Professional Account ID for the app
   name_of_account?: string; // User's full name on IG
@@ -474,28 +473,116 @@ export default function SettingsPage({
     }
   };
 
-  // Add similar refresh logic for Instagram if token is about to expire
-  // This is just a placeholder, actual refresh should happen server-side or via a secure backend call
+  // Auto-refresh Instagram token if nearing expiry
   const checkAndRefreshInstagramToken = useCallback(async () => {
     if (!instagramAccount || !instagramAccount.access_token || !instagramAccount.token_expiry) {
       return;
     }
 
+    // Check if token expires within 7 days
     if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, 'day'))) {
-      toast({
-        title: "Info",
-        description: "Instagram token is nearing expiry. Ideally, this would trigger a server-side refresh or prompt for re-authentication.",
-        variant: "default",
-      });
-      // In a real app, you might call a backend endpoint that securely refreshes the token.
-      // e.g., await fetch('/api/instagram/refresh-token', { method: 'POST' });
-      // For now, this is a client-side notice. The cron job will handle the actual refresh.
+      try {
+        const response = await fetch('/api/instagram/refresh-token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to refresh Instagram token');
+        }
+
+        // Show success message
+        toast({
+          title: "Success",
+          description: "Instagram token has been automatically refreshed.",
+          variant: "default",
+        });
+
+        // Refresh the page data to show updated token expiry
+        window.location.reload();
+
+      } catch (error: any) {
+        console.error('Error refreshing Instagram token:', error);
+
+        // Handle different error scenarios
+        if (error.message?.includes('re-authenticate') || error.message?.includes('revoked')) {
+          toast({
+            title: "Authentication Required",
+            description: "Your Instagram token has expired. Please reconnect your Instagram account.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Warning",
+            description: `Instagram token refresh failed: ${error.message}. It will be refreshed automatically by our system.`,
+            variant: "default",
+          });
+        }
+      }
     }
-  }, [instagramAccount]);
+  }, [instagramAccount, toast]);
+
+  // Auto-refresh YouTube token if nearing expiry
+  const checkAndRefreshYouTubeToken = useCallback(async () => {
+    if (!youtubeAccount || !youtubeAccount.access_token || !youtubeAccount.expires_at) {
+      return;
+    }
+
+    // Check if token expires within 5 minutes (YouTube tokens have shorter expiry)
+    if (dayjs(youtubeAccount.expires_at).isBefore(dayjs().add(5, 'minute'))) {
+      try {
+        const response = await fetch('/api/youtube/refresh', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to refresh YouTube token');
+        }
+
+        // Show success message
+        toast({
+          title: "Success",
+          description: "YouTube token has been automatically refreshed.",
+          variant: "default",
+        });
+
+        // Refresh the page data to show updated token expiry
+        window.location.reload();
+
+      } catch (error: any) {
+        console.error('Error refreshing YouTube token:', error);
+
+        // Handle different error scenarios
+        if (error.message?.includes('re-authenticate') || error.message?.includes('revoked')) {
+          toast({
+            title: "Authentication Required",
+            description: "Your YouTube token has expired. Please reconnect your YouTube account.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Warning",
+            description: `YouTube token refresh failed: ${error.message}. It will be refreshed automatically by our system.`,
+            variant: "default",
+          });
+        }
+      }
+    }
+  }, [youtubeAccount, toast]);
 
   useEffect(() => {
     checkAndRefreshInstagramToken();
-  }, [checkAndRefreshInstagramToken]);
+    checkAndRefreshYouTubeToken();
+  }, [checkAndRefreshInstagramToken, checkAndRefreshYouTubeToken]);
 
   if (pageLoading) {
     return (
@@ -539,9 +626,12 @@ export default function SettingsPage({
                 <div>
                   <h3 className="font-medium">YouTube</h3>
                   {youtubeConnected ? (
-                    <p className="text-sm text-muted-foreground">
-                      Connected as {youtubeAccount?.channel_title || "your YouTube account"}
-                    </p>
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Connected as {youtubeAccount?.channel_title || "your YouTube account"}
+                        <span className="ml-2 text-green-600 text-xs">✓ Active</span>
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Not connected
@@ -579,9 +669,12 @@ export default function SettingsPage({
                 <div>
                   <h3 className="font-medium">Instagram</h3>
                   {instagramConnected ? (
-                    <p className="text-sm text-muted-foreground">
-                      Connected as {instagramAccount?.name_of_account || instagramAccount?.username || "your Instagram account"} ({(instagramAccount?.account_type || 'N/A').replace('_', ' ')})
-                    </p>
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Connected as {instagramAccount?.name_of_account || instagramAccount?.username || "your Instagram account"} ({(instagramAccount?.account_type || 'N/A').replace('_', ' ')})
+                        <span className="ml-2 text-green-600 text-xs">✓ Active</span>
+                      </p>
+                    </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Not connected

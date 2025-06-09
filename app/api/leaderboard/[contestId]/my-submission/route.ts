@@ -1,14 +1,12 @@
 import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 export async function GET(
   request: Request,
   context: { params: { contestId: string } }
 ) {
-  const cookieStore = cookies();
   const supabase = await createClient();
-  const params = await context.params;
+  const params = context.params;
   const contestId = params?.contestId;
 
   if (!contestId) {
