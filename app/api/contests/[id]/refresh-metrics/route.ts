@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
 import { METRICS_REFRESH_COOLDOWN_MS } from '@/lib/constants';
 
 export async function POST(
@@ -101,17 +102,27 @@ export async function POST(
     const cronResult = await cronResponse.json();
     const currentTime = new Date().toISOString();
 
-    // Update the contest's last_metrics_updated timestamp
-    const { error: updateError } = await supabase
+    // Update the contest's last_metrics_updated timestamp using admin client to bypass RLS
+    console.log(`Attempting to update last_metrics_updated for contest ${contestId} to ${currentTime} - Source: ${isOpportunitiesRefresh ? 'Opportunities' : 'Owner'}`);
+    
+    const supabaseAdmin = createAdminSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { data: updateData, error: updateError } = await supabaseAdmin
       .from('contests')
       .update({ last_metrics_updated: currentTime })
-      .eq('id', contestId);
+      .eq('id', contestId)
+      .select();
 
     if (updateError) {
       console.error(`Failed to update last_metrics_updated for contest ${contestId}:`, updateError);
+      console.error(`Update error details:`, JSON.stringify(updateError, null, 2));
       // Don't fail the request, just log the error
     } else {
-      console.log(`Updated last_metrics_updated for contest ${contestId} to ${currentTime}`);
+      console.log(`Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`);
+      console.log(`Update result:`, updateData);
     }
 
     console.log(`Successfully refreshed metrics for contest ${contestId}`);

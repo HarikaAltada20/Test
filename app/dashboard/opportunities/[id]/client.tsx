@@ -146,7 +146,6 @@ export function ContestClientPage({
 
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
-  const [lastMetricsUpdate, setLastMetricsUpdate] = useState<string | null>(null);
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -175,15 +174,11 @@ export function ContestClientPage({
         last_metrics_updated: newTimestamp
       }));
 
-      console.log('Updated contest last_metrics_updated to:', newTimestamp);
-
       // Refresh BOTH the leaderboard AND the user's own submission data
       await Promise.all([
         fetchLeaderboard(leaderboardCurrentPage),
         fetchMySubmissionData()
       ]);
-
-      console.log('Metrics refreshed successfully from opportunities side');
 
     } catch (error: any) {
       console.error('Failed to refresh metrics:', error);
@@ -369,10 +364,7 @@ export function ContestClientPage({
         if (isMounted) {
           setContest(contestData);
 
-          // Set initial refresh state based on last_metrics_updated
-          if (contestData.last_metrics_updated) {
-            setLastMetricsUpdate(contestData.last_metrics_updated);
-          }
+          // No need to set separate lastMetricsUpdate state - it's part of contest state
         }
 
         // Fetch existing submission status for the current user (if logged in)
@@ -1013,7 +1005,6 @@ export function ContestClientPage({
                   {/* Refresh Metrics Button - Only show for active contests with submissions */}
                   {contest?.status === 'active' && totalLeaderboardEntries > 0 && (() => {
                     const cooldownInfo = getMetricsRefreshCooldownInfo(contest?.last_metrics_updated);
-                    console.log('Cooldown info:', cooldownInfo, 'Contest last_metrics_updated:', contest?.last_metrics_updated);
 
                     return (
                       <Button
