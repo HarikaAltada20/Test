@@ -32,13 +32,20 @@ const isTokenExpired = (expiresAt: string): boolean =>
     new Date(expiresAt) <= new Date();
 
 // Function to update budget spent for CPM contests
-async function updateCpmContestBudgets(supabaseAdmin: any): Promise<void> {
+async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): Promise<void> {
     try {
-        const { data: contests, error } = await supabaseAdmin
+        let contestsQuery = supabaseAdmin
             .from('contests')
             .select('id, contest_based_details')
             .eq('contest_type', 'cpm')
             .not('contest_based_details', 'is', null);
+
+        // If contest-specific, filter by contest ID
+        if (contestId) {
+            contestsQuery = contestsQuery.eq('id', contestId);
+        }
+
+        const { data: contests, error } = await contestsQuery;
 
         if (error || !contests?.length) {
             console.log('No CPM contests to update');
@@ -210,17 +217,32 @@ export async function GET(request: Request) {
     );
 
     try {
+        // Check if this is a contest-specific refresh
+        const url = new URL(request.url);
+        const contestId = url.searchParams.get('contestId');
+        const isContestSpecific = !!contestId;
+
         // Fetch submissions to update
-        const { data: submissions, error: submissionError } = await supabaseAdmin
+        let submissionsQuery = supabaseAdmin
             .from('submissions')
-            .select('id, creator_id, content_link, views')
+            .select('id, creator_id, content_link, views, contest_id')
             .in('status', ['verified', 'pending'])
             .not('content_link', 'is', null);
 
+        // If contest-specific, filter by contest_id
+        if (isContestSpecific) {
+            submissionsQuery = submissionsQuery.eq('contest_id', contestId);
+            console.log(`Contest-specific YouTube metrics update for contest: ${contestId}`);
+        }
+
+        const { data: submissions, error: submissionError } = await submissionsQuery;
+
         if (submissionError) throw new Error(`Submission fetch failed: ${submissionError.message}`);
         if (!submissions?.length) {
-            await updateCpmContestBudgets(supabaseAdmin);
-            return NextResponse.json({ message: 'No submissions to update, budget tracking completed' });
+            await updateCpmContestBudgets(supabaseAdmin, isContestSpecific ? contestId : undefined);
+            return NextResponse.json({ 
+                message: `No submissions to update${isContestSpecific ? ` for contest ${contestId}` : ''}, budget tracking completed` 
+            });
         }
 
         // Group submissions by creator
@@ -269,10 +291,10 @@ export async function GET(request: Request) {
         await batchUpdateDatabase(supabaseAdmin, allUpdates, tokenUpdates);
         
         // Update CPM contest budgets
-        await updateCpmContestBudgets(supabaseAdmin);
+        await updateCpmContestBudgets(supabaseAdmin, isContestSpecific ? contestId : undefined);
 
         return NextResponse.json({ 
-            message: `Updated ${allUpdates.length} submissions and CPM contest budgets` 
+            message: `Updated ${allUpdates.length} submissions${isContestSpecific ? ` for contest ${contestId}` : ''} and CPM contest budgets` 
         });
 
     } catch (error: any) {

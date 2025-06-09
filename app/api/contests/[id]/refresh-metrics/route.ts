@@ -14,8 +14,8 @@ export async function POST(
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const contestId = params.id;
+    const resolvedParams = await params;
+    const contestId = resolvedParams.id;
     const now = new Date();
 
     // Get contest details including last metrics update time
@@ -75,10 +75,10 @@ export async function POST(
         }, { status: 400 });
     }
 
-    // Call the appropriate cron job
+    // Call the appropriate cron job with contest-specific parameter
     const baseUrl = request.headers.get('host');
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
-    const cronUrl = `${protocol}://${baseUrl}${cronEndpoint}`;
+    const cronUrl = `${protocol}://${baseUrl}${cronEndpoint}?contestId=${contestId}`;
 
     console.log(`Manual refresh triggered for contest ${contestId} (${contest.title}) - calling ${cronName} - Source: ${isOpportunitiesRefresh ? 'Opportunities' : 'Owner'}`);
 
@@ -86,7 +86,8 @@ export async function POST(
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-Contest-Id': contestId
       }
     });
 
@@ -99,6 +100,20 @@ export async function POST(
     }
 
     const cronResult = await cronResponse.json();
+    const currentTime = new Date().toISOString();
+
+    // Update the contest's last_metrics_updated timestamp
+    const { error: updateError } = await supabase
+      .from('contests')
+      .update({ last_metrics_updated: currentTime })
+      .eq('id', contestId);
+
+    if (updateError) {
+      console.error(`Failed to update last_metrics_updated for contest ${contestId}:`, updateError);
+      // Don't fail the request, just log the error
+    } else {
+      console.log(`Updated last_metrics_updated for contest ${contestId} to ${currentTime}`);
+    }
 
     console.log(`Successfully refreshed metrics for contest ${contestId}`);
 
@@ -111,6 +126,7 @@ export async function POST(
       nextRefreshAvailable: new Date(now.getTime() + REFRESH_COOLDOWN_MS).toISOString(),
       timeSinceLastUpdate: contest.last_metrics_updated ? 
         Math.floor((now.getTime() - new Date(contest.last_metrics_updated).getTime()) / 1000 / 60) : null,
+      lastMetricsUpdated: currentTime,
       cronResult
     });
 

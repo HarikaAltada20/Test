@@ -6,7 +6,7 @@ export async function GET(
   context: { params: { contestId: string } }
 ) {
   const supabase = await createClient();
-  const params = context.params;
+  const params = await context.params;
   const contestId = params?.contestId;
 
   if (!contestId) {

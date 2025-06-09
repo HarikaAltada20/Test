@@ -142,6 +142,7 @@ export default async function AdminContestDetailPage({
             resources: contestData.resources,
             contest_type: contestData.contest_type,
             contest_based_details: contestData.contest_based_details,
+            last_metrics_updated: contestData.last_metrics_updated,
         };
 
         // Prepare submissions data

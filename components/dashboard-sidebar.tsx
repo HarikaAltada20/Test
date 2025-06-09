@@ -67,10 +67,10 @@ export function DashboardSidebar({
       description: "Performance insights",
     },
     {
-      name: "Billing",
+      name: "Wallet",
       href: "/dashboard/billing",
       icon: CreditCard,
-      description: "Payments & invoices",
+      description: "Balance, transactions & withdrawals",
     },
     {
       name: "Settings",
