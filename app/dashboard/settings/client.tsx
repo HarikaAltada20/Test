@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
-import { Bell, LogOut, Mail, ExternalLink, RefreshCw } from "lucide-react";
+import { Bell, LogOut, Mail, ExternalLink, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from 'dayjs';
@@ -73,10 +73,15 @@ export default function SettingsPage({
   const [companyProfileLoading, setCompanyProfileLoading] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
     null
   );
   const [pageLoading, setPageLoading] = useState(true);
+  const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
   const router = useRouter();
   const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
@@ -95,6 +100,7 @@ export default function SettingsPage({
     async function loadProfile() {
       setPageLoading(true);
       try {
+        // Get user data from our users table
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("user_type")
@@ -103,6 +109,14 @@ export default function SettingsPage({
 
         if (userError) throw userError;
         setUserType(userData.user_type);
+
+        // Simple check: if user has email provider, they can manage passwords
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          const providers = authUser.app_metadata?.providers || [];
+          const hasEmailProvider = providers.includes('email');
+          setHasPassword(hasEmailProvider);
+        }
 
         if (userData.user_type === "creator") {
           const { data, error } = await supabase
@@ -186,23 +200,50 @@ export default function SettingsPage({
     setPasswordChangeLoading(true);
 
     try {
+      // For users with existing passwords, validate current password first
+      if (hasPassword && currentPassword) {
+        // Validate current password by attempting to sign in with it
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user!.email!,
+          password: currentPassword,
+        });
+
+        if (signInError) {
+          throw new Error("Current password is incorrect");
+        }
+      } else if (hasPassword && !currentPassword) {
+        throw new Error("Current password is required");
+      }
+
+      if (!newPassword || newPassword.length < 6) {
+        throw new Error("New password must be at least 6 characters long");
+      }
+
+      if (newPassword !== confirmPassword) {
+        throw new Error("New password and confirm password do not match");
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
       if (error) throw error;
 
+      // Update hasPassword state since user now has a password
+      setHasPassword(true);
+
       toast({
         title: "Success",
-        description: "Password updated successfully",
+        description: hasPassword ? "Password updated successfully" : "Password set successfully! You can now sign in with email and password.",
         variant: "default",
       });
       setCurrentPassword("");
       setNewPassword("");
+      setConfirmPassword("");
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || "Failed to update password",
+        description: err.message || (hasPassword ? "Failed to update password" : "Failed to set password"),
         variant: "destructive",
       });
     } finally {
@@ -804,44 +845,98 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
 
-      {/* Security */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Security</CardTitle>
-          <CardDescription>
-            Update your password and security settings
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handlePasswordChange} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="current-password">Current Password</Label>
-              <Input
-                id="current-password"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-            </div>
+      {/* Security - Only show for users with email authentication */}
+      {hasPassword && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Security</CardTitle>
+            <CardDescription>
+              Update your password and security settings
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Alert className="mb-4">
+              <AlertDescription>
+                <strong>Multiple Sign-in Methods:</strong> You can sign in with both Google and email/password.
+              </AlertDescription>
+            </Alert>
 
-            <div className="space-y-2">
-              <Label htmlFor="new-password">New Password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="current-password">Current Password</Label>
+                <div className="relative">
+                  <Input
+                    id="current-password"
+                    type={showCurrentPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
 
-            <Button type="submit" disabled={passwordChangeLoading}>
-              {passwordChangeLoading ? "Updating..." : "Update Password"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <div className="relative">
+                  <Input
+                    id="new-password"
+                    type={showNewPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Minimum 6 characters"
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <div className="relative">
+                  <Input
+                    id="confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <Button type="submit" disabled={passwordChangeLoading || !newPassword || !confirmPassword}>
+                {passwordChangeLoading ? "Updating Password..." : "Update Password"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Danger Zone */}
       {/* <Card>

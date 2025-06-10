@@ -1,417 +1,293 @@
 "use client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
-import { createClient } from "@/utils/supabase/client";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import logo from "@/public/images/gold_logo_vertical.svg";
-
+import { useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
+import { useToast } from "@/hooks/use-toast"
+import { Mail, Loader2, Crown, Trophy, Star, Sparkles, Rocket, Zap } from "lucide-react"
+import Link from "next/link"
+import { FcGoogle } from "react-icons/fc"
+import Image from "next/image"
+import logo from "@/public/images/gold_logo_vertical.svg"
 
 export default function SignUpPage() {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [user_type, Setuser_type] = useState<"advertiser" | "creator">("creator");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [referralCode, setReferralCode] = useState("");
-  const supabase = createClient();
-  const router = useRouter();
-  const { toast } = useToast();
+  const [email, setEmail] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
+  const supabase = createClient()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setIsLoading(true);
+  // Handle email sign-up
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setIsLoading(true)
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      toast({
-        variant: "destructive",
-        title: "Validation Error",
-        description: "Password must be at least 6 characters",
-        duration: 5000,
-      });
-      setIsLoading(false);
-      return;
+    if (!email || !email.includes('@')) {
+      setError('Please enter a valid email address')
+      setIsLoading(false)
+      return
     }
 
     try {
-      const fullName = `${firstName} ${lastName}`.trim();
-      const normalizedEmail = email.trim();
-
+      // Check if email already exists
       const { data: existingUser, error: checkError } = await supabase
         .from('users')
-        .select('id, username')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
+        .select('id')
+        .eq('email', email.trim().toLowerCase())
+        .maybeSingle()
 
       if (checkError && checkError.code !== 'PGRST116') {
-        console.error("Error checking existing email:", checkError);
-        setError("Could not verify email. Please try again later.");
-        toast({ variant: "destructive", title: "Verification Error", description: "Could not verify your email. Please try again." });
-        setIsLoading(false);
-        return;
+        console.error('Error checking existing user:', checkError)
+        throw new Error('Unable to verify email. Please try again.')
       }
 
       if (existingUser) {
-        if (!existingUser.username) {
-          setError("Your email is verified, but username setup is pending.");
-          toast({
-            variant: "default", // Keep default for info, but style button
-            title: "Profile Incomplete",
-            description: (
-              <div className="flex flex-col items-start space-y-2">
-                <span>Your email is verified, but username setup is pending.</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 text-xs h-auto py-1 px-2 border-amber-500 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
-                  onClick={() => router.push('/auth/signin')}
-                >
-                  Sign in to complete profile
-                </Button>
-              </div>
-            ),
-            duration: 10000,
-          });
-        } else {
-          setError("An account with this email already exists.");
-          toast({
-            variant: "destructive",
-            title: "Account Already Exists",
-            description: (
-              <div className="flex flex-col items-start space-y-2">
-                <span>An account with this email already exists.</span>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="mt-2 text-xs h-auto py-1 px-2 text-amber-500 hover:text-amber-400"
-                  onClick={() => router.push('/auth/signin')}
-                >
-                  Sign in instead
-                </Button>
-              </div>
-            ),
-            duration: 8000,
-          });
-        }
-        setIsLoading(false);
-        return;
+        setError('An account with this email already exists. Please sign in instead.')
+        toast({
+          variant: "destructive",
+          title: "Account Already Exists",
+          description: "This email is already registered. Please sign in instead.",
+          duration: 5000,
+        })
+        setIsLoading(false)
+        return
       }
 
-      const trimmedReferralCode = referralCode.trim();
-      if (trimmedReferralCode) {
-        const { data: referrerCheck, error: referrerError } = await supabase
-          .from('users')
-          .select('id')
-          .eq('referral_code', trimmedReferralCode)
-          .maybeSingle();
-
-        if (referrerError) {
-          console.error("Error checking referral code:", referrerError);
-          setError("Could not verify referral code. Please try again later.");
-          toast({ variant: "destructive", title: "Referral Error", description: "Could not verify the referral code." });
-          setIsLoading(false);
-          return;
-        }
-
-        if (!referrerCheck) {
-          setError("Invalid referral code. Please check and try again.");
-          toast({ variant: "destructive", title: "Invalid Referral", description: "The referral code entered is invalid." });
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
+      // Send OTP for new user
+      const { data, error: otpError } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
         options: {
-          data: {
-            full_name: fullName,
-            user_type: user_type,
-            referral_code: trimmedReferralCode || undefined,
-          },
-          emailRedirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`
+          // Don't use callback for email OTP - users will manually enter code
+          shouldCreateUser: true,
         },
-      });
+      })
+
+      if (otpError) {
+        throw otpError
+      }
+
+      toast({
+        title: "Quest Initiated! 🚀",
+        description: `Verification code sent to ${email}. Check your inbox to continue your journey!`,
+        duration: 8000,
+      })
+
+      // Store email for OTP verification page
+      localStorage.setItem('auth-email', email.trim().toLowerCase())
+
+      // Redirect to OTP verification
+      window.location.href = '/auth/verify-otp'
+
+    } catch (err: any) {
+      console.error('Email sign-up error:', err)
+      setError(err.message || 'Failed to send verification email')
+      toast({
+        variant: "destructive",
+        title: "Quest Failed",
+        description: err.message || "Failed to send verification email. Please try again.",
+        duration: 5000,
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Handle Google OAuth sign-up
+  const handleGoogleSignUp = async () => {
+    setError(null)
+    setIsGoogleLoading(true)
+
+    try {
+      const { data, error: signUpError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
+        }
+      })
 
       if (signUpError) {
-        console.error("Supabase signUp error:", signUpError);
-        let errorMessage = signUpError.message;
-        if (signUpError.message.includes("User already registered") ||
-          signUpError.message.includes("already exists") ||
-          (signUpError.message.includes("violates unique constraint") && signUpError.message.includes("email"))) {
-          errorMessage = "An account with this email already exists.";
-          setError(errorMessage);
-          toast({
-            variant: "destructive",
-            title: "Account Exists",
-            description: (
-              <div className="flex flex-col items-start space-y-2">
-                <span>{errorMessage}</span>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="mt-2 text-xs h-auto py-1 px-2 text-amber-500 hover:text-amber-400"
-                  onClick={() => router.push('/auth/signin')}
-                >
-                  Sign in
-                </Button>
-              </div>
-            ),
-            duration: 8000,
-          });
-        } else {
-          setError(errorMessage);
-          toast({
-            variant: "destructive",
-            title: "Sign up failed",
-            description: errorMessage,
-            duration: 8000,
-          });
-        }
-        setIsLoading(false);
-        return;
+        throw signUpError
       }
 
-      if (data.user) {
-        toast({
-          title: "Verification code sent!",
-          description:
-            "We\'ve sent a verification code to your email address. Please check your inbox.",
-          duration: 5000,
-        });
-        router.push(`/auth/verify-otp?email=${encodeURIComponent(normalizedEmail)}`);
-      } else {
-        console.warn("SignUpPage: supabase.auth.signUp call was successful but data.user is null. This is unexpected for an OTP flow.", data);
-        setError("Sign up process did not complete as expected for OTP. Please try again.");
-        toast({
-          variant: "destructive",
-          title: "Sign up Incomplete",
-          description: "Could not initiate the OTP verification process. Please try again.",
-          duration: 5000,
-        });
-        setIsLoading(false);
-      }
+      // OAuth redirect will handle the rest
     } catch (err: any) {
-      console.error("SignUpPage handleSubmit unexpected error:", err);
-      if (!error) {
-        setError(err.message || "An unexpected error occurred. Please try again.");
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: err.message || "An unexpected error occurred. Please try again.",
-          duration: 5000,
-        });
-      }
-      setIsLoading(false);
+      console.error("Google sign-up error:", err)
+      setError(err.message || "Failed to sign up with Google")
+      toast({
+        variant: "destructive",
+        title: "Google Quest Failed",
+        description: err.message || "Failed to sign up with Google. Please try again.",
+        duration: 5000,
+      })
+      setIsGoogleLoading(false)
     }
-  };
-
-  const togglePasswordVisibility = () => {
-    setShowPassword((prev) => !prev);
-  };
+  }
 
   return (
-    <>
-      <style jsx global>{`
-        @keyframes border-flow {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
-        }
-        .animate-border-flow {
-          background-image: linear-gradient(to right, #FBBF24, #F59E0B, #D97706, #F59E0B, #FBBF24);
-          background-size: 300% auto;
-          animation: border-flow 5s linear infinite;
-        }
-      `}</style>
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 dark:bg-gray-900 px-4 pt-4 pb-16">
-        <div className="w-full max-w-md">
-          <div className="mb-10 flex flex-col items-center">
-            <Image
-              src={logo}
-              alt="Game Of Creators Logo"
-              priority
-              width={150}
-              height={150}
-            />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden relative">
+      {/* Enhanced Background Elements - Gamified */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(139,92,246,0.15),transparent)]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(236,72,153,0.15),transparent)]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_40%,rgba(59,130,246,0.1),transparent)]"></div>
+
+      {/* Precision Grid Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
+
+      {/* Floating Gaming Elements */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-20 left-10 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg rotate-45 opacity-60 animate-pulse"></div>
+        <div className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60 animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60 animate-pulse" style={{ animationDelay: '4s' }}></div>
+        <Trophy className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60 animate-bounce" style={{ animationDelay: '1s' }} />
+        <Star className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60 animate-pulse" style={{ animationDelay: '3s' }} />
+        <Rocket className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60 animate-bounce" style={{ animationDelay: '5s' }} />
+        <Zap className="absolute bottom-20 right-20 h-6 w-6 text-violet-400/60 animate-pulse" style={{ animationDelay: '2.5s' }} />
+      </div>
+
+      <div className="relative z-20 flex items-center justify-center min-h-screen p-4">
+        <div className="w-full max-w-lg">
+          {/* Premium Logo */}
+          <div className="text-center mb-8">
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-r from-violet-600/20 to-purple-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="relative bg-gradient-to-br from-slate-800/60 to-slate-700/60 p-4 rounded-2xl border border-violet-400/20 backdrop-blur-md shadow-xl shadow-violet-500/10">
+                <Image src={logo} alt="Game of Creators" width={200} height={50} className="mx-auto" />
+              </div>
+            </div>
           </div>
 
-          <div className="p-[2.5px] rounded-xl bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-600 animate-border-flow shadow-2xl">
-            <div className="bg-[#0B0F11] dark:bg-gray-800 rounded-lg p-8">
-              <div className="mb-6 text-center">
-                <h1 className="text-3xl font-bold text-white dark:text-white">
-                  Create Account
+          {/* Enhanced Gaming Container */}
+          <div className="relative group">
+            {/* Gaming Glow Effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity duration-500"></div>
+
+            <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/60 backdrop-blur-md p-8 rounded-2xl border border-violet-400/30 shadow-2xl shadow-violet-500/20">
+              {/* Gaming Header */}
+              <div className="mb-8 text-center">
+                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-orange-600/20 backdrop-blur-sm border border-amber-400/30 rounded-full px-4 py-2 mb-4 shadow-xl shadow-amber-500/20">
+                  <Rocket className="h-4 w-4 text-amber-400" />
+                  <span className="text-xs font-semibold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                    BEGIN QUEST
+                  </span>
+                </div>
+                <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl mb-4">
+                  <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 bg-clip-text text-transparent">
+                    Join
+                  </span>{" "}
+                  <span className="text-white">The</span>{" "}
+                  <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+                    Arena
+                  </span>
                 </h1>
-                <p className="text-sm text-slate-400 mt-2">
-                  Already have an account?{" "}
-                  <Link
-                    href="/auth/signin"
-                    className="font-medium text-amber-500 hover:text-amber-400"
-                  >
-                    Sign In
-                  </Link>
+                <p className="text-slate-300 leading-relaxed">
+                  🚀 Start your creator journey and unlock epic opportunities
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleEmailSignUp} className="space-y-6">
+                {/* Email Field */}
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-slate-300 font-medium">Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="Enter your email to begin"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-10 h-12 bg-slate-900/70 border-slate-600/50 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 rounded-xl"
+                      required
+                      disabled={isLoading || isGoogleLoading}
+                    />
+                  </div>
+                </div>
+
+                {/* Error Display */}
                 {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                    <p className="text-red-400 text-sm">{error}</p>
+                  </div>
                 )}
 
-                <Tabs
-                  value={user_type}
-                  onValueChange={(value) =>
-                    Setuser_type(value as "advertiser" | "creator")
-                  }
-                  className="w-full"
-                >
-                  <TabsList className="grid w-full grid-cols-2 bg-slate-800">
-                    <TabsTrigger value="creator" className="data-[state=active]:bg-rose-600 data-[state=active]:text-white">Creator</TabsTrigger>
-                    <TabsTrigger value="advertiser" className="data-[state=active]:bg-rose-600 data-[state=active]:text-white">Brand</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
-                    <Input
-                      id="firstName"
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      required
-                      className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
-                      placeholder="John"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
-                    <Input
-                      id="lastName"
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      required
-                      className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
-                      placeholder="Doe"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    name="email"
-                    placeholder="name@example.com"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-300">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                      autoComplete="new-password"
-                      className="h-11 pr-10 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-200"
-                      onClick={togglePasswordVisibility}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-500">Password must be at least 6 characters.</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="referralCode" className="text-slate-300">
-                    Referral Code{" "}
-                    <span className="text-slate-500">(Optional)</span>
-                  </Label>
-                  <Input
-                    id="referralCode"
-                    type="text"
-                    value={referralCode}
-                    onChange={(e) => setReferralCode(e.target.value)}
-                    className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
-                    placeholder="Enter referral code"
-                  />
-                </div>
-
+                {/* Gaming Sign Up Button */}
                 <Button
                   type="submit"
-                  className="w-full h-11 bg-rose-600 hover:bg-rose-700 text-white"
-                  disabled={isLoading}
+                  className="group relative w-full bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 text-white font-bold px-8 py-4 text-lg rounded-xl shadow-2xl shadow-amber-500/40 hover:shadow-amber-500/60 transition-all duration-300 hover:scale-105 border border-amber-400/30 overflow-hidden"
+                  disabled={isLoading || isGoogleLoading}
                 >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
                   {isLoading ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating Account...
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <span className="relative z-10">Initiating Quest...</span>
                     </>
                   ) : (
-                    "Create Account"
+                    <>
+                      <Rocket className="mr-2 h-5 w-5" />
+                      <span className="relative z-10">Begin Adventure</span>
+                      <Sparkles className="ml-2 h-5 w-5" />
+                    </>
                   )}
                 </Button>
-                <p className="text-xs text-center text-slate-500">
-                  By signing up, I agree to the{" "}
+              </form>
+
+              {/* Divider */}
+              <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center">
+                  <Separator className="w-full bg-slate-600/50" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-gradient-to-br from-slate-800/80 to-slate-700/60 px-4 text-slate-400 font-medium">OR</span>
+                </div>
+              </div>
+
+              {/* Google Sign Up Button */}
+              <Button
+                onClick={handleGoogleSignUp}
+                variant="outline"
+                className="group relative w-full bg-slate-900/50 border-2 border-slate-600/50 text-white hover:text-white hover:bg-slate-800/70 hover:border-violet-400/50 backdrop-blur-sm font-bold px-8 py-4 text-lg rounded-xl transition-all duration-300 hover:scale-105"
+                disabled={isLoading || isGoogleLoading}
+              >
+                {isGoogleLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <FcGoogle className="mr-3 h-6 w-6" />
+                    <span>Quick Start with Google</span>
+                    <Zap className="ml-3 h-5 w-5 text-amber-400" />
+                  </>
+                )}
+              </Button>
+
+              {/* Sign In Link */}
+              <div className="mt-8 text-center">
+                <p className="text-slate-400">
+                  Already in the arena?{' '}
                   <Link
-                    href="/terms-of-service"
-                    className="font-medium text-amber-500 hover:text-amber-400 underline"
+                    href="/auth/signin"
+                    className="font-semibold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent hover:from-emerald-300 hover:to-cyan-300 transition-all"
                   >
-                    Terms of Service
-                  </Link>{" "}
-                  and{" "}
-                  <Link
-                    href="/privacy-policy"
-                    className="font-medium text-amber-500 hover:text-amber-400 underline"
-                  >
-                    Privacy Policy
+                    Sign in here
                   </Link>
                 </p>
-              </form>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </>
-  );
+    </div>
+  )
 }

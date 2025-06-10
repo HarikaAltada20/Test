@@ -9,6 +9,23 @@ export async function middleware(request: NextRequest) {
   // Then add route protection for authenticated users
   const { pathname } = request.nextUrl
   
+  // Auth route protection - redirect logged-in users away from auth pages
+  if (pathname.startsWith('/auth/')) {
+    try {
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (user) {
+        // User is logged in, redirect to dashboard
+        const redirectUrl = new URL('/dashboard', request.url)
+        return NextResponse.redirect(redirectUrl)
+      }
+    } catch (error) {
+      console.error('Auth route protection error:', error)
+      // Don't block the request if there's an error checking auth
+    }
+  }
+  
   // Only check permissions for dashboard routes
   if (pathname.startsWith('/dashboard')) {
     try {
@@ -95,6 +112,7 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     '/dashboard/:path*',
-    '/choose-username'
+    '/choose-username',
+    '/auth/:path*'
   ],
 }

@@ -69,8 +69,8 @@ export async function updateSession(request: NextRequest) {
         // If an unauthenticated user is trying to access one of these,
         // and it's NOT one of the explicitly allowed public auth paths, redirect to signin.
         if (!isPublicAuthPath) {
-            console.log(`Middleware: No user, path: ${currentPath}. Redirecting to /auth/signin.`);
-            return NextResponse.redirect(new URL('/auth/signin', request.url));
+                    console.log(`Middleware: No user, path: ${currentPath}. Redirecting to /auth/signin.`);
+        return NextResponse.redirect(new URL('/auth/signin', request.url));
         }
         // If it's an allowed public auth path (or /choose-username for direct nav), let unauthenticated user proceed.
         return supabaseResponse;

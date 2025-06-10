@@ -7,8 +7,8 @@ export async function completeLogout() {
   await supabase.auth.signOut()
   // Only redirect if not already on the sign-in page
   // This hard redirect in completeLogout is fine when explicitly logging out.
-  if (window.location.pathname !== '/auth/signin') {
-    window.location.href = '/auth/signin'
+      if (window.location.pathname !== '/auth/signin') {
+      window.location.href = '/auth/signin'
   }
 }
 
