@@ -92,8 +92,12 @@ export default function ResetPasswordPage() {
                 description: "Your password has been updated. Welcome back, champion!",
                 duration: 5000,
             })
-            // Optionally redirect to sign-in after a short delay
-            setTimeout(() => router.push("/auth/signin"), 3000)
+            // Redirect to dashboard after successful password reset
+            // Using replace to prevent back navigation and refresh to update auth state
+            setTimeout(() => {
+                router.replace("/dashboard")
+                router.refresh()
+            }, 3000)
 
         } catch (err: any) {
             let errorMessage = "Failed to reset password. Please try again."
@@ -206,14 +210,15 @@ export default function ResetPasswordPage() {
 
                                     <Button
                                         className="group relative w-full bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 hover:from-emerald-500 hover:via-cyan-500 hover:to-blue-500 text-white font-bold px-8 py-4 text-lg rounded-xl shadow-2xl shadow-emerald-500/40 hover:shadow-emerald-500/60 transition-all duration-300 hover:scale-105 border border-emerald-400/30 overflow-hidden"
-                                        asChild
+                                        onClick={() => {
+                                            router.replace("/dashboard")
+                                            router.refresh()
+                                        }}
                                     >
-                                        <Link href="/auth/signin">
-                                            <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                                            <Shield className="mr-2 h-5 w-5" />
-                                            <span className="relative z-10">Enter Arena</span>
-                                            <Crown className="ml-2 h-5 w-5" />
-                                        </Link>
+                                        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
+                                        <Shield className="mr-2 h-5 w-5" />
+                                        <span className="relative z-10">Enter Dashboard</span>
+                                        <Crown className="ml-2 h-5 w-5" />
                                     </Button>
                                 </div>
                             ) : (
