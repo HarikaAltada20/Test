@@ -614,11 +614,13 @@ export default function ChooseUsernamePage() {
                                                 <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
                                                 <Input
                                                     id="firstName"
+                                                    name="given-name"
                                                     type="text"
                                                     value={firstName}
                                                     onChange={(e) => setFirstName(e.target.value)}
                                                     className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
                                                     placeholder="First name"
+                                                    autoComplete="given-name"
                                                     required={userData?.needsFullName}
                                                 />
                                             </div>
@@ -626,11 +628,13 @@ export default function ChooseUsernamePage() {
                                                 <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
                                                 <Input
                                                     id="lastName"
+                                                    name="family-name"
                                                     type="text"
                                                     value={lastName}
                                                     onChange={(e) => setLastName(e.target.value)}
                                                     className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
                                                     placeholder="Last name"
+                                                    autoComplete="family-name"
                                                     required={userData?.needsFullName}
                                                 />
                                             </div>
@@ -645,11 +649,13 @@ export default function ChooseUsernamePage() {
                                                 <div className="relative">
                                                     <Input
                                                         id="password"
+                                                        name="new-password"
                                                         type={showPassword ? "text" : "password"}
                                                         value={password}
                                                         onChange={(e) => setPassword(e.target.value)}
                                                         className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 pr-10"
                                                         placeholder="Enter your password"
+                                                        autoComplete="new-password"
                                                         required
                                                     />
                                                     <button
@@ -666,11 +672,13 @@ export default function ChooseUsernamePage() {
                                                 <div className="relative">
                                                     <Input
                                                         id="confirmPassword"
+                                                        name="confirm-password"
                                                         type={showConfirmPassword ? "text" : "password"}
                                                         value={confirmPassword}
                                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                                         className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 pr-10"
                                                         placeholder="Confirm your password"
+                                                        autoComplete="new-password"
                                                         required
                                                     />
                                                     <button
@@ -694,6 +702,7 @@ export default function ChooseUsernamePage() {
                                         <div className="relative">
                                             <Input
                                                 id="username"
+                                                name="username"
                                                 type="text"
                                                 value={username}
                                                 onChange={handleUsernameChange}
@@ -704,6 +713,7 @@ export default function ChooseUsernamePage() {
                                                 className={`h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 pr-10 ${usernameAvailable === true ? 'border-green-500' : usernameAvailable === false ? 'border-red-500' : 'border-slate-700'}`}
                                                 autoCapitalize="none"
                                                 autoCorrect="off"
+                                                autoComplete="off"
                                             />
                                             <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                                                 {isCheckingUsername && <Loader2 className="h-5 w-5 animate-spin text-slate-400" />}
