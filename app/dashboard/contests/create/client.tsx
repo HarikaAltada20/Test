@@ -27,18 +27,16 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
-  ArrowRight,
-  Check,
+
   Image,
-  Info,
+
   Trash,
   Trophy,
   Upload,
   AlertTriangle,
-  AlertCircle,
-  Trash2,
+
   ExternalLink,
-  X,
+
 } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
@@ -46,7 +44,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   toLocalDateTimeStrings,
   toUTCISOString,
-  formatLocalDateTime,
+
 } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
@@ -111,11 +109,9 @@ export default function CreateContestPage({
   const [briefHtml, setBriefHtml] = useState("");
   const [briefJson, setBriefJson] = useState<any>(null);
   const [showBriefPreview, setShowBriefPreview] = useState(false); // Default to editor mode for better UX
-  const [rules, setRules] = useState(`Content must be in English
-Content must be similar in style to the inspiration content from the brief
-If you have earnings on Game Of Creators, please show your total earnings as well
-You must include a call to action encouraging viewers to download the Game Of Creators App to get Paid
-You must show the Game Of Creators App Store listing in your video`);
+  const [rulesHtml, setRulesHtml] = useState("");
+  const [rulesJson, setRulesJson] = useState<any>(null);
+  const [showRulesPreview, setShowRulesPreview] = useState(false);
   const [resources, setResources] = useState<Record<string, string>>({});
   const [newResourceUrl, setNewResourceUrl] = useState("");
   const [resourceFile, setResourceFile] = useState<File | null>(null);
@@ -125,32 +121,20 @@ You must show the Game Of Creators App Store listing in your video`);
   const [resourceDescription, setResourceDescription] = useState("");
   const [externalResourceDescription, setExternalResourceDescription] =
     useState("");
-  const [storageAvailable, setStorageAvailable] = useState<boolean | null>(
-    null
-  );
+
   const [inspirationLinks, setInspirationLinks] = useState<string[]>([]);
   const [newInspirationLink, setNewInspirationLink] = useState("");
-  const [subscriptionPlan, setSubscriptionPlan] = useState<
-    | "a28ef5c0-3391-44a1-a9ef-f9b999ff0198"
-    | "0477016e-7751-4049-bc57-19012004a05b"
-    | "4107627f-4ccb-4f1e-ad1a-fdc723e6a5ef"
-    | "0f094792-1ef6-4334-b169-f98d21ca0fbd"
-    | "f7630717-5578-4988-922f-255ca4c985c4"
-    | "79a96d6b-ba5c-453c-bbca-49937ba05ad6"
-  >("a28ef5c0-3391-44a1-a9ef-f9b999ff0198");
+
   const [winnerCount, setWinnerCount] = useState<number>(3);
   const [winnerAmounts, setWinnerAmounts] = useState<number[]>([
     5000, 3000, 2000,
   ]);
-  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resourceFileRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const supabase = createClient();
   const [userPlan, setUserPlan] = useState<string | null>(null);
-  const [showContactModal, setShowContactModal] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(10000); // Default total prize pool
   const [hasExceededBudgetThreshold, setHasExceededBudgetThreshold] =
     useState<boolean>(false);
@@ -162,13 +146,10 @@ You must show the Game Of Creators App Store listing in your video`);
   const [endTime, setEndTime] = useState<string>("");
   const [showHighBudgetPrompt, setShowHighBudgetPrompt] = useState(false);
 
-  // Add resourceUploadProgress to state variables
-  const [resourceUploadProgress, setResourceUploadProgress] =
-    useState<number>(0);
+
 
   // Add draft ID state for tracking loaded drafts
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [draftLoaded, setDraftLoaded] = useState(false);
 
   // Add this to the state declarations
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>(
@@ -192,6 +173,7 @@ You must show the Game Of Creators App Store listing in your video`);
 
   // Add ref for the rich text editor
   const richTextEditorRef = useRef<any>(null);
+  const rulesRichTextEditorRef = useRef<any>(null);
 
   // Add this function for handling resource file uploads
 
@@ -236,9 +218,20 @@ You must show the Game Of Creators App Store listing in your video`);
     if (richTextEditorRef.current) {
       const content = richTextEditorRef.current.getContent();
       console.log("Captured brief content:", content ? content.html.substring(0, 100) + "..." : content);
-      setBrief(content.html);
       setBriefHtml(content.html);
       setBriefJson(content.json);
+      return content.html;
+    }
+    return "";
+  };
+
+  // Function to capture content from rules rich text editor
+  const captureRulesContent = () => {
+    if (rulesRichTextEditorRef.current) {
+      const content = rulesRichTextEditorRef.current.getContent();
+      console.log("Captured rules content:", content ? content.html.substring(0, 100) + "..." : content);
+      setRulesHtml(content.html);
+      setRulesJson(content.json);
       return content.html;
     }
     return "";
@@ -251,6 +244,15 @@ You must show the Game Of Creators App Store listing in your video`);
       captureBriefContent();
     }
     setShowBriefPreview(!showBriefPreview);
+  };
+
+  // Function to preview the rules content
+  const toggleRulesPreview = () => {
+    if (!showRulesPreview) {
+      // Always capture content before showing preview
+      captureRulesContent();
+    }
+    setShowRulesPreview(!showRulesPreview);
   };
 
   // Function to manually save content without toggling preview
@@ -530,7 +532,16 @@ You must show the Game Of Creators App Store listing in your video`);
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
-        if (!rules) {
+        // Capture rules content before validation
+        const currentRulesHtml = captureRulesContent();
+        // Also check the existing rulesHtml state as fallback
+        const rulesToValidate = currentRulesHtml || rulesHtml;
+
+        console.log("Rules validation - currentRulesHtml:", currentRulesHtml?.substring(0, 100));
+        console.log("Rules validation - rulesHtml state:", rulesHtml?.substring(0, 100));
+        console.log("Rules validation - final rulesToValidate:", rulesToValidate?.substring(0, 100));
+
+        if (!rulesToValidate || isQuillEmpty(rulesToValidate)) {
           setFormFeedback("Contest rules are required");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
@@ -620,7 +631,6 @@ You must show the Game Of Creators App Store listing in your video`);
           const isStorageAvailable = await checkStorageAvailability();
           if (!isStorageAvailable) {
             if (isDraft) console.warn("Storage not available, continuing with draft save without uploading resources");
-            else setError("File upload is unavailable due to storage configuration. Contest will be created without resources.");
           } else {
             const resourceUploadPromises = [];
             const failedUploads = [];
@@ -656,7 +666,6 @@ You must show the Game Of Creators App Store listing in your video`);
         } catch (error) {
           console.error("Error handling resource uploads:", error);
           if (!isDraft) {
-            setError("Failed to upload resources. Please try again.");
             setIsLoading(false); setUploadProgress(null); return;
           }
         }
@@ -676,7 +685,6 @@ You must show the Game Of Creators App Store listing in your video`);
       } catch (error) {
         console.error("Error formatting dates for submission:", error);
         if (!isDraft) {
-          setError("There was a problem with the date format. Please check the start and end dates.");
           setFormFeedback("There was a problem with the date format. Please check the start and end dates.");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
@@ -690,10 +698,10 @@ You must show the Game Of Creators App Store listing in your video`);
         thumbnail_url: thumbnailUrl,
         category,
         platform: platform,
-        brief,
         brief_html: briefHtml,
         brief_json: briefJson,
-        rules: { list: rules.split("\n") },
+        rules_html: rulesHtml,
+        rules_json: rulesJson,
         resources,
         inspiration_links: inspirationLinks,
         subscription_plan_of_user: userPlan,
@@ -845,9 +853,7 @@ You must show the Game Of Creators App Store listing in your video`);
       // Convert dollars to cents for internal storage
       const numValue = Math.round(dollars * 100);
 
-      // Clear previous errors
-      setError(null);
-      setValidationError(null);
+
 
       // Update the value immediately to improve responsiveness
       const newWinnerAmounts = [...winnerAmounts];
@@ -876,7 +882,7 @@ You must show the Game Of Creators App Store listing in your video`);
 
   const handleWinnerCountChange = (count: number) => {
     const planFeatures = getPlanFeatures(
-      userPlan || "a28ef5c0-3391-44a1-a9ef-f9b999ff0198"
+      userPlan || subscriptionPlans[0].id
     );
 
     if (count > planFeatures.maxWinnersPerContest) {
@@ -884,7 +890,7 @@ You must show the Game Of Creators App Store listing in your video`);
       return;
     }
 
-    setValidationError(null);
+
     setWinnerCount(count);
 
     // Add more entries if needed, using default allocations or minimum prize
@@ -932,12 +938,13 @@ You must show the Game Of Creators App Store listing in your video`);
 
       // Capture content from rich text editor before validation
       const currentBrief = captureBriefContent();
+      const currentRules = captureRulesContent();
 
       // Also check the current brief state as a fallback
-      const briefToCheck = currentBrief || brief || briefHtml;
+      const briefToCheck = currentBrief || briefHtml;
+      const rulesToCheck = currentRules || rulesHtml;
 
       console.log("Brief validation - currentBrief:", currentBrief?.substring(0, 50));
-      console.log("Brief validation - brief state:", brief?.substring(0, 50));
       console.log("Brief validation - briefHtml state:", briefHtml?.substring(0, 50));
 
       if (isQuillEmpty(briefToCheck)) {
@@ -945,7 +952,7 @@ You must show the Game Of Creators App Store listing in your video`);
         setFormFeedbackType("error");
         return;
       }
-      if (!rules) {
+      if (isQuillEmpty(rulesToCheck)) {
         setFormFeedback("Please provide rules for your contest"); // Footer feedback
         setFormFeedbackType("error");
         return;
@@ -973,7 +980,7 @@ You must show the Game Of Creators App Store listing in your video`);
     if (step === "brief") {
       // For brief step, we'll allow proceeding and validate in nextStep
       // This prevents the editor from being blocked while user is typing
-      return !rules; // Only check rules since brief will be captured on next
+      return false; // Allow proceeding, validation will happen in nextStep for both brief and rules
     }
     // For the "resources" step, no specific blocking validation for the entire step is defined for isNextDisabled
     // Individual resource additions handle their own feedback internally.
@@ -990,7 +997,6 @@ You must show the Game Of Creators App Store listing in your video`);
 
       if (userError) {
         console.error("Authentication error:", userError);
-        setStorageAvailable(false);
         return false;
       }
 
@@ -1001,16 +1007,13 @@ You must show the Game Of Creators App Store listing in your video`);
 
       if (error) {
         console.error("Storage access error:", error);
-        setStorageAvailable(false);
         return false;
       }
 
       // Storage is accessible
-      setStorageAvailable(true);
       return true;
     } catch (error) {
       console.error("Storage check error:", error);
-      setStorageAvailable(false);
       return false;
     }
   };
@@ -1026,7 +1029,7 @@ You must show the Game Of Creators App Store listing in your video`);
 
       if (authError || !authData.user) {
         console.error("Authentication error in getUserPlan:", authError);
-        setUserPlan("a28ef5c0-3391-44a1-a9ef-f9b999ff0198"); // Default to free plan
+        setUserPlan(subscriptionPlans[0].id); // Default to free plan
         return;
       }
 
@@ -1049,10 +1052,10 @@ You must show the Game Of Creators App Store listing in your video`);
       }
 
       // If we couldn't find a subscription anywhere, default to 'free'
-      setUserPlan("a28ef5c0-3391-44a1-a9ef-f9b999ff0198");
+      setUserPlan(subscriptionPlans[0].id);
     } catch (error) {
       console.error("Error in getUserPlan:", error);
-      setUserPlan("a28ef5c0-3391-44a1-a9ef-f9b999ff0198"); // Default to free plan on error
+      setUserPlan(subscriptionPlans[0].id);
     }
   };
 
@@ -1085,11 +1088,11 @@ You must show the Game Of Creators App Store listing in your video`);
       );
       // Attempt to find the 'free' plan by name if ID fails, or use the first available plan, or default
       const freePlan = dbSubscriptionPlans.find(
-        (p) => p.name.toLowerCase() === "free"
+        (p) => p.name.toLowerCase() === "FREE"
       );
       return (
-        freePlan?.features ||
         dbSubscriptionPlans[0]?.features ||
+        freePlan?.features ||
         defaultFreePlanFeatures
       );
     }
@@ -1097,21 +1100,7 @@ You must show the Game Of Creators App Store listing in your video`);
     return plan.features;
   };
 
-  // Validate if the user can perform certain actions based on their plan
-  const canPerformAction = (action: string, value: number) => {
-    const features = getPlanFeatures(userPlan);
 
-    switch (action) {
-      case "createContest":
-        return value <= features.maxActiveContests;
-      case "contestBudget":
-        return value >= features.minContestBudget;
-      case "winnerCount":
-        return value <= features.maxWinnersPerContest;
-      default:
-        return true;
-    }
-  };
 
   // Function to load draft data
   const loadDraftData = async () => {
@@ -1189,15 +1178,16 @@ You must show the Game Of Creators App Store listing in your video`);
     setTitle(draft.title || "");
     setCategory(draft.category || "technology");
     setPlatform(draft.platform || "youtube"); // Load platform, default if not present
-    // Thumbnail: If draft.thumbnail_url exists, set it to thumbnailPreview.
-    // Do not set the 'thumbnail' File object from a URL.
+    // If thumbnail URL is available, show it in the preview
+    if (draft.thumbnail_url) {
+      setThumbnailPreview(draft.thumbnail_url);
+    }
     setDraftId(draft.id);
 
     console.log("Loading draft data:", draft); // For debugging
 
-    // Pre-fill form fields with draft data
+    // Pre-fill form fields with draft data using rich text format
     if (draft.brief_html && draft.brief_json) {
-      // Use new rich text format
       setBrief(draft.brief_html);
       setBriefHtml(draft.brief_html);
       setBriefJson(draft.brief_json);
@@ -1205,14 +1195,19 @@ You must show the Game Of Creators App Store listing in your video`);
       if (richTextEditorRef.current) {
         richTextEditorRef.current.setContent(draft.brief_json);
       }
-    } else if (draft.brief) {
-      // Fallback to legacy plain text format
-      setBrief(draft.brief);
-      setBriefHtml(draft.brief);
-      setBriefJson(null);
     }
 
-    if (draft.rules?.list) setRules(draft.rules.list.join("\n"));
+    // Handle rules rich text content loading
+    if (draft.rules_html && draft.rules_json) {
+      setRulesHtml(draft.rules_html);
+      setRulesJson(draft.rules_json);
+      // Set content in editor if ref is available
+      setTimeout(() => {
+        if (rulesRichTextEditorRef.current) {
+          rulesRichTextEditorRef.current.setContent(draft.rules_json);
+        }
+      }, 100);
+    }
 
     // Set resources if available
     if (draft.resources && typeof draft.resources === "object") {
@@ -1244,10 +1239,7 @@ You must show the Game Of Creators App Store listing in your video`);
     }
     // If draft.inspiration_links is undefined (key not in draft object), the default state from useState remains (empty array as per initial state).
 
-    // Set subscription plan if available
-    if (draft.subscription_plan) {
-      setSubscriptionPlan(draft.subscription_plan);
-    }
+
 
     // Set winner count and amounts if available
     if (draft.winner_count) {
@@ -1277,12 +1269,6 @@ You must show the Game Of Creators App Store listing in your video`);
       setEndTime(timeString);
     }
 
-    // If thumbnail URL is available, show it in the preview
-    if (draft.thumbnail_url) {
-      setThumbnailPreview(draft.thumbnail_url);
-    }
-
-    setDraftLoaded(true);
     console.log(
       "Draft loaded successfully, thumbnail preview:",
       draft.thumbnail_url
@@ -1495,42 +1481,6 @@ You must show the Game Of Creators App Store listing in your video`);
     }
   }, [startDate, startTime]);
 
-  // Modal for high budget contests
-  const ContactModal = () => {
-    if (!showContactModal) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white p-6 rounded-lg max-w-md w-full">
-          <h3 className="text-xl font-bold mb-4">High Budget Contest</h3>
-          <p className="mb-4">
-            For contests with budgets over{" "}
-            {formatCurrency(HIGH_BUDGET_THRESHOLD)}, we recommend speaking with
-            our team for personalized guidance and support.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowContactModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                // Logic to handle high budget contest request
-                setShowContactModal(false);
-                // Could open a form, send an email, etc.
-              }}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
-            >
-              Contact Us
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // High Budget Prompt Modal
   const HighBudgetPromptModal = () => {
     if (!showHighBudgetPrompt) return null;
@@ -1601,7 +1551,6 @@ You must show the Game Of Creators App Store listing in your video`);
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Removed inline validationError Alert (which was for general step validation) */}
 
           {/* Current Plan Details */}
           <div className="border rounded-lg p-6 mb-6">
@@ -1610,20 +1559,21 @@ You must show the Game Of Creators App Store listing in your video`);
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-4">
                   <div
-                    className={`w-14 h-14 rounded-full flex items-center justify-center ${userPlan === "a28ef5c0-3391-44a1-a9ef-f9b999ff0198"
-                      ? "bg-gray-300"
-                      : userPlan === "0477016e-7751-4049-bc57-19012004a05b"
-                        ? "bg-orange-500"
-                        : userPlan === "4107627f-4ccb-4f1e-ad1a-fdc723e6a5ef"
-                          ? "bg-gray-300"
-                          : userPlan === "0f094792-1ef6-4334-b169-f98d21ca0fbd"
-                            ? "bg-yellow-400"
-                            : userPlan === "f7630717-5578-4988-922f-255ca4c985c4"
-                              ? "bg-indigo-400"
-                              : userPlan === "79a96d6b-ba5c-453c-bbca-49937ba05ad6"
-                                ? "bg-blue-300"
+                    className={`w-14 h-14 rounded-full flex items-center justify-center ${userPlan === subscriptionPlans[0].id
+                      ? "bg-gray-300" // Free plan
+                      : userPlan === subscriptionPlans[1].id
+                        ? "bg-bronze-500" // Bronze plan
+                        : userPlan === subscriptionPlans[2].id
+                          ? "bg-silver-500" // Silver plan
+                          : userPlan === subscriptionPlans[3].id
+                            ? "bg-yellow-500" // Gold plan
+                            : userPlan === subscriptionPlans[4].id
+                              ? "bg-yellow-400" // Platinum plan
+                              : userPlan === subscriptionPlans[5].id
+                                ? "bg-blue-500" // Diamond plan
                                 : "bg-gray-300"
                       }`}
+
                   >
                     <Trophy className="h-6 w-6 text-white" />
                   </div>
@@ -2416,13 +2366,50 @@ You must show the Game Of Creators App Store listing in your video`);
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Set rules</h3>
-                <Textarea
-                  value={rules}
-                  onChange={(e) => setRules(e.target.value)}
-                  rows={8}
-                  placeholder="Content rules and guidelines"
-                />
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-medium">Set rules</h3>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleRulesPreview}
+                    >
+                      {showRulesPreview ? 'Edit' : 'Preview'}
+                    </Button>
+                  </div>
+                </div>
+
+                {showRulesPreview ? (
+                  <div className="border rounded-lg p-4 min-h-[300px] bg-white">
+                    <h4 className="text-sm font-medium mb-2 text-gray-600">Preview:</h4>
+                    <div
+                      className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
+                      style={{
+                        padding: '12px 15px',
+                        minHeight: '250px',
+                      }}
+                      dangerouslySetInnerHTML={{
+                        __html: rulesHtml || '<p class="text-gray-400">No rules yet. Click "Edit" to add rules.</p>'
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white rounded min-h-[300px]">
+                    <NovelEditor
+                      value={rulesHtml}
+                      placeholder="Content rules and guidelines..."
+                      height="250px"
+                      ref={rulesRichTextEditorRef}
+                      onChange={(html: string, json: any) => {
+                        console.log("Rules editor onChange - html:", html?.substring(0, 50));
+                        console.log("Rules editor onChange - json:", json);
+                        setRulesHtml(html);
+                        setRulesJson(json);
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             </CardContent>
             <CardFooter className="flex justify-between items-center pt-6">
@@ -2920,9 +2907,6 @@ You must show the Game Of Creators App Store listing in your video`);
           </>
         )}
       </Card>
-
-      {/* Contact Modal for high budget contests */}
-      <ContactModal />
 
       {/* High Budget Prompt Modal */}
       <HighBudgetPromptModal />

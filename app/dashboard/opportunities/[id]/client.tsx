@@ -605,10 +605,10 @@ export function ContestClientPage({
                   <CardContent className="space-y-6">
                     <div>
                       <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">Brief</h3>
-                      {(contest.brief_html || contest.brief) ? (
+                      {contest.brief_html ? (
                         <div
                           className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
-                          dangerouslySetInnerHTML={{ __html: contest.brief_html || contest.brief || '' }}
+                          dangerouslySetInnerHTML={{ __html: contest.brief_html }}
                         />
                       ) : (
                         <p className="text-slate-600 dark:text-slate-400 text-sm">No brief provided</p>
@@ -735,22 +735,11 @@ export function ContestClientPage({
                           <ScrollText className="h-5 w-5" /> Rules & Guidelines
                         </h3>
                         <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
-                          {contest.rules_description ? (
-                            <p className="text-slate-700 dark:text-slate-300">{contest.rules_description}</p>
-                          ) : contest.rules &&
-                            typeof contest.rules === "object" &&
-                            contest.rules.list &&
-                            Array.isArray(contest.rules.list) ? (
-                            <ul className="space-y-2">
-                              {contest.rules.list.map(
-                                (rule: string, index: number) => (
-                                  <li key={index} className="flex items-start py-1">
-                                    <span className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></span>
-                                    <span className="text-slate-700 dark:text-slate-300">{rule}</span>
-                                  </li>
-                                )
-                              )}
-                            </ul>
+                          {(contest as any).rules_html ? (
+                            <div
+                              className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
+                              dangerouslySetInnerHTML={{ __html: (contest as any).rules_html }}
+                            />
                           ) : (
                             <p className="text-slate-600 dark:text-slate-400">No specific rules provided.</p>
                           )}

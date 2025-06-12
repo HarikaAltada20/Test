@@ -103,10 +103,11 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     // Common contest fields
     const [title, setTitle] = useState("")
     const [category, setCategory] = useState<string>("technology") // Or consider platform if that's more accurate
-    const [brief, setBrief] = useState("")
     const [briefHtml, setBriefHtml] = useState("")
     const [briefJson, setBriefJson] = useState<any>(null)
-    const [rules, setRules] = useState("")
+    const [rulesHtml, setRulesHtml] = useState("")
+    const [rulesJson, setRulesJson] = useState<any>(null)
+    const [showRulesPreview, setShowRulesPreview] = useState(false)
     const [startDate, setStartDate] = useState<string>("")
     const [startTime, setStartTime] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
@@ -117,6 +118,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
     const richTextEditorRef = useRef<any>(null)
+    const rulesRichTextEditorRef = useRef<any>(null)
 
     // Contest Type and Specific Details
     const [contestType, setContestType] = useState<"leaderboard" | "cpm" | null>(null);
@@ -201,7 +203,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 setUserPlan(advertiserData.subscription_plan);
             } else {
                 // Default to free plan if not found or error (assuming ID exists)
-                const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free')?.id || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198'; // Fallback hardcoded ID
+                const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
                 setUserPlan(freePlanId);
                 if (advertiserError && advertiserError.code !== 'PGRST116') { // Ignore 'single row not found'
                     console.error("Error fetching advertiser profile:", advertiserError);
@@ -209,7 +211,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             }
         } catch (error) {
             console.error("Error in getUserPlan:", error);
-            const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free')?.id || 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198'; // Fallback hardcoded ID
+            const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
             setUserPlan(freePlanId); // Default to free plan on error
         } finally {
             setIsUserPlanLoading(false);
@@ -226,14 +228,14 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
         if (!planId) {
             // Find free plan by name if planId is null
-            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free');
+            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE');
             return freePlan?.features || defaultFreePlanFeatures;
         }
 
         const plan = dbSubscriptionPlans.find((p: SubscriptionPlan) => p.id === planId);
 
         if (!plan) {
-            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'free');
+            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE');
             return freePlan?.features || dbSubscriptionPlans[0]?.features || defaultFreePlanFeatures;
         }
         return plan.features;
@@ -297,8 +299,6 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                         // Handle rich text content loading
                         if (data.brief_html && data.brief_json) {
-                            // Use new rich text format
-                            setBrief(data.brief_html);
                             setBriefHtml(data.brief_html);
                             setBriefJson(data.brief_json);
                             // Set content in editor if ref is available
@@ -307,14 +307,19 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                     richTextEditorRef.current.setContent(data.brief_json);
                                 }
                             }, 100);
-                        } else if (data.brief) {
-                            // Fallback to legacy plain text format
-                            setBrief(data.brief);
-                            setBriefHtml(data.brief);
-                            setBriefJson(null);
                         }
 
-                        setRules(data.rules?.list?.join("\n") || "");
+                        // Handle rules rich text content loading
+                        if (data.rules_html && data.rules_json) {
+                            setRulesHtml(data.rules_html);
+                            setRulesJson(data.rules_json);
+                            // Set content in editor if ref is available
+                            setTimeout(() => {
+                                if (rulesRichTextEditorRef.current) {
+                                    rulesRichTextEditorRef.current.setContent(data.rules_json);
+                                }
+                            }, 100);
+                        }
 
                         if (data.start_date) {
                             const { dateString, timeString } = toLocalDateTimeStrings(data.start_date);
@@ -483,10 +488,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
         let updatePayload: any = {
             title,
             category,
-            brief,
             brief_html: briefHtml,
             brief_json: briefJson,
-            rules: { list: rules.split('\n').filter(rule => rule.trim() !== "") },
+            rules_html: rulesHtml,
+            rules_json: rulesJson,
             inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
         };
 
@@ -952,6 +957,48 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
         }
     };
 
+    // Helper functions for content management
+    const captureBriefContent = () => {
+        if (richTextEditorRef.current) {
+            const content = richTextEditorRef.current.getContent();
+            console.log("Captured brief content:", content ? content.html.substring(0, 100) + "..." : content);
+            setBriefHtml(content.html);
+            setBriefJson(content.json);
+            return content.html;
+        }
+        return "";
+    };
+
+    // Function to capture content from rules rich text editor
+    const captureRulesContent = () => {
+        if (rulesRichTextEditorRef.current) {
+            const content = rulesRichTextEditorRef.current.getContent();
+            console.log("Captured rules content:", content ? content.html.substring(0, 100) + "..." : content);
+            setRulesHtml(content.html);
+            setRulesJson(content.json);
+            return content.html;
+        }
+        return "";
+    };
+
+    // Function to preview the rules content
+    const toggleRulesPreview = () => {
+        if (!showRulesPreview) {
+            // Always capture content before showing preview
+            captureRulesContent();
+        }
+        setShowRulesPreview(!showRulesPreview);
+    };
+
+    // Helper function to check if rich text editor content is effectively empty
+    const isRichTextEditorEmpty = (editorRef: React.RefObject<any>): boolean => {
+        if (editorRef.current) {
+            const content = editorRef.current.getContent();
+            return content === null || content.html === "" || content.html === "<p><br></p>";
+        }
+        return true;
+    };
+
     if (isLoading || isPlansLoading || isUserPlanLoading) { // Check all loading states
         return (
             <div className="flex items-center justify-center h-full">
@@ -1139,12 +1186,11 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                         <Label htmlFor="brief">Brief</Label>
                         <div className="bg-white rounded min-h-[300px]">
                             <NovelEditor
-                                value={brief}
+                                value={briefHtml}
                                 placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
                                 height="250px"
                                 ref={richTextEditorRef}
                                 onChange={(html: string, json: any) => {
-                                    setBrief(html); // Keep for backward compatibility
                                     setBriefHtml(html);
                                     setBriefJson(json);
                                 }}
@@ -1192,13 +1238,50 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     </div>
 
                     <div className="space-y-4">
-                        <h3 className="text-lg font-medium">Set rules</h3>
-                        <Textarea
-                            value={rules}
-                            onChange={(e) => setRules(e.target.value)}
-                            rows={8}
-                            placeholder="Content rules and guidelines"
-                        />
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-medium">Set rules</h3>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={toggleRulesPreview}
+                                >
+                                    {showRulesPreview ? 'Edit' : 'Preview'}
+                                </Button>
+                            </div>
+                        </div>
+
+                        {showRulesPreview ? (
+                            <div className="border rounded-lg p-4 min-h-[300px] bg-white">
+                                <h4 className="text-sm font-medium mb-2 text-gray-600">Preview:</h4>
+                                <div
+                                    className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
+                                    style={{
+                                        padding: '12px 15px',
+                                        minHeight: '250px',
+                                    }}
+                                    dangerouslySetInnerHTML={{
+                                        __html: rulesHtml || '<p class="text-gray-400">No rules yet. Click "Edit" to add rules.</p>'
+                                    }}
+                                />
+                            </div>
+                        ) : (
+                            <div className="bg-white rounded min-h-[300px]">
+                                <NovelEditor
+                                    value={rulesHtml}
+                                    placeholder="Content rules and guidelines..."
+                                    height="250px"
+                                    ref={rulesRichTextEditorRef}
+                                    onChange={(html: string, json: any) => {
+                                        console.log("Rules editor onChange - html:", html?.substring(0, 50));
+                                        console.log("Rules editor onChange - json:", json);
+                                        setRulesHtml(html);
+                                        setRulesJson(json);
+                                    }}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <Separator />

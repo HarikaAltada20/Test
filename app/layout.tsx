@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
-import { Footer } from "@/components/footer";
 import { Toaster } from "@/components/ui/toaster";
 import { createClient } from "@/utils/supabase/server";
+import { ConditionalFooter } from "./conditional-footer";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -77,7 +77,7 @@ export default async function RootLayout({
             subscriptionPlan={subscriptionPlan}
           />
           <main className="flex-1">{children}</main>
-          <Footer />
+          <ConditionalFooter />
         </div>
         <Toaster />
       </body>

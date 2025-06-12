@@ -77,11 +77,10 @@ interface Contest {
     contest_type?: "leaderboard" | "cpm" | null;
     thumbnail_url?: string | null;
     brief_html?: string | null;
-    brief?: string | null;
     platform?: string | null;
     start_date: string | null;
     end_date: string | null;
-    rules?: any | null;
+    rules_html?: string | null;
     inspiration_links?: string[] | null;
     resources?: any | null;
     contest_based_details?: any | null;
@@ -567,10 +566,10 @@ export default function ContestDetailClient({
 
                                 <div>
                                     <h3 className="font-medium mb-2">Brief</h3>
-                                    {(contest.brief_html || contest.brief) ? (
+                                    {contest.brief_html ? (
                                         <div
                                             className="prose prose-sm max-w-none text-muted-foreground"
-                                            dangerouslySetInnerHTML={{ __html: contest.brief_html || contest.brief || '' }}
+                                            dangerouslySetInnerHTML={{ __html: contest.brief_html }}
                                         />
                                     ) : (
                                         <p className="text-muted-foreground">No brief provided</p>
@@ -674,25 +673,14 @@ export default function ContestDetailClient({
                                     </div>
                                 )}
 
-                                {contest.rules && contest.rules.list && (
+                                {(contest as any).rules_html && (
                                     <div>
                                         <h3 className="font-medium mb-2">Rules</h3>
                                         <div className="border rounded-md p-4 bg-gray-50">
-                                            {Array.isArray(contest.rules.list) ? (
-                                                <ul className="list-disc list-inside space-y-1">
-                                                    {contest.rules.list.map(
-                                                        (rule: string, idx: number) => (
-                                                            <li key={idx} className="text-sm">
-                                                                {rule}
-                                                            </li>
-                                                        )
-                                                    )}
-                                                </ul>
-                                            ) : (
-                                                <p className="text-muted-foreground">
-                                                    No rules specified
-                                                </p>
-                                            )}
+                                            <div
+                                                className="prose prose-sm max-w-none text-muted-foreground"
+                                                dangerouslySetInnerHTML={{ __html: (contest as any).rules_html }}
+                                            />
                                         </div>
                                     </div>
                                 )}
