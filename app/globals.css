@@ -91,4 +91,20 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Global scaling to make the platform more compact - similar to 80% zoom */
+  html {
+    font-size: 14px; /* Reduced from default 16px (87.5% of original) */
+  }
+  
+  /* Reduce default spacing and sizing */
+  .dashboard-container {
+    zoom: 0.85; /* Scale down dashboard content to 85% */
+  }
+  
+  /* Ensure sidebar takes full height despite zoom */
+  .dashboard-container aside {
+    height: 117.647vh !important; /* 100vh / 0.85 = 117.647vh */
+    min-height: 117.647vh !important;
+  }
 }

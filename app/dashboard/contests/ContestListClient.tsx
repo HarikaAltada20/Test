@@ -185,7 +185,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
         return (
             <Card
                 key={contest.id}
-                className="overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out border dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 cursor-pointer w-full max-w-sm mx-auto"
+                className="overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out border dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 cursor-pointer w-full"
                 onClick={(e) => {
                     // Don't navigate if the click is on a button or interactive element
                     if ((e.target as HTMLElement).closest('button')) {
@@ -383,7 +383,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                 </TabsList>
 
                 <TabsContent value="published" className="mt-4">
-                    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+                    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
                         {sortedAndFilteredPublishedContests.length > 0 ? (
                             sortedAndFilteredPublishedContests.map((contest) => renderContestCard(contest))
                         ) : (
@@ -397,7 +397,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                     </div>
                 </TabsContent>
                 <TabsContent value="drafts" className="mt-4">
-                    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+                    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
                         {sortedAndFilteredDraftContests.length > 0 ? (
                             sortedAndFilteredDraftContests.map((contest) => renderContestCard(contest))
                         ) : (

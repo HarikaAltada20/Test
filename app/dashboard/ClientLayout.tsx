@@ -1006,10 +1006,10 @@ function DashboardContent({
       `}</style>
 
       {/* Main Layout Container */}
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen dashboard-container">
         {/* Desktop Sidebar */}
         <aside className={cn(
-          "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out min-h-screen fixed left-0 top-0 z-30",
+          "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
           sidebarCollapsed ? "w-28" : "w-72"
         )} style={{
           background: currentMode === 'light'
@@ -1084,7 +1084,7 @@ function DashboardContent({
             "border items-center justify-center"
           )}
           style={{
-            left: sidebarCollapsed ? '98px' : '270px', // Center of actual sidebar border
+            left: sidebarCollapsed ? '86px' : '240px', // Center of actual sidebar border (adjusted for zoom)
             backgroundColor: currentMode === 'light'
               ? `rgba(${mode.background.primary}, 0.9)`
               : `rgba(${mode.background.secondary}, 0.9)`,

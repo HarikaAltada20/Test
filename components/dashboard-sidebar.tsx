@@ -226,7 +226,6 @@ export function DashboardSidebar({
           "flex-1 overflow-y-auto transition-all duration-300",
           showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
         )}
-        style={{ maxHeight: 'calc(100vh - 200px)' }}
       >
         <div className="p-4">
           {!collapsed && (
