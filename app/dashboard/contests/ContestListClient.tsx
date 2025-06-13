@@ -22,7 +22,7 @@ import {
     Users,
     DollarSign,
     ExternalLink, // For View button icon
-
+    Info,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, formatMoney, cn } from "@/lib/utils";
@@ -185,7 +185,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
         return (
             <Card
                 key={contest.id}
-                className="overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out border dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 cursor-pointer"
+                className="overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out border dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 cursor-pointer w-full max-w-sm mx-auto"
                 onClick={(e) => {
                     // Don't navigate if the click is on a button or interactive element
                     if ((e.target as HTMLElement).closest('button')) {
@@ -206,20 +206,12 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         ) : (
                             <Trophy className="h-16 w-16 text-slate-300 dark:text-slate-600" />
                         )}
-                        <div className="absolute top-2 right-2 flex flex-col space-y-1">
+                        <div className="absolute top-2 right-2">
                             <Badge
                                 className={cn("capitalize text-xs px-2 py-0.5 font-medium border", statusDisplay.className)}
                             >
                                 {statusDisplay.text}
                             </Badge>
-                            {contest.contest_type && (
-                                <Badge
-                                    variant={contest.contest_type === 'cpm' ? "secondary" : "default"}
-                                    className="capitalize text-xs px-2 py-0.5 font-medium border"
-                                >
-                                    {contest.contest_type === 'cpm' ? 'CPM' : 'Leaderboard'}
-                                </Badge>
-                            )}
                         </div>
                     </div>
                     <CardHeader className="p-4 pb-2">
@@ -265,6 +257,14 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                                 <div className="flex items-center">
                                     <Users className="h-4 w-4 mr-2 flex-shrink-0" />
                                     <span>Submissions: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                                </div>
+                            )}
+                            {contest.contest_type && (
+                                <div className="flex items-center">
+                                    <Info className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>Contest Type: <span className="font-medium text-slate-700 dark:text-slate-300">
+                                        {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1)}
+                                    </span></span>
                                 </div>
                             )}
                             {(leaderboardPrizeMoney !== null || cpmBudget !== null) && (
@@ -383,11 +383,11 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                 </TabsList>
 
                 <TabsContent value="published" className="mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
                         {sortedAndFilteredPublishedContests.length > 0 ? (
                             sortedAndFilteredPublishedContests.map((contest) => renderContestCard(contest))
                         ) : (
-                            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 text-center py-12">
+                            <div className="col-span-full text-center py-12">
                                 <h3 className="text-lg font-semibold">No Published Contests</h3>
                                 <p className="text-slate-500 mt-2">
                                     No contests match the current filters.
@@ -397,11 +397,11 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                     </div>
                 </TabsContent>
                 <TabsContent value="drafts" className="mt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:col-span-4 gap-6">
+                    <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
                         {sortedAndFilteredDraftContests.length > 0 ? (
                             sortedAndFilteredDraftContests.map((contest) => renderContestCard(contest))
                         ) : (
-                            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 text-center py-12">
+                            <div className="col-span-full text-center py-12">
                                 <h3 className="text-lg font-semibold">No Drafts</h3>
                                 <p className="text-slate-500 mt-2">
                                     You have no draft contests at the moment.

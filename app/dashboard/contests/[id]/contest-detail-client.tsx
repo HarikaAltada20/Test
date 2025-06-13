@@ -273,9 +273,9 @@ export default function ContestDetailClient({
 
     const getPlatformIcon = (platform?: string | null) => {
         const lowerPlatform = platform?.toLowerCase();
-        if (lowerPlatform?.includes("youtube")) return <Youtube className="h-5 w-5 text-red-500 flex-shrink-0" />;
-        if (lowerPlatform?.includes("instagram")) return <Instagram className="h-5 w-5 text-pink-500 flex-shrink-0" />;
-        return <FileText className="h-5 w-5 text-gray-400 flex-shrink-0" />;
+        if (lowerPlatform?.includes("youtube")) return <Youtube className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />;
+        if (lowerPlatform?.includes("instagram")) return <Instagram className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />;
+        return <Share2 className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />;
     }
 
     const extractPlatformMetrics = (submission: Submission) => {
@@ -358,107 +358,89 @@ export default function ContestDetailClient({
 
             {/* Modern Contest Overview - Redesigned for better UX */}
             <div className="space-y-6 mb-8">
-                {/* Contest Status Banner */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-white rounded-lg shadow-sm">
-                                <Trophy className="h-5 w-5 text-amber-500" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-900">Contest Status</h3>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <Badge className={cn(contestStatusBadgeInfo.className, "text-xs")}>{contestStatusBadgeInfo.text}</Badge>
-                                    <span className="text-sm text-gray-600">•</span>
-                                    <span className="text-sm font-medium text-gray-700 capitalize">{contest.contest_type || 'N/A'} Contest</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Quick Actions Buttons */}
-                        <div className="flex items-center gap-2">
-                            {(contest.status === 'active' || contest.status === 'ended') && currentSubmissions && currentSubmissions.length > 0 && (
-                                <Button
-                                    size="sm"
-                                    className={`shadow-sm ${cooldownInfo.canRefresh && !isRefreshingMetrics
-                                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                        }`}
-                                    onClick={handleRefreshMetrics}
-                                    disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                                    title={!cooldownInfo.canRefresh ? `Please wait ${cooldownInfo.remainingMinutes} more minute${cooldownInfo.remainingMinutes !== 1 ? 's' : ''}` : undefined}
-                                >
-                                    {isRefreshingMetrics ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <RefreshCw className="mr-2 h-4 w-4" />
-                                    )}
-                                    {isRefreshingMetrics ? 'Updating...' :
-                                        !cooldownInfo.canRefresh ? `Wait ${cooldownInfo.remainingMinutes}m` : 'Refresh'}
-                                </Button>
+                {/* Quick Actions Bar */}
+                <div className="flex items-center justify-end gap-2 mb-6">
+                    {(contest.status === 'active' || contest.status === 'ended') && currentSubmissions && currentSubmissions.length > 0 && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className={`shadow-sm ${cooldownInfo.canRefresh && !isRefreshingMetrics
+                                ? 'border-green-200 text-green-700 hover:bg-green-50'
+                                : 'border-gray-200 text-gray-500 cursor-not-allowed'
+                                }`}
+                            onClick={handleRefreshMetrics}
+                            disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
+                            title={!cooldownInfo.canRefresh ? `Please wait ${cooldownInfo.remainingMinutes} more minute${cooldownInfo.remainingMinutes !== 1 ? 's' : ''}` : undefined}
+                        >
+                            {isRefreshingMetrics ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <RefreshCw className="mr-2 h-4 w-4" />
                             )}
+                            {isRefreshingMetrics ? 'Updating...' :
+                                !cooldownInfo.canRefresh ? `Wait ${cooldownInfo.remainingMinutes}m` : 'Refresh Metrics'}
+                        </Button>
+                    )}
 
-                            <Button size="sm" variant="outline" className="shadow-sm" asChild>
-                                <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/share` : `/dashboard/contests/${contestId}/share`}>
-                                    <Share2 className="mr-2 h-4 w-4" /> Share
-                                </Link>
-                            </Button>
+                    <Button size="sm" variant="outline" className="shadow-sm" asChild>
+                        <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/share` : `/dashboard/contests/${contestId}/share`}>
+                            <Share2 className="mr-2 h-4 w-4" /> Share
+                        </Link>
+                    </Button>
 
-                            {isContestEditable && (
-                                <Button size="sm" variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50" asChild>
-                                    <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/edit` : `/dashboard/contests/${contestId}/edit`}>
-                                        <Edit className="h-4 w-4" />
-                                    </Link>
-                                </Button>
-                            )}
+                    {isContestEditable && (
+                        <Button size="sm" variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50" asChild>
+                            <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/edit` : `/dashboard/contests/${contestId}/edit`}>
+                                <Edit className="h-4 w-4" />
+                            </Link>
+                        </Button>
+                    )}
 
-                            {isContestDeletable && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="border-red-200 text-red-700 hover:bg-red-50"
-                                    onClick={() => {
-                                        if (confirm('Are you sure you want to delete this contest? This action cannot be undone.')) {
-                                            console.log('Delete contest', contestId);
-                                        }
-                                    }}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            )}
-                        </div>
-                    </div>
+                    {isContestDeletable && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-200 text-red-700 hover:bg-red-50"
+                            onClick={() => {
+                                if (confirm('Are you sure you want to delete this contest? This action cannot be undone.')) {
+                                    console.log('Delete contest', contestId);
+                                }
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    )}
                 </div>
 
-                {/* Stats Cards Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Colorful Contest Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                     {/* Platform Card */}
-                    <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200 hover:shadow-md transition-shadow">
+                    <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-4">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-lg shadow-sm">
+                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                                     {getPlatformIcon(contest.platform)}
                                 </div>
-                                <div>
-                                    <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Platform</p>
-                                    <p className="text-lg font-bold text-gray-900 capitalize">{contest.platform || 'N/A'}</p>
+                                <div className="flex-1">
+                                    <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Platform</p>
+                                    <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">{contest.platform || 'N/A'}</p>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Timeline Card */}
-                    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200 hover:shadow-md transition-shadow">
+                    {/* Duration Card */}
+                    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-4">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-lg shadow-sm">
-                                    <Calendar className="h-5 w-5 text-green-600" />
+                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                    <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
                                 </div>
-                                <div>
-                                    <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Duration</p>
-                                    <p className="text-lg font-bold text-gray-900">{durationDays !== null ? `${durationDays} ${durationDays === 1 ? 'day' : 'days'}` : 'N/A'}</p>
+                                <div className="flex-1">
+                                    <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Duration</p>
+                                    <p className="text-lg font-bold text-green-900 dark:text-green-100">{durationDays !== null ? `${durationDays} ${durationDays === 1 ? 'day' : 'days'}` : 'N/A'}</p>
                                     {contest.start_date && contest.end_date && (
-                                        <p className="text-xs text-gray-500 mt-1">
+                                        <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
                                             {formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric' })} - {formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric' })}
                                         </p>
                                     )}
@@ -469,16 +451,16 @@ export default function ContestDetailClient({
 
                     {/* Prize/Budget Card */}
                     {(contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null) && (
-                        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200 hover:shadow-md transition-shadow">
+                        <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
                             <CardContent className="p-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-white rounded-lg shadow-sm">
-                                        <DollarSign className="h-5 w-5 text-yellow-600" />
+                                    <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                        <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Prize Pool</p>
-                                        <p className="text-lg font-bold text-green-600">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</p>
-                                        <p className="text-xs text-gray-500 mt-1">{contest.contest_based_details.leaderboard_contest.winner_count} winners</p>
+                                    <div className="flex-1">
+                                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">Prize Pool</p>
+                                        <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</p>
+                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">{contest.contest_based_details.leaderboard_contest.winner_count} winners</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -486,16 +468,16 @@ export default function ContestDetailClient({
                     )}
 
                     {(contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null) && (
-                        <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200 hover:shadow-md transition-shadow">
+                        <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
                             <CardContent className="p-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-white rounded-lg shadow-sm">
-                                        <DollarSign className="h-5 w-5 text-blue-600" />
+                                    <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                        <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Total Budget</p>
-                                        <p className="text-lg font-bold text-blue-600">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</p>
-                                        <p className="text-xs text-gray-500 mt-1">${contest.contest_based_details.cpm_contest.cpm_rate_usd} CPM</p>
+                                    <div className="flex-1">
+                                        <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Budget</p>
+                                        <p className="text-lg font-bold text-blue-900 dark:text-blue-100">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">${contest.contest_based_details.cpm_contest.cpm_rate_usd} CPM</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -503,16 +485,16 @@ export default function ContestDetailClient({
                     )}
 
                     {/* Submissions Count Card */}
-                    <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 hover:shadow-md transition-shadow">
+                    <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-4">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white rounded-lg shadow-sm">
-                                    <Users className="h-5 w-5 text-indigo-600" />
+                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                    <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                                 </div>
-                                <div>
-                                    <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">Submissions</p>
-                                    <p className="text-lg font-bold text-gray-900">{currentSubmissions.length}</p>
-                                    <p className="text-xs text-gray-500 mt-1">Total entries</p>
+                                <div className="flex-1">
+                                    <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Submissions</p>
+                                    <p className="text-lg font-bold text-purple-900 dark:text-purple-100">{currentSubmissions.length}</p>
+                                    <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">Total entries</p>
                                 </div>
                             </div>
                         </CardContent>

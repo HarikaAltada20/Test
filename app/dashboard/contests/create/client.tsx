@@ -2006,62 +2006,98 @@ export default function CreateContestPage({
         <h1 className="text-2xl font-bold">Create New Contest</h1>
       </div>
 
-      {/* Progress Steps */}
-      <div className="mb-8">
+      {/* Enhanced Progress Stepper */}
+      <div className="mb-12">
         <div className="flex justify-center">
-          <div className="relative flex w-full max-w-3xl justify-between">
-            <div className="absolute top-1/2 left-0 right-0 h-0.5 -translate-y-1/2 bg-gray-200"></div>
-
-            <div className={`relative z-10 flex flex-col items-center gap-1`}>
+          <div className="relative flex w-full max-w-4xl justify-between px-4">
+            {/* Progress line - dynamically colored */}
+            <div className="absolute top-6 left-0 right-0 h-1 bg-slate-200 dark:bg-slate-700 rounded-full">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full 
+                className="h-full bg-gradient-to-r from-rose-500 to-pink-500 rounded-full transition-all duration-500 ease-in-out"
+                style={{
+                  width: step === "basics" ? "0%" :
+                    step === "brief" ? "33.33%" :
+                      step === "resources" ? "66.66%" : "100%"
+                }}
+              ></div>
+            </div>
+
+            {/* Step 1: Get Started */}
+            <div className="relative z-10 flex flex-col items-center group">
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
                 ${step === "basics"
-                    ? "bg-rose-600 text-white"
-                    : "bg-rose-600 text-white"
+                    ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
+                    : "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200"
                   }`}
               >
-                <span className="text-sm font-medium">1</span>
+                <span className="text-base font-bold">1</span>
               </div>
-              <span className="text-sm font-medium">Get Started</span>
+              <div className="mt-3 text-center">
+                <span className={`text-sm font-semibold transition-colors duration-300
+                  ${step === "basics" ? "text-rose-600 dark:text-rose-400" : "text-slate-600 dark:text-slate-400"}
+                `}>Get Started</span>
+              </div>
             </div>
 
-            <div className={`relative z-10 flex flex-col items-center gap-1`}>
+            {/* Step 2: Create Brief */}
+            <div className="relative z-10 flex flex-col items-center group">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full 
+                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
                 ${step === "brief" || step === "resources" || step === "prize"
-                    ? "bg-rose-600 text-white"
-                    : "bg-gray-300 text-gray-700"
+                    ? step === "brief"
+                      ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
+                      : "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200"
+                    : "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500"
                   }`}
               >
-                <span className="text-sm font-medium">2</span>
+                <span className="text-base font-bold">2</span>
               </div>
-              <span className="text-sm font-medium">Create Brief</span>
+              <div className="mt-3 text-center">
+                <span className={`text-sm font-semibold transition-colors duration-300
+                  ${step === "brief" ? "text-rose-600 dark:text-rose-400" :
+                    (step === "resources" || step === "prize") ? "text-slate-600 dark:text-slate-400" : "text-slate-400 dark:text-slate-500"}
+                `}>Create Brief</span>
+              </div>
             </div>
 
-            <div className={`relative z-10 flex flex-col items-center gap-1`}>
+            {/* Step 3: Resources */}
+            <div className="relative z-10 flex flex-col items-center group">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full 
+                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
                 ${step === "resources" || step === "prize"
-                    ? "bg-rose-600 text-white"
-                    : "bg-gray-300 text-gray-700"
+                    ? step === "resources"
+                      ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
+                      : "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200"
+                    : "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500"
                   }`}
               >
-                <span className="text-sm font-medium">3</span>
+                <span className="text-base font-bold">3</span>
               </div>
-              <span className="text-sm font-medium">Resources</span>
+              <div className="mt-3 text-center">
+                <span className={`text-sm font-semibold transition-colors duration-300
+                  ${step === "resources" ? "text-rose-600 dark:text-rose-400" :
+                    step === "prize" ? "text-slate-600 dark:text-slate-400" : "text-slate-400 dark:text-slate-500"}
+                `}>Resources</span>
+              </div>
             </div>
 
-            <div className={`relative z-10 flex flex-col items-center gap-1`}>
+            {/* Step 4: Prize */}
+            <div className="relative z-10 flex flex-col items-center group">
               <div
-                className={`flex h-10 w-10 items-center justify-center rounded-full 
+                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
                 ${step === "prize"
-                    ? "bg-rose-600 text-white"
-                    : "bg-gray-300 text-gray-700"
+                    ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
+                    : "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500"
                   }`}
               >
-                <span className="text-sm font-medium">4</span>
+                <span className="text-base font-bold">4</span>
               </div>
-              <span className="text-sm font-medium">Prize</span>
+              <div className="mt-3 text-center">
+                <span className={`text-sm font-semibold transition-colors duration-300
+                  ${step === "prize" ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}
+                `}>Prize</span>
+              </div>
             </div>
           </div>
         </div>

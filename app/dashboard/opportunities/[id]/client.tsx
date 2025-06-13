@@ -14,6 +14,8 @@ import {
   Info,
   Trophy,
   User,
+  Users,
+  Share2,
   ListOrdered,
   ScrollText,
   Link2,
@@ -22,7 +24,8 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Clock
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatMoney } from "@/lib/utils";
@@ -477,52 +480,146 @@ export function ContestClientPage({
     );
   }
 
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: contest.title,
+          text: `Check out this amazing contest: ${contest.title}`,
+          url: window.location.href,
+        });
+      } else {
+        // Fallback to copying to clipboard
+        await navigator.clipboard.writeText(window.location.href);
+        // You could add a toast notification here
+        alert('Contest link copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   // Render main content
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
       <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="icon"
-            className="hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600"
-            onClick={() => router.push("/dashboard/opportunities")}
-          >
-            <ArrowLeft className="h-5 w-5 text-slate-600 dark:text-slate-300" />
-          </Button>
-          {/* Placeholder for potential future actions like share */}
-        </div>
+        {/* Improved Header Navigation */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600 transition-all duration-200 hover:scale-105"
+              onClick={() => router.push("/dashboard/opportunities")}
+            >
+              <ArrowLeft className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+              <span className="hidden sm:inline text-slate-600 dark:text-slate-300 font-medium">Back to Opportunities</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 transition-all duration-200 hover:scale-105"
+              onClick={handleShare}
+            >
+              <Share2 className="h-4 w-4" />
+              <span className="hidden sm:inline font-medium">Share</span>
+            </Button>
+          </div>
 
-        {/* Contest Header Section */}
-        <div className="mb-8 p-6 bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 dark:from-rose-600 dark:via-pink-600 dark:to-purple-700 rounded-xl shadow-2xl text-white">
-          <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-2">
-                {contest.title}
-              </h1>
-              <div className="flex items-center space-x-3 mb-4">
-                <Badge
-                  className={`text-sm px-3 py-1 font-semibold rounded-full shadow-md border-2 border-white/50 ${contest.status === "active"
-                    ? "bg-green-400/80 backdrop-blur-sm"
-                    : contest.status === "upcoming"
-                      ? "bg-blue-400/80 backdrop-blur-sm"
-                      : "bg-slate-400/80 backdrop-blur-sm"
-                    }`}
-                >
-                  {contest.status.toUpperCase()}
-                </Badge>
-                {contest.contest_type && (
-                  <Badge
-                    variant={contest.contest_type === 'cpm' ? "outline" : "default"} // Use outline for secondary for better contrast on gradient
-                    className="capitalize text-sm px-3 py-1 font-semibold rounded-full shadow-md bg-white/20 backdrop-blur-sm border-2 border-white/50 text-white"
-                  >
-                    {contest.contest_type === 'cpm' ? 'CPM Based' : 'Leaderboard'}
-                  </Badge>
-                )}
+          {/* Enhanced Contest Header Section */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 dark:from-rose-600 dark:via-pink-600 dark:to-purple-700 shadow-2xl">
+            {/* Decorative background pattern */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full transform translate-x-16 -translate-y-16"></div>
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/5 rounded-full transform -translate-x-24 translate-y-24"></div>
+
+            <div className="relative p-8">
+              <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
+                <div className="flex-1 min-w-0">
+                  {/* Contest Title */}
+                  <h1 className="text-4xl lg:text-5xl font-bold tracking-tight mb-6 text-white drop-shadow-sm leading-tight">
+                    {contest.title}
+                  </h1>
+
+                  {/* Status and Type Badges */}
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <Badge
+                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
+                        ? "bg-green-400/90 text-green-900"
+                        : contest.status === "upcoming"
+                          ? "bg-blue-400/90 text-blue-900"
+                          : "bg-slate-400/90 text-slate-900"
+                        }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {contest.status === "active" ? (
+                          <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
+                        ) : contest.status === "upcoming" ? (
+                          <Clock className="w-3 h-3" />
+                        ) : (
+                          <Calendar className="w-3 h-3" />
+                        )}
+                        {contest.status.toUpperCase()}
+                      </span>
+                    </Badge>
+                    {contest.contest_type && (
+                      <Badge
+                        className="capitalize text-sm px-4 py-2 font-semibold rounded-full shadow-lg bg-white/20 backdrop-blur-sm border-2 border-white/30 text-white"
+                      >
+                        {contest.contest_type === 'cpm' ? 'Performance Based' : 'Competition Based'}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Contest Duration */}
+                  {contest.start_date && contest.end_date && (
+                    <div className="bg-white/15 backdrop-blur-sm rounded-lg px-4 py-3 inline-block">
+                      <p className="text-white/95 text-sm font-medium flex items-center gap-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>
+                          {formatLocalDateTime(contest.start_date, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })} - {formatLocalDateTime(contest.end_date, {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right side - Enhanced Prize Pool */}
+                <div className="flex-shrink-0 lg:text-right">
+                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/25 shadow-xl">
+                    <div className="text-white/80 text-sm font-medium mb-2 uppercase tracking-wide">
+                      {contest.contest_type === 'cpm' ? 'Total Budget' : 'Prize Pool'}
+                    </div>
+                    <div className="text-3xl lg:text-4xl font-bold text-white mb-1">
+                      {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
+                        ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
+                        : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
+                          ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
+                          : contest.total_prize
+                            ? formatMoney(contest.total_prize || 0)
+                            : "$0.00"}
+                    </div>
+                    {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.winner_count && (
+                      <div className="text-white/70 text-xs font-medium">
+                        {contest.contest_based_details.leaderboard_contest.winner_count} winner{contest.contest_based_details.leaderboard_contest.winner_count !== 1 ? 's' : ''}
+                      </div>
+                    )}
+                    {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd && (
+                      <div className="text-white/70 text-xs font-medium">
+                        {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="flex-shrink-0">
-              {/* Placeholder for a potential countdown timer or key stat like total entries */}
             </div>
           </div>
         </div>
@@ -540,54 +637,205 @@ export function ContestClientPage({
           </div>
         )}
 
-        {/* Action Card: Submit or Status - More Prominent */}
-        <Card className="mb-8 shadow-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
-          <CardContent className="p-6 text-center">
-            {hasSubmitted ? (
-              <div className="flex flex-col items-center">
-                <CheckCircle className="h-12 w-12 text-green-500 mb-3" />
-                <p className="text-xl font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  You have already submitted for this opportunity!
-                </p>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Submitted {formatTimeAgo(existingSubmission.created_at)}
-                </p>
-                {/* Optional: Link to view submission could go here */}
-              </div>
-            ) : (
-              <div>
-                <p className="text-xl font-semibold text-slate-700 dark:text-slate-200 mb-2">
-                  Ready to Showcase Your Talent?
-                </p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                  {contest.status === "active"
-                    ? "The stage is yours! Submit your content to join the game."
-                    : contest.status === "upcoming"
-                      ? "Get ready! This contest hasn\'t started yet."
-                      : "This contest has ended or is no longer active."
-                  }
-                </p>
-                <Button
-                  size="lg" // Larger button
-                  onClick={handleSubmitContent}
-                  disabled={contest.status?.toLowerCase() !== "active"}
-                  className={`w-full max-w-xs mx-auto font-bold text-base py-3 rounded-lg shadow-md transition-all duration-300 ease-in-out 
-                    ${contest.status?.toLowerCase() === "active"
-                      ? "bg-rose-600 hover:bg-rose-700 text-white transform hover:scale-105"
-                      : "bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    }`}
-                >
-                  {contest.status?.toLowerCase() === "upcoming"
-                    ? (<><Calendar className="mr-2 h-5 w-5" /> Contest Not Started</>)
-                    : contest.status?.toLowerCase() === "ended" || contest.status?.toLowerCase() === "completed"
-                      ? "Contest Ended"
-                      : (<><PlayCircle className="mr-2 h-5 w-5" /> Submit Your Entry!</>)
-                  }
-                </Button>
-              </div>
-            )}
+        {/* Enhanced Action Card: Submit or Status */}
+        <Card className="mb-8 shadow-2xl border-slate-200 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 overflow-hidden">
+          <CardContent className="p-8 text-center relative">
+            {/* Decorative background elements */}
+            <div className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-rose-200/30 to-purple-200/30 dark:from-rose-500/10 dark:to-purple-500/10 rounded-full blur-xl transform -translate-x-16 -translate-y-16"></div>
+            <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-tl from-blue-200/30 to-cyan-200/30 dark:from-blue-500/10 dark:to-cyan-500/10 rounded-full blur-xl transform translate-x-20 translate-y-20"></div>
+
+            <div className="relative z-10">
+              {hasSubmitted ? (
+                <div className="flex flex-col items-center">
+                  <div className="relative mb-4">
+                    <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                      <CheckCircle className="h-10 w-10 text-white" />
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">✓</span>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">
+                    Submission Complete!
+                  </p>
+                  <p className="text-base text-slate-600 dark:text-slate-300 mb-1">
+                    You have successfully submitted for this opportunity
+                  </p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Submitted {formatTimeAgo(existingSubmission.created_at)}
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="mb-6">
+                    <h2 className="text-3xl font-bold bg-gradient-to-r from-rose-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-3">
+                      Ready to Showcase Your Talent?
+                    </h2>
+                    <p className="text-lg text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
+                      {contest.status === "active"
+                        ? "The stage is yours! Submit your content and let your creativity shine."
+                        : contest.status === "upcoming"
+                          ? "Get ready! This contest hasn't started yet, but you can prepare."
+                          : "This contest has ended or is no longer active."
+                      }
+                    </p>
+                  </div>
+
+                  <Button
+                    size="lg"
+                    onClick={handleSubmitContent}
+                    disabled={contest.status?.toLowerCase() !== "active"}
+                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
+                      ? "bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 hover:from-rose-600 hover:via-pink-600 hover:to-purple-700 text-white border-0 hover:shadow-2xl hover:scale-105 active:scale-95"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      }`}
+                  >
+                    {/* Animated shine effect for active button */}
+                    {contest.status?.toLowerCase() === "active" && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                    )}
+
+                    <span className="relative flex items-center gap-3">
+                      {contest.status?.toLowerCase() === "upcoming" ? (
+                        <>
+                          <Clock className="h-6 w-6" />
+                          <span>Contest Not Started</span>
+                        </>
+                      ) : contest.status?.toLowerCase() === "ended" || contest.status?.toLowerCase() === "completed" ? (
+                        <>
+                          <Calendar className="h-6 w-6" />
+                          <span>Contest Ended</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <PlayCircle className="h-6 w-6" />
+                            <span>Submit Your Entry!</span>
+                          </div>
+                          {contest.status?.toLowerCase() === "active" && (
+                            <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse ml-1"></div>
+                          )}
+                        </>
+                      )}
+                    </span>
+                  </Button>
+
+                  {contest.status?.toLowerCase() === "active" && (
+                    <div className="text-sm text-slate-500 dark:text-slate-400 mt-4 flex items-center justify-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      Contest is live! Join now to compete
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
+
+        {/* Colorful Contest Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Platform Card */}
+          <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                  <Share2 className="h-5 w-5 text-red-600 dark:text-red-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Platform</p>
+                  <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">
+                    {contest.platform || "Not specified"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Duration Card */}
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                  <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Duration</p>
+                  <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                    {(() => {
+                      if (!contest.start_date || !contest.end_date) return "Not specified";
+                      const start = new Date(contest.start_date);
+                      const end = new Date(contest.end_date);
+                      const diffTime = Math.abs(end.getTime() - start.getTime());
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                      return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+                    })()}
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                    {contest.start_date && contest.end_date ? (
+                      `${formatLocalDateTime(contest.start_date, {
+                        month: 'short',
+                        day: 'numeric',
+                      })} - ${formatLocalDateTime(contest.end_date, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}`
+                    ) : "Dates TBD"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Prize Pool Card */}
+          <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                  <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">Prize Pool</p>
+                  <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">
+                    {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
+                      ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
+                      : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
+                        ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
+                        : contest.total_prize // Fallback to old field if necessary for older data
+                          ? formatMoney(contest.total_prize || 0)
+                          : "$0.00"}
+                  </p>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
+                    {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.winner_count
+                      ? `${contest.contest_based_details.leaderboard_contest.winner_count} winner${contest.contest_based_details.leaderboard_contest.winner_count !== 1 ? 's' : ''}`
+                      : contest.contest_type === 'cpm'
+                        ? 'CPM based'
+                        : 'Total prize'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Submissions Card */}
+          <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Submissions</p>
+                  <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
+                    {contest.live_submission_count !== null && contest.live_submission_count >= 0
+                      ? contest.live_submission_count
+                      : 0}
+                  </p>
+                  <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">Total entries</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-200 dark:bg-slate-700/50 rounded-lg p-1">
@@ -595,305 +843,290 @@ export function ContestClientPage({
             <TabsTrigger value="leaderboard" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Leaderboard</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="details">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-bold text-slate-900 dark:text-slate-100">Contest Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">Brief</h3>
-                      {contest.brief_html ? (
-                        <div
-                          className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
-                          dangerouslySetInnerHTML={{ __html: contest.brief_html }}
-                        />
-                      ) : (
-                        <p className="text-slate-600 dark:text-slate-400 text-sm">No brief provided</p>
-                      )}
-                    </div>
-                    <Separator />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Start Date & Time</h3>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {contest.start_date
-                            ? formatLocalDateTime(contest.start_date)
-                            : "Not specified"}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">End Date & Time</h3>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {contest.end_date
-                            ? formatLocalDateTime(contest.end_date)
-                            : "Not specified"}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Platform</h3>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {contest.platform || "Not specified"}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Category</h3>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {contest.category || "Not specified"}
-                        </p>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Sponsor</h3>
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {contest.advertiser_profiles?.company_name ||
-                            "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">
-                        {contest.contest_type === 'cpm' ? 'CPM Configuration' : 'Prize Structure'}
-                      </h3>
-                      {contest.contest_type === 'leaderboard' && (
-                        Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && contest.contest_based_details.leaderboard_contest.prizes.length > 0 ? (
-                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
-                            <ul className="space-y-2">
-                              {[...(contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])]
-                                .sort((a, b) => a.position - b.position)
-                                .map((prize) => (
-                                  <li key={prize.position} className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0">
-                                    <span className="font-medium text-slate-800 dark:text-slate-200">
-                                      Position {prize.position}
-                                    </span>
-                                    <span className="font-bold text-green-600 dark:text-green-400">
-                                      {formatMoney(prize.amount)}
-                                    </span>
-                                  </li>
-                                ))}
-                            </ul>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-600 dark:text-slate-400">
-                            No prize structure defined for this leaderboard contest.
-                          </p>
-                        )
-                      )}
-                      {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
-                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium text-slate-800 dark:text-slate-200">CPM Rate:</span>
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium text-slate-800 dark:text-slate-200">Total Budget:</span>
-                              <span className="font-bold text-green-600 dark:text-green-400">
-                                {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}
-                              </span>
-                            </div>
-                            {contest.contest_based_details.cpm_contest.min_views != null && (
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-slate-800 dark:text-slate-200">Minimum Views:</span>
-                                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                  {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+          <TabsContent value="details" className="mt-6 space-y-6">
+            <Card className="shadow-sm">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
+                <CardTitle className="text-gray-800 flex items-center gap-2">
+                  <ScrollText className="h-5 w-5 text-blue-500" />
+                  Contest Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="pt-4">
+                  <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">Brief</h3>
+                  {contest.brief_html ? (
+                    <div
+                      className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
+                      dangerouslySetInnerHTML={{ __html: contest.brief_html }}
+                    />
+                  ) : (
+                    <p className="text-slate-600 dark:text-slate-400 text-sm">No brief provided</p>
+                  )}
+                </div>
+                <Separator />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Start Date & Time</h3>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {contest.start_date
+                        ? formatLocalDateTime(contest.start_date)
+                        : "Not specified"}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">End Date & Time</h3>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {contest.end_date
+                        ? formatLocalDateTime(contest.end_date)
+                        : "Not specified"}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Platform</h3>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {contest.platform || "Not specified"}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Category</h3>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {contest.category || "Not specified"}
+                    </p>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Sponsor</h3>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                      {contest.advertiser_profiles?.company_name ||
+                        "Not specified"}
+                    </p>
+                  </div>
+                </div>
+                <Separator />
+                <div>
+                  <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">
+                    {contest.contest_type === 'cpm' ? 'Earnings & Budget' : 'Prize Structure'}
+                  </h3>
+                  {contest.contest_type === 'leaderboard' && (
+                    Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && contest.contest_based_details.leaderboard_contest.prizes.length > 0 ? (
+                      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                        <ul className="space-y-2">
+                          {[...(contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])]
+                            .sort((a, b) => a.position - b.position)
+                            .map((prize) => (
+                              <li key={prize.position} className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Position {prize.position}
                                 </span>
-                              </div>
-                            )}
-                            {contest.contest_based_details.cpm_contest.max_views != null && (
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-slate-800 dark:text-slate-200">Max Views (Cap):</span>
-                                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                  {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                <span className="font-bold text-green-600 dark:text-green-400">
+                                  {formatMoney(prize.amount)}
                                 </span>
-                              </div>
-                            )}
-                          </div>
-                          <Separator />
-                          <div>
-                            <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">Terms & Conditions:</h4>
-                            <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-200 dark:border-slate-700">
-                              <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
-                                {contest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
-                              </pre>
-                            </div>
-                          </div>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        No prize structure defined for this leaderboard contest.
+                      </p>
+                    )
+                  )}
+                  {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">Pay Rate:</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">
+                            {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views
+                          </span>
                         </div>
-                      )}
-                      {contest.contest_type !== 'leaderboard' && contest.contest_type !== 'cpm' && (
-                        <p className="text-sm text-slate-600 dark:text-slate-400">Contest type details not available.</p>
-                      )}
-                    </div>
-                    {/* Rules Section */}
-                    {(contest.rules || contest.rules_description) && (
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">Total Budget:</span>
+                          <span className="font-bold text-green-600 dark:text-green-400">
+                            {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}
+                          </span>
+                        </div>
+                        {contest.contest_based_details.cpm_contest.min_views != null && (
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-slate-800 dark:text-slate-200">Minimum Views Required:</span>
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        {contest.contest_based_details.cpm_contest.max_views != null && (
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium text-slate-800 dark:text-slate-200">Maximum Views Counted:</span>
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <Separator />
                       <div>
-                        <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                          <ScrollText className="h-5 w-5" /> Rules & Guidelines
-                        </h3>
-                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
-                          {(contest as any).rules_html ? (
-                            <div
-                              className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
-                              dangerouslySetInnerHTML={{ __html: (contest as any).rules_html }}
-                            />
-                          ) : (
-                            <p className="text-slate-600 dark:text-slate-400">No specific rules provided.</p>
-                          )}
+                        <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">Terms & Conditions:</h4>
+                        <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-200 dark:border-slate-700">
+                          <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
+                            {contest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {contest.contest_type !== 'leaderboard' && contest.contest_type !== 'cpm' && (
+                    <p className="text-sm text-slate-600 dark:text-slate-400">Contest type details not available.</p>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Rules Section - Always Show */}
+                <div>
+                  <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <ScrollText className="h-5 w-5" /> Rules & Guidelines
+                  </h3>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                    {/* Check multiple possible rule fields */}
+                    {(contest as any).rules_html ? (
+                      <div
+                        className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
+                        dangerouslySetInnerHTML={{ __html: (contest as any).rules_html }}
+                      />
+                    ) : contest.rules ? (
+                      <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                        {contest.rules}
+                      </div>
+                    ) : contest.rules_description ? (
+                      <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                        {contest.rules_description}
+                      </div>
+                    ) : (contest as any).rules_text ? (
+                      <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
+                        {(contest as any).rules_text}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
+                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">📋 General Rules:</h4>
+                          <ul className="space-y-2 ml-4 list-disc text-slate-600 dark:text-slate-400">
+                            <li><strong>Eligibility:</strong> Only registered creators are eligible to participate in contests.</li>
+                            <li><strong>Age Requirement:</strong> Contestants must be at least 18 years old.</li>
+                            <li><strong>Content Standards:</strong> Content must adhere to the platform's content guidelines and community standards.</li>
+                            <li><strong>Original Work:</strong> All submissions must be original content created by the participant.</li>
+                            <li><strong>Submission Deadline:</strong> Entries must be submitted before the contest end date and time.</li>
+                            <li><strong>Platform Compliance:</strong> Content must comply with the rules and policies of the specified platform (YouTube, Instagram, etc.).</li>
+                          </ul>
+                        </div>
+
+                        <div className="border-t border-slate-200 dark:border-slate-600 pt-3">
+                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">⚠️ Important Notes:</h4>
+                          <ul className="space-y-1 ml-4 list-disc text-slate-600 dark:text-slate-400 text-sm">
+                            <li>Violation of rules may result in disqualification</li>
+                            <li>Contest organizers reserve the right to verify submissions</li>
+                            <li>Winners will be contacted through their registered email</li>
+                            <li>Prize distribution is subject to verification and approval</li>
+                          </ul>
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
 
-                    {/* Resources Section */}
+                <Separator />
+
+                {/* Resources Section - Always Show */}
+                <div>
+                  <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <Lightbulb className="h-5 w-5" /> Resources
+                  </h3>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-3">
                     {contest.resources &&
                       typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0 && <Separator />}
-                    {contest.resources &&
-                      typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0 && (
-                        <div>
-                          <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
-                            Resources
-                          </h3>
-                          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-3">
-                            {Object.entries(contest.resources).map(
-                              ([key, value]) => (
-                                <div
-                                  key={key}
-                                  className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0"
-                                >
-                                  <span className="font-medium text-slate-800 dark:text-slate-200">
-                                    {key}
-                                  </span>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    asChild
-                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
-                                  >
-                                    <Link
-                                      href={value as string}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                    >
-                                      <ExternalLink className="h-4 w-4 mr-1" />
-                                      View Resource
-                                    </Link>
-                                  </Button>
-                                </div>
-                              )
-                            )}
+                      Object.keys(contest.resources).length > 0 ? (
+                      Object.entries(contest.resources).map(
+                        ([key, value]) => (
+                          <div
+                            key={key}
+                            className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0"
+                          >
+                            <span className="font-medium text-slate-800 dark:text-slate-200">
+                              {key}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              asChild
+                              className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
+                            >
+                              <Link
+                                href={value as string}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                View Resource
+                              </Link>
+                            </Button>
                           </div>
-                        </div>
-                      )}
+                        )
+                      )
+                    ) : (
+                      <div className="text-center py-4">
+                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-2">
+                          No additional resources provided for this contest.
+                        </p>
+                        <p className="text-slate-400 dark:text-slate-500 text-xs">
+                          Check the brief and rules above for all contest requirements.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-                    {/* Inspiration Links Section */}
-                    {(() => {
-                      let links = [];
-                      try {
-                        links =
-                          typeof contest.inspiration_links === "string"
-                            ? JSON.parse(contest.inspiration_links)
-                            : Array.isArray(contest.inspiration_links)
-                              ? contest.inspiration_links
-                              : [];
-                      } catch (e) {
-                        console.error("Error parsing inspiration_links:", e);
-                      }
-                      return links.length > 0 ? (
-                        <>
-                          <Separator />
-                          <div>
-                            <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
-                              Inspiration Links
-                            </h3>
-                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-3">
-                              {links.map((link: string, index: number) => (
-                                <div
-                                  key={index}
-                                  className="flex items-center py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0"
-                                >
-                                  <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                                  <Link
-                                    href={link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate"
-                                  >
-                                    {link}
-                                  </Link>
-                                </div>
-                              ))}
+                {/* Inspiration Links Section */}
+                {(() => {
+                  let links = [];
+                  try {
+                    links =
+                      typeof contest.inspiration_links === "string"
+                        ? JSON.parse(contest.inspiration_links)
+                        : Array.isArray(contest.inspiration_links)
+                          ? contest.inspiration_links
+                          : [];
+                  } catch (e) {
+                    console.error("Error parsing inspiration_links:", e);
+                  }
+                  return links.length > 0 ? (
+                    <>
+                      <Separator />
+                      <div>
+                        <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
+                          Inspiration Links
+                        </h3>
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-3">
+                          {links.map((link: string, index: number) => (
+                            <div
+                              key={index}
+                              className="flex items-center py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0"
+                            >
+                              <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                              <Link
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate"
+                              >
+                                {link}
+                              </Link>
                             </div>
-                          </div>
-                        </>
-                      ) : null;
-                    })()}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="lg:col-span-1 space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="font-bold text-slate-900 dark:text-slate-100">Contest Summary</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Timeframe</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">
-                          {contest.start_date
-                            ? formatLocalDateTime(contest.start_date, {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                            : "N/A"}{" "}
-                          -{" "}
-                          {contest.end_date
-                            ? formatLocalDateTime(contest.end_date, {
-                              dateStyle: "short",
-                              timeStyle: "short",
-                            })
-                            : "N/A"}
-                        </p>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <Trophy className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                          {contest.contest_type === 'cpm' ? 'Total Budget' : 'Total Prize Pool'}
-                        </p>
-                        <p className="text-xs font-bold text-green-600 dark:text-green-400">
-                          {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
-                            ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
-                            : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
-                              ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
-                              : contest.total_prize // Fallback to old field if necessary for older data
-                                ? formatMoney(contest.total_prize || 0)
-                                : "N/A"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                      <User className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Sponsor</p>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">
-                          {contest.advertiser_profiles?.company_name ||
-                            "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+                    </>
+                  ) : null;
+                })()}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="leaderboard">

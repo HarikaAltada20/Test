@@ -270,14 +270,14 @@ export default function OpportunitiesPage({
         </Select>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         {displayedContests && displayedContests.length > 0 ? (
           displayedContests.map((contest) => (
             <Card
               key={contest.id}
-              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500"
+              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 w-full max-w-sm mx-auto"
             >
-              <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+              <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
                 {contest.thumbnail_url ? (
                   <img
                     src={contest.thumbnail_url || "/placeholder.svg"}
@@ -287,101 +287,70 @@ export default function OpportunitiesPage({
                 ) : (
                   <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
                 )}
+                <div className="absolute top-2 right-2">
+                  <Badge
+                    className={cn(
+                      "capitalize text-xs px-2 py-0.5 font-medium border",
+                      contest.status === "active" && "bg-green-500 border-green-500 text-white",
+                      contest.status === "upcoming" && "bg-blue-500 border-blue-500 text-white",
+                      contest.status === "ended" && "bg-slate-500 border-slate-500 text-white",
+                      !["active", "upcoming", "ended"].includes(contest.status) && "bg-yellow-400 border-yellow-400 text-yellow-900"
+                    )}
+                  >
+                    {contest.status}
+                  </Badge>
+                </div>
               </div>
               <CardHeader className="p-4 pb-2">
-                <div className="flex justify-between items-start mb-1">
-                  <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300 mr-2 leading-tight">
-                    {contest.title}
-                  </CardTitle>
-                  <div className="flex flex-shrink-0 space-x-1.5">
-                    <Badge
-                      className={cn(
-                        "capitalize text-xs px-2 py-1 font-medium",
-                        contest.status === "active" && "bg-green-500 border-green-500 text-white",
-                        contest.status === "upcoming" && "bg-blue-500 border-blue-500 text-white",
-                        contest.status === "ended" && "bg-slate-500 border-slate-500 text-white",
-                        !["active", "upcoming", "ended"].includes(contest.status) && "bg-yellow-400 border-yellow-400 text-yellow-900"
-                      )}
-                    >
-                      {contest.status}
-                    </Badge>
-                    {contest.contest_type && (
-                      <Badge
-                        variant={contest.contest_type === 'cpm' ? "secondary" : "default"}
-                        className="capitalize text-xs px-2 py-1 font-medium border"
-                      >
-                        {contest.contest_type === 'cpm' ? 'CPM' : 'Leaderboard'}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
+                <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300 mr-2 leading-tight">
+                  {contest.title}
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                <div className="space-y-2 text-sm mb-3">
-                  {/* Platform, Starts, Ends, Type, then Budget/Prize, then CPM Rate */}
-                  <div className="flex items-center text-slate-500 dark:text-slate-400">
-                    <Share2 className="h-4 w-4 mr-2 flex-shrink-0" /> {/* Assuming Share2 is for Platform */}
-                    <span>Platform: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
+                <div className="space-y-1.5 text-sm mb-3 text-slate-600 dark:text-slate-400">
+                  <div className="flex items-center">
+                    <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                    <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
                   </div>
-
-                  {/* Start Date & Time */}
-                  <div className="flex items-center text-slate-500 dark:text-slate-400">
-                    <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>Starts: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.start_date ? formatLocalDateTime(contest.start_date, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    }) : "N/A"}</span></span>
-                  </div>
-
-                  {/* End Date & Time */}
-                  <div className="flex items-center text-slate-500 dark:text-slate-400">
-                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>Ends: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.end_date ? formatLocalDateTime(contest.end_date, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      hour12: true
-                    }) : "N/A"}</span></span>
-                  </div>
-
-                  {/* Live Submission Count - NEW */}
-                  {(contest.live_submission_count !== null && contest.live_submission_count >= 0) && (
-                    <div className="flex items-center text-slate-500 dark:text-slate-400">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>Submissions: <span className="font-semibold text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                  {contest.start_date && (
+                    <div className="flex items-center">
+                      <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>Starts: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                     </div>
                   )}
-
-                  {/* Contest Type */}
-                  <div className="flex items-center text-slate-500 dark:text-slate-400">
-                    <Info className="h-4 w-4 mr-2 flex-shrink-0" /> {/* Assuming Info is for Type */}
-                    <span>Type: <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {contest.end_date && (
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>Ends: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
+                    </div>
+                  )}
+                  {(contest.live_submission_count !== null && contest.live_submission_count >= 0) && (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>Submissions: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                    </div>
+                  )}
+                  <div className="flex items-center">
+                    <Info className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>Contest Type: <span className="font-medium text-slate-700 dark:text-slate-300">
                       {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type ? contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1) : 'N/A'}
                     </span></span>
                   </div>
-                  {/* Display CPM Rate for CPM contests - MOVED HERE */}
                   {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
-                    <div className="flex items-center text-slate-500 dark:text-slate-400">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" /> {/* Re-using DollarSign, consider a different one */}
-                      <span>CPM Rate: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                      <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                     </div>
                   )}
-                  {/* Budget or Prize Pool - MOVED HERE */}
-                  <div className="flex items-center text-slate-500 dark:text-slate-400">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                    <span className="text-md">
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>
                       {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest ? (
-                        <>Budget: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></>
+                        <>Prize/Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></>
                       ) : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest ? (
-                        <>Prize Pool: <span className="font-bold text-slate-800 dark:text-slate-100">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</span></>
+                        <>Prize/Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</span></>
                       ) : (
-                        <>Budget/Prize: <span className="font-bold text-slate-800 dark:text-slate-100">N/A</span></>
+                        <>Prize/Budget: <span className="font-medium text-slate-700 dark:text-slate-300">N/A</span></>
                       )}
                     </span>
                   </div>

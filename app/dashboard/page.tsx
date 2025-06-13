@@ -217,117 +217,131 @@ function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {isAdvertiser ? (
           <>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Spent
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(profile?.total_money_spent || 0)}
+            {/* Total Spent Card - Red/Pink */}
+            <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                    <DollarSign className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Total Spent</p>
+                    <p className="text-lg font-bold text-red-900 dark:text-red-100">
+                      {formatCurrency(profile?.total_money_spent || 0)}
+                    </p>
+                    <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">Money spent on contests</p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Total money spent on contests
-                </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Contests
-                </CardTitle>
-                <Trophy className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {profile?.total_contests_run || 0}
+
+            {/* Total Contests Card - Blue */}
+            <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                    <Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Contests</p>
+                    <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                      {profile?.total_contests_run || 0}
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">Contests created</p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Contests created
-                </p>
               </CardContent>
             </Card>
           </>
         ) : (
           <>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Total Earnings
-                </CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(profile?.total_money_won || 0)}
+            {/* Total Earnings Card - Green */}
+            <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                    <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Earnings</p>
+                    <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                      {formatCurrency(profile?.total_money_won || 0)}
+                    </p>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Money earned from contests</p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Total money earned from contests
-                </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Contests Won
-                </CardTitle>
-                <Trophy className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {profile?.total_contests_won || 0}
+
+            {/* Contests Won Card - Yellow/Gold */}
+            <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                    <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">Contests Won</p>
+                    <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">
+                      {profile?.total_contests_won || 0}
+                    </p>
+                    <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
+                      Out of {profile?.total_contests_participated || 0} participated
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Out of {profile?.total_contests_participated || 0}{" "}
-                  participated
-                </p>
               </CardContent>
             </Card>
           </>
         )}
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Views</CardTitle>
-            <Video className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {(profile?.total_views || 0).toLocaleString()}
+        {/* Total Views Card - Purple */}
+        <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                <Video className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Total Views</p>
+                <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
+                  {(profile?.total_views || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
+                  {isAdvertiser
+                    ? "Views on contest content"
+                    : "Views on your content"}
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {isAdvertiser
-                ? "Views on your contest content"
-                : "Views on your content"}
-            </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Available Coins
-            </CardTitle>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4 text-muted-foreground"
-            >
-              <circle cx="12" cy="12" r="8" />
-              <path d="M12 8v4l2 2" />
-            </svg>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{userCoins}</div>
-            <p className="text-xs text-muted-foreground">
-              Coins to redeem or use
-            </p>
+
+        {/* Available Coins Card - Orange */}
+        <Card className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-200 dark:border-orange-700/50 hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5 text-orange-600 dark:text-orange-400"
+                >
+                  <circle cx="12" cy="12" r="8" />
+                  <path d="M12 8v4l2 2" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-orange-800 dark:text-orange-300 uppercase tracking-wide">Available Coins</p>
+                <p className="text-lg font-bold text-orange-900 dark:text-orange-100">{userCoins}</p>
+                <p className="text-xs text-orange-700 dark:text-orange-400 mt-0.5">Coins to redeem or use</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

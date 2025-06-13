@@ -65,11 +65,11 @@ export default async function ContestsPage() {
   return (
     <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">My Contests</h1>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Contests</h1>
           </div>
-          <Button className="bg-rose-600 hover:bg-rose-700" asChild>
+          <Button className="bg-rose-600 hover:bg-rose-700 w-full sm:w-auto" asChild>
             <Link href="/dashboard/contests/create">
               <Plus className="mr-2 h-4 w-4" /> Create Contest
             </Link>
