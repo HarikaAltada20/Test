@@ -65,10 +65,11 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
   const avatarSrc = profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
 
-  // Hide nav on all /auth/* pages and /choose-username
+  // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
     pathname.startsWith('/auth') ||
-    pathname === "/choose-username"
+    pathname === "/choose-username" ||
+    pathname.startsWith('/dashboard')
   ) {
     return null;
   }

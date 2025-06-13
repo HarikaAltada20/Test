@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,11 +15,15 @@ import {
   DollarSign,
   CreditCard,
   ChevronRight,
+  BarChart3,
+  FileText,
+  Briefcase,
+  Shield,
+  User
 } from "lucide-react";
-import { useClientAuth } from "@/hooks/use-client-auth";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { UserResponse } from "@supabase/supabase-js";
+import { UserResponse } from "@supabase/supabase-js";
 
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
@@ -36,15 +41,17 @@ export function DashboardSidebar({
   profilePictureUrl,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
-  const { logout } = useClientAuth();
+  const [showScrollbar, setShowScrollbar] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const handleSignOut = async () => {
-    try {
-      await logout();
-      console.log("Sign out successful");
-    } catch (error) {
-      console.error("Sign out error in sidebar:", error);
-    }
+  // Handle mouse enter on sidebar - show scrollbar immediately
+  const handleMouseEnter = () => {
+    setShowScrollbar(true);
+  };
+
+  // Handle mouse leave from sidebar - hide scrollbar immediately
+  const handleMouseLeave = () => {
+    setShowScrollbar(false);
   };
 
   const advertiserLinks = [
@@ -153,21 +160,38 @@ export function DashboardSidebar({
   const avatarFallback = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="flex h-full flex-col">
-      {/* User Profile Section */}
+    <div
+      className="flex h-full flex-col min-h-0"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {/* Fixed User Profile Section */}
       {!collapsed && (
-        <div className="p-4 border-b border-sidebar-border">
+        <div className="flex-shrink-0 p-4 border-b" style={{ borderColor: 'hsl(var(--primary) / 0.2)' }}>
           <Link href="/dashboard/profile" className="block">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/20 dark:to-pink-950/20 border border-rose-100 dark:border-rose-800/30 hover:from-rose-100 hover:to-pink-100 dark:hover:from-rose-950/30 dark:hover:to-pink-950/30 hover:border-rose-200 dark:hover:border-rose-700/50 transition-all duration-200 cursor-pointer">
-              <Avatar className="h-12 w-12 ring-2 ring-rose-200 dark:ring-rose-800">
+            <div className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-sm"
+              style={{
+                backgroundColor: 'hsl(var(--primary) / 0.1)',
+                borderColor: 'hsl(var(--primary) / 0.2)',
+                color: 'hsl(var(--foreground))'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'hsl(var(--primary) / 0.4)';
+                e.currentTarget.style.backgroundColor = 'hsl(var(--primary) / 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'hsl(var(--primary) / 0.2)';
+                e.currentTarget.style.backgroundColor = 'hsl(var(--primary) / 0.1)';
+              }}>
+              <Avatar className="h-12 w-12 ring-2" style={{ '--tw-ring-color': 'hsl(var(--primary) / 0.3)' } as React.CSSProperties}>
                 <AvatarImage src={avatarSrc} alt={displayName} />
-                <AvatarFallback className="bg-gradient-to-br from-rose-500 to-purple-500 text-white font-semibold">
+                <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white font-semibold">
                   {avatarFallback}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-sidebar-foreground truncate">{displayName}</p>
-                <p className="text-xs text-sidebar-foreground/70 truncate">{displayEmail}</p>
+                <p className="text-sm font-semibold truncate" style={{ color: 'hsl(var(--foreground))' }}>{displayName}</p>
+                <p className="text-xs truncate" style={{ color: 'hsl(var(--muted-foreground))' }}>{displayEmail}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
                     roleInfo.color, roleInfo.textColor)}>
@@ -180,13 +204,14 @@ export function DashboardSidebar({
         </div>
       )}
 
-      {/* Collapsed User Avatar */}
+      {/* Fixed Collapsed User Avatar */}
       {collapsed && (
-        <div className="p-2 border-b border-sidebar-border">
+        <div className="flex-shrink-0 p-4 border-b flex justify-center" style={{ borderColor: 'hsl(var(--primary) / 0.2)' }}>
           <Link href="/dashboard/profile" className="block">
-            <Avatar className="h-8 w-8 mx-auto ring-2 ring-rose-200 dark:ring-rose-800 hover:ring-rose-300 dark:hover:ring-rose-700 transition-all duration-200 cursor-pointer">
+            <Avatar className="h-12 w-12 ring-2 transition-all duration-200 cursor-pointer hover:ring-opacity-50"
+              style={{ '--tw-ring-color': 'hsl(var(--primary) / 0.3)' } as React.CSSProperties}>
               <AvatarImage src={avatarSrc} alt={displayName} />
-              <AvatarFallback className="bg-gradient-to-br from-rose-500 to-purple-500 text-white font-semibold text-xs">
+              <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white font-semibold">
                 {avatarFallback}
               </AvatarFallback>
             </Avatar>
@@ -194,102 +219,92 @@ export function DashboardSidebar({
         </div>
       )}
 
-      {/* Navigation Links */}
-      <div className="flex-1 p-2">
-        {!collapsed && (
-          <h3 className="px-2 py-2 text-xs font-semibold text-sidebar-foreground/60 uppercase tracking-wider">
-            Navigation
-          </h3>
+      {/* Scrollable Navigation Links */}
+      <div
+        ref={scrollContainerRef}
+        className={cn(
+          "flex-1 overflow-y-auto transition-all duration-300",
+          showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
         )}
-        <nav className="space-y-1">
-          {links.map((link) => {
-            const isActive = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  "group relative flex items-center gap-3 rounded-xl px-3 py-3 transition-all duration-200",
-                  "border border-transparent hover:border-sidebar-accent/20",
-                  "hover:bg-sidebar-accent/60 hover:shadow-sm hover:translate-x-1",
-                  isActive && "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg shadow-rose-500/25",
-                  collapsed ? "justify-center" : ""
-                )}
-                title={collapsed ? link.name : undefined}
-              >
-                <div className={cn(
-                  "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-                  isActive
-                    ? "bg-white/20 text-white"
-                    : "bg-sidebar-accent/40 text-sidebar-foreground group-hover:bg-sidebar-accent/60"
-                )}>
-                  <link.icon className="h-4 w-4" />
-                </div>
-                {!collapsed && (
-                  <>
-                    <div className="flex-1 min-w-0">
-                      <div className={cn(
-                        "font-medium text-sm",
-                        isActive ? "text-white" : "text-sidebar-foreground"
-                      )}>
-                        {link.name}
-                      </div>
-                      <div className={cn(
-                        "text-xs truncate transition-colors",
-                        isActive
-                          ? "text-white/80"
-                          : "text-sidebar-foreground/60 group-hover:text-sidebar-foreground/80"
-                      )}>
-                        {link.description}
-                      </div>
-                    </div>
-                    <ChevronRight className={cn(
-                      "h-3 w-3 transition-all duration-200",
-                      isActive
-                        ? "text-white/80 translate-x-0.5"
-                        : "text-sidebar-foreground/40 group-hover:text-sidebar-foreground/60 group-hover:translate-x-0.5"
-                    )} />
-                  </>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
-        <Button
-          className={cn(
-            "group w-full justify-start gap-3 rounded-xl px-3 py-3 transition-all duration-200",
-            "hover:bg-red-50 dark:hover:bg-red-950/20 hover:border-red-200 dark:hover:border-red-800",
-            "border border-transparent hover:shadow-sm",
-            "text-sidebar-foreground hover:text-red-600 dark:hover:text-red-400",
-            collapsed ? "justify-center px-2" : ""
-          )}
-          variant="ghost"
-          onClick={() => {
-            try {
-              handleSignOut();
-              console.log("Sign out initiated");
-            } catch (error) {
-              console.error("Sign out error in sidebar:", error);
-            }
-          }}
-          title={collapsed ? "Sign out" : undefined}
-        >
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 group-hover:bg-red-200 dark:group-hover:bg-red-950/60 transition-colors">
-            <LogOut className="h-4 w-4" />
-          </div>
+        style={{ maxHeight: 'calc(100vh - 200px)' }}
+      >
+        <div className="p-4">
           {!collapsed && (
-            <div className="flex-1 text-left">
-              <div className="font-medium text-sm">Sign out</div>
-              <div className="text-xs text-sidebar-foreground/60 group-hover:text-red-500/80 dark:group-hover:text-red-400/80">
-                See you later!
-              </div>
-            </div>
+            <h3 className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
+              style={{ color: 'hsl(var(--muted-foreground))' }}>
+              Navigation
+            </h3>
           )}
-        </Button>
+          <nav className={cn("space-y-2", collapsed && "space-y-3")}>
+            {links.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={cn(
+                    "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
+                    "border border-transparent",
+                    collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
+                  )}
+                  style={{
+                    backgroundColor: isActive ? 'hsl(var(--primary))' : 'transparent',
+                    borderColor: isActive ? 'hsl(var(--primary) / 0.3)' : 'transparent',
+                    color: isActive ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))',
+                    boxShadow: isActive ? '0 4px 6px -1px hsl(var(--primary) / 0.25)' : 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.borderColor = 'hsl(var(--primary) / 0.3)';
+                      e.currentTarget.style.backgroundColor = 'hsl(var(--primary) / 0.1)';
+                      e.currentTarget.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.borderColor = 'transparent';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
+                  }}
+                  title={collapsed ? link.name : undefined}
+                >
+                  <div className={cn(
+                    "flex items-center justify-center rounded-lg transition-colors",
+                    collapsed ? "w-16 h-12" : "w-10 h-10"
+                  )}
+                    style={{
+                      backgroundColor: isActive ? 'hsl(var(--primary-foreground) / 0.2)' : 'hsl(var(--primary) / 0.2)',
+                      color: isActive ? 'hsl(var(--primary-foreground))' : 'hsl(var(--primary))'
+                    }}>
+                    <link.icon className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")} />
+                  </div>
+                  {!collapsed && (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm"
+                          style={{ color: isActive ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))' }}>
+                          {link.name}
+                        </div>
+                        <div className="text-xs truncate transition-colors"
+                          style={{ color: isActive ? 'hsl(var(--primary-foreground) / 0.8)' : 'hsl(var(--muted-foreground))' }}>
+                          {link.description}
+                        </div>
+                      </div>
+                      <ChevronRight className={cn(
+                        "h-4 w-4 transition-all duration-200",
+                        isActive && "translate-x-0.5"
+                      )}
+                        style={{
+                          color: isActive ? 'hsl(var(--primary-foreground) / 0.8)' : 'hsl(var(--muted-foreground))'
+                        }} />
+                    </>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
       </div>
     </div>
   );
