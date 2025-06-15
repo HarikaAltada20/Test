@@ -219,9 +219,9 @@ function DashboardContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileSidebarOpen, setProfileSidebarOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<ThemeKey>('purple');
-  const [currentMode, setCurrentMode] = useState<ModeKey>('dark');
-  const [currentPreset, setCurrentPreset] = useState<PresetKey>('game-of-creators');
+  const [currentTheme, setCurrentTheme] = useState<ThemeKey>('clean');
+  const [currentMode, setCurrentMode] = useState<ModeKey>('light');
+  const [currentPreset, setCurrentPreset] = useState<PresetKey>('clean-professional');
   const { logout } = useClientAuth();
   const [profileData, setProfileData] = useState<{
     fullName: string | null;
@@ -274,15 +274,24 @@ function DashboardContent({
       setCurrentMode(presetConfigurations[savedPreset].mode);
       setCurrentTheme(presetConfigurations[savedPreset].theme);
     } else {
-      // Fallback to individual settings
+      // Fallback to individual settings or defaults
       const savedTheme = localStorage.getItem('dashboard-theme') as ThemeKey;
       if (savedTheme && colorThemes[savedTheme]) {
         setCurrentTheme(savedTheme);
+      } else {
+        setCurrentTheme('clean'); // Default to clean theme
       }
 
       const savedMode = localStorage.getItem('dashboard-mode') as ModeKey;
       if (savedMode && modeConfigurations[savedMode]) {
         setCurrentMode(savedMode);
+      } else {
+        setCurrentMode('light'); // Default to light mode
+      }
+
+      // Set default preset if no individual settings
+      if (!savedTheme && !savedMode) {
+        setCurrentPreset('clean-professional');
       }
     }
   }, []);

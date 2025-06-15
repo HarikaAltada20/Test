@@ -559,7 +559,7 @@ export function ContestClientPage({
                         ) : (
                           <Calendar className="w-3 h-3" />
                         )}
-                        {contest.status.toUpperCase()}
+                        {contest.status === "active" ? "LIVE" : contest.status.toUpperCase()}
                       </span>
                     </Badge>
                     {contest.contest_type && (

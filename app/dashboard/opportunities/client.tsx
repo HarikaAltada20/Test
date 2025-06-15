@@ -297,7 +297,7 @@ export default function OpportunitiesPage({
                       !["active", "upcoming", "ended"].includes(contest.status) && "bg-yellow-400 border-yellow-400 text-yellow-900"
                     )}
                   >
-                    {contest.status}
+                    {contest.status === "active" ? "Live" : contest.status}
                   </Badge>
                 </div>
               </div>
