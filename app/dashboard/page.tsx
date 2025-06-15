@@ -358,20 +358,20 @@ function DashboardPage() {
           </CardHeader>
           <CardContent>
             {recentContests && recentContests.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {recentContests.map((contest) => (
                   <div
                     key={contest.id}
-                    className="flex items-center justify-between border-b pb-4"
+                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="rounded-full bg-gray-100 p-2">
-                        <Trophy className="h-4 w-4" />
+                    <div className="flex items-center space-x-4 flex-1">
+                      <div className="rounded-full bg-primary/10 p-3 flex-shrink-0">
+                        <Trophy className="h-5 w-5 text-primary" />
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{contest.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {contest.platform} |{" "}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{contest.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {contest.platform} • {" "}
                           {formatLocalDateTime(contest.created_at, {
                             year: "numeric",
                             month: "short",
@@ -380,8 +380,8 @@ function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/dashboard/contests/${contest.id}`}>
+                    <Button variant="outline" size="sm" className="ml-4 flex-shrink-0" asChild>
+                      <Link href={isAdvertiser ? `/dashboard/contests/${contest.id}` : `/dashboard/opportunities/${contest.id}`}>
                         View
                       </Link>
                     </Button>

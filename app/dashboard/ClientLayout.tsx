@@ -109,7 +109,7 @@ const presetConfigurations = {
   },
   "clean-professional": {
     name: "🤍 Clean Professional",
-    description: "Light theme with minimal styling",
+    description: "Warm light theme with comfortable colors",
     mode: "light" as ModeKey,
     theme: "clean" as ThemeKey,
   },
@@ -154,16 +154,16 @@ const modeConfigurations = {
   light: {
     name: "Light Mode",
     background: {
-      primary: "255, 255, 255", // pure white
-      secondary: "248, 250, 252", // slate-50
-      tertiary: "241, 245, 249", // slate-100
+      primary: "249, 250, 251", // gray-50 - softer than pure white
+      secondary: "243, 244, 246", // gray-100 - subtle secondary bg
+      tertiary: "229, 231, 235", // gray-200 - gentle tertiary bg
     },
     text: {
-      primary: "15, 23, 42", // slate-900 - much darker for better contrast
-      secondary: "30, 41, 59", // slate-800 - darker secondary text
-      muted: "71, 85, 105", // slate-600 - darker muted text
+      primary: "17, 24, 39", // gray-900 - rich dark text
+      secondary: "55, 65, 81", // gray-700 - readable secondary text
+      muted: "107, 114, 128", // gray-500 - balanced muted text
     },
-    border: "226, 232, 240", // slate-200 - lighter but visible borders
+    border: "209, 213, 219", // gray-300 - visible but gentle borders
   },
 } as const;
 
@@ -370,22 +370,22 @@ function DashboardContent({
       {/* Dynamic CSS Custom Properties for Theme */}
       <style jsx global>{`
         :root {
-          --background: ${currentMode === 'light' ? '0 0% 100%' : '222.2 84% 4.9%'};
-          --foreground: ${currentMode === 'light' ? '222.2 84% 4.9%' : '210 40% 98%'};
-          --card: ${currentMode === 'light' ? '0 0% 100%' : '217.2 32.6% 17.5%'};
-          --card-foreground: ${currentMode === 'light' ? '222.2 84% 4.9%' : '210 40% 98%'};
-          --popover: ${currentMode === 'light' ? '0 0% 100%' : '217.2 32.6% 17.5%'};
-          --popover-foreground: ${currentMode === 'light' ? '222.2 84% 4.9%' : '210 40% 98%'};
+          --background: ${currentMode === 'light' ? '210 20% 98%' : '222.2 84% 4.9%'};
+          --foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
+          --card: ${currentMode === 'light' ? '0 0% 96%' : '217.2 32.6% 17.5%'};
+          --card-foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
+          --popover: ${currentMode === 'light' ? '0 0% 96%' : '217.2 32.6% 17.5%'};
+          --popover-foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
           --primary: ${getThemeHSL(currentTheme)};
           --primary-foreground: ${currentMode === 'light' ? '0 0% 100%' : '222.2 84% 4.9%'};
-          --secondary: ${currentMode === 'light' ? '210 40% 98%' : '217.2 32.6% 17.5%'};
-          --secondary-foreground: ${currentMode === 'light' ? '222.2 84% 4.9%' : '210 40% 98%'};
-          --muted: ${currentMode === 'light' ? '210 40% 96%' : '217.2 32.6% 17.5%'};
-          --muted-foreground: ${currentMode === 'light' ? '215.4 16.3% 46.9%' : '215 20.2% 75.1%'};
-          --accent: ${currentMode === 'light' ? '210 40% 96%' : '217.2 32.6% 17.5%'};
-          --accent-foreground: ${currentMode === 'light' ? '222.2 84% 4.9%' : '210 40% 98%'};
-          --border: ${currentMode === 'light' ? '214.3 31.8% 91.4%' : '217.2 32.6% 17.5%'};
-          --input: ${currentMode === 'light' ? '214.3 31.8% 91.4%' : '217.2 32.6% 17.5%'};
+          --secondary: ${currentMode === 'light' ? '220 14% 96%' : '217.2 32.6% 17.5%'};
+          --secondary-foreground: ${currentMode === 'light' ? '220 9% 46%' : '210 40% 98%'};
+          --muted: ${currentMode === 'light' ? '220 13% 91%' : '217.2 32.6% 17.5%'};
+          --muted-foreground: ${currentMode === 'light' ? '220 9% 46%' : '215 20.2% 75.1%'};
+          --accent: ${currentMode === 'light' ? '220 13% 91%' : '217.2 32.6% 17.5%'};
+          --accent-foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
+          --border: ${currentMode === 'light' ? '220 13% 82%' : '217.2 32.6% 17.5%'};
+          --input: ${currentMode === 'light' ? '220 13% 82%' : '217.2 32.6% 17.5%'};
           --ring: ${getThemeHSL(currentTheme)};
         }
       `}</style>
@@ -537,19 +537,54 @@ function DashboardContent({
         
         /* Light mode specific improvements */
         ${currentMode === 'light' ? `
-          /* Card shadows for better depth in light mode */
+          /* Enhanced card shadows and backgrounds for better depth */
           [data-theme="light"] .card,
           [data-theme="light"] [data-card],
           [data-theme="light"] div[class*="rounded-"],
           [data-theme="light"] div[class*="border"] {
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06) !important;
-            background-color: rgba(${mode.background.secondary}, 1) !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+            background: linear-gradient(135deg, rgba(${mode.background.secondary}, 1) 0%, rgba(${mode.background.primary}, 1) 100%) !important;
+            border: 1px solid rgba(${mode.border}, 0.8) !important;
           }
           
-          /* Button shadows for light mode */
+          /* Enhanced button styling */
           [data-theme="light"] button,
           [data-theme="light"] .btn {
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, rgba(${mode.background.secondary}, 1) 0%, rgba(${mode.background.primary}, 1) 100%);
+            border: 1px solid rgba(${mode.border}, 0.6);
+            transition: all 0.2s ease;
+          }
+          
+          [data-theme="light"] button:hover,
+          [data-theme="light"] .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+          }
+          
+          /* Enhanced sidebar styling */
+          [data-theme="light"] .sidebar-container {
+            background: linear-gradient(180deg, rgba(${mode.background.primary}, 1) 0%, rgba(${mode.background.secondary}, 1) 100%);
+            border-right: 1px solid rgba(${mode.border}, 0.8);
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
+          }
+          
+          /* Enhanced main content area */
+          [data-theme="light"] .dashboard-main-content {
+            background: linear-gradient(135deg, rgba(${mode.background.primary}, 1) 0%, rgba(${mode.background.secondary}, 0.3) 100%);
+          }
+          
+          /* Improved navigation items */
+          [data-theme="light"] .nav-item {
+            transition: all 0.2s ease;
+            border-radius: 8px;
+            margin: 2px 0;
+          }
+          
+          [data-theme="light"] .nav-item:hover {
+            background: linear-gradient(135deg, rgba(${mode.background.tertiary}, 0.8) 0%, rgba(${mode.background.secondary}, 0.8) 100%);
+            transform: translateX(2px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
           }
           
           /* Fix sidebar text in light mode */
@@ -1016,7 +1051,9 @@ function DashboardContent({
             ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
             : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
           borderRightColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
-          boxShadow: currentMode === 'light' ? '2px 0 8px 0 rgba(0, 0, 0, 0.1)' : 'none'
+          boxShadow: currentMode === 'light'
+            ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
+            : 'none'
         }}>
           {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div className="relative flex h-20 items-center justify-center border-b" style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}>
@@ -1035,24 +1072,62 @@ function DashboardContent({
             {/* Logo - Centered and Full Width */}
             <div className="relative flex items-center justify-center flex-1 z-10">
               {!sidebarCollapsed ? (
-                <Link href="/" className="flex items-center">
-                  <Image
-                    src={logo}
-                    alt="Game Of Creators Logo"
-                    width={160}
-                    height={40}
-                    className="h-10 w-auto filter brightness-110"
-                  />
+                <Link href="/" className="flex items-center group transition-all duration-300">
+                  <div
+                    className={cn(
+                      "relative p-3 rounded-lg transition-all duration-300",
+                      currentMode === 'light'
+                        ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
+                        : "hover:bg-white/5"
+                    )}
+                    style={{
+                      ...(currentMode === 'light' && {
+                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`
+                      })
+                    }}
+                  >
+                    <Image
+                      src={logo}
+                      alt="Game Of Creators Logo"
+                      width={160}
+                      height={40}
+                      className={cn(
+                        "h-10 w-auto transition-all duration-300",
+                        currentMode === 'light'
+                          ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
+                          : "filter brightness-110 group-hover:brightness-125"
+                      )}
+                    />
+                  </div>
                 </Link>
               ) : (
-                <Link href="/" className="flex items-center justify-center">
-                  <Image
-                    src={squareLogo}
-                    alt="Game Of Creators"
-                    width={44}
-                    height={44}
-                    className="h-11 w-11 filter brightness-110"
-                  />
+                <Link href="/" className="flex items-center justify-center group transition-all duration-300">
+                  <div
+                    className={cn(
+                      "relative p-2 rounded-lg transition-all duration-300",
+                      currentMode === 'light'
+                        ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
+                        : "hover:bg-white/5"
+                    )}
+                    style={{
+                      ...(currentMode === 'light' && {
+                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`
+                      })
+                    }}
+                  >
+                    <Image
+                      src={squareLogo}
+                      alt="Game Of Creators"
+                      width={44}
+                      height={44}
+                      className={cn(
+                        "h-11 w-11 transition-all duration-300",
+                        currentMode === 'light'
+                          ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
+                          : "filter brightness-110 group-hover:brightness-125"
+                      )}
+                    />
+                  </div>
                 </Link>
               )}
             </div>
@@ -1066,9 +1141,6 @@ function DashboardContent({
               <DashboardSidebar
                 userRole={userRole}
                 collapsed={sidebarCollapsed}
-                user={user}
-                profileFullName={profileData.fullName}
-                profilePictureUrl={profileData.profilePictureUrl}
               />
             )}
           </div>
@@ -1236,9 +1308,6 @@ function DashboardContent({
                             <DashboardSidebar
                               userRole={userRole}
                               collapsed={false}
-                              user={user}
-                              profileFullName={profileData.fullName}
-                              profilePictureUrl={profileData.profilePictureUrl}
                             />
                           )}
                         </div>

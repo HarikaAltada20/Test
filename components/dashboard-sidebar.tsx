@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
   Trophy,
@@ -22,23 +21,15 @@ import {
   User
 } from "lucide-react";
 import Link from "next/link";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserResponse } from "@supabase/supabase-js";
 
 interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
   collapsed?: boolean;
-  user?: (UserResponse["data"]["user"] & { user_type?: string | null }) | null;
-  profileFullName?: string | null;
-  profilePictureUrl?: string | null;
 }
 
 export function DashboardSidebar({
   userRole = "advertiser",
   collapsed = false,
-  user,
-  profileFullName,
-  profilePictureUrl,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
@@ -137,89 +128,13 @@ export function DashboardSidebar({
 
   const links = userRole === "advertiser" ? advertiserLinks : userRole === 'admin' ? adminLinks : creatorLinks;
 
-  // Get role display name and color
-  const getRoleInfo = (role: string) => {
-    switch (role) {
-      case "advertiser":
-        return { label: "Advertiser", color: "bg-blue-500", textColor: "text-blue-100" };
-      case "creator":
-        return { label: "Creator", color: "bg-purple-500", textColor: "text-purple-100" };
-      case "admin":
-        return { label: "Admin", color: "bg-red-500", textColor: "text-red-100" };
-      default:
-        return { label: "User", color: "bg-gray-500", textColor: "text-gray-100" };
-    }
-  };
-
-  const roleInfo = getRoleInfo(userRole);
-
-  // Get user display info
-  const displayName = profileFullName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
-  const displayEmail = user?.email || "";
-  const avatarSrc = profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
-  const avatarFallback = displayName.charAt(0).toUpperCase();
-
   return (
     <div
       className="flex h-full flex-col min-h-0"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Fixed User Profile Section */}
-      {!collapsed && (
-        <div className="flex-shrink-0 p-4 border-b" style={{ borderColor: 'hsl(var(--primary) / 0.2)' }}>
-          <Link href="/dashboard/profile" className="block">
-            <div className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-sm"
-              style={{
-                backgroundColor: 'hsl(var(--primary) / 0.1)',
-                borderColor: 'hsl(var(--primary) / 0.2)',
-                color: 'hsl(var(--foreground))'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'hsl(var(--primary) / 0.4)';
-                e.currentTarget.style.backgroundColor = 'hsl(var(--primary) / 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'hsl(var(--primary) / 0.2)';
-                e.currentTarget.style.backgroundColor = 'hsl(var(--primary) / 0.1)';
-              }}>
-              <Avatar className="h-12 w-12 ring-2" style={{ '--tw-ring-color': 'hsl(var(--primary) / 0.3)' } as React.CSSProperties}>
-                <AvatarImage src={avatarSrc} alt={displayName} />
-                <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white font-semibold">
-                  {avatarFallback}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate" style={{ color: 'hsl(var(--foreground))' }}>{displayName}</p>
-                <p className="text-xs truncate" style={{ color: 'hsl(var(--muted-foreground))' }}>{displayEmail}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                    roleInfo.color, roleInfo.textColor)}>
-                    {roleInfo.label}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-      )}
-
-      {/* Fixed Collapsed User Avatar */}
-      {collapsed && (
-        <div className="flex-shrink-0 p-4 border-b flex justify-center" style={{ borderColor: 'hsl(var(--primary) / 0.2)' }}>
-          <Link href="/dashboard/profile" className="block">
-            <Avatar className="h-12 w-12 ring-2 transition-all duration-200 cursor-pointer hover:ring-opacity-50"
-              style={{ '--tw-ring-color': 'hsl(var(--primary) / 0.3)' } as React.CSSProperties}>
-              <AvatarImage src={avatarSrc} alt={displayName} />
-              <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white font-semibold">
-                {avatarFallback}
-              </AvatarFallback>
-            </Avatar>
-          </Link>
-        </div>
-      )}
-
-      {/* Scrollable Navigation Links */}
+      {/* Navigation Links - Full Height */}
       <div
         ref={scrollContainerRef}
         className={cn(
