@@ -299,7 +299,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         <div className="flex items-center gap-2 pt-2 border-t dark:border-slate-700 mt-auto">
                             {isDraft ? (
                                 <>
-                                    <Button size="sm" className="flex-1 bg-rose-600 hover:bg-rose-700" asChild>
+                                    <Button size="sm" variant="white" className="flex-1" asChild>
                                         <Link href={`/dashboard/contests/create?draft=${contest.id}`}>
                                             <Edit className="h-4 w-4 mr-2" />
                                             Continue Editing
@@ -315,7 +315,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                                     />
                                 </>
                             ) : (
-                                <Button size="sm" className="w-full bg-rose-600 hover:bg-rose-700 text-white" asChild>
+                                <Button size="sm" variant="white" className="w-full" asChild>
                                     <Link href={isAdminView ? `/dashboard/admin/contests/${contest.id}` : `/dashboard/contests/${contest.id}`}>
                                         View Details
                                         <ExternalLink className="h-4 w-4 ml-2" />

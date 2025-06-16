@@ -21,6 +21,7 @@ const buttonVariants = cva(
         selected: "bg-primary text-primary-foreground font-semibold shadow-md border border-primary/20",
         "selected-secondary": "bg-secondary text-secondary-foreground font-semibold shadow-md border border-secondary/20",
         "selected-outline": "bg-primary/10 text-primary font-semibold border-2 border-primary shadow-md",
+        white: "bg-white text-gray-900 font-bold border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 shadow-md hover:shadow-lg transition-all duration-200",
       },
       size: {
         default: "h-10 px-4 py-2",

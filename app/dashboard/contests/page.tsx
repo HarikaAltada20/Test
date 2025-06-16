@@ -69,7 +69,7 @@ export default async function ContestsPage() {
           <div className="flex-1">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Contests</h1>
           </div>
-          <Button className="bg-rose-600 hover:bg-rose-700 w-full sm:w-auto" asChild>
+          <Button variant="white" className="w-full sm:w-auto" asChild>
             <Link href="/dashboard/contests/create">
               <Plus className="mr-2 h-4 w-4" /> Create Contest
             </Link>

@@ -206,7 +206,7 @@ function DashboardPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         {isAdvertiser && (
-          <Button className="bg-rose-600 hover:bg-rose-700" asChild>
+          <Button variant="white" asChild>
             <Link href="/dashboard/contests/create">
               <Plus className="mr-2 h-4 w-4" /> Create Contest
             </Link>

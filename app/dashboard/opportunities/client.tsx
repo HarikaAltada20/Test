@@ -395,7 +395,8 @@ export default function OpportunitiesPage({
                 <Button
                   onClick={() => handleViewDetails(contest.id)}
                   size="sm"
-                  className="w-full mt-auto font-medium hover:shadow-md transition-all duration-200"
+                  variant="white"
+                  className="w-full mt-auto"
                 >
                   View Details
                 </Button>
