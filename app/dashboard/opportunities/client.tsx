@@ -214,20 +214,35 @@ export default function OpportunitiesPage({
         {/* Filters and Sorters will go here - Old filter button removed */}
       </div>
 
-      {/* Status Filter Tabs */}
-      <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="live">Live</TabsTrigger>
-          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+      {/* Enhanced Status Filter Tabs with better visual distinction */}
+      <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-8">
+        <TabsList className="grid w-full grid-cols-3 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
+          <TabsTrigger
+            value="all"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+          >
+            All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="live"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+          >
+            Live <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.status === 'active').length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="upcoming"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+          >
+            Upcoming <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.status === 'upcoming').length}</Badge>
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* Filter and Sort Select Dropdowns */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* Enhanced Filter and Sort Select Dropdowns */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {/* Platform Filter */}
         <Select value={platformFilter} onValueChange={(value) => setPlatformFilter(value as PlatformFilterType)}>
-          <SelectTrigger>
+          <SelectTrigger className="font-medium">
             <SelectValue placeholder="Filter by Platform" />
           </SelectTrigger>
           <SelectContent>
@@ -240,7 +255,7 @@ export default function OpportunitiesPage({
 
         {/* Contest Type Filter */}
         <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as ContestTypeFilterType)}>
-          <SelectTrigger>
+          <SelectTrigger className="font-medium">
             <SelectValue placeholder="Filter by Type" />
           </SelectTrigger>
           <SelectContent>
@@ -252,7 +267,7 @@ export default function OpportunitiesPage({
 
         {/* Sort By */}
         <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOptionType)}>
-          <SelectTrigger>
+          <SelectTrigger className="font-medium">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
@@ -270,7 +285,7 @@ export default function OpportunitiesPage({
         </Select>
       </div>
 
-      <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {displayedContests && displayedContests.length > 0 ? (
           displayedContests.map((contest) => (
             <Card
@@ -324,7 +339,7 @@ export default function OpportunitiesPage({
                       <span>Ends: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                     </div>
                   )}
-                  {(contest.live_submission_count !== null && contest.live_submission_count >= 0) && (
+                  {contest.live_submission_count !== null && contest.live_submission_count !== undefined && (
                     <div className="flex items-center">
                       <Users className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span>Submissions: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
@@ -342,24 +357,27 @@ export default function OpportunitiesPage({
                       <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                     </div>
                   )}
-                  <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>
-                      {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest ? (
-                        <>Prize/Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></>
-                      ) : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest ? (
-                        <>Prize/Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</span></>
-                      ) : (
-                        <>Prize/Budget: <span className="font-medium text-slate-700 dark:text-slate-300">N/A</span></>
-                      )}
-                    </span>
-                  </div>
+                  {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                      <span>Total Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
+                    </div>
+                  )}
+                  {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null && contest.contest_based_details.leaderboard_contest.total_prize > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                      <span>Total Prize Pool: <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                      </span></span>
+                    </div>
+                  )}
                 </div>
+
                 {/* Budget Spent Progress Bar for CPM contests */}
                 {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
-                  <div className="mt-2 mb-3">
-                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-0.5">
-                      <span>Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
+                  <div className="mt-3 mb-3">
+                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                      <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
                       <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
@@ -368,19 +386,22 @@ export default function OpportunitiesPage({
                         style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
                       ></div>
                     </div>
+                    <div className="flex justify-center text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      <span>Remaining: {formatMoney(contest.contest_based_details.cpm_contest.total_budget - (contest.contest_based_details.cpm_contest.budget_spent || 0))}</span>
+                    </div>
                   </div>
                 )}
-                <div className="pt-2 mt-auto"> {/* Ensure button is at the bottom */}
-                  <Button
-                    className="w-full font-semibold bg-rose-600 hover:bg-rose-700 text-white dark:bg-rose-500 dark:hover:bg-rose-600 transition-colors duration-200 py-2.5"
-                    onClick={() => handleViewDetails(contest.id)}
-                  >
-                    View Details
-                  </Button>
-                </div>
+
+                <Button
+                  onClick={() => handleViewDetails(contest.id)}
+                  size="sm"
+                  className="w-full mt-auto font-medium hover:shadow-md transition-all duration-200"
+                >
+                  View Details
+                </Button>
               </CardContent>
             </Card>
-          ))
+          )).slice(0, 50) // Limit to 50 contests for performance
         ) : (
           <div className="col-span-full text-center py-12">
             <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />

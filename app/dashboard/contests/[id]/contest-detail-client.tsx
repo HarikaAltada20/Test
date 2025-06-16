@@ -503,24 +503,24 @@ export default function ContestDetailClient({
             </div>
 
             {/* Main Content Tabs */}
-            <div className="w-full">
+            <div className="mt-8">
                 <Tabs defaultValue="overview" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3 bg-gradient-to-r from-gray-50 to-gray-100 p-1 rounded-xl shadow-sm">
+                    <TabsList className="grid w-full grid-cols-3 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
                         <TabsTrigger
                             value="overview"
-                            className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-gray-900 text-gray-600 font-medium rounded-lg transition-all"
+                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
                         >
                             Overview
                         </TabsTrigger>
                         <TabsTrigger
                             value="submissions"
-                            className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-gray-900 text-gray-600 font-medium rounded-lg transition-all"
+                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
                         >
-                            Submissions ({currentSubmissions.length})
+                            Submissions <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">({currentSubmissions.length})</Badge>
                         </TabsTrigger>
                         <TabsTrigger
                             value="analytics"
-                            className="data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-gray-900 text-gray-600 font-medium rounded-lg transition-all"
+                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
                         >
                             Analytics
                         </TabsTrigger>

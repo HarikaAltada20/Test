@@ -949,9 +949,19 @@ export default function SubmitContentPage({
 
               {youtubeAccount && !isTokenExpired && (
                 <Tabs defaultValue="youtube-library" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="youtube-library">Your Videos & Shorts</TabsTrigger>
-                    <TabsTrigger value="youtube-link">YouTube Link</TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
+                    <TabsTrigger
+                      value="youtube-library"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                      Your Videos & Shorts
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="youtube-link"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                      YouTube Link
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="youtube-library" className="mt-4">
                     {isLoadingVideos ? (
@@ -1209,9 +1219,19 @@ export default function SubmitContentPage({
 
               {instagramAccount && !isInstagramTokenExpired && (
                 <Tabs defaultValue="instagram-library" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="instagram-library">Your Reels & Videos</TabsTrigger>
-                    <TabsTrigger value="instagram-link">Instagram Link</TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
+                    <TabsTrigger
+                      value="instagram-library"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                      Your Reels & Videos
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="instagram-link"
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                      Instagram Link
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (

@@ -29,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import Link from "next/link";
 import Image from "next/image";
 import logo from "@/public/images/gold_logo_horizontal.svg";
@@ -118,18 +119,6 @@ const presetConfigurations = {
     description: "Dark theme with minimal styling",
     mode: "dark" as ModeKey,
     theme: "clean" as ThemeKey,
-  },
-  "ocean-breeze": {
-    name: "🌊 Ocean Breeze",
-    description: "Light theme with blue accents",
-    mode: "light" as ModeKey,
-    theme: "blue" as ThemeKey,
-  },
-  "forest-fresh": {
-    name: "🌲 Forest Fresh",
-    description: "Light theme with green accents",
-    mode: "light" as ModeKey,
-    theme: "green" as ThemeKey,
   },
 } as const;
 
@@ -227,10 +216,12 @@ function DashboardContent({
     fullName: string | null;
     profilePictureUrl: string | null;
     isActive: boolean;
+    subscriptionPlan: string | null;
   }>({
     fullName: null,
     profilePictureUrl: null,
     isActive: true,
+    subscriptionPlan: null,
   });
 
   const handleSignOut = async () => {
@@ -250,15 +241,29 @@ function DashboardContent({
       const supabase = createClient();
       const { data: profile } = await supabase
         .from('users')
-        .select('full_name, profile_picture_url, is_active')
+        .select('full_name, profile_picture_url, is_active, user_type')
         .eq('id', user.id)
         .single();
 
       if (profile) {
+        let subscriptionPlan: string | null = null;
+
+        // Fetch subscription plan for advertisers
+        if (profile.user_type === 'advertiser') {
+          const { data: advertiserProfile } = await supabase
+            .from('advertiser_profiles')
+            .select('subscription_plan')
+            .eq('id', user.id)
+            .single();
+
+          subscriptionPlan = advertiserProfile?.subscription_plan || null;
+        }
+
         setProfileData({
           fullName: profile.full_name,
           profilePictureUrl: profile.profile_picture_url,
           isActive: profile.is_active ?? true,
+          subscriptionPlan: subscriptionPlan,
         });
       }
     };
@@ -321,6 +326,11 @@ function DashboardContent({
     localStorage.removeItem('dashboard-preset'); // Clear preset when manually changing
   };
 
+  // Reset to default function
+  const resetToDefault = () => {
+    switchPreset('clean-professional');
+  };
+
   // Get current theme and mode configurations
   const theme = colorThemes[currentTheme];
   const mode = modeConfigurations[currentMode];
@@ -371,6 +381,16 @@ function DashboardContent({
   const displayEmail = user?.email || "";
   const avatarSrc = profileData.profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
+
+  // Get subscription plan details
+  const getCurrentPlan = () => {
+    if (!profileData.subscriptionPlan || userRole !== "advertiser") {
+      return subscriptionPlans[0]; // Default to FREE plan
+    }
+    return subscriptionPlans.find(plan => plan.id === profileData.subscriptionPlan) || subscriptionPlans[0];
+  };
+
+  const currentPlan = getCurrentPlan();
 
   return (
     <div className="bg-background" data-theme={currentMode} data-color-theme={currentTheme}>
@@ -1404,25 +1424,73 @@ function DashboardContent({
                     {/* Settings Panel Content */}
                     <SheetContent
                       side="right"
-                      className="w-96 p-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-l border-violet-500/30"
+                      className="w-96 p-0 border-l"
+                      style={{
+                        background: currentMode === 'dark'
+                          ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
+                          : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
+                        borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.3' : '0.2'})`,
+                      }}
                     >
                       {/* Premium Background Effects */}
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(139,92,246,0.1),transparent)]"></div>
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(236,72,153,0.08),transparent)]"></div>
-                      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`
+                        }}
+                      ></div>
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`
+                        }}
+                      ></div>
+                      <div
+                        className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"
+                        style={{
+                          opacity: currentMode === 'dark' ? 1 : 0.3
+                        }}
+                      ></div>
 
                       <div className="relative h-full flex flex-col">
                         {/* Header */}
-                        <SheetHeader className="p-6 border-b border-violet-500/20 flex-shrink-0">
+                        <SheetHeader
+                          className="p-6 border-b flex-shrink-0"
+                          style={{
+                            borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.2' : '0.15'})`
+                          }}
+                        >
                           <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-xl bg-violet-600/20 flex items-center justify-center">
-                              <Settings className="h-6 w-6 text-violet-300" />
+                            <div
+                              className="w-12 h-12 rounded-xl flex items-center justify-center"
+                              style={{
+                                backgroundColor: `rgba(${theme.primary}, 0.2)`
+                              }}
+                            >
+                              <Settings
+                                className="h-6 w-6"
+                                style={{
+                                  color: `rgba(${theme.primary}, 1)`
+                                }}
+                              />
                             </div>
                             <div className="flex-1">
-                              <SheetTitle className="text-white text-lg font-semibold">
+                              <SheetTitle
+                                className="text-lg font-semibold"
+                                style={{
+                                  color: `rgba(${mode.text.primary}, 1)`
+                                }}
+                              >
                                 Dashboard Settings
                               </SheetTitle>
-                              <p className="text-slate-300 text-sm">Customize your dashboard experience</p>
+                              <p
+                                className="text-sm"
+                                style={{
+                                  color: `rgba(${mode.text.secondary}, 1)`
+                                }}
+                              >
+                                Customize your dashboard experience
+                              </p>
                             </div>
                           </div>
                           <SheetDescription className="sr-only">
@@ -1435,7 +1503,14 @@ function DashboardContent({
                           <div className="p-6 space-y-6">
                             {/* Quick Presets */}
                             <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Quick Presets</h3>
+                              <h3
+                                className="text-sm font-semibold uppercase tracking-wider"
+                                style={{
+                                  color: `rgba(${mode.text.muted}, 1)`
+                                }}
+                              >
+                                Quick Presets
+                              </h3>
                               <div className="grid grid-cols-1 gap-3">
                                 {Object.entries(presetConfigurations).map(([key, preset]) => (
                                   <button
@@ -1477,7 +1552,14 @@ function DashboardContent({
 
                             {/* Appearance Settings */}
                             <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Appearance</h3>
+                              <h3
+                                className="text-sm font-semibold uppercase tracking-wider"
+                                style={{
+                                  color: `rgba(${mode.text.muted}, 1)`
+                                }}
+                              >
+                                Appearance
+                              </h3>
 
                               {/* Dark Mode Toggle */}
                               <div
@@ -1512,145 +1594,191 @@ function DashboardContent({
                                   onCheckedChange={(checked) => switchMode(checked ? 'dark' : 'light')}
                                 />
                               </div>
-
-                              {/* High Contrast */}
-                              <div
-                                className="flex items-center justify-between p-4 rounded-xl border"
-                                style={{
-                                  backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                  borderColor: `rgba(${theme.primary}, 0.2)`,
-                                }}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                                    style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
-                                  >
-                                    <Contrast className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
-                                  </div>
-                                  <div>
-                                    <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>High Contrast</div>
-                                    <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>Improve visibility</div>
-                                  </div>
-                                </div>
-                                <Switch />
-                              </div>
-                            </div>
-
-                            {/* Layout Preferences */}
-                            <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Layout</h3>
-
-                              {/* Compact Mode */}
-                              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/30 border border-violet-400/20">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg bg-violet-600/20 flex items-center justify-center">
-                                    <Maximize2 className="h-5 w-5 text-violet-300" />
-                                  </div>
-                                  <div>
-                                    <div className="font-medium text-white text-sm">Compact Mode</div>
-                                    <div className="text-xs text-slate-400">Reduce spacing and padding</div>
-                                  </div>
-                                </div>
-                                <Switch />
-                              </div>
-
-                              {/* RTL Layout */}
-                              <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/30 border border-violet-400/20">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-lg bg-violet-600/20 flex items-center justify-center">
-                                    <RotateCcw className="h-5 w-5 text-violet-300" />
-                                  </div>
-                                  <div>
-                                    <div className="font-medium text-white text-sm">Right-to-Left</div>
-                                    <div className="text-xs text-slate-400">RTL layout support</div>
-                                  </div>
-                                </div>
-                                <Switch />
-                              </div>
                             </div>
 
                             {/* Color Scheme */}
                             <div className="space-y-4">
-                              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Color Themes</h3>
+                              <h3
+                                className="text-sm font-semibold uppercase tracking-wider"
+                                style={{
+                                  color: `rgba(${mode.text.muted}, 1)`
+                                }}
+                              >
+                                Color Themes
+                              </h3>
                               <div className="grid grid-cols-2 gap-3">
                                 {/* Purple/Game of Creators Theme */}
                                 <button
                                   onClick={() => switchTheme('purple')}
-                                  className={cn(
-                                    "p-3 rounded-xl border-2 transition-all duration-200",
-                                    currentTheme === 'purple'
-                                      ? "bg-gradient-to-br from-violet-600/20 to-purple-600/20 border-violet-400/40 hover:border-violet-400/60"
-                                      : "bg-slate-900/30 border-slate-600/30 hover:border-violet-400/40"
-                                  )}
+                                  className="p-3 rounded-xl border-2 transition-all duration-200"
+                                  style={{
+                                    backgroundColor: currentTheme === 'purple'
+                                      ? `rgba(${colorThemes.purple.primary}, 0.2)`
+                                      : `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: currentTheme === 'purple'
+                                      ? `rgba(${colorThemes.purple.primary}, 0.4)`
+                                      : `rgba(${colorThemes.purple.primary}, 0.2)`,
+                                    color: currentTheme === 'purple'
+                                      ? `rgba(${mode.text.primary}, 1)`
+                                      : `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${colorThemes.purple.primary}, 0.6)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = currentTheme === 'purple'
+                                      ? `rgba(${colorThemes.purple.primary}, 0.4)`
+                                      : `rgba(${colorThemes.purple.primary}, 0.2)`;
+                                  }}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded-full bg-violet-500"></div>
-                                    <span className={cn("text-sm font-medium", currentTheme === 'purple' ? "text-white" : "text-slate-300")}>Purple</span>
+                                    <div
+                                      className="w-4 h-4 rounded-full"
+                                      style={{
+                                        backgroundColor: `rgba(${colorThemes.purple.primary}, 1)`
+                                      }}
+                                    ></div>
+                                    <span className="text-sm font-medium">Purple</span>
                                   </div>
                                 </button>
 
                                 {/* Clean Theme */}
                                 <button
                                   onClick={() => switchTheme('clean')}
-                                  className={cn(
-                                    "p-3 rounded-xl border-2 transition-all duration-200",
-                                    currentTheme === 'clean'
-                                      ? "bg-gradient-to-br from-slate-600/20 to-slate-500/20 border-slate-400/40 hover:border-slate-400/60"
-                                      : "bg-slate-900/30 border-slate-600/30 hover:border-slate-400/40"
-                                  )}
+                                  className="p-3 rounded-xl border-2 transition-all duration-200"
+                                  style={{
+                                    backgroundColor: currentTheme === 'clean'
+                                      ? `rgba(${colorThemes.clean.primary}, 0.2)`
+                                      : `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: currentTheme === 'clean'
+                                      ? `rgba(${colorThemes.clean.primary}, 0.4)`
+                                      : `rgba(${colorThemes.clean.primary}, 0.2)`,
+                                    color: currentTheme === 'clean'
+                                      ? `rgba(${mode.text.primary}, 1)`
+                                      : `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${colorThemes.clean.primary}, 0.6)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = currentTheme === 'clean'
+                                      ? `rgba(${colorThemes.clean.primary}, 0.4)`
+                                      : `rgba(${colorThemes.clean.primary}, 0.2)`;
+                                  }}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded-full bg-slate-500"></div>
-                                    <span className={cn("text-sm font-medium", currentTheme === 'clean' ? "text-white" : "text-slate-300")}>Clean</span>
+                                    <div
+                                      className="w-4 h-4 rounded-full"
+                                      style={{
+                                        backgroundColor: `rgba(${colorThemes.clean.primary}, 1)`
+                                      }}
+                                    ></div>
+                                    <span className="text-sm font-medium">Clean</span>
                                   </div>
                                 </button>
 
                                 {/* Blue Ocean Theme */}
                                 <button
                                   onClick={() => switchTheme('blue')}
-                                  className={cn(
-                                    "p-3 rounded-xl border-2 transition-all duration-200",
-                                    currentTheme === 'blue'
-                                      ? "bg-gradient-to-br from-blue-600/20 to-sky-600/20 border-blue-400/40 hover:border-blue-400/60"
-                                      : "bg-slate-900/30 border-slate-600/30 hover:border-blue-400/40"
-                                  )}
+                                  className="p-3 rounded-xl border-2 transition-all duration-200"
+                                  style={{
+                                    backgroundColor: currentTheme === 'blue'
+                                      ? `rgba(${colorThemes.blue.primary}, 0.2)`
+                                      : `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: currentTheme === 'blue'
+                                      ? `rgba(${colorThemes.blue.primary}, 0.4)`
+                                      : `rgba(${colorThemes.blue.primary}, 0.2)`,
+                                    color: currentTheme === 'blue'
+                                      ? `rgba(${mode.text.primary}, 1)`
+                                      : `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${colorThemes.blue.primary}, 0.6)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = currentTheme === 'blue'
+                                      ? `rgba(${colorThemes.blue.primary}, 0.4)`
+                                      : `rgba(${colorThemes.blue.primary}, 0.2)`;
+                                  }}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-                                    <span className={cn("text-sm font-medium", currentTheme === 'blue' ? "text-white" : "text-slate-300")}>Blue Ocean</span>
+                                    <div
+                                      className="w-4 h-4 rounded-full"
+                                      style={{
+                                        backgroundColor: `rgba(${colorThemes.blue.primary}, 1)`
+                                      }}
+                                    ></div>
+                                    <span className="text-sm font-medium">Blue Ocean</span>
                                   </div>
                                 </button>
 
                                 {/* Green Forest Theme */}
                                 <button
                                   onClick={() => switchTheme('green')}
-                                  className={cn(
-                                    "p-3 rounded-xl border-2 transition-all duration-200",
-                                    currentTheme === 'green'
-                                      ? "bg-gradient-to-br from-green-600/20 to-emerald-600/20 border-green-400/40 hover:border-green-400/60"
-                                      : "bg-slate-900/30 border-slate-600/30 hover:border-green-400/40"
-                                  )}
+                                  className="p-3 rounded-xl border-2 transition-all duration-200"
+                                  style={{
+                                    backgroundColor: currentTheme === 'green'
+                                      ? `rgba(${colorThemes.green.primary}, 0.2)`
+                                      : `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: currentTheme === 'green'
+                                      ? `rgba(${colorThemes.green.primary}, 0.4)`
+                                      : `rgba(${colorThemes.green.primary}, 0.2)`,
+                                    color: currentTheme === 'green'
+                                      ? `rgba(${mode.text.primary}, 1)`
+                                      : `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${colorThemes.green.primary}, 0.6)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = currentTheme === 'green'
+                                      ? `rgba(${colorThemes.green.primary}, 0.4)`
+                                      : `rgba(${colorThemes.green.primary}, 0.2)`;
+                                  }}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                                    <span className={cn("text-sm font-medium", currentTheme === 'green' ? "text-white" : "text-slate-300")}>Green Forest</span>
+                                    <div
+                                      className="w-4 h-4 rounded-full"
+                                      style={{
+                                        backgroundColor: `rgba(${colorThemes.green.primary}, 1)`
+                                      }}
+                                    ></div>
+                                    <span className="text-sm font-medium">Green Forest</span>
                                   </div>
                                 </button>
 
                                 {/* Rose Sunset Theme */}
                                 <button
                                   onClick={() => switchTheme('rose')}
-                                  className={cn(
-                                    "p-3 rounded-xl border-2 transition-all duration-200",
-                                    currentTheme === 'rose'
-                                      ? "bg-gradient-to-br from-rose-600/20 to-orange-600/20 border-rose-400/40 hover:border-rose-400/60"
-                                      : "bg-slate-900/30 border-slate-600/30 hover:border-rose-400/40"
-                                  )}
+                                  className="p-3 rounded-xl border-2 transition-all duration-200"
+                                  style={{
+                                    backgroundColor: currentTheme === 'rose'
+                                      ? `rgba(${colorThemes.rose.primary}, 0.2)`
+                                      : `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: currentTheme === 'rose'
+                                      ? `rgba(${colorThemes.rose.primary}, 0.4)`
+                                      : `rgba(${colorThemes.rose.primary}, 0.2)`,
+                                    color: currentTheme === 'rose'
+                                      ? `rgba(${mode.text.primary}, 1)`
+                                      : `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${colorThemes.rose.primary}, 0.6)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = currentTheme === 'rose'
+                                      ? `rgba(${colorThemes.rose.primary}, 0.4)`
+                                      : `rgba(${colorThemes.rose.primary}, 0.2)`;
+                                  }}
                                 >
                                   <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded-full bg-rose-500"></div>
-                                    <span className={cn("text-sm font-medium", currentTheme === 'rose' ? "text-white" : "text-slate-300")}>Rose Sunset</span>
+                                    <div
+                                      className="w-4 h-4 rounded-full"
+                                      style={{
+                                        backgroundColor: `rgba(${colorThemes.rose.primary}, 1)`
+                                      }}
+                                    ></div>
+                                    <span className="text-sm font-medium">Rose Sunset</span>
                                   </div>
                                 </button>
                               </div>
@@ -1659,31 +1787,40 @@ function DashboardContent({
                         </div>
 
                         {/* Footer - Action Buttons */}
-                        <div className="p-6 border-t border-violet-500/20 flex-shrink-0">
-                          <div className="flex gap-3">
-                            <Button
-                              variant="ghost"
-                              className="flex-1 bg-slate-900/30 border border-slate-600/30 hover:border-slate-500/50 hover:bg-slate-800/50 text-slate-300 hover:text-white transition-all duration-300"
-                            >
-                              <RotateCcw className="h-4 w-4 mr-2" />
-                              Reset to Default
-                            </Button>
-                            <Button
-                              className="flex-1 text-white border-0 shadow-lg transition-all duration-300"
+                        <div
+                          className="p-6 border-t flex-shrink-0"
+                          style={{
+                            borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.2' : '0.15'})`
+                          }}
+                        >
+                          <Button
+                            onClick={resetToDefault}
+                            variant="ghost"
+                            className="w-full border transition-all duration-300"
+                            style={{
+                              backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                              borderColor: `rgba(${theme.primary}, 0.3)`,
+                              color: `rgba(${mode.text.secondary}, 1)`
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.5)`;
+                              e.currentTarget.style.backgroundColor = `rgba(${mode.background.tertiary}, 0.5)`;
+                              e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.3)`;
+                              e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
+                              e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                            }}
+                          >
+                            <RotateCcw
+                              className="h-4 w-4 mr-2"
                               style={{
-                                background: `linear-gradient(to right, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`,
-                                boxShadow: `0 10px 15px -3px rgba(${theme.primary}, 0.25)`,
+                                color: `rgba(${theme.primary}, 1)`
                               }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = `linear-gradient(to right, rgba(${theme.primaryDark}, 1), rgba(${theme.primary}, 1))`;
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = `linear-gradient(to right, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`;
-                              }}
-                            >
-                              Apply Changes
-                            </Button>
-                          </div>
+                            />
+                            Reset to Default
+                          </Button>
                         </div>
                       </div>
                     </SheetContent>
@@ -1737,36 +1874,97 @@ function DashboardContent({
                     {/* Profile Sidebar Content */}
                     <SheetContent
                       side="right"
-                      className="w-80 p-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-l border-violet-500/30"
+                      className="w-80 p-0 border-l"
+                      style={{
+                        background: currentMode === 'dark'
+                          ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
+                          : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
+                        borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.3' : '0.2'})`,
+                      }}
                     >
                       {/* Premium Background Effects */}
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(139,92,246,0.1),transparent)]"></div>
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(236,72,153,0.08),transparent)]"></div>
-                      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`
+                        }}
+                      ></div>
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`
+                        }}
+                      ></div>
+                      <div
+                        className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"
+                        style={{
+                          opacity: currentMode === 'dark' ? 1 : 0.3
+                        }}
+                      ></div>
 
                       <div className="relative h-full flex flex-col">
                         {/* Header */}
-                        <SheetHeader className="p-6 border-b border-violet-500/20 flex-shrink-0">
+                        <SheetHeader
+                          className="p-6 border-b flex-shrink-0"
+                          style={{
+                            borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.2' : '0.15'})`
+                          }}
+                        >
                           <div className="flex items-center gap-4">
                             {avatarSrc ? (
-                              <Avatar className="h-16 w-16 ring-2 ring-violet-400/30">
+                              <Avatar
+                                className="h-16 w-16"
+                                style={{
+                                  border: `2px solid rgba(${theme.primary}, 0.3)`
+                                }}
+                              >
                                 <AvatarImage src={avatarSrc} alt={displayName} />
-                                <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white text-xl font-bold">
+                                <AvatarFallback
+                                  className="text-white text-xl font-bold"
+                                  style={{
+                                    background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`
+                                  }}
+                                >
                                   {avatarFallback}
                                 </AvatarFallback>
                               </Avatar>
                             ) : (
-                              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-xl font-bold ring-2 ring-violet-400/30">
+                              <div
+                                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
+                                style={{
+                                  background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`,
+                                  border: `2px solid rgba(${theme.primary}, 0.3)`
+                                }}
+                              >
                                 {avatarFallback}
                               </div>
                             )}
                             <div className="flex-1">
-                              <SheetTitle className="text-white text-lg font-semibold">
+                              <SheetTitle
+                                className="text-lg font-semibold"
+                                style={{
+                                  color: `rgba(${mode.text.primary}, 1)`
+                                }}
+                              >
                                 {displayName}
                               </SheetTitle>
-                              <p className="text-slate-300 text-sm">{displayEmail}</p>
+                              <p
+                                className="text-sm"
+                                style={{
+                                  color: `rgba(${mode.text.secondary}, 1)`
+                                }}
+                              >
+                                {displayEmail}
+                              </p>
                               <div className="mt-2">
-                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-violet-600/20 text-violet-300 border border-violet-400/20">
+                                <span
+                                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border"
+                                  style={{
+                                    backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                    color: `rgba(${theme.primary}, 1)`,
+                                    borderColor: `rgba(${theme.primary}, 0.2)`
+                                  }}
+                                >
                                   {userRole === "advertiser" ? "Advertiser" : userRole === "creator" ? "Creator" : "Admin"}
                                 </span>
                               </div>
@@ -1784,15 +1982,58 @@ function DashboardContent({
                             {/* Account Plan Section - Only for Advertisers */}
                             {userRole === "advertiser" && (
                               <div className="space-y-3">
-                                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Current Plan</h3>
-                                <div className="p-4 rounded-xl bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-400/30">
+                                <h3
+                                  className="text-sm font-semibold uppercase tracking-wider"
+                                  style={{
+                                    color: `rgba(${mode.text.muted}, 1)`
+                                  }}
+                                >
+                                  Current Plan
+                                </h3>
+                                <div
+                                  className="p-4 rounded-xl border"
+                                  style={{
+                                    background: `linear-gradient(135deg, rgba(${theme.primary}, 0.2), rgba(${theme.primaryDark}, 0.2))`,
+                                    borderColor: `rgba(${theme.primary}, 0.3)`
+                                  }}
+                                >
                                   <div className="flex items-center justify-between">
                                     <div>
-                                      <div className="font-semibold text-white">Free Plan</div>
-                                      <div className="text-xs text-violet-300">Basic features included</div>
+                                      <div
+                                        className="font-semibold"
+                                        style={{
+                                          color: `rgba(${mode.text.primary}, 1)`
+                                        }}
+                                      >
+                                        {currentPlan.name} Plan
+                                      </div>
+                                      <div
+                                        className="text-xs"
+                                        style={{
+                                          color: `rgba(${theme.primary}, 1)`
+                                        }}
+                                      >
+                                        {currentPlan.price === 0
+                                          ? "Basic features included"
+                                          : `$${(currentPlan.price / 100).toFixed(2)}/month`
+                                        }
+                                      </div>
                                     </div>
-                                    <div className="w-10 h-10 rounded-lg bg-violet-600/30 flex items-center justify-center">
-                                      <svg className="h-5 w-5 text-violet-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <div
+                                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                      style={{
+                                        backgroundColor: `rgba(${theme.primary}, 0.3)`
+                                      }}
+                                    >
+                                      <svg
+                                        className="h-5 w-5"
+                                        style={{
+                                          color: `rgba(${theme.primary}, 1)`
+                                        }}
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                                       </svg>
                                     </div>
@@ -1800,7 +2041,16 @@ function DashboardContent({
                                   <Link
                                     href="/dashboard/billing"
                                     onClick={() => setProfileSidebarOpen(false)}
-                                    className="inline-flex items-center gap-2 mt-3 text-xs text-violet-300 hover:text-white transition-colors"
+                                    className="inline-flex items-center gap-2 mt-3 text-xs transition-colors"
+                                    style={{
+                                      color: `rgba(${theme.primary}, 1)`
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.color = `rgba(${theme.primary}, 1)`;
+                                    }}
                                   >
                                     Upgrade Plan
                                     <ChevronRight className="h-3 w-3" />
@@ -1811,34 +2061,101 @@ function DashboardContent({
 
                             {/* Quick Actions */}
                             <div className="space-y-3">
-                              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Quick Actions</h3>
+                              <h3
+                                className="text-sm font-semibold uppercase tracking-wider"
+                                style={{
+                                  color: `rgba(${mode.text.muted}, 1)`
+                                }}
+                              >
+                                Quick Actions
+                              </h3>
                               <div className="space-y-2">
                                 <Link
                                   href="/dashboard/profile"
                                   onClick={() => setProfileSidebarOpen(false)}
-                                  className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/30 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10 transition-all duration-300 text-slate-300 hover:text-white group"
+                                  className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 group"
+                                  style={{
+                                    backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: `rgba(${theme.primary}, 0.2)`,
+                                    color: `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                                    e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                                    e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                                    e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
+                                    e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                                  }}
                                 >
-                                  <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center group-hover:bg-violet-600/30 transition-colors">
-                                    <User className="h-4 w-4" />
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
+                                    style={{
+                                      backgroundColor: `rgba(${theme.primary}, 0.2)`
+                                    }}
+                                  >
+                                    <User
+                                      className="h-4 w-4"
+                                      style={{
+                                        color: `rgba(${theme.primary}, 1)`
+                                      }}
+                                    />
                                   </div>
                                   <div className="flex-1">
                                     <div className="font-medium text-sm">Edit Profile</div>
                                   </div>
-                                  <ChevronRight className="h-3 w-3 text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                                  <ChevronRight
+                                    className="h-3 w-3 transition-all group-hover:translate-x-0.5"
+                                    style={{
+                                      color: `rgba(${mode.text.muted}, 1)`
+                                    }}
+                                  />
                                 </Link>
 
                                 <Link
                                   href="/dashboard/billing"
                                   onClick={() => setProfileSidebarOpen(false)}
-                                  className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/30 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10 transition-all duration-300 text-slate-300 hover:text-white group"
+                                  className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 group"
+                                  style={{
+                                    backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: `rgba(${theme.primary}, 0.2)`,
+                                    color: `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                                    e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                                    e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                                    e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
+                                    e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                                  }}
                                 >
-                                  <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center group-hover:bg-violet-600/30 transition-colors">
-                                    <CreditCard className="h-4 w-4" />
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
+                                    style={{
+                                      backgroundColor: `rgba(${theme.primary}, 0.2)`
+                                    }}
+                                  >
+                                    <CreditCard
+                                      className="h-4 w-4"
+                                      style={{
+                                        color: `rgba(${theme.primary}, 1)`
+                                      }}
+                                    />
                                   </div>
                                   <div className="flex-1">
                                     <div className="font-medium text-sm">Billing & Wallet</div>
                                   </div>
-                                  <ChevronRight className="h-3 w-3 text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                                  <ChevronRight
+                                    className="h-3 w-3 transition-all group-hover:translate-x-0.5"
+                                    style={{
+                                      color: `rgba(${mode.text.muted}, 1)`
+                                    }}
+                                  />
                                 </Link>
 
                                 <button
@@ -1846,43 +2163,88 @@ function DashboardContent({
                                     setProfileSidebarOpen(false);
                                     setSettingsPanelOpen(true);
                                   }}
-                                  className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/30 border border-violet-400/20 hover:border-violet-400/40 hover:bg-violet-600/10 transition-all duration-300 text-slate-300 hover:text-white group w-full"
+                                  className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 group w-full"
+                                  style={{
+                                    backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: `rgba(${theme.primary}, 0.2)`,
+                                    color: `rgba(${mode.text.secondary}, 1)`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                                    e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                                    e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                                    e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
+                                    e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
+                                  }}
                                 >
-                                  <div className="w-8 h-8 rounded-lg bg-violet-600/20 flex items-center justify-center group-hover:bg-violet-600/30 transition-colors">
-                                    <Settings className="h-4 w-4" />
+                                  <div
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
+                                    style={{
+                                      backgroundColor: `rgba(${theme.primary}, 0.2)`
+                                    }}
+                                  >
+                                    <Settings
+                                      className="h-4 w-4"
+                                      style={{
+                                        color: `rgba(${theme.primary}, 1)`
+                                      }}
+                                    />
                                   </div>
                                   <div className="flex-1 text-left">
                                     <div className="font-medium text-sm">Dashboard Settings</div>
                                   </div>
-                                  <ChevronRight className="h-3 w-3 text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                                  <ChevronRight
+                                    className="h-3 w-3 transition-all group-hover:translate-x-0.5"
+                                    style={{
+                                      color: `rgba(${mode.text.muted}, 1)`
+                                    }}
+                                  />
                                 </button>
                               </div>
                             </div>
 
                             {/* Account Status */}
                             <div className="space-y-3">
-                              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Account Status</h3>
-                              <div className={cn(
-                                "p-3 rounded-lg border",
-                                profileData.isActive ? "bg-slate-900/30 border-green-400/20"
-                                  : "bg-slate-900/30 border-red-400/20"
-                              )}>
+                              <h3
+                                className="text-sm font-semibold uppercase tracking-wider"
+                                style={{
+                                  color: `rgba(${mode.text.muted}, 1)`
+                                }}
+                              >
+                                Account Status
+                              </h3>
+                              <div
+                                className="p-3 rounded-lg border"
+                                style={{
+                                  backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                  borderColor: profileData.isActive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(244, 63, 94, 0.2)'
+                                }}
+                              >
                                 <div className="flex items-center gap-2">
-                                  <div className={cn(
-                                    "w-2 h-2 rounded-full",
-                                    profileData.isActive ? "bg-green-400" : "bg-red-400"
-                                  )}></div>
-                                  <span className={cn(
-                                    "text-sm font-medium",
-                                    profileData.isActive ? "text-green-300" : "text-red-300"
-                                  )}>
+                                  <div
+                                    className="w-2 h-2 rounded-full"
+                                    style={{
+                                      backgroundColor: profileData.isActive ? 'rgb(34, 197, 94)' : 'rgb(244, 63, 94)'
+                                    }}
+                                  ></div>
+                                  <span
+                                    className="text-sm font-medium"
+                                    style={{
+                                      color: profileData.isActive ? 'rgb(74, 222, 128)' : 'rgb(251, 113, 133)'
+                                    }}
+                                  >
                                     {profileData.isActive ? "Active" : "Inactive"}
                                   </span>
                                 </div>
-                                <p className={cn(
-                                  "text-xs mt-1",
-                                  profileData.isActive ? "text-green-400/70" : "text-red-400/70"
-                                )}>
+                                <p
+                                  className="text-xs mt-1"
+                                  style={{
+                                    color: profileData.isActive ? 'rgba(34, 197, 94, 0.7)' : 'rgba(244, 63, 94, 0.7)'
+                                  }}
+                                >
                                   {profileData.isActive
                                     ? "Your account is active and fully functional"
                                     : "Your account is currently inactive"
@@ -1894,18 +2256,55 @@ function DashboardContent({
                         </div>
 
                         {/* Footer - Sign Out */}
-                        <div className="p-6 border-t border-violet-500/20 flex-shrink-0">
+                        <div
+                          className="p-6 border-t flex-shrink-0"
+                          style={{
+                            borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.2' : '0.15'})`
+                          }}
+                        >
                           <Button
                             onClick={handleSignOut}
                             variant="ghost"
-                            className="w-full justify-start gap-3 p-3 h-auto bg-red-900/20 border border-red-400/20 hover:border-red-400/40 hover:bg-red-600/10 text-red-300 hover:text-red-200 transition-all duration-300"
+                            className="w-full justify-start gap-3 p-3 h-auto border transition-all duration-300"
+                            style={{
+                              backgroundColor: 'rgba(244, 63, 94, 0.2)',
+                              borderColor: 'rgba(244, 63, 94, 0.2)',
+                              color: 'rgb(251, 113, 133)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                              e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.1)';
+                              e.currentTarget.style.color = 'rgb(248, 113, 113)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.2)';
+                              e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.2)';
+                              e.currentTarget.style.color = 'rgb(251, 113, 133)';
+                            }}
                           >
-                            <div className="w-10 h-10 rounded-lg bg-red-600/20 flex items-center justify-center">
-                              <LogOut className="h-5 w-5" />
+                            <div
+                              className="w-10 h-10 rounded-lg flex items-center justify-center"
+                              style={{
+                                backgroundColor: 'rgba(244, 63, 94, 0.2)'
+                              }}
+                            >
+                              <LogOut
+                                className="h-5 w-5"
+                                style={{
+                                  color: 'rgb(244, 63, 94)'
+                                }}
+                              />
                             </div>
                             <div className="flex-1 text-left">
                               <div className="font-medium">Sign Out</div>
-                              <div className="text-xs text-red-400">End your session</div>
+                              <div
+                                className="text-xs"
+                                style={{
+                                  color: 'rgba(244, 63, 94, 0.8)'
+                                }}
+                              >
+                                End your session
+                              </div>
                             </div>
                           </Button>
                         </div>

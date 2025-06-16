@@ -838,9 +838,23 @@ export function ContestClientPage({
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-200 dark:bg-slate-700/50 rounded-lg p-1">
-            <TabsTrigger value="details" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Contest Details</TabsTrigger>
-            <TabsTrigger value="leaderboard" className="py-2.5 text-sm font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600 data-[state=active]:shadow-md data-[state=active]:text-primary rounded-md transition-all">Leaderboard</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 mb-8 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
+            <TabsTrigger
+              value="details"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+            >
+              Contest Details
+            </TabsTrigger>
+            <TabsTrigger
+              value="leaderboard"
+              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+            >
+              Leaderboard {contest?.contest_type === 'leaderboard' && totalLeaderboardEntries > 0 && (
+                <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                  {totalLeaderboardEntries}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="mt-6 space-y-6">

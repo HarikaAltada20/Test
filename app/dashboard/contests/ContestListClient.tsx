@@ -377,9 +377,19 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
             </div>
 
             <Tabs defaultValue={draftContests.length === 0 ? "published" : "drafts"} className="w-full">
-                <TabsList>
-                    <TabsTrigger value="published">Published ({publishedContests.length})</TabsTrigger>
-                    <TabsTrigger value="drafts">Drafts ({draftContests.length})</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm mb-8">
+                    <TabsTrigger
+                        value="published"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Published <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">({publishedContests.length})</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="drafts"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Drafts <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">({draftContests.length})</Badge>
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="published" className="mt-4">

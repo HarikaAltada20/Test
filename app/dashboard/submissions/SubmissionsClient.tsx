@@ -158,218 +158,258 @@ export default function SubmissionsClient({
                 </div>
             </div>
 
-            <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="mb-6">
-                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7">
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="active">Active</TabsTrigger>
-                    <TabsTrigger value="pending">Pending</TabsTrigger>
-                    <TabsTrigger value="verified">Verified</TabsTrigger>
-                    <TabsTrigger value="rejected">Rejected</TabsTrigger>
-                    <TabsTrigger value="ended">Ended</TabsTrigger>
-                    <TabsTrigger value="paid">Paid</TabsTrigger>
+            {/* Enhanced Tabs with better visual distinction */}
+            <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="mb-8">
+                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
+                    <TabsTrigger
+                        value="all"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        All
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="active"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Active
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="pending"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Pending
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="verified"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Verified
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="rejected"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Rejected
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="ended"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Ended
+                    </TabsTrigger>
+                    <TabsTrigger
+                        value="paid"
+                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                    >
+                        Paid
+                    </TabsTrigger>
                 </TabsList>
-            </Tabs>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>{filterDisplayInfo[statusFilter].title}</CardTitle>
-                    <CardDescription>{filterDisplayInfo[statusFilter].description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {filteredSubmissions && filteredSubmissions.length > 0 ? (
-                        <div className="space-y-6">
-                            {filteredSubmissions.map((submission) => {
-                                const contest = submission.contests;
-                                // Correctly extract the nested cpm_contest object and type it
-                                const cpmConfig = contest?.contest_type === 'cpm' && contest.contest_based_details && typeof contest.contest_based_details === 'object' && contest.contest_based_details !== null && 'cpm_contest' in contest.contest_based_details
-                                    ? contest.contest_based_details.cpm_contest as unknown as CpmContestDetails
-                                    : null;
+                <TabsContent value={statusFilter} className="space-y-4">
+                    <Card className="shadow-sm">
+                        <CardHeader className="pb-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-xl font-bold">{filterDisplayInfo[statusFilter].title}</CardTitle>
+                                    <CardDescription className="mt-1">{filterDisplayInfo[statusFilter].description}</CardDescription>
+                                </div>
+                                <Badge variant="secondary" className="px-3 py-1 text-sm font-medium">
+                                    {filteredSubmissions.length} submission{filteredSubmissions.length !== 1 ? 's' : ''}
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid gap-6">
+                                {filteredSubmissions.map((submission) => {
+                                    const contest = submission.contests;
+                                    // Correctly extract the nested cpm_contest object and type it
+                                    const cpmConfig = contest?.contest_type === 'cpm' && contest.contest_based_details && typeof contest.contest_based_details === 'object' && contest.contest_based_details !== null && 'cpm_contest' in contest.contest_based_details
+                                        ? contest.contest_based_details.cpm_contest as unknown as CpmContestDetails
+                                        : null;
 
-                                const displayStatus = getDisplayStatus(submission);
-                                const views = submission.views ?? 0;
-                                const contestId = submission.contests?.id;
-                                const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
+                                    const displayStatus = getDisplayStatus(submission);
+                                    const views = submission.views ?? 0;
+                                    const contestId = submission.contests?.id;
+                                    const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
 
-                                let primaryEarningsDisplay: React.ReactNode | null = null;
+                                    let primaryEarningsDisplay: React.ReactNode | null = null;
 
-                                if (contest?.contest_type === 'cpm') {
-                                    let cpmLabel = "";
-                                    let cpmAmount: string | number = "0.00";
-
-                                    if (submission.status === 'paid') {
-                                        cpmLabel = "Paid";
-                                        cpmAmount = submission.earnings?.toFixed(2) || "0.00";
-                                    } else if (submission.status === 'rejected') {
-                                        cpmLabel = isEnded ? "Earnings" : "Est. Earnings";
-                                        cpmAmount = "0.00";
-                                    } else { // pending or verified
-                                        let effectiveViews = views;
-                                        if (cpmConfig?.min_views != null && views < cpmConfig.min_views) {
-                                            effectiveViews = 0;
-                                        } else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) {
-                                            effectiveViews = cpmConfig.max_views;
-                                        }
-                                        const calculatedEarnings = (effectiveViews * (cpmConfig?.cpm_rate_usd || 0) / 1000);
-                                        cpmAmount = calculatedEarnings.toFixed(2);
-                                        if (isEnded) {
-                                            cpmLabel = "Final Earnings";
-                                        } else {
-                                            cpmLabel = "Est. Earnings";
-                                        }
-                                    }
-                                    primaryEarningsDisplay = (
-                                        <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                            {cpmLabel}: <span className="text-base">${cpmAmount}</span> USD
-                                        </p>
-                                    );
-
-                                } else if (contest?.contest_type === 'leaderboard') {
-                                    if (!isEnded) { // LIVE Leaderboard
-                                        if (contestId) {
-                                            primaryEarningsDisplay = (
-                                                <Link href={`/dashboard/opportunities/${contestId}#leaderboard`} className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block">
-                                                    View contest for leaderboard standing.
-                                                </Link>
-                                            );
-                                        }
-                                    } else { // ENDED Leaderboard
-                                        // Uses the new contest.post_contest_status field
-                                        const postContestStatus = submission.contests?.post_contest_status as string | undefined;
-                                        const calculatedAmount = submission.earnings?.toFixed(2) || "0.00";
-                                        let leaderBoardLabel = "";
+                                    if (contest?.contest_type === 'cpm') {
+                                        let cpmLabel = "";
+                                        let cpmAmount: string | number = "0.00";
 
                                         if (submission.status === 'paid') {
-                                            leaderBoardLabel = "Paid";
-                                        } else {
-                                            switch (postContestStatus) {
-                                                case 'pending_review':
-                                                case 'in_review':
-                                                    leaderBoardLabel = "Est. Earnings";
-                                                    break;
-                                                case 'verification_complete':
-                                                case 'payouts_processed':
-                                                    leaderBoardLabel = "Final Earnings";
-                                                    break;
-                                                default: // Fallback if post_contest_status is not set or has an unexpected value
-                                                    leaderBoardLabel = "Earnings";
+                                            cpmLabel = "Paid";
+                                            cpmAmount = submission.earnings?.toFixed(2) || "0.00";
+                                        } else if (submission.status === 'rejected') {
+                                            cpmLabel = isEnded ? "Earnings" : "Est. Earnings";
+                                            cpmAmount = "0.00";
+                                        } else { // pending or verified
+                                            let effectiveViews = views;
+                                            if (cpmConfig?.min_views != null && views < cpmConfig.min_views) {
+                                                effectiveViews = 0;
+                                            } else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) {
+                                                effectiveViews = cpmConfig.max_views;
+                                            }
+                                            const calculatedEarnings = (effectiveViews * (cpmConfig?.cpm_rate_usd || 0) / 1000);
+                                            cpmAmount = calculatedEarnings.toFixed(2);
+                                            if (isEnded) {
+                                                cpmLabel = "Final Earnings";
+                                            } else {
+                                                cpmLabel = "Est. Earnings";
                                             }
                                         }
                                         primaryEarningsDisplay = (
                                             <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                                {leaderBoardLabel}: <span className="text-base">${calculatedAmount}</span> USD
+                                                {cpmLabel}: <span className="text-base">${cpmAmount}</span> USD
                                             </p>
                                         );
-                                    }
-                                }
-                                // If contest_type is other than 'cpm' or 'leaderboard', primaryEarningsDisplay remains null.
 
-                                return (
-                                    <div
-                                        key={submission.id}
-                                        className="border rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
-                                    >
-                                        <div className="flex items-center space-x-4 flex-grow">
-                                            {submission.video_thumbnail_url ? (
-                                                <Image
-                                                    src={submission.video_thumbnail_url}
-                                                    alt={submission.video_title || 'Video thumbnail'}
-                                                    width={80}
-                                                    height={45}
-                                                    className="rounded object-cover aspect-video"
-                                                />
-                                            ) : (
-                                                <div className="w-[80px] h-[45px] rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                                    <Video className="h-6 w-6 text-gray-400 dark:text-gray-500" />
-                                                </div>
-                                            )}
-                                            <div className="flex-grow">
-                                                {contestId ? (
-                                                    <Link href={`/dashboard/opportunities/${contestId}`} className="hover:underline">
-                                                        <p className="text-md font-semibold text-primary dark:text-sky-400">
+                                    } else if (contest?.contest_type === 'leaderboard') {
+                                        if (!isEnded) { // LIVE Leaderboard
+                                            if (contestId) {
+                                                primaryEarningsDisplay = (
+                                                    <Link href={`/dashboard/opportunities/${contestId}#leaderboard`} className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block">
+                                                        View contest for leaderboard standing.
+                                                    </Link>
+                                                );
+                                            }
+                                        } else { // ENDED Leaderboard
+                                            // Uses the new contest.post_contest_status field
+                                            const postContestStatus = submission.contests?.post_contest_status as string | undefined;
+                                            const calculatedAmount = submission.earnings?.toFixed(2) || "0.00";
+                                            let leaderBoardLabel = "";
+
+                                            if (submission.status === 'paid') {
+                                                leaderBoardLabel = "Paid";
+                                            } else {
+                                                switch (postContestStatus) {
+                                                    case 'pending_review':
+                                                    case 'in_review':
+                                                        leaderBoardLabel = "Est. Earnings";
+                                                        break;
+                                                    case 'verification_complete':
+                                                    case 'payouts_processed':
+                                                        leaderBoardLabel = "Final Earnings";
+                                                        break;
+                                                    default: // Fallback if post_contest_status is not set or has an unexpected value
+                                                        leaderBoardLabel = "Earnings";
+                                                }
+                                            }
+                                            primaryEarningsDisplay = (
+                                                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                                    {leaderBoardLabel}: <span className="text-base">${calculatedAmount}</span> USD
+                                                </p>
+                                            );
+                                        }
+                                    }
+                                    // If contest_type is other than 'cpm' or 'leaderboard', primaryEarningsDisplay remains null.
+
+                                    return (
+                                        <div
+                                            key={submission.id}
+                                            className="border rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
+                                        >
+                                            <div className="flex items-center space-x-4 flex-grow">
+                                                {submission.video_thumbnail_url ? (
+                                                    <Image
+                                                        src={submission.video_thumbnail_url}
+                                                        alt={submission.video_title || 'Video thumbnail'}
+                                                        width={80}
+                                                        height={45}
+                                                        className="rounded object-cover aspect-video"
+                                                    />
+                                                ) : (
+                                                    <div className="w-[80px] h-[45px] rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                                        <Video className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                                                    </div>
+                                                )}
+                                                <div className="flex-grow">
+                                                    {contestId ? (
+                                                        <Link href={`/dashboard/opportunities/${contestId}`} className="hover:underline">
+                                                            <p className="text-md font-semibold text-primary dark:text-sky-400">
+                                                                {contest?.title || 'Contest Title N/A'}
+                                                            </p>
+                                                        </Link>
+                                                    ) : (
+                                                        <p className="text-md font-semibold">
                                                             {contest?.title || 'Contest Title N/A'}
                                                         </p>
-                                                    </Link>
-                                                ) : (
-                                                    <p className="text-md font-semibold">
-                                                        {contest?.title || 'Contest Title N/A'}
-                                                    </p>
-                                                )}
-                                                <div className="text-xs text-muted-foreground mt-1">
-                                                    <span>Submitted on{" "}
-                                                        {submission.formatted_created_at || 'Date N/A'} |{" "}
-                                                    </span>
-                                                    <Badge variant="outline" className="ml-1 text-xs">
-                                                        {submission.platform ? submission.platform.charAt(0).toUpperCase() + submission.platform.slice(1) : 'N/A'}
-                                                    </Badge>
-                                                    {contest?.contest_type && (
-                                                        <Badge variant={contest.contest_type === 'cpm' ? "secondary" : "default"} className="ml-1 text-xs">
-                                                            {contest.contest_type.toUpperCase()}
-                                                        </Badge>
                                                     )}
-                                                    {isEnded && submission.contests?.post_contest_status && postContestStatusMap[submission.contests.post_contest_status] && (
-                                                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                                            Contest Stage: <span className="font-medium">{postContestStatusMap[submission.contests.post_contest_status]}</span>
-                                                        </div>
+                                                    <div className="text-xs text-muted-foreground mt-1">
+                                                        <span>Submitted on{" "}
+                                                            {submission.formatted_created_at || 'Date N/A'} |{" "}
+                                                        </span>
+                                                        <Badge variant="outline" className="ml-1 text-xs">
+                                                            {submission.platform ? submission.platform.charAt(0).toUpperCase() + submission.platform.slice(1) : 'N/A'}
+                                                        </Badge>
+                                                        {contest?.contest_type && (
+                                                            <Badge variant={contest.contest_type === 'cpm' ? "secondary" : "default"} className="ml-1 text-xs">
+                                                                {contest.contest_type.toUpperCase()}
+                                                            </Badge>
+                                                        )}
+                                                        {isEnded && submission.contests?.post_contest_status && postContestStatusMap[submission.contests.post_contest_status] && (
+                                                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                                Contest Stage: <span className="font-medium">{postContestStatusMap[submission.contests.post_contest_status]}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
+                                                <div className="text-sm text-left sm:text-right p-3 rounded-md bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 min-w-[200px]">
+                                                    <p className="font-medium text-slate-700 dark:text-slate-300">{views.toLocaleString()} views</p>
+
+                                                    {primaryEarningsDisplay}
+
+                                                    <Badge
+                                                        className={`mt-2 text-xs ${getStatusBadgeColor(submission.status, contest?.end_date)}`}
+                                                    >
+                                                        {displayStatus}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                                    <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
+                                                        <Link
+                                                            href={submission.content_link || '#'}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className={`flex items-center justify-center ${!submission.content_link ? 'pointer-events-none opacity-50' : ''}`}
+                                                        >
+                                                            <ExternalLink className="h-4 w-4 mr-1.5" /> View Content
+                                                        </Link>
+                                                    </Button>
+                                                    {contestId && (
+                                                        <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
+                                                            <Link href={`/dashboard/opportunities/${contestId}`} className="flex items-center justify-center">
+                                                                <Info className="h-4 w-4 mr-1.5" /> View Contest
+                                                            </Link>
+                                                        </Button>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                                        <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
-                                            <div className="text-sm text-left sm:text-right p-3 rounded-md bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 min-w-[200px]">
-                                                <p className="font-medium text-slate-700 dark:text-slate-300">{views.toLocaleString()} views</p>
-
-                                                {primaryEarningsDisplay}
-
-                                                <Badge
-                                                    className={`mt-2 text-xs ${getStatusBadgeColor(submission.status, contest?.end_date)}`}
-                                                >
-                                                    {displayStatus}
-                                                </Badge>
-                                            </div>
-                                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                                <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
-                                                    <Link
-                                                        href={submission.content_link || '#'}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className={`flex items-center justify-center ${!submission.content_link ? 'pointer-events-none opacity-50' : ''}`}
-                                                    >
-                                                        <ExternalLink className="h-4 w-4 mr-1.5" /> View Content
-                                                    </Link>
-                                                </Button>
-                                                {contestId && (
-                                                    <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
-                                                        <Link href={`/dashboard/opportunities/${contestId}`} className="flex items-center justify-center">
-                                                            <Info className="h-4 w-4 mr-1.5" /> View Contest
-                                                        </Link>
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="text-center py-12">
-                            <Video className="mx-auto h-12 w-12 text-gray-400" />
-                            <h3 className="mt-2 text-lg font-medium">No submissions found</h3>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                Try adjusting your filters or find new opportunities.
+                    {filteredSubmissions.length === 0 && (
+                        <div className="col-span-full text-center py-12">
+                            <Video className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                            <h2 className="text-xl font-medium mb-2">No submissions found</h2>
+                            <p className="text-muted-foreground mb-4">
+                                You haven't submitted any content for contests matching the current filter criteria.
                             </p>
-                            {allSubmissions.length > 0 && (
-                                <Button variant="link" onClick={() => { setContestTypeFilter('all'); setStatusFilter('all'); setPlatformFilter('all'); }} className="mt-2">
-                                    Clear all filters
-                                </Button>
-                            )}
-                            <Button className="mt-4" asChild>
-                                <Link href="/dashboard/opportunities">Find Opportunities</Link>
+                            <Button asChild>
+                                <Link href="/dashboard/opportunities">Browse Opportunities</Link>
                             </Button>
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 } 
