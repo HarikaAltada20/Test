@@ -256,11 +256,6 @@ export default function CreateContestPage({
     setShowRulesPreview(!showRulesPreview);
   };
 
-  // Function to manually save content without toggling preview
-  const saveCurrentContent = () => {
-    captureBriefContent();
-    toast({ title: "Success", description: "Content saved successfully!" });
-  };
 
   // Function to clear toast error when user starts interacting
   const clearToastError = () => {
@@ -418,8 +413,9 @@ export default function CreateContestPage({
     let prepTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
     try {
-      if (isDraft && !title) {
-        setFormFeedback("Title is required even for drafts"); // Footer feedback
+      // Basic validation for drafts - only require title
+      if (isDraft && !title.trim()) {
+        setFormFeedback("Title is required to save draft");
         setFormFeedbackType("error");
         setIsLoading(false);
         setUploadProgress(null);
@@ -490,7 +486,7 @@ export default function CreateContestPage({
         };
       }
 
-      // Only run these validations if we're not in draft mode
+      // Only run comprehensive validations if we're submitting for approval
       if (!isDraft) {
         setUploadProgress("Preparing contest...");
         prepTimeoutId = setTimeout(() => {
@@ -526,36 +522,33 @@ export default function CreateContestPage({
           }
         }
 
-        // TODO: Add validation for maximum active contests if needed
-        // This would require fetching the current count of active contests for the user
-        // and comparing it against planFeatures.maxActiveContests
-
         if (!thumbnail && !thumbnailPreview) {
-          setFormFeedback("Contest thumbnail is required");
+          setFormFeedback("Contest thumbnail is required for submission");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
-        if (!brief) {
-          setFormFeedback("Contest brief is required");
+
+        // Capture content before validation
+        const currentBrief = captureBriefContent();
+        const briefToValidate = currentBrief || briefHtml;
+
+        if (!briefToValidate || isQuillEmpty(briefToValidate)) {
+          setFormFeedback("Contest brief is required for submission");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
+
         // Capture rules content before validation
         const currentRulesHtml = captureRulesContent();
-        // Also check the existing rulesHtml state as fallback
         const rulesToValidate = currentRulesHtml || rulesHtml;
 
-        console.log("Rules validation - currentRulesHtml:", currentRulesHtml?.substring(0, 100));
-        console.log("Rules validation - rulesHtml state:", rulesHtml?.substring(0, 100));
-        console.log("Rules validation - final rulesToValidate:", rulesToValidate?.substring(0, 100));
-
         if (!rulesToValidate || isQuillEmpty(rulesToValidate)) {
-          setFormFeedback("Contest rules are required");
+          setFormFeedback("Contest rules are required for submission");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
 
-        // Validate that at least one resource is provided (either uploaded asset or external link)
+        // Validate that at least one resource is provided
         const hasUploadedAssets = Object.keys(resources).some(key =>
           resources[key] && (resources[key].startsWith('data:') || resources[key].includes('supabase'))
         );
@@ -564,39 +557,44 @@ export default function CreateContestPage({
         );
 
         if (!hasUploadedAssets && !hasExternalLinks) {
-          setFormFeedback("Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements");
+          setFormFeedback("At least one resource is required for submission - upload an asset OR add an external resource link");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
 
         if (!startDate || !startTime || !endDate || !endTime) {
-          setFormFeedback("Contest start and end dates/times are required for publishing");
+          setFormFeedback("Contest start and end dates/times are required for submission");
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
+
         try {
           const startDateTime = new Date(`${startDate}T${startTime}`);
           const endDateTime = new Date(`${endDate}T${endTime}`);
           const now = new Date();
+
           if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
             setFormFeedback("Invalid date or time format. Please check your entries.");
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
+
           if (startDateTime < now) {
             setFormFeedback("Contest start time must be in the future");
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
+
           if (endDateTime <= startDateTime) {
             setFormFeedback("Contest end time must be after the start time");
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
+
           const durationMs = endDateTime.getTime() - startDateTime.getTime();
           const oneDayMs = 24 * 60 * 60 * 1000;
-          if (durationMs < oneDayMs) {
-            setFormFeedback("Contest duration must be at least 1 day");
+          if (durationMs <= oneDayMs) {
+            setFormFeedback("Contest duration must be more than 24 hours (at least 1 day gap)");
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
@@ -728,11 +726,12 @@ export default function CreateContestPage({
         resources,
         inspiration_links: inspirationLinks,
         subscription_plan_of_user: userPlan,
-        is_draft: isDraft,
+        moderation_status: isDraft ? 'draft' : 'pending_approval', // Draft or submit for approval
+        submitted_for_approval_at: isDraft ? null : new Date().toISOString(),
         start_date: formattedStartDate,
         end_date: formattedEndDate,
-        contest_type: contestType, // Added contest_type
-        contest_based_details: contestBasedDetails, // Added contest_based_details
+        contest_type: contestType,
+        contest_based_details: contestBasedDetails,
       };
 
       let responseData, responseError;
@@ -753,17 +752,23 @@ export default function CreateContestPage({
       }
 
       if (!isDraft) {
-        setUploadProgress("Contest created successfully! Redirecting...");
+        setUploadProgress("Contest submitted for review! Redirecting...");
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
-        toast({ title: "Success", description: "Contest created successfully!" });
-        setTimeout(() => { router.push("/dashboard/contests"); }, 1000);
+        toast({
+          title: "Contest Submitted!",
+          description: "Your contest has been submitted for admin review. You'll be notified once it's approved."
+        });
+        const contestId = responseData?.[0]?.id;
+        setTimeout(() => {
+          router.push(contestId ? `/dashboard/contests/${contestId}` : "/dashboard/contests");
+        }, 1500);
       } else {
         // This 'else' block is for draft saving if handleSubmit is directly called with isDraft=true.
         setResourceFiles({});
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
         setIsLoading(false);
         setUploadProgress(null);
-        toast({ title: "Success", description: "Draft saved successfully!" });
+        toast({ title: "Draft Saved", description: "Your contest draft has been saved successfully!" });
       }
     } catch (err: any) {
       console.error("Error submitting contest:", err);
@@ -1016,7 +1021,6 @@ export default function CreateContestPage({
   };
 
   const isNextDisabled = () => {
-    const planFeatures = getPlanFeatures(userPlan); // Add this line to fix undefined planFeatures
 
     if (step === "basics") return !title || (!thumbnail && !thumbnailPreview); // Updated to match nextStep validation
     if (step === "brief") {
@@ -1195,7 +1199,7 @@ export default function CreateContestPage({
         .from("contests")
         .select("*")
         .eq("advertiser_id", userId)
-        .eq("is_draft", true)
+        .eq("moderation_status", "draft")
         .order("created_at", { ascending: false })
         .limit(1);
 
@@ -1628,79 +1632,395 @@ export default function CreateContestPage({
         <CardContent className="space-y-6">
 
           {/* Current Plan Details */}
-          <div className="border rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-medium mb-4">Your Current Plan</h3>
-            {currentPlan ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={`w-14 h-14 rounded-full flex items-center justify-center ${userPlan === subscriptionPlans[0].id
-                      ? "bg-gray-300" // Free plan
-                      : userPlan === subscriptionPlans[1].id
-                        ? "bg-bronze-500" // Bronze plan
-                        : userPlan === subscriptionPlans[2].id
-                          ? "bg-silver-500" // Silver plan
-                          : userPlan === subscriptionPlans[3].id
-                            ? "bg-yellow-500" // Gold plan
-                            : userPlan === subscriptionPlans[4].id
-                              ? "bg-yellow-400" // Platinum plan
-                              : userPlan === subscriptionPlans[5].id
-                                ? "bg-blue-500" // Diamond plan
-                                : "bg-gray-300"
-                      }`}
+          <div className={`relative overflow-hidden border-2 rounded-2xl p-8 mb-8 shadow-xl ${currentPlan && currentPlan.price === 0
+            ? "bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 border-gray-300" // Free plan - muted colors
+            : currentPlan && currentPlan.price <= 10000
+              ? "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 border-orange-200" // Bronze plan - warm colors  
+              : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200/50" // Higher plans - premium colors
+            }`}>
+            {/* Background decorative elements */}
+            <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl ${currentPlan && currentPlan.price === 0
+              ? "bg-gradient-to-br from-gray-300/20 to-gray-400/20" // Free plan
+              : currentPlan && currentPlan.price <= 10000
+                ? "bg-gradient-to-br from-orange-300/20 to-amber-400/20" // Bronze plan
+                : "bg-gradient-to-br from-blue-400/20 to-purple-400/20" // Higher plans
+              }`}></div>
+            <div className={`absolute bottom-0 left-0 w-32 h-32 rounded-full blur-2xl ${currentPlan && currentPlan.price === 0
+              ? "bg-gradient-to-br from-gray-400/15 to-slate-400/15" // Free plan
+              : currentPlan && currentPlan.price <= 10000
+                ? "bg-gradient-to-br from-amber-400/15 to-orange-400/15" // Bronze plan  
+                : "bg-gradient-to-br from-indigo-400/15 to-pink-400/15" // Higher plans
+              }`}></div>
 
-                  >
-                    <Trophy className="h-6 w-6 text-white" />
+            <div className="relative z-10">
+              {/* Header Section */}
+              <div className="flex items-start justify-between mb-8">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-2xl shadow-lg ${currentPlan && currentPlan.price === 0
+                    ? "bg-gradient-to-br from-gray-500 to-gray-600" // Free plan
+                    : currentPlan && currentPlan.price <= 10000
+                      ? "bg-gradient-to-br from-amber-500 to-orange-600" // Bronze plan
+                      : "bg-gradient-to-br from-blue-600 to-purple-600" // Higher plans
+                    }`}>
+                    <Trophy className="h-8 w-8 text-white" />
                   </div>
                   <div>
-                    <h4 className="text-xl font-bold">
-                      {currentPlan.name || "FREE"} Plan
-                    </h4>
-                    <p className="text-sm text-gray-500">
-                      {formatCurrency(currentPlan.price)}/month
+                    <h3 className="text-2xl font-bold text-gray-900 mb-2">Your Current Subscription Plan</h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                      {currentPlan && currentPlan.price === 0 ? (
+                        <>Get started with basic features. <span className="font-medium text-orange-600">Upgrade for better rates and more flexibility!</span></>
+                      ) : currentPlan && currentPlan.price <= 10000 ? (
+                        <>Good for small campaigns. <span className="font-medium text-blue-600">Higher plans offer better commission rates!</span></>
+                      ) : (
+                        <>Your plan determines contest limits, commission rates, and available features. Higher plans offer better rates and more flexibility for your marketing campaigns.</>
+                      )}
                     </p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Max Winners Per Contest:</span>
-                    <span className="font-medium">
-                      {planFeatures.maxWinnersPerContest}
-                    </span>
+              </div>
+
+              {currentPlan ? (
+                <div className="space-y-8">
+                  {/* Plan Header Card */}
+                  <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg ${currentPlan.price === 0
+                    ? "bg-white/90 border-gray-200" // Free plan
+                    : currentPlan.price <= 10000
+                      ? "bg-white/90 border-orange-200" // Bronze plan
+                      : "bg-white/80 border-gray-200/50" // Higher plans
+                    }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-6">
+                        <div
+                          className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${userPlan === subscriptionPlans[0].id
+                            ? "bg-gradient-to-br from-gray-500 to-gray-600" // Free plan
+                            : userPlan === subscriptionPlans[1].id
+                              ? "bg-gradient-to-br from-amber-500 to-orange-600" // Bronze plan
+                              : userPlan === subscriptionPlans[2].id
+                                ? "bg-gradient-to-br from-gray-400 to-slate-500" // Silver plan
+                                : userPlan === subscriptionPlans[3].id
+                                  ? "bg-gradient-to-br from-yellow-400 to-orange-500" // Gold plan
+                                  : userPlan === subscriptionPlans[4].id
+                                    ? "bg-gradient-to-br from-purple-500 to-indigo-600" // Platinum plan
+                                    : userPlan === subscriptionPlans[5].id
+                                      ? "bg-gradient-to-br from-blue-500 to-cyan-600" // Diamond plan
+                                      : "bg-gradient-to-br from-gray-500 to-gray-600"
+                            }`}
+                        >
+                          <Trophy className="h-8 w-8 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-2xl font-bold text-gray-900 mb-1">
+                            {currentPlan.name || "FREE"} Plan
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-3xl font-bold ${currentPlan.price === 0 ? "text-gray-600" : "text-blue-600"
+                              }`}>
+                              {formatCurrency(currentPlan.price)}
+                            </span>
+                            <span className="text-lg text-gray-500">/month</span>
+                            {currentPlan.price === 0 && (
+                              <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium">
+                                Limited Features
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        {currentPlan.price > 0 ? (
+                          <>
+                            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
+                              ✓ Active Subscription
+                            </div>
+                            <p className="text-xs text-gray-500">Billed monthly</p>
+                          </>
+                        ) : (
+                          <>
+                            <div className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-semibold">
+                              Free Plan
+                            </div>
+                            <p className="text-xs text-orange-600 font-medium">Consider upgrading</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Min Budget Per Contest:</span>
-                    <span className="font-medium">
-                      {formatCurrency(planFeatures.minContestBudget)}
-                    </span>
+
+                  {/* Plan Features with Descriptions */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Max Winners Feature */}
+                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.maxWinnersPerContest <= 3
+                      ? "bg-orange-50/80 border-orange-200" // Limited feature - warm warning
+                      : "bg-white/80 border-gray-200/50"
+                      }`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.maxWinnersPerContest <= 3
+                          ? "bg-gradient-to-br from-orange-500 to-orange-600" // Limited
+                          : "bg-gradient-to-br from-blue-500 to-blue-600" // Good
+                          }`}>
+                          <span className="text-white font-bold text-lg">W</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-lg font-semibold text-gray-900">Maximum Winners</h5>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-2xl font-bold ${planFeatures.maxWinnersPerContest <= 3 ? "text-orange-600" : "text-blue-600"
+                                }`}>
+                                {planFeatures.maxWinnersPerContest === Infinity ? '∞' : planFeatures.maxWinnersPerContest}
+                              </span>
+                              {planFeatures.maxWinnersPerContest <= 3 && (
+                                <span className="text-orange-500 text-sm">⚠️</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            The maximum number of creators you can reward in a single contest. More winners means broader reach and engagement for your brand.
+                          </p>
+                          <div className={`mt-3 text-xs font-medium ${planFeatures.maxWinnersPerContest <= 3
+                            ? "text-orange-600"
+                            : "text-blue-600"
+                            }`}>
+                            {planFeatures.maxWinnersPerContest <= 3
+                              ? "⚡ Upgrade for more winner slots!"
+                              : "💡 Tip: More winners = higher participation rates"
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Min Budget Feature */}
+                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.minContestBudget >= 10000
+                      ? "bg-orange-50/80 border-orange-200" // High minimum - warning
+                      : "bg-white/80 border-gray-200/50"
+                      }`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.minContestBudget >= 10000
+                          ? "bg-gradient-to-br from-orange-500 to-red-600" // High minimum
+                          : "bg-gradient-to-br from-green-500 to-emerald-600" // Low minimum
+                          }`}>
+                          <span className="text-white font-bold text-lg">$</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-lg font-semibold text-gray-900">Minimum Budget</h5>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-2xl font-bold ${planFeatures.minContestBudget >= 10000 ? "text-orange-600" : "text-green-600"
+                                }`}>
+                                {formatCurrency(planFeatures.minContestBudget)}
+                              </span>
+                              {planFeatures.minContestBudget >= 10000 && (
+                                <span className="text-orange-500 text-sm">⚠️</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            The minimum total prize pool required to create a contest. Lower minimums give you more flexibility for smaller campaigns.
+                          </p>
+                          <div className={`mt-3 text-xs font-medium ${planFeatures.minContestBudget >= 10000
+                            ? "text-orange-600"
+                            : "text-green-600"
+                            }`}>
+                            {planFeatures.minContestBudget >= 10000
+                              ? "⚡ Upgrade for lower minimum budgets!"
+                              : "💡 Tip: Start with smaller budgets to test campaigns"
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Active Contests Feature */}
+                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.maxActiveContests <= 1
+                      ? "bg-red-50/80 border-red-200" // Very limited - red warning
+                      : planFeatures.maxActiveContests <= 5
+                        ? "bg-orange-50/80 border-orange-200" // Limited - orange warning
+                        : "bg-white/80 border-gray-200/50"
+                      }`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.maxActiveContests <= 1
+                          ? "bg-gradient-to-br from-red-500 to-red-600" // Very limited
+                          : planFeatures.maxActiveContests <= 5
+                            ? "bg-gradient-to-br from-orange-500 to-orange-600" // Limited
+                            : "bg-gradient-to-br from-purple-500 to-indigo-600" // Good
+                          }`}>
+                          <span className="text-white font-bold text-lg">C</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-lg font-semibold text-gray-900">Active Contests</h5>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-2xl font-bold ${planFeatures.maxActiveContests <= 1
+                                ? "text-red-600"
+                                : planFeatures.maxActiveContests <= 5
+                                  ? "text-orange-600"
+                                  : "text-purple-600"
+                                }`}>
+                                {planFeatures.maxActiveContests === Infinity ? '∞' : planFeatures.maxActiveContests}
+                              </span>
+                              {planFeatures.maxActiveContests <= 5 && (
+                                <span className={`text-sm ${planFeatures.maxActiveContests <= 1 ? "text-red-500" : "text-orange-500"
+                                  }`}>⚠️</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            How many contests you can run simultaneously. Run multiple campaigns to maximize your brand's exposure across different audiences.
+                          </p>
+                          <div className={`mt-3 text-xs font-medium ${planFeatures.maxActiveContests <= 1
+                            ? "text-red-600"
+                            : planFeatures.maxActiveContests <= 5
+                              ? "text-orange-600"
+                              : "text-purple-600"
+                            }`}>
+                            {planFeatures.maxActiveContests <= 1
+                              ? "🚨 Only 1 contest allowed - upgrade now!"
+                              : planFeatures.maxActiveContests <= 5
+                                ? "⚡ Upgrade for more simultaneous campaigns!"
+                                : "💡 Tip: Run parallel campaigns for different products"
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Commission Feature */}
+                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.commisionPercentage >= 40
+                      ? "bg-red-50/80 border-red-200" // Very high commission - red warning
+                      : planFeatures.commisionPercentage >= 20
+                        ? "bg-orange-50/80 border-orange-200" // High commission - orange warning  
+                        : "bg-white/80 border-gray-200/50"
+                      }`}>
+                      <div className="flex items-start gap-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.commisionPercentage >= 40
+                          ? "bg-gradient-to-br from-red-500 to-red-600" // Very high commission
+                          : planFeatures.commisionPercentage >= 20
+                            ? "bg-gradient-to-br from-orange-500 to-red-600" // High commission
+                            : "bg-gradient-to-br from-green-500 to-emerald-600" // Low commission
+                          }`}>
+                          <span className="text-white font-bold text-lg">%</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="text-lg font-semibold text-gray-900">Platform Commission</h5>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-2xl font-bold ${planFeatures.commisionPercentage >= 40
+                                ? "text-red-600"
+                                : planFeatures.commisionPercentage >= 20
+                                  ? "text-orange-600"
+                                  : "text-green-600"
+                                }`}>
+                                {planFeatures.commisionPercentage}%
+                              </span>
+                              {planFeatures.commisionPercentage >= 20 && (
+                                <span className={`text-sm ${planFeatures.commisionPercentage >= 40 ? "text-red-500" : "text-orange-500"
+                                  }`}>⚠️</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed">
+                            Our service fee taken from your total prize pool. Higher-tier plans have lower commission rates, saving you money on larger campaigns.
+                          </p>
+                          <div className={`mt-3 text-xs font-medium ${planFeatures.commisionPercentage >= 40
+                            ? "text-red-600"
+                            : planFeatures.commisionPercentage >= 20
+                              ? "text-orange-600"
+                              : "text-green-600"
+                            }`}>
+                            {planFeatures.commisionPercentage >= 40
+                              ? "🚨 High commission rate - upgrade to save!"
+                              : planFeatures.commisionPercentage >= 20
+                                ? "⚡ Upgrade to reduce commission fees!"
+                                : "💡 Tip: Great rate - you're saving on fees!"
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Max Active Contests:</span>
-                    <span className="font-medium">
-                      {planFeatures.maxActiveContests}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Commission Percentage on Total Prize Pool:</span>
-                    <span className="font-medium">
-                      {planFeatures.commisionPercentage}%
-                    </span>
+
+                  {/* Plan Benefits Summary */}
+                  <div className={`rounded-2xl p-6 text-white shadow-xl ${currentPlan.price === 0
+                    ? "bg-gradient-to-r from-gray-600 to-gray-700" // Free plan - muted
+                    : currentPlan.price <= 10000
+                      ? "bg-gradient-to-r from-orange-600 to-amber-600" // Bronze plan - warm
+                      : "bg-gradient-to-r from-blue-600 to-purple-600" // Higher plans - premium
+                    }`}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                        <Trophy className="h-5 w-5 text-white" />
+                      </div>
+                      <h4 className="text-lg font-semibold">
+                        {currentPlan.price === 0
+                          ? `Get Started with ${currentPlan.name} Plan - Then Upgrade!`
+                          : `Why Your ${currentPlan.name} Plan Matters`
+                        }
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                        <span>Launch up to {planFeatures.maxActiveContests === Infinity ? 'unlimited' : planFeatures.maxActiveContests} simultaneous marketing campaigns</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                        <span>Reward up to {planFeatures.maxWinnersPerContest === Infinity ? 'unlimited' : planFeatures.maxWinnersPerContest} creators per contest</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                        <span>Start campaigns from just {formatCurrency(planFeatures.minContestBudget)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                        <span>Only {planFeatures.commisionPercentage}% platform fee on your budget</span>
+                      </div>
+                    </div>
+
+                    {/* Upgrade CTA for lower tier plans */}
+                    {(currentPlan.price === 0 || planFeatures.commisionPercentage >= 20) && (
+                      <div className="mt-6 pt-6 border-t border-white/20">
+                        <div className="flex items-start justify-between gap-6">
+                          <div className="flex-1 min-w-0">
+                            <h5 className="text-sm font-semibold mb-2">
+                              {currentPlan.price === 0 ? "Ready to unlock more potential?" : "Want better rates and more features?"}
+                            </h5>
+                            <p className="text-xs opacity-90 leading-relaxed pr-4">
+                              {currentPlan.price === 0 ? "Upgrade to reduce commission and get more winners" : "Higher plans offer lower commission rates and more flexibility"}
+                            </p>
+                          </div>
+                          <div className="flex-shrink-0">
+                            <Button
+                              asChild
+                              size="sm"
+                              className="bg-white text-gray-900 hover:bg-gray-100 font-semibold shadow-lg border border-gray-200"
+                            >
+                              <Link href="/pricing">Upgrade Plan</Link>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-500 mb-2">
-                  You don't have an active subscription plan.
-                </p>
-                <Button
-                  asChild
-                  className="bg-rose-600 hover:bg-rose-700 text-white"
-                >
-                  <Link href="/pricing">View Pricing Plans</Link>
-                </Button>
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
+                    <Trophy className="h-10 w-10 text-white" />
+                  </div>
+                  <h4 className="text-2xl font-bold text-gray-900 mb-3">No Active Subscription Plan</h4>
+                  <p className="text-gray-600 mb-6 max-w-md mx-auto leading-relaxed">
+                    You need an active subscription plan to create contests and start your marketing campaigns.
+                    Choose a plan that fits your marketing needs and budget.
+                  </p>
+                  <Button
+                    asChild
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 text-lg font-semibold shadow-xl hover:shadow-2xl transition-all duration-300"
+                  >
+                    <Link href="/pricing">View Pricing Plans →</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Contest Duration */}
@@ -1778,7 +2098,7 @@ export default function CreateContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              Contest duration must be at least 1 day. The end date will
+              Contest duration must be more than 24 hours (at least 1 day gap). The end date will
               automatically adjust to maintain this minimum duration.
             </p>
           </div>
@@ -2915,33 +3235,126 @@ export default function CreateContestPage({
                       Add External Resource
                     </Button>
 
-                    {/* List of added external resources */}
+                    {/* Enhanced List of Added Resources */}
                     {Object.entries(resources).length > 0 && (
-                      <div className="mt-4 border-t pt-4">
-                        <h5 className="font-medium mb-2">Added Resources:</h5>
-                        <ul className="space-y-2">
-                          {Object.entries(resources).map(([name, url]) => (
-                            <li
-                              key={name}
-                              className="flex justify-between items-center p-2 bg-gray-50 rounded"
-                            >
-                              <div>
-                                <p className="font-medium">{name}</p>
-                                <p className="text-sm text-gray-500 truncate max-w-xs">
-                                  {url}
-                                </p>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeResource(name)}
-                                className="text-red-500"
+                      <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                          <h5 className="font-semibold text-blue-900 dark:text-blue-100">Added Resources:</h5>
+                          <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-medium px-2 py-1 rounded-full">
+                            {Object.entries(resources).length} resource{Object.entries(resources).length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {Object.entries(resources).map(([name, url]) => {
+                            const isUploadedFile = url.startsWith('data:') || url.includes('supabase');
+                            const isImage = url.startsWith('data:image') || (url.includes('supabase') && /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url));
+
+                            return (
+                              <div
+                                key={name}
+                                className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200"
                               >
-                                <Trash className="h-4 w-4" />
-                              </Button>
-                            </li>
-                          ))}
-                        </ul>
+                                <div className="flex items-start gap-3">
+                                  {/* Resource Icon/Preview */}
+                                  <div className="flex-shrink-0">
+                                    {isImage ? (
+                                      <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                        <img
+                                          src={url}
+                                          alt={name}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      </div>
+                                    ) : isUploadedFile ? (
+                                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                                        <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </div>
+                                    ) : (
+                                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                                        <ExternalLink className="w-6 h-6 text-green-600 dark:text-green-400" />
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Resource Info */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <h6 className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                                          {name}
+                                        </h6>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${isUploadedFile
+                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                                            : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                            }`}>
+                                            {isUploadedFile ? (
+                                              <>
+                                                <Upload className="w-3 h-3" />
+                                                Uploaded File
+                                              </>
+                                            ) : (
+                                              <>
+                                                <ExternalLink className="w-3 h-3" />
+                                                External Link
+                                              </>
+                                            )}
+                                          </span>
+                                        </div>
+                                        {!isUploadedFile && (
+                                          <div className="mt-2">
+                                            <a
+                                              href={url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline font-medium flex items-center gap-1 w-fit"
+                                            >
+                                              <span className="truncate max-w-[200px]">{url}</span>
+                                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Remove Button */}
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeResource(name)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8 p-0"
+                                      >
+                                        <Trash className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Resource Summary */}
+                        <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+                          <div className="flex items-center justify-between px-2">
+                            <div className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                              <span>
+                                {Object.entries(resources).filter(([, url]) => url.startsWith('data:') || url.includes('supabase')).length} uploaded file{Object.entries(resources).filter(([, url]) => url.startsWith('data:') || url.includes('supabase')).length !== 1 ? 's' : ''}, {' '}
+                                {Object.entries(resources).filter(([, url]) => !url.startsWith('data:') && !url.includes('supabase')).length} external link{Object.entries(resources).filter(([, url]) => !url.startsWith('data:') && !url.includes('supabase')).length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                              Participants will see these resources
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -3085,7 +3498,7 @@ export default function CreateContestPage({
                                   ? 60
                                   : uploadProgress.includes("Creating")
                                     ? 80
-                                    : uploadProgress.includes("Redirecting")
+                                    : uploadProgress.includes("submitted")
                                       ? 100
                                       : 10
                         }
@@ -3093,7 +3506,7 @@ export default function CreateContestPage({
                       />
                     </div>
                   ) : (
-                    "Create Contest"
+                    "Submit for Review"
                   )}
                 </Button>
               </div>

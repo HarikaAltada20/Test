@@ -211,22 +211,27 @@ export interface Database {
           start_date: string | null
           end_date: string | null
           thumbnail_url: string | null
-          brief: string | null
-          rules: Json
-          prizes: Json
-          resources: Json
+          brief_html: string | null
+          brief_json: Json | null
+          rules_html: string | null
+          rules_json: Json | null
+          resources: Json | null
           category: string | null
-          inspiration_links: string | null
-          total_prize: number
-          winner_count: number
+          inspiration_links: string[] | null
           created_at: string
-          is_draft: boolean
+          updated_at: string
           subscription_plan_of_user: string | null
           contest_type: 'leaderboard' | 'cpm'
           contest_based_details: Json | null
-          post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
-          status?: string
-          live_submission_count?: number | null
+          post_contest_status: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
+          live_submission_count: number | null
+          last_metrics_updated: string | null
+          moderation_status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected'
+          submitted_for_approval_at: string | null
+          approved_at: string | null
+          approved_by: string | null
+          published_at: string | null
+          rejection_reason: string | null
         }
         Insert: {
           id?: string
@@ -236,22 +241,27 @@ export interface Database {
           start_date?: string | null
           end_date?: string | null
           thumbnail_url?: string | null
-          brief?: string | null
-          rules?: Json
-          prizes?: Json
-          resources?: Json
+          brief_html?: string | null
+          brief_json?: Json | null
+          rules_html?: string | null
+          rules_json?: Json | null
+          resources?: Json | null
           category?: string | null
-          inspiration_links?: string | null
-          total_prize?: number
-          winner_count?: number
+          inspiration_links?: string[] | null
           created_at?: string
-          is_draft?: boolean
+          updated_at?: string
           subscription_plan_of_user?: string | null
           contest_type?: 'leaderboard' | 'cpm'
           contest_based_details?: Json | null
           post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
-          status?: string
           live_submission_count?: number | null
+          last_metrics_updated?: string | null
+          moderation_status?: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected'
+          submitted_for_approval_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          published_at?: string | null
+          rejection_reason?: string | null
         }
         Update: {
           id?: string
@@ -261,22 +271,27 @@ export interface Database {
           start_date?: string | null
           end_date?: string | null
           thumbnail_url?: string | null
-          brief?: string | null
-          rules?: Json
-          prizes?: Json
-          resources?: Json
+          brief_html?: string | null
+          brief_json?: Json | null
+          rules_html?: string | null
+          rules_json?: Json | null
+          resources?: Json | null
           category?: string | null
-          inspiration_links?: string | null
-          total_prize?: number
-          winner_count?: number
+          inspiration_links?: string[] | null
           created_at?: string
-          is_draft?: boolean
+          updated_at?: string
           subscription_plan_of_user?: string | null
           contest_type?: 'leaderboard' | 'cpm'
           contest_based_details?: Json | null
           post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
-          status?: string
           live_submission_count?: number | null
+          last_metrics_updated?: string | null
+          moderation_status?: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected'
+          submitted_for_approval_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          published_at?: string | null
+          rejection_reason?: string | null
         }
       }
       submissions: {
@@ -458,20 +473,30 @@ export interface Database {
           start_date: string | null
           end_date: string | null
           thumbnail_url: string | null
-          brief: string | null
-          rules: Json | null
+          brief_html: string | null
+          brief_json: Json | null
+          rules_html: string | null
+          rules_json: Json | null
           resources: Json | null
           category: string | null
-          inspiration_links: string | null
+          inspiration_links: string[] | null
           created_at: string | null
-          is_draft: boolean | null
-          subscription_plan_of_user: string | null
           updated_at: string | null
+          subscription_plan_of_user: string | null
           contest_type: 'leaderboard' | 'cpm' | null
           contest_based_details: Json | null
           post_contest_status: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
           live_submission_count: number | null
-          status: 'draft' | 'incomplete' | 'upcoming' | 'active' | 'ended' | 'unknown' | null
+          last_metrics_updated: string | null
+          // Moderation status (admin approval workflow)
+          moderation_status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected' | null
+          submitted_for_approval_at: string | null
+          approved_at: string | null
+          approved_by: string | null
+          published_at: string | null
+          rejection_reason: string | null
+          // Contest lifecycle status (only for published contests) 
+          status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'incomplete' | 'upcoming' | 'active' | 'ended' | 'unknown' | null
         }
       }
     }

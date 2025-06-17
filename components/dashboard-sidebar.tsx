@@ -91,6 +91,12 @@ export function DashboardSidebar({
       icon: Trophy,
       description: "Manage all contests",
     },
+    {
+      name: "Contest Moderation",
+      href: "/dashboard/admin/contest-moderation",
+      icon: Shield,
+      description: "Review & approve contests",
+    },
   ];
 
   const creatorLinks = [

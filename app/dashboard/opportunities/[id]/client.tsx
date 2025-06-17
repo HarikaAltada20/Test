@@ -365,8 +365,14 @@ export function ContestClientPage({
         if (contestError) throw contestError;
         if (!contestData) throw new Error("Contest not found.");
 
-        if (["draft", "incomplete"].includes(contestData.status) || contestData.is_draft) {
+        // Only published contests should be available to creators
+        if (contestData.moderation_status !== 'published') {
           throw new Error("This contest is not available.");
+        }
+
+        // Check if published contest has valid dates
+        if (contestData.status === 'incomplete') {
+          throw new Error("This contest has incomplete information.");
         }
         if (isMounted) {
           setContest(contestData);

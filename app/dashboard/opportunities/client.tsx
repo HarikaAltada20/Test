@@ -77,8 +77,8 @@ export default function OpportunitiesPage({
         const { data: contests, error: contestError } = await supabase
           .from("contests_with_status")
           .select("*")
-          .not("status", "eq", "draft")
-          .not("status", "eq", "incomplete")
+          .eq("moderation_status", "published")  // Only show published contests
+          .not("status", "eq", "incomplete")     // Exclude incomplete published contests
           .order("created_at", { ascending: false });
 
         if (contestError) {
@@ -102,9 +102,11 @@ export default function OpportunitiesPage({
   useEffect(() => {
     let contestsToDisplay = [...availableContests];
 
-    // Status Filter
+    // Status Filter - only for published contests with valid lifecycle status
     if (statusFilter !== 'all') {
       contestsToDisplay = contestsToDisplay.filter(contest => {
+        // Only published contests should be visible, and they should have a valid status
+        if (contest.moderation_status !== 'published' || !contest.status) return false;
         if (statusFilter === 'live') return contest.status === 'active';
         if (statusFilter === 'upcoming') return contest.status === 'upcoming';
         return true; // Should not happen if logic is correct
@@ -221,19 +223,19 @@ export default function OpportunitiesPage({
             value="all"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
           >
-            All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.length}</Badge>
+            All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status).length}</Badge>
           </TabsTrigger>
           <TabsTrigger
             value="live"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
           >
-            Live <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.status === 'active').length}</Badge>
+            Live <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status === 'active').length}</Badge>
           </TabsTrigger>
           <TabsTrigger
             value="upcoming"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
           >
-            Upcoming <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.status === 'upcoming').length}</Badge>
+            Upcoming <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status === 'upcoming').length}</Badge>
           </TabsTrigger>
         </TabsList>
       </Tabs>

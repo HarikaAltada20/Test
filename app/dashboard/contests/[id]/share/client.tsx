@@ -32,7 +32,8 @@ type ContestData = {
   brief: string | null;
   brief_html?: string | null;
   thumbnail_url: string | null;
-  status: "Draft" | "upcoming" | "active" | "ended" | "Unknown";
+  moderation_status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected';
+  status: "upcoming" | "active" | "ended" | "incomplete" | "unknown";
 };
 
 export default function ShareContestPage({
@@ -67,7 +68,7 @@ export default function ShareContestPage({
       try {
         const { data, error } = await supabase
           .from("contests_with_status")
-          .select("id, title, brief, brief_html, thumbnail_url, status")
+          .select("id, title, brief, brief_html, thumbnail_url, moderation_status, status")
           .eq("id", contestId)
           .eq("advertiser_id", user.id)
           .single();
@@ -163,14 +164,21 @@ export default function ShareContestPage({
       )}
 
       {/* Refined contest status alerts */}
-      {contest.status === "upcoming" && (
+      {contest.moderation_status !== 'published' && (
+        <Alert className="mb-6 border-amber-500 bg-amber-50">
+          <AlertDescription className="text-amber-800">
+            This contest is not published yet. Only you can see this preview. Publish the contest first to share it with creators.
+          </AlertDescription>
+        </Alert>
+      )}
+      {contest.moderation_status === 'published' && contest.status === "upcoming" && (
         <Alert className="mb-6 border-blue-500 bg-blue-50">
           <AlertDescription className="text-blue-800">
             This contest is not live yet. You can share it, but creators won't be able to participate until the start date.
           </AlertDescription>
         </Alert>
       )}
-      {contest.status === "ended" && ( // You might want to include other terminal statuses like "completed" or "archived" here if they exist
+      {contest.moderation_status === 'published' && contest.status === "ended" && (
         <Alert className="mb-6 border-red-500 bg-red-50">
           <AlertDescription className="text-red-800">
             This contest has ended. Creators can no longer submit entries.
@@ -206,18 +214,34 @@ export default function ShareContestPage({
               ) : (
                 <p className="text-gray-600 line-clamp-3">No brief provided</p>
               )}
-              <div className="mt-4">
-                <Badge
-                  className={
-                    contest.status === "active"
-                      ? "bg-green-500"
-                      : contest.status === "upcoming"
-                        ? "bg-blue-500"
-                        : "bg-gray-500"
-                  }
-                >
-                  {contest.status}
-                </Badge>
+              <div className="mt-4 space-x-2">
+                {contest.moderation_status !== 'published' && (
+                  <Badge className="bg-amber-500">
+                    {contest.moderation_status === 'draft' && 'Draft'}
+                    {contest.moderation_status === 'pending_approval' && 'Pending Approval'}
+                    {contest.moderation_status === 'approved' && 'Approved'}
+                    {contest.moderation_status === 'rejected' && 'Rejected'}
+                  </Badge>
+                )}
+                {contest.moderation_status === 'published' && (
+                  <Badge
+                    className={
+                      contest.status === "active"
+                        ? "bg-green-500"
+                        : contest.status === "upcoming"
+                          ? "bg-blue-500"
+                          : contest.status === "ended"
+                            ? "bg-gray-500"
+                            : "bg-red-500"
+                    }
+                  >
+                    {contest.status === "active" && "Live"}
+                    {contest.status === "upcoming" && "Upcoming"}
+                    {contest.status === "ended" && "Ended"}
+                    {contest.status === "incomplete" && "Incomplete"}
+                    {contest.status === "unknown" && "Unknown"}
+                  </Badge>
+                )}
               </div>
             </div>
           </CardContent>

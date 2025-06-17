@@ -59,8 +59,6 @@ export default async function ContestsPage() {
     return { ...contest, status: contest.status || 'unknown', total_prize_money_sortable };
   }) as any[];
 
-  const publishedContests = typedContests.filter((contest) => !contest.is_draft);
-  const draftContests = typedContests.filter((contest) => contest.is_draft);
 
   return (
     <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">

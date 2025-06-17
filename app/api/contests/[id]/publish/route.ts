@@ -1,0 +1,80 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/utils/supabase/server";
+
+export async function POST(
+    request: NextRequest,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const supabase = await createClient();
+        const resolvedParams = await params;
+        const contestId = resolvedParams.id;
+
+        // Get current user
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        // Get contest to verify ownership and status
+        const { data: contest, error: contestError } = await supabase
+            .from("contests")
+            .select("*")
+            .eq("id", contestId)
+            .eq("advertiser_id", user.id)
+            .single();
+
+        if (contestError || !contest) {
+            return NextResponse.json({ error: "Contest not found" }, { status: 404 });
+        }
+
+        // Verify contest is approved
+        if (contest.moderation_status !== 'approved') {
+            return NextResponse.json({ 
+                error: "Contest must be approved before publishing" 
+            }, { status: 400 });
+        }
+
+        // Verify dates are set and valid
+        if (!contest.start_date || !contest.end_date) {
+            return NextResponse.json({ 
+                error: "Contest must have start and end dates before publishing" 
+            }, { status: 400 });
+        }
+
+        // Verify start date is in the future
+        if (new Date(contest.start_date) <= new Date()) {
+            return NextResponse.json({ 
+                error: "Cannot publish contest with past start date" 
+            }, { status: 400 });
+        }
+
+        // Update contest status to published
+        const { error: updateError } = await supabase
+            .from("contests")
+            .update({
+                moderation_status: 'published',
+                published_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            })
+            .eq("id", contestId);
+
+        if (updateError) {
+            console.error("Error publishing contest:", updateError);
+            return NextResponse.json({ 
+                error: "Failed to publish contest" 
+            }, { status: 500 });
+        }
+
+        return NextResponse.json({ 
+            success: true, 
+            message: "Contest published successfully" 
+        });
+
+    } catch (error) {
+        console.error("Error in publish contest API:", error);
+        return NextResponse.json({ 
+            error: "Internal server error" 
+        }, { status: 500 });
+    }
+} 

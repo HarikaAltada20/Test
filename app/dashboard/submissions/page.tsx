@@ -33,36 +33,10 @@ export default async function SubmissionsPage() {
     redirect("/dashboard");
   }
 
-  // Get submissions for this creator
+  // Simplified query - get only basic submission data first
   const { data: submissionsData, error: submissionsError } = await supabase
     .from("submissions")
-    .select(
-      `
-      id,
-      created_at,
-      content_link,
-      views,
-      status,
-      earnings,
-      last_insights_update,
-      contest_id,
-      creator_id,
-      description,
-      other_stats,
-      platform,
-      video_id,
-      video_title,
-      video_thumbnail_url,
-      contests (
-        id,
-        title,
-        contest_type,
-        contest_based_details,
-        end_date,
-        post_contest_status 
-      )
-    `
-    )
+    .select("*")
     .eq("creator_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -77,9 +51,33 @@ export default async function SubmissionsPage() {
 
   const submissionsToFormat = submissionsData || [];
 
+  // Get contest data using the simplest possible query
+  let contestsData: any[] = [];
+  try {
+    const contestIds = [...new Set(submissionsToFormat.map(sub => sub.contest_id).filter(Boolean))];
+
+    if (contestIds.length > 0) {
+      const { data: fetchedContests } = await supabase
+        .from("contests")
+        .select("id, title, contest_type, contest_based_details, end_date, post_contest_status")
+        .in("id", contestIds);
+
+      contestsData = fetchedContests || [];
+    }
+  } catch (error) {
+    console.warn("Could not fetch contest details:", error);
+    // Continue without contest data if there's an error
+  }
+
+  // Create a map of contests for quick lookup
+  const contestsMap = new Map();
+  contestsData.forEach(contest => {
+    contestsMap.set(contest.id, contest);
+  });
+
   const formattedSubmissions = submissionsToFormat.map(sub => ({
     ...sub,
-    contests: sub.contests ? { ...sub.contests } : null,
+    contests: sub.contest_id ? contestsMap.get(sub.contest_id) || null : null,
     formatted_created_at: sub.created_at
       ? new Date(sub.created_at).toLocaleDateString('en-US', {
         year: 'numeric',

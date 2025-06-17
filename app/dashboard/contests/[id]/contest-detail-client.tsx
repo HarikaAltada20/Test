@@ -77,7 +77,12 @@ import {
 interface Contest {
     id: string;
     title: string;
-    status: 'draft' | 'upcoming' | 'active' | 'ended' | 'completed' | 'incomplete' | 'unknown';
+    // Moderation status (admin workflow)
+    moderation_status: 'draft' | 'pending_approval' | 'approved' | 'published' | 'rejected';
+    // Contest lifecycle status (only for published contests)
+    status: 'upcoming' | 'active' | 'ended' | 'incomplete' | 'unknown' | null;
+    // Post-contest status for ended contests
+    post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null;
     contest_type?: "leaderboard" | "cpm" | null;
     thumbnail_url?: string | null;
     brief_html?: string | null;
@@ -89,6 +94,12 @@ interface Contest {
     resources?: any | null;
     contest_based_details?: any | null;
     last_metrics_updated?: string | null;
+    // Moderation tracking fields
+    submitted_for_approval_at?: string | null;
+    approved_at?: string | null;
+    approved_by?: string | null;
+    published_at?: string | null;
+    rejection_reason?: string | null;
 }
 
 interface Submission {
@@ -141,18 +152,36 @@ export default function ContestDetailClient({
 
     { console.log("contest data", contest) }
 
-    const getStatusBadgeProps = (status: Contest['status']) => {
-        switch (status) {
+    const getStatusBadgeProps = (contest: Contest) => {
+        // For unpublished contests, show moderation status
+        if (contest.moderation_status !== 'published') {
+            switch (contest.moderation_status) {
+                case "draft": return { text: "Draft", className: "bg-gray-500 text-white" };
+                case "pending_approval": return { text: "Pending Approval", className: "bg-yellow-500 text-white" };
+                case "approved": return { text: "Ready to Publish", className: "bg-blue-500 text-white" };
+                case "rejected": return { text: "Rejected", className: "bg-red-500 text-white" };
+                default: return { text: "Unknown", className: "bg-slate-400 text-white" };
+            }
+        }
+
+        // For published contests, show lifecycle status
+        switch (contest.status) {
             case "active": return { text: "Live", className: "bg-green-500 text-white" };
             case "upcoming": return { text: "Upcoming", className: "bg-blue-500 text-white" };
             case "ended":
-            case "completed": return { text: "Ended", className: "bg-gray-500 text-white" };
-            case "draft": return { text: "Draft", className: "bg-amber-500 text-white" };
+                // Show post-contest status for ended contests
+                if (contest.post_contest_status === "verification_complete") {
+                    return { text: "Verified - Payment Processing", className: "bg-purple-500 text-white" };
+                }
+                if (contest.post_contest_status === "payouts_processed") {
+                    return { text: "Verified - Payment Released", className: "bg-green-600 text-white" };
+                }
+                return { text: "Ended", className: "bg-gray-500 text-white" };
             case "incomplete": return { text: "Incomplete", className: "bg-yellow-500 text-black" };
-            default: return { text: status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown", className: "bg-slate-400 text-white" };
+            default: return { text: "Unknown", className: "bg-slate-400 text-white" };
         }
     };
-    const contestStatusBadgeInfo = getStatusBadgeProps(contest.status);
+    const contestStatusBadgeInfo = getStatusBadgeProps(contest);
 
     const getSubmissionStatusBadge = (status: Submission['status']) => {
         switch (status) {
@@ -335,8 +364,9 @@ export default function ContestDetailClient({
         return String(value);
     };
 
-    const isContestEditable = contest.status === 'draft' || contest.status === 'upcoming';
-    const isContestDeletable = !(contest.status === 'active' || contest.status === 'ended' || contest.status === 'completed');
+    const isContestEditable = contest.moderation_status === 'draft' || contest.moderation_status === 'rejected' ||
+        (contest.moderation_status === 'approved' && contest.status === 'upcoming');
+    const isContestDeletable = contest.moderation_status === 'draft' || contest.moderation_status === 'rejected';
 
     return (
         <div>
@@ -364,7 +394,7 @@ export default function ContestDetailClient({
             <div className="space-y-6 mb-8">
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-end gap-2 mb-6">
-                    {(contest.status === 'active' || contest.status === 'ended') && currentSubmissions && currentSubmissions.length > 0 && (
+                    {(contest.moderation_status === 'published' && (contest.status === 'active' || contest.status === 'ended')) && currentSubmissions && currentSubmissions.length > 0 && (
                         <Button
                             size="sm"
                             variant="outline"

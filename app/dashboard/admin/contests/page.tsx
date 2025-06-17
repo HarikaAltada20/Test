@@ -11,7 +11,7 @@ export type AdminContest = {
     platform: string | null;
     contest_type: string | null;
     created_at: string;
-    is_draft: boolean;
+    moderation_status: string;
     status: string;
     start_date: string | null;
     end_date: string | null;

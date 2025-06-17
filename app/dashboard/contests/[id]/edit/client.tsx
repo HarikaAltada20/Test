@@ -77,13 +77,16 @@ type ContestData = {
         cpm_contest?: CpmContestDetails;
         leaderboard_contest?: LeaderboardContestDetails;
     } | null;
+    // Moderation fields
+    moderation_status: string;
+    rejection_reason: string | null;
     // Old fields to be phased out or mapped from contest_based_details
     prizes?: { position: number; amount: number }[];
     total_prize?: number;
     winner_count?: number;
 };
 
-export default function EditContestPage({ user, contestId }: { user: UserResponse["data"]["user"], contestId: string }) {
+export default function EditContestPage({ user, contestId, datesOnly = false }: { user: UserResponse["data"]["user"], contestId: string, datesOnly?: boolean }) {
     const router = useRouter()
     const supabase = createClient()
     const { toast } = useToast()
@@ -287,13 +290,21 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
 
                 if (data) {
-                    const now = new Date();
-                    const contestStartDate = data.start_date ? new Date(data.start_date) : null;
-                    const contestEndDate = data.end_date ? new Date(data.end_date) : null;
-                    const isLive = contestStartDate && contestStartDate <= now && (!contestEndDate || contestEndDate > now);
-                    const isEnded = contestEndDate && contestEndDate <= now;
+                    // Simplified logic: Only check dates if contest is published
+                    let canEdit = true;
 
-                    if (isLive || isEnded) {
+                    if (data.moderation_status === 'published') {
+                        const now = new Date();
+                        const contestStartDate = data.start_date ? new Date(data.start_date) : null;
+                        const contestEndDate = data.end_date ? new Date(data.end_date) : null;
+                        const isLive = contestStartDate && contestStartDate <= now && (!contestEndDate || contestEndDate > now);
+                        const isEnded = contestEndDate && contestEndDate <= now;
+
+                        canEdit = !isLive && !isEnded;
+                    }
+                    // If moderation_status is not 'published', always allow editing regardless of dates
+
+                    if (!canEdit) {
                         setError("This contest is already live or has ended and cannot be edited.");
                         setContest(data as ContestData); // Still set contest to allow viewing some info if needed
                     } else {
@@ -499,59 +510,66 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             return;
         }
 
-        // Validate mandatory fields - show toast + bottom error every time
-        if (!title || title.trim() === "") {
-            showError("Contest title is required.");
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-        }
+        // Validate mandatory fields - skip content validation for datesOnly mode
+        if (!datesOnly) {
+            if (!title || title.trim() === "") {
+                showError("Contest title is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
 
-        if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
-            showError("Brief description is required.");
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-        }
+            if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
+                showError("Brief description is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
 
-        if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
-            showError("Contest rules are required.");
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-        }
+            if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
+                showError("Contest rules are required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
 
-        const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
-        if (validInspirationLinks.length === 0) {
-            showError("At least one inspiration link is required.");
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-        }
+            const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+            if (validInspirationLinks.length === 0) {
+                showError("At least one inspiration link is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
 
-        const hasUploadedFiles = Object.keys(resourceFiles).length > 0;
-        const hasExistingResources = resources && Object.keys(resources).length > 0;
-        const totalResources = (hasUploadedFiles ? Object.keys(resourceFiles).length : 0) +
-            (hasExistingResources ? Object.keys(resources).length : 0);
+            const hasUploadedFiles = Object.keys(resourceFiles).length > 0;
+            const hasExistingResources = resources && Object.keys(resources).length > 0;
+            const totalResources = (hasUploadedFiles ? Object.keys(resourceFiles).length : 0) +
+                (hasExistingResources ? Object.keys(resources).length : 0);
 
-        if (totalResources === 0) {
-            showError("At least one resource is required.");
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
+            if (totalResources === 0) {
+                showError("At least one resource is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
         }
 
         const planFeatures = getPlanFeatures(userPlan);
         let contestBasedDetails: any = {};
-        let updatePayload: any = {
-            title,
-            category,
-            brief_html: briefHtml,
-            brief_json: briefJson,
-            rules_html: rulesHtml,
-            rules_json: rulesJson,
-            inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
-        };
+        let updatePayload: any = {};
+
+        // Only include content fields if not in datesOnly mode
+        if (!datesOnly) {
+            updatePayload = {
+                title,
+                category,
+                brief_html: briefHtml,
+                brief_json: briefJson,
+                rules_html: rulesHtml,
+                rules_json: rulesJson,
+                inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+            };
+        }
 
         if (startDate && startTime && endDate && endTime) {
             try {
@@ -588,10 +606,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 }
                 const durationMs = endDateTime.getTime() - startDateTime.getTime();
                 const oneDayMs = 24 * 60 * 60 * 1000;
-                if (durationMs < oneDayMs) {
+                if (durationMs <= oneDayMs) {
                     toast({
                         title: "Invalid Duration",
-                        description: "Contest duration must be at least 1 day.",
+                        description: "Contest duration must be more than 24 hours (at least 1 day gap).",
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -616,7 +634,8 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
         }
 
-        if (contestType === 'leaderboard') {
+        // Skip contest type validation for datesOnly mode
+        if (!datesOnly && contestType === 'leaderboard') {
             const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
             if (winnerCount > planFeatures.maxWinnersPerContest) {
                 toast({
@@ -661,7 +680,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 total_prize: currentTotalPrizePool,
                 winner_count: winnerCount,
             };
-        } else if (contestType === 'cpm') {
+        } else if (!datesOnly && contestType === 'cpm') {
             const numCpmRate = parseFloat(cpmRate as string);
             const numTotalBudget = parseFloat(totalBudget as string);
             const numMinViews = minViews !== "" && minViews !== null ? parseInt(minViews as string, 10) : null;
@@ -723,7 +742,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 terms_conditions: termsConditions,
                 budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
             };
-        } else {
+        } else if (!datesOnly) {
             toast({
                 title: "Invalid Contest Type",
                 description: "Invalid contest type selected. Please refresh and try again.",
@@ -732,15 +751,18 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
             setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
         }
 
-        updatePayload.contest_type = contestType;
-        updatePayload.contest_based_details = contestBasedDetails;
+        // Only update contest type and details if not in datesOnly mode
+        if (!datesOnly) {
+            updatePayload.contest_type = contestType;
+            updatePayload.contest_based_details = contestBasedDetails;
+        }
 
         // Initialize final resources object for DB update
         const finalDbResources: Record<string, string> = {};
 
         try {
             let finalThumbnailUrl = contest.thumbnail_url;
-            if (thumbnail) {
+            if (!datesOnly && thumbnail) {
                 try {
                     const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${thumbnail.name.replace(/\s+/g, '_')}`;
                     const { error: uploadError } = await supabase.storage
@@ -767,69 +789,73 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
             }
-            updatePayload.thumbnail_url = finalThumbnailUrl;
-
-            // 1. Process Staged File Uploads (New Files)
-            for (const resourceName in resourceFiles) {
-                const fileToUpload = resourceFiles[resourceName];
-                const resourceFileName = `contest_resources/${user.id}/${contestId}/${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`;
-                const { error: resourceUploadError } = await supabase.storage
-                    .from('contest-assets') // Assuming same bucket as thumbnails, or a dedicated one
-                    .upload(resourceFileName, fileToUpload);
-                if (resourceUploadError) {
-                    throw new Error(`Failed to upload resource "${resourceName}": ${resourceUploadError.message}`);
-                }
-                const { data: publicUrlData } = supabase.storage
-                    .from('contest-assets')
-                    .getPublicUrl(resourceFileName);
-                finalDbResources[resourceName] = publicUrlData.publicUrl;
+            if (!datesOnly) {
+                updatePayload.thumbnail_url = finalThumbnailUrl;
             }
 
-            // 2. Add Existing External Links or Already Uploaded Files (that weren't re-staged)
-            // These are items in `resources` state that are not in `resourceFiles` (newly staged uploads)
-            for (const resourceName in resources) {
-                if (!resourceFiles[resourceName]) { // If it wasn't a new file upload handled above
-                    finalDbResources[resourceName] = resources[resourceName];
+            // 1. Process Staged File Uploads (New Files) - skip for datesOnly
+            if (!datesOnly) {
+                for (const resourceName in resourceFiles) {
+                    const fileToUpload = resourceFiles[resourceName];
+                    const resourceFileName = `contest_resources/${user.id}/${contestId}/${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`;
+                    const { error: resourceUploadError } = await supabase.storage
+                        .from('contest-assets') // Assuming same bucket as thumbnails, or a dedicated one
+                        .upload(resourceFileName, fileToUpload);
+                    if (resourceUploadError) {
+                        throw new Error(`Failed to upload resource "${resourceName}": ${resourceUploadError.message}`);
+                    }
+                    const { data: publicUrlData } = supabase.storage
+                        .from('contest-assets')
+                        .getPublicUrl(resourceFileName);
+                    finalDbResources[resourceName] = publicUrlData.publicUrl;
                 }
-            }
 
-            // 3. Handle Deletion of Resources previously in DB but now removed from UI
-            const originalDbResources = contest.resources || {};
-            for (const originalResourceName in originalDbResources) {
-                if (!finalDbResources[originalResourceName]) { // If this original resource is no longer in our final list
-                    const resourceUrlToDelete = originalDbResources[originalResourceName];
-                    // Check if it's a Supabase storage URL before attempting to delete from storage
-                    if (resourceUrlToDelete && resourceUrlToDelete.includes(supabase.storage.from('contest-assets').getPublicUrl('').data.publicUrl.split('/contest-assets/')[0] + '/contest-assets/')) {
-                        try {
-                            // Extract file path from URL. This needs to be robust.
-                            // Example: https://<project_ref>.supabase.co/storage/v1/object/public/contest-assets/contest_resources/....filePath
-                            const pathSegments = new URL(resourceUrlToDelete).pathname.split('/');
-                            // Find 'contest-assets' and take everything after it.
-                            const bucketName = 'contest-assets'; // Make sure this matches your bucket name
-                            const bucketIndex = pathSegments.indexOf(bucketName);
-                            if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
-                                const filePath = pathSegments.slice(bucketIndex + 1).join('/');
-                                console.log(`Attempting to delete from storage: ${filePath}`);
-                                const { error: deleteError } = await supabase.storage
-                                    .from(bucketName)
-                                    .remove([filePath]);
-                                if (deleteError) {
-                                    // Log error but don't block contest update for this, as the link will be removed from DB anyway
-                                    console.error(`Failed to delete resource "${originalResourceName}" from storage: ${deleteError.message}`);
-                                    // setError(`Failed to delete old resource "${originalResourceName}" from storage. Please check storage manually.`);
-                                    // setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                // 2. Add Existing External Links or Already Uploaded Files (that weren't re-staged)
+                // These are items in `resources` state that are not in `resourceFiles` (newly staged uploads)
+                for (const resourceName in resources) {
+                    if (!resourceFiles[resourceName]) { // If it wasn't a new file upload handled above
+                        finalDbResources[resourceName] = resources[resourceName];
+                    }
+                }
+
+                // 3. Handle Deletion of Resources previously in DB but now removed from UI
+                const originalDbResources = contest.resources || {};
+                for (const originalResourceName in originalDbResources) {
+                    if (!finalDbResources[originalResourceName]) { // If this original resource is no longer in our final list
+                        const resourceUrlToDelete = originalDbResources[originalResourceName];
+                        // Check if it's a Supabase storage URL before attempting to delete from storage
+                        if (resourceUrlToDelete && resourceUrlToDelete.includes(supabase.storage.from('contest-assets').getPublicUrl('').data.publicUrl.split('/contest-assets/')[0] + '/contest-assets/')) {
+                            try {
+                                // Extract file path from URL. This needs to be robust.
+                                // Example: https://<project_ref>.supabase.co/storage/v1/object/public/contest-assets/contest_resources/....filePath
+                                const pathSegments = new URL(resourceUrlToDelete).pathname.split('/');
+                                // Find 'contest-assets' and take everything after it.
+                                const bucketName = 'contest-assets'; // Make sure this matches your bucket name
+                                const bucketIndex = pathSegments.indexOf(bucketName);
+                                if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
+                                    const filePath = pathSegments.slice(bucketIndex + 1).join('/');
+                                    console.log(`Attempting to delete from storage: ${filePath}`);
+                                    const { error: deleteError } = await supabase.storage
+                                        .from(bucketName)
+                                        .remove([filePath]);
+                                    if (deleteError) {
+                                        // Log error but don't block contest update for this, as the link will be removed from DB anyway
+                                        console.error(`Failed to delete resource "${originalResourceName}" from storage: ${deleteError.message}`);
+                                        // setError(`Failed to delete old resource "${originalResourceName}" from storage. Please check storage manually.`);
+                                        // setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                                    }
+                                } else {
+                                    console.warn(`Could not determine file path for deletion for: ${originalResourceName} with URL ${resourceUrlToDelete}`);
                                 }
-                            } else {
-                                console.warn(`Could not determine file path for deletion for: ${originalResourceName} with URL ${resourceUrlToDelete}`);
+                            } catch (parseError) {
+                                console.warn(`Error parsing URL for deletion or deleting resource ${originalResourceName}:`, parseError);
                             }
-                        } catch (parseError) {
-                            console.warn(`Error parsing URL for deletion or deleting resource ${originalResourceName}:`, parseError);
                         }
                     }
                 }
-            }
 
-            updatePayload.resources = finalDbResources; // Add the final map of resources to the payload
+                updatePayload.resources = finalDbResources; // Add the final map of resources to the payload
+            }
 
             const { error: updateError } = await supabase
                 .from("contests")
@@ -844,8 +870,8 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
             // Show success toast
             toast({
-                title: "Contest Updated",
-                description: "Your contest has been successfully updated.",
+                title: datesOnly ? "Contest Dates Updated" : "Contest Updated",
+                description: datesOnly ? "Contest dates have been successfully updated." : "Your contest has been successfully updated.",
                 variant: "default",
             });
 
@@ -1062,6 +1088,410 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
         setFormFeedbackType(null);
     };
 
+    // Handle save as draft for rejected contests
+    const handleSaveAsDraft = async () => {
+        await handleSubmitWithStatus('draft');
+    };
+
+    // Handle resubmit for approval for rejected contests  
+    const handleResubmitForApproval = async () => {
+        await handleSubmitWithStatus('pending_approval');
+    };
+
+    // Modified submit function that accepts a moderation status
+    const handleSubmitWithStatus = async (moderationStatus?: 'draft' | 'pending_approval') => {
+        const showError = (message: string) => {
+            toast({
+                title: "Validation Error",
+                description: message,
+                duration: 3000,
+            });
+            setFormFeedback(message);
+            setFormFeedbackType("error");
+        };
+
+        setError(null);
+        setIsSubmitting(true);
+
+        let submitTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
+        submitTimeoutId = setTimeout(() => {
+            if (isSubmitting) {
+                console.log("Edit submission taking longer than expected...");
+                toast({
+                    title: "Processing...",
+                    description: "Operation is taking longer than expected. Please wait...",
+                    variant: "default",
+                });
+            }
+        }, 10000);
+
+        if (!user) {
+            toast({
+                title: "Authentication Error",
+                description: "You must be logged in to update a contest",
+                variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        if (!contest) {
+            toast({
+                title: "Contest Error",
+                description: "Contest data not loaded. Cannot save changes.",
+                variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        // Validate mandatory fields - skip content validation for datesOnly mode
+        // For draft mode, we can be more lenient with validation
+        const isDraftMode = moderationStatus === 'draft';
+
+        if (!datesOnly && !isDraftMode) {
+            if (!title || title.trim() === "") {
+                showError("Contest title is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
+
+            if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
+                showError("Brief description is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
+
+            if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
+                showError("Contest rules are required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
+
+            const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+            if (validInspirationLinks.length === 0) {
+                showError("At least one inspiration link is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
+
+            const hasUploadedFiles = Object.keys(resourceFiles).length > 0;
+            const hasExistingResources = resources && Object.keys(resources).length > 0;
+            const totalResources = (hasUploadedFiles ? Object.keys(resourceFiles).length : 0) +
+                (hasExistingResources ? Object.keys(resources).length : 0);
+
+            if (totalResources === 0) {
+                showError("At least one resource is required.");
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
+        }
+
+        const planFeatures = getPlanFeatures(userPlan);
+        let contestBasedDetails: any = {};
+        let updatePayload: any = {};
+
+        // Only include content fields if not in datesOnly mode
+        if (!datesOnly) {
+            updatePayload = {
+                title,
+                category,
+                brief_html: briefHtml,
+                brief_json: briefJson,
+                rules_html: rulesHtml,
+                rules_json: rulesJson,
+                inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+            };
+        }
+
+        // Add moderation status if specified (for rejected contest workflows)
+        if (moderationStatus) {
+            updatePayload.moderation_status = moderationStatus;
+            if (moderationStatus === 'pending_approval') {
+                updatePayload.submitted_for_approval_at = new Date().toISOString();
+                // Clear rejection reason when resubmitting
+                updatePayload.rejection_reason = null;
+            }
+        }
+
+        // Continue with the rest of the validation and submission logic...
+        // (This is the same as the original handleSubmit function from here on)
+
+        if (startDate && startTime && endDate && endTime) {
+            try {
+                const startDateTime = new Date(`${startDate}T${startTime}`);
+                const endDateTime = new Date(`${endDate}T${endTime}`);
+                const now = new Date();
+
+                if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+                    toast({
+                        title: "Invalid Date Format",
+                        description: "Please check your date and time entries.",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+
+                const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
+                if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
+                    toast({
+                        title: "Invalid Start Time",
+                        description: "Contest start time must be in the future.",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                if (endDateTime <= startDateTime) {
+                    toast({
+                        title: "Invalid End Time",
+                        description: "Contest end time must be after the start time.",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                const durationMs = endDateTime.getTime() - startDateTime.getTime();
+                const oneDayMs = 24 * 60 * 60 * 1000;
+                if (durationMs <= oneDayMs) {
+                    toast({
+                        title: "Invalid Duration",
+                        description: "Contest duration must be more than 24 hours (at least 1 day gap).",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                updatePayload.start_date = toUTCISOString(startDate, startTime);
+                updatePayload.end_date = toUTCISOString(endDate, endTime);
+            } catch (error) {
+                console.error("Date validation error:", error);
+                toast({
+                    title: "Date Error",
+                    description: "There was an error with the date/time format. Please check your entries.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+        } else {
+            toast({
+                title: "Missing Dates",
+                description: "Contest start and end dates/times are required.",
+                variant: "destructive",
+            });
+            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+
+        // Skip contest type validation for datesOnly mode and draft mode
+        if (!datesOnly && !isDraftMode && contestType === 'leaderboard') {
+            const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+            if (winnerCount > planFeatures.maxWinnersPerContest) {
+                toast({
+                    title: "Plan Limit Exceeded",
+                    description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            if (currentTotalPrizePool < planFeatures.minContestBudget) {
+                toast({
+                    title: "Prize Pool Too Low",
+                    description: `Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            for (let i = 0; i < winnerCount; i++) {
+                if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+                    toast({
+                        title: "Prize Amount Too Low",
+                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+                    toast({
+                        title: "Prize Amount Too High",
+                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+            }
+
+            contestBasedDetails.leaderboard_contest = {
+                prizes: winnerAmounts.slice(0, winnerCount).map((amount, index) => ({
+                    position: index + 1,
+                    amount: amount
+                })),
+                total_prize: currentTotalPrizePool,
+                winner_count: winnerCount
+            };
+            updatePayload.contest_type = 'leaderboard';
+            updatePayload.contest_based_details = contestBasedDetails;
+        }
+
+        if (!datesOnly && !isDraftMode && contestType === 'cpm') {
+            const parsedCpmRate = typeof cpmRate === 'string' ? parseFloat(cpmRate) : cpmRate;
+            const parsedMinViews = minViews ? (typeof minViews === 'string' ? parseInt(minViews) : minViews) : null;
+            const parsedMaxViews = maxViews ? (typeof maxViews === 'string' ? parseInt(maxViews) : maxViews) : null;
+            const parsedTotalBudget = typeof totalBudget === 'string' ? parseFloat(totalBudget) : totalBudget;
+
+            if (!parsedCpmRate || parsedCpmRate <= 0) {
+                toast({
+                    title: "Invalid CPM Rate",
+                    description: "CPM rate must be a positive number.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            if (!parsedTotalBudget || parsedTotalBudget < planFeatures.minContestBudget) {
+                toast({
+                    title: "Budget Too Low",
+                    description: `Your current plan requires a minimum total budget of ${formatCurrency(planFeatures.minContestBudget)}.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            if (parsedMinViews && parsedMaxViews && parsedMinViews >= parsedMaxViews) {
+                toast({
+                    title: "Invalid View Range",
+                    description: "Minimum views must be less than maximum views.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            if (!termsConditions || termsConditions.trim() === "") {
+                toast({
+                    title: "Missing Terms & Conditions",
+                    description: "Terms and conditions are required for CPM contests.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            contestBasedDetails.cpm_contest = {
+                cpm_rate_usd: parsedCpmRate,
+                min_views: parsedMinViews,
+                max_views: parsedMaxViews,
+                total_budget: parsedTotalBudget,
+                budget_spent: 0,
+                terms_conditions: termsConditions.trim()
+            };
+            updatePayload.contest_type = 'cpm';
+            updatePayload.contest_based_details = contestBasedDetails;
+        }
+
+        // Continue with file uploads and database update...
+        const finalDbResources: Record<string, string> = {};
+
+        try {
+            let finalThumbnailUrl = contest.thumbnail_url;
+            if (!datesOnly && thumbnail) {
+                try {
+                    const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${thumbnail.name.replace(/\s+/g, '_')}`;
+                    const { error: uploadError } = await supabase.storage
+                        .from('contest-assets')
+                        .upload(fileName, thumbnail);
+                    if (uploadError) {
+                        toast({
+                            title: "Thumbnail Upload Failed",
+                            description: uploadError.message,
+                            variant: "destructive",
+                        });
+                        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                    }
+                    const { data: publicUrlData } = supabase.storage
+                        .from('contest-assets')
+                        .getPublicUrl(fileName);
+                    finalThumbnailUrl = publicUrlData.publicUrl;
+                } catch (error: any) {
+                    toast({
+                        title: "Thumbnail Upload Failed",
+                        description: error.message,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+            }
+            if (!datesOnly) {
+                updatePayload.thumbnail_url = finalThumbnailUrl;
+            }
+
+            // Process file uploads for resources
+            if (!datesOnly) {
+                for (const resourceName in resourceFiles) {
+                    const fileToUpload = resourceFiles[resourceName];
+                    const resourceFileName = `contest_resources/${user.id}/${contestId}/${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`;
+                    const { error: resourceUploadError } = await supabase.storage
+                        .from('contest-assets')
+                        .upload(resourceFileName, fileToUpload);
+                    if (resourceUploadError) {
+                        throw new Error(`Failed to upload resource "${resourceName}": ${resourceUploadError.message}`);
+                    }
+                    const { data: publicUrlData } = supabase.storage
+                        .from('contest-assets')
+                        .getPublicUrl(resourceFileName);
+                    finalDbResources[resourceName] = publicUrlData.publicUrl;
+                }
+
+                for (const resourceName in resources) {
+                    if (!resourceFiles[resourceName]) {
+                        finalDbResources[resourceName] = resources[resourceName];
+                    }
+                }
+
+                updatePayload.resources = finalDbResources;
+            }
+
+            const { error: updateError } = await supabase
+                .from("contests")
+                .update(updatePayload)
+                .eq("id", contestId)
+                .eq("advertiser_id", user.id);
+
+            if (updateError) {
+                console.error("Supabase update error:", updateError);
+                throw updateError;
+            }
+
+            // Show appropriate success message
+            let successMessage = "Contest updated successfully.";
+            if (moderationStatus === 'draft') {
+                successMessage = "Contest saved as draft successfully.";
+            } else if (moderationStatus === 'pending_approval') {
+                successMessage = "Contest resubmitted for approval successfully.";
+            } else if (datesOnly) {
+                successMessage = "Contest dates updated successfully.";
+            }
+
+            toast({
+                title: "Success",
+                description: successMessage,
+                variant: "default",
+            });
+
+            router.push(`/dashboard/contests/${contestId}`);
+        } catch (err: any) {
+            toast({
+                title: "Update Failed",
+                description: err.message || "Failed to update contest",
+                variant: "destructive",
+            });
+        } finally {
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            setIsSubmitting(false);
+        }
+    };
+
     if (isLoading || isPlansLoading || isUserPlanLoading) { // Check all loading states
         return (
             <div className="flex items-center justify-center h-full">
@@ -1134,8 +1564,21 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                         <ArrowLeft className="h-5 w-5" />
                     </Link>
                 </Button>
-                <h1 className="text-2xl font-bold">Edit Contest</h1>
+                <h1 className="text-2xl font-bold">
+                    {datesOnly ? 'Edit Contest Dates' : 'Edit Contest'}
+                </h1>
             </div>
+
+            {/* Dates Only Warning */}
+            {datesOnly && (
+                <Alert className="mb-6 border-blue-200 bg-blue-50 text-blue-900">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                        <strong>Dates Only Mode:</strong> This contest is approved. You can only modify start and end dates/times.
+                        All other content fields are locked to maintain approval integrity.
+                    </AlertDescription>
+                </Alert>
+            )}
 
             {/* Current Plan Information */}
             <div className="mb-6">
@@ -1162,364 +1605,378 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     <CardTitle>Edit Contest Details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="title">Contest title</Label>
-                        <Input
-                            id="title"
-                            value={title}
-                            onChange={(e) => {
-                                setTitle(e.target.value);
-                                clearBottomError();
-                            }}
-                            placeholder="Game Of Creators! Get Paid to Create"
-                            required
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="category">Category</Label>
-                            <Select value={category} onValueChange={(value) => setCategory(value)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="crypto-financial">Crypto/Financial</SelectItem>
-                                    <SelectItem value="education">Education</SelectItem>
-                                    <SelectItem value="dating">Dating</SelectItem>
-                                    <SelectItem value="food-drink">Food & Drink</SelectItem>
-                                    <SelectItem value="games-toys">Games & Toys</SelectItem>
-                                    <SelectItem value="health-wellness">Health & Wellness</SelectItem>
-                                    <SelectItem value="home-living">Home & Living</SelectItem>
-                                    <SelectItem value="pets-animals">Pets & Animals</SelectItem>
-                                    <SelectItem value="sports-outdoors">Sports & Outdoors</SelectItem>
-                                    <SelectItem value="technology">Technology</SelectItem>
-                                    <SelectItem value="other">Other</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Thumbnail</Label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                            {thumbnailPreview ? (
-                                <div className="relative">
-                                    <img
-                                        src={thumbnailPreview}
-                                        alt="Thumbnail preview"
-                                        className="mx-auto max-h-64 object-contain"
-                                    />
-                                    <div className="mt-2 flex justify-between items-center">
-                                        <p className="text-sm text-gray-500">
-                                            {thumbnail?.name || "Current thumbnail"}
-                                        </p>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={removeThumbnail}
-                                            className="text-red-500"
-                                        >
-                                            <Trash className="h-4 w-4 mr-1" /> Remove
-                                        </Button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-8">
-                                    <Image className="h-16 w-16 mx-auto text-gray-400 mb-2" />
-                                    <p className="text-sm font-medium mb-1">Drag, drop or browse thumbnail</p>
-                                    <p className="text-xs text-gray-500 mb-4">Max file size: 5MB</p>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => fileInputRef.current?.click()}
-                                    >
-                                        <Upload className="h-4 w-4 mr-2" /> Upload
-                                    </Button>
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={handleThumbnailChange}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Label htmlFor="brief">Brief <span className="text-red-500">*</span></Label>
-                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">Required</span>
-                        </div>
-                        <div className="bg-white rounded min-h-[300px]">
-                            <NovelEditor
-                                value={briefHtml}
-                                placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
-                                height="250px"
-                                ref={richTextEditorRef}
-                                onChange={(html: string, json: any) => {
-                                    setBriefHtml(html);
-                                    setBriefJson(json);
-                                    clearBottomError();
-                                }}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <h3 className="text-lg font-medium">Inspiration Links <span className="text-red-500">*</span></h3>
-                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
-                        </div>
-                        <div className="border rounded-md p-4 bg-card">
-                            {inspirationLinks.length > 0 && (
-                                <ul className="space-y-2 mb-4">
-                                    {inspirationLinks.map((link, index) => (
-                                        <li key={index} className="flex items-center justify-between text-sm">
-                                            <a
-                                                href={link}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 hover:underline flex items-center mr-2"
-                                            >
-                                                <ExternalLink className="h-3 w-3 mr-1 flex-shrink-0" />
-                                                <span className="truncate">{link}</span>
-                                            </a>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => removeInspirationLink(link)}
-                                                className="text-red-500 h-6 w-6 p-0 flex-shrink-0"
-                                            >
-                                                <Trash className="h-4 w-4" />
-                                            </Button>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                            <div className="flex gap-2">
+                    {!datesOnly && (
+                        <>
+                            <div className="space-y-2">
+                                <Label htmlFor="title">Contest title</Label>
                                 <Input
-                                    placeholder="Add inspiration link (e.g., instagram, YouTube)"
-                                    value={newInspirationLink}
+                                    id="title"
+                                    value={title}
                                     onChange={(e) => {
-                                        setNewInspirationLink(e.target.value);
+                                        setTitle(e.target.value);
                                         clearBottomError();
                                     }}
+                                    placeholder="Game Of Creators! Get Paid to Create"
+                                    required
                                 />
-                                <Button onClick={addInspirationLink} disabled={!newInspirationLink}>Add</Button>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="category">Category</Label>
+                                    <Select value={category} onValueChange={(value) => setCategory(value)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select category" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="crypto-financial">Crypto/Financial</SelectItem>
+                                            <SelectItem value="education">Education</SelectItem>
+                                            <SelectItem value="dating">Dating</SelectItem>
+                                            <SelectItem value="food-drink">Food & Drink</SelectItem>
+                                            <SelectItem value="games-toys">Games & Toys</SelectItem>
+                                            <SelectItem value="health-wellness">Health & Wellness</SelectItem>
+                                            <SelectItem value="home-living">Home & Living</SelectItem>
+                                            <SelectItem value="pets-animals">Pets & Animals</SelectItem>
+                                            <SelectItem value="sports-outdoors">Sports & Outdoors</SelectItem>
+                                            <SelectItem value="technology">Technology</SelectItem>
+                                            <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Thumbnail</Label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                                    {thumbnailPreview ? (
+                                        <div className="relative">
+                                            <img
+                                                src={thumbnailPreview}
+                                                alt="Thumbnail preview"
+                                                className="mx-auto max-h-64 object-contain"
+                                            />
+                                            <div className="mt-2 flex justify-between items-center">
+                                                <p className="text-sm text-gray-500">
+                                                    {thumbnail?.name || "Current thumbnail"}
+                                                </p>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={removeThumbnail}
+                                                    className="text-red-500"
+                                                >
+                                                    <Trash className="h-4 w-4 mr-1" /> Remove
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8">
+                                            <Image className="h-16 w-16 mx-auto text-gray-400 mb-2" />
+                                            <p className="text-sm font-medium mb-1">Drag, drop or browse thumbnail</p>
+                                            <p className="text-xs text-gray-500 mb-4">Max file size: 5MB</p>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => fileInputRef.current?.click()}
+                                            >
+                                                <Upload className="h-4 w-4 mr-2" /> Upload
+                                            </Button>
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={handleThumbnailChange}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {!datesOnly && (
+                        <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                                <h3 className="text-lg font-medium">Set rules <span className="text-red-500">*</span></h3>
+                                <Label htmlFor="brief">Brief <span className="text-red-500">*</span></Label>
                                 <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">Required</span>
                             </div>
-                            <div className="flex gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={toggleRulesPreview}
-                                >
-                                    {showRulesPreview ? 'Edit' : 'Preview'}
-                                </Button>
-                            </div>
-                        </div>
-
-                        {showRulesPreview ? (
-                            <div className="border rounded-lg p-4 min-h-[300px] bg-white">
-                                <h4 className="text-sm font-medium mb-2 text-gray-600">Preview:</h4>
-                                <div
-                                    className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
-                                    style={{
-                                        padding: '12px 15px',
-                                        minHeight: '250px',
-                                    }}
-                                    dangerouslySetInnerHTML={{
-                                        __html: rulesHtml || '<p class="text-gray-400">No rules yet. Click "Edit" to add rules.</p>'
-                                    }}
-                                />
-                            </div>
-                        ) : (
                             <div className="bg-white rounded min-h-[300px]">
                                 <NovelEditor
-                                    value={rulesHtml}
-                                    placeholder="Content rules and guidelines..."
+                                    value={briefHtml}
+                                    placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
                                     height="250px"
-                                    ref={rulesRichTextEditorRef}
+                                    ref={richTextEditorRef}
                                     onChange={(html: string, json: any) => {
-                                        console.log("Rules editor onChange - html:", html?.substring(0, 50));
-                                        console.log("Rules editor onChange - json:", json);
-                                        setRulesHtml(html);
-                                        setRulesJson(json);
+                                        setBriefHtml(html);
+                                        setBriefJson(json);
                                         clearBottomError();
                                     }}
                                 />
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
+
+                    {!datesOnly && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <h3 className="text-lg font-medium">Inspiration Links <span className="text-red-500">*</span></h3>
+                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
+                            </div>
+                            <div className="border rounded-md p-4 bg-card">
+                                {inspirationLinks.length > 0 && (
+                                    <ul className="space-y-2 mb-4">
+                                        {inspirationLinks.map((link, index) => (
+                                            <li key={index} className="flex items-center justify-between text-sm">
+                                                <a
+                                                    href={link}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-blue-600 hover:underline flex items-center mr-2"
+                                                >
+                                                    <ExternalLink className="h-3 w-3 mr-1 flex-shrink-0" />
+                                                    <span className="truncate">{link}</span>
+                                                </a>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeInspirationLink(link)}
+                                                    className="text-red-500 h-6 w-6 p-0 flex-shrink-0"
+                                                >
+                                                    <Trash className="h-4 w-4" />
+                                                </Button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                                <div className="flex gap-2">
+                                    <Input
+                                        placeholder="Add inspiration link (e.g., instagram, YouTube)"
+                                        value={newInspirationLink}
+                                        onChange={(e) => {
+                                            setNewInspirationLink(e.target.value);
+                                            clearBottomError();
+                                        }}
+                                    />
+                                    <Button onClick={addInspirationLink} disabled={!newInspirationLink}>Add</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {!datesOnly && (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-lg font-medium">Set rules <span className="text-red-500">*</span></h3>
+                                    <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">Required</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={toggleRulesPreview}
+                                    >
+                                        {showRulesPreview ? 'Edit' : 'Preview'}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {showRulesPreview ? (
+                                <div className="border rounded-lg p-4 min-h-[300px] bg-white">
+                                    <h4 className="text-sm font-medium mb-2 text-gray-600">Preview:</h4>
+                                    <div
+                                        className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
+                                        style={{
+                                            padding: '12px 15px',
+                                            minHeight: '250px',
+                                        }}
+                                        dangerouslySetInnerHTML={{
+                                            __html: rulesHtml || '<p class="text-gray-400">No rules yet. Click "Edit" to add rules.</p>'
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded min-h-[300px]">
+                                    <NovelEditor
+                                        value={rulesHtml}
+                                        placeholder="Content rules and guidelines..."
+                                        height="250px"
+                                        ref={rulesRichTextEditorRef}
+                                        onChange={(html: string, json: any) => {
+                                            console.log("Rules editor onChange - html:", html?.substring(0, 50));
+                                            console.log("Rules editor onChange - json:", json);
+                                            setRulesHtml(html);
+                                            setRulesJson(json);
+                                            clearBottomError();
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <Separator />
 
                     {/* Resources Section START */}
-                    <div className="space-y-6"> {/* Main container for entire resources section */}
-                        <div className="flex items-center gap-2">
-                            <h3 className="text-lg font-medium">Resources for Participants <span className="text-red-500">*</span></h3>
-                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                            Add or remove resources that help participants understand your brand and contest requirements. You need at least one resource (either upload an asset OR add an external link).
-                        </p>
-
-                        {resourceSuccess && (
-                            <Alert variant="default" className="bg-green-50 border-green-200 text-green-700">
-                                <Check className="h-4 w-4" />
-                                <AlertDescription>{resourceSuccess}</AlertDescription>
-                            </Alert>
-                        )}
-                        {/* General resourceError Alert removed from here */}
-
-                        {/* File Upload Container */}
-                        <div className="border rounded-lg p-4 space-y-4">
-                            {/* Section-specific error for Upload Asset */}
-                            {resourceError &&
-                                (resourceError.includes("No file selected") ||
-                                    resourceError.includes("File size") ||
-                                    resourceError.includes("description for the asset") ||
-                                    resourceError.includes("already exists")) && (
-                                    <Alert variant="destructive">
-                                        <AlertDescription>{resourceError}</AlertDescription>
-                                    </Alert>
-                                )}
-                            <h4 className="text-md font-medium">Upload New Asset</h4>
-                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
-                                {resourceFilePreview ? (
-                                    <div className="relative text-center">
-                                        {resourceFilePreview.startsWith("data:image") ? (
-                                            <img src={resourceFilePreview} alt="Asset preview" className="mx-auto max-h-40 object-contain mb-2" />
-                                        ) : resourceFilePreview.startsWith("file-type:") ? (
-                                            <div className="py-4">
-                                                <p className="text-sm font-medium">File: {resourceFilePreview.split("::")[2]}</p>
-                                                <p className="text-xs text-muted-foreground">Type: {resourceFilePreview.split("::")[1]}</p>
-                                            </div>
-                                        ) : ( /* Fallback for other previews like Object URLs for non-images if needed */
-                                            <div className="py-4">
-                                                <p className="text-sm font-medium">Preview not available</p>
-                                                {resourceFile && <p className="text-xs text-muted-foreground">File: {resourceFile.name}</p>}
-                                            </div>
-                                        )}
-                                        <Button variant="ghost" size="sm" onClick={removeResourceFile} className="text-red-500">
-                                            <Trash className="h-4 w-4 mr-1" /> Clear Selection
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-4">
-                                        <Upload className="h-10 w-10 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-                                        <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Max file size: 20MB</p>
-                                        <Button variant="outline" size="sm" onClick={() => { if (resourceFileRef.current) { resourceFileRef.current.click(); } }}>
-                                            Browse File
-                                        </Button>
-                                        <input type="file" ref={resourceFileRef} id="resourceFileInputEdit" className="hidden" onChange={handleResourceFileChange} />
-                                    </div>
-                                )}
+                    {!datesOnly && (
+                        <div className="space-y-6"> {/* Main container for entire resources section */}
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-lg font-medium">Resources for Participants <span className="text-red-500">*</span></h3>
+                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
                             </div>
-                            <div>
-                                <Label htmlFor="resourceDescriptionEdit">Asset Description (Required)</Label>
-                                <Input
-                                    id="resourceDescriptionEdit"
-                                    placeholder="e.g., Brand Logo, Product Image"
-                                    value={resourceDescription}
-                                    onChange={(e) => setResourceDescription(e.target.value)}
-                                />
-                            </div>
-                            <Button type="button" onClick={addFileResource} disabled={!resourceFile || !resourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
-                                Add Asset to List
-                            </Button>
-                        </div>
+                            <p className="text-sm text-muted-foreground">
+                                Add or remove resources that help participants understand your brand and contest requirements. You need at least one resource (either upload an asset OR add an external link).
+                            </p>
 
-                        {/* External Resource Link */}
-                        <div className="border rounded-lg p-4 space-y-4">
-                            {/* Section-specific error for External Link */}
-                            {resourceError &&
-                                (resourceError.includes("Please enter a URL") ||
-                                    resourceError.includes("Invalid URL format") ||
-                                    resourceError.includes("description for the external resource") ||
-                                    resourceError.includes("already exists")) && (
-                                    <Alert variant="destructive">
-                                        <AlertDescription>{resourceError}</AlertDescription>
-                                    </Alert>
-                                )}
-                            <h4 className="text-md font-medium">Add External Resource Link</h4>
-                            <div>
-                                <Label htmlFor="newResourceUrlEdit">Resource URL (Required)</Label>
-                                <Input
-                                    id="newResourceUrlEdit"
-                                    type="url"
-                                    placeholder="https://example.com/resource-link"
-                                    value={newResourceUrl}
-                                    onChange={(e) => setNewResourceUrl(e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="externalResourceDescriptionEdit">Link Description (Required)</Label>
-                                <Input
-                                    id="externalResourceDescriptionEdit"
-                                    placeholder="e.g., Company Website, Style Guide PDF"
-                                    value={externalResourceDescription}
-                                    onChange={(e) => setExternalResourceDescription(e.target.value)}
-                                />
-                            </div>
-                            <Button type="button" onClick={addExternalResource} disabled={!newResourceUrl.trim() || !externalResourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
-                                Add Link to List
-                            </Button>
-                        </div>
+                            {resourceSuccess && (
+                                <Alert variant="default" className="bg-green-50 border-green-200 text-green-700">
+                                    <Check className="h-4 w-4" />
+                                    <AlertDescription>{resourceSuccess}</AlertDescription>
+                                </Alert>
+                            )}
+                            {/* General resourceError Alert removed from here */}
 
-                        {/* List of current/staged resources */}
-                        {Object.keys(resources).length > 0 && (
-                            <div className="space-y-3 pt-4">
-                                <h4 className="text-md font-medium">Current & Staged Resources:</h4>
-                                <ul className="space-y-2">
-                                    {Object.entries(resources).map(([name, url]) => (
-                                        <li key={name} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-800 rounded text-sm">
-                                            <div>
-                                                <p className="font-medium text-slate-800 dark:text-slate-100">{name}</p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs md:max-w-md" title={url}>
-                                                    {url.startsWith("data:image") ? "Image Preview (Staged/Current)" :
-                                                        url.startsWith("file-type:") ? `File: ${url.split("::")[2]} (Staged)` :
-                                                            resourceFiles[name] ? `File: ${resourceFiles[name]!.name} (Staged)` :
-                                                                url.startsWith("blob:") ? "Local File Preview (Staged)" :
-                                                                    url /* Assumed to be an external link or existing DB URL */}
-                                                </p>
-                                            </div>
-                                            <Button variant="ghost" size="sm" onClick={() => removeResource(name)} className="text-red-500 hover:text-red-700" disabled={isSubmitting}>
-                                                <Trash className="h-4 w-4 mr-1" /> Remove
+                            {/* File Upload Container */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                {/* Section-specific error for Upload Asset */}
+                                {resourceError &&
+                                    (resourceError.includes("No file selected") ||
+                                        resourceError.includes("File size") ||
+                                        resourceError.includes("description for the asset") ||
+                                        resourceError.includes("already exists")) && (
+                                        <Alert variant="destructive">
+                                            <AlertDescription>{resourceError}</AlertDescription>
+                                        </Alert>
+                                    )}
+                                <h4 className="text-md font-medium">Upload New Asset</h4>
+                                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
+                                    {resourceFilePreview ? (
+                                        <div className="relative text-center">
+                                            {resourceFilePreview.startsWith("data:image") ? (
+                                                <img src={resourceFilePreview} alt="Asset preview" className="mx-auto max-h-40 object-contain mb-2" />
+                                            ) : resourceFilePreview.startsWith("file-type:") ? (
+                                                <div className="py-4">
+                                                    <p className="text-sm font-medium">File: {resourceFilePreview.split("::")[2]}</p>
+                                                    <p className="text-xs text-muted-foreground">Type: {resourceFilePreview.split("::")[1]}</p>
+                                                </div>
+                                            ) : ( /* Fallback for other previews like Object URLs for non-images if needed */
+                                                <div className="py-4">
+                                                    <p className="text-sm font-medium">Preview not available</p>
+                                                    {resourceFile && <p className="text-xs text-muted-foreground">File: {resourceFile.name}</p>}
+                                                </div>
+                                            )}
+                                            <Button variant="ghost" size="sm" onClick={removeResourceFile} className="text-red-500">
+                                                <Trash className="h-4 w-4 mr-1" /> Clear Selection
                                             </Button>
-                                        </li>
-                                    ))}
-                                </ul>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-4">
+                                            <Upload className="h-10 w-10 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+                                            <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Max file size: 20MB</p>
+                                            <Button variant="outline" size="sm" onClick={() => { if (resourceFileRef.current) { resourceFileRef.current.click(); } }}>
+                                                Browse File
+                                            </Button>
+                                            <input type="file" ref={resourceFileRef} id="resourceFileInputEdit" className="hidden" onChange={handleResourceFileChange} />
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <Label htmlFor="resourceDescriptionEdit">Asset Description (Required)</Label>
+                                    <Input
+                                        id="resourceDescriptionEdit"
+                                        placeholder="e.g., Brand Logo, Product Image"
+                                        value={resourceDescription}
+                                        onChange={(e) => setResourceDescription(e.target.value)}
+                                    />
+                                </div>
+                                <Button type="button" onClick={addFileResource} disabled={!resourceFile || !resourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
+                                    Add Asset to List
+                                </Button>
                             </div>
-                        )}
-                    </div>
+
+                            {/* External Resource Link */}
+                            <div className="border rounded-lg p-4 space-y-4">
+                                {/* Section-specific error for External Link */}
+                                {resourceError &&
+                                    (resourceError.includes("Please enter a URL") ||
+                                        resourceError.includes("Invalid URL format") ||
+                                        resourceError.includes("description for the external resource") ||
+                                        resourceError.includes("already exists")) && (
+                                        <Alert variant="destructive">
+                                            <AlertDescription>{resourceError}</AlertDescription>
+                                        </Alert>
+                                    )}
+                                <h4 className="text-md font-medium">Add External Resource Link</h4>
+                                <div>
+                                    <Label htmlFor="newResourceUrlEdit">Resource URL (Required)</Label>
+                                    <Input
+                                        id="newResourceUrlEdit"
+                                        type="url"
+                                        placeholder="https://example.com/resource-link"
+                                        value={newResourceUrl}
+                                        onChange={(e) => setNewResourceUrl(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor="externalResourceDescriptionEdit">Link Description (Required)</Label>
+                                    <Input
+                                        id="externalResourceDescriptionEdit"
+                                        placeholder="e.g., Company Website, Style Guide PDF"
+                                        value={externalResourceDescription}
+                                        onChange={(e) => setExternalResourceDescription(e.target.value)}
+                                    />
+                                </div>
+                                <Button type="button" onClick={addExternalResource} disabled={!newResourceUrl.trim() || !externalResourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
+                                    Add Link to List
+                                </Button>
+                            </div>
+
+                            {/* List of current/staged resources */}
+                            {Object.keys(resources).length > 0 && (
+                                <div className="space-y-3 pt-4">
+                                    <h4 className="text-md font-medium">Current & Staged Resources:</h4>
+                                    <ul className="space-y-2">
+                                        {Object.entries(resources).map(([name, url]) => (
+                                            <li key={name} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-800 rounded text-sm">
+                                                <div>
+                                                    <p className="font-medium text-slate-800 dark:text-slate-100">{name}</p>
+                                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs md:max-w-md" title={url}>
+                                                        {url.startsWith("data:image") ? "Image Preview (Staged/Current)" :
+                                                            url.startsWith("file-type:") ? `File: ${url.split("::")[2]} (Staged)` :
+                                                                resourceFiles[name] ? `File: ${resourceFiles[name]!.name} (Staged)` :
+                                                                    url.startsWith("blob:") ? "Local File Preview (Staged)" :
+                                                                        url /* Assumed to be an external link or existing DB URL */}
+                                                    </p>
+                                                </div>
+                                                <Button variant="ghost" size="sm" onClick={() => removeResource(name)} className="text-red-500 hover:text-red-700" disabled={isSubmitting}>
+                                                    <Trash className="h-4 w-4 mr-1" /> Remove
+                                                </Button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {/* Resources Section END */}
 
                     <Separator />
 
                     {/* Contest Type Display (Read-Only) */}
-                    <div className="space-y-2">
-                        <Label htmlFor="contest-type">Contest Type</Label>
-                        <Input
-                            id="contest-type"
-                            value={contestType === 'cpm' ? 'CPM Based' : 'Leaderboard Based'}
-                            readOnly
-                            className="bg-gray-100 cursor-not-allowed"
-                        />
-                    </div>
+                    {!datesOnly && (
+                        <div className="space-y-2">
+                            <Label htmlFor="contest-type">Contest Type</Label>
+                            <Input
+                                id="contest-type"
+                                value={contestType === 'cpm' ? 'CPM Based' : 'Leaderboard Based'}
+                                readOnly
+                                className="bg-gray-100 cursor-not-allowed"
+                            />
+                        </div>
+                    )}
 
                     {/* Contest Duration */}
                     <div className="space-y-4">
@@ -1570,14 +2027,14 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                         </div>
 
                         <p className="text-sm text-gray-500 mt-1">
-                            Contest duration must be at least 1 day.
+                            Contest duration must be more than 24 hours (at least 1 day gap).
                         </p>
                     </div>
 
                     <Separator />
 
                     {/* Prize Distribution - Conditional for Leaderboard */}
-                    {contestType === 'leaderboard' && (
+                    {!datesOnly && contestType === 'leaderboard' && (
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-medium">Prize distribution</h3>
@@ -1724,7 +2181,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     )}
 
                     {/* CPM Configuration - Conditional for CPM */}
-                    {contestType === 'cpm' && (
+                    {!datesOnly && contestType === 'cpm' && (
                         <div className="space-y-6">
                             <Separator />
                             <div>
@@ -1806,6 +2263,22 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                 </CardContent>
                 <CardFooter className="flex justify-between items-center pt-6">
+                    {/* Show rejection reason banner for rejected contests */}
+                    {contest?.moderation_status === 'rejected' && contest?.rejection_reason && (
+                        <div className="w-full mb-4">
+                            <Alert variant="destructive">
+                                <AlertTriangle className="h-4 w-4" />
+                                <div>
+                                    <div className="font-medium">Contest was rejected</div>
+                                    <div className="text-sm mt-1">{contest.rejection_reason}</div>
+                                    <div className="text-xs mt-2 text-muted-foreground">
+                                        Please address the issues above and either save as draft for further editing or submit for approval.
+                                    </div>
+                                </div>
+                            </Alert>
+                        </div>
+                    )}
+
                     {/* Modern Error Display exactly like create contest page */}
                     {formFeedback && formFeedbackType === 'error' && (
                         <div className="mr-auto">
@@ -1829,13 +2302,35 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     </Button>
 
                     <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={isSubmitting || !!validationError} // Disable during submission or if validation errors exist
-                            className="bg-rose-600 hover:bg-rose-700 text-white"
-                        >
-                            {isSubmitting ? "Saving..." : "Save Changes"}
-                        </Button>
+                        {contest?.moderation_status !== 'published' ? (
+                            // Draft/Save and Submit buttons for all non-published contests
+                            <>
+                                <Button
+                                    variant="outline"
+                                    onClick={handleSaveAsDraft}
+                                    disabled={isSubmitting || !!validationError}
+                                    className="bg-gray-600 hover:bg-gray-700 text-white"
+                                >
+                                    {isSubmitting ? "Saving..." : "Save as Draft"}
+                                </Button>
+                                <Button
+                                    onClick={handleResubmitForApproval}
+                                    disabled={isSubmitting || !!validationError}
+                                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                                >
+                                    {isSubmitting ? "Submitting..." : "Submit for Approval"}
+                                </Button>
+                            </>
+                        ) : (
+                            // Regular save button for published contests (dates-only editing)
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting || !!validationError} // Disable during submission or if validation errors exist
+                                className="bg-rose-600 hover:bg-rose-700 text-white"
+                            >
+                                {isSubmitting ? "Saving..." : "Save Changes"}
+                            </Button>
+                        )}
                     </div>
                 </CardFooter>
             </Card>

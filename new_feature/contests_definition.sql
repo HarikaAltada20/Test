@@ -1,0 +1,37 @@
+create table public.contests (
+  id uuid not null default gen_random_uuid (),
+  advertiser_id uuid null,
+  title text not null,
+  platform text null,
+  start_date timestamp with time zone null,
+  end_date timestamp with time zone null,
+  thumbnail_url text null,
+  resources jsonb null,
+  category text null,
+  inspiration_links text null,
+  created_at timestamp with time zone null default now(),
+  is_draft boolean null default false,
+  subscription_plan_of_user text null,
+  updated_at timestamp with time zone null default now(),
+  contest_type public.contest_type_enum null,
+  contest_based_details jsonb null,
+  live_submission_count integer null default 0,
+  post_contest_status public.post_contest_status_enum null,
+  brief_html text null,
+  brief_json jsonb null,
+  last_metrics_updated timestamp with time zone null,
+  rules_html text null,
+  rules_json jsonb null,
+  constraint contests_pkey primary key (id),
+  constraint contests_advertiser_id_fkey1 foreign KEY (advertiser_id) references advertiser_profiles (id)
+) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_brief_html on public.contests using gin (to_tsvector('english'::regconfig, brief_html)) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_last_metrics_updated on public.contests using btree (last_metrics_updated) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_rules_html on public.contests using gin (to_tsvector('english'::regconfig, rules_html)) TABLESPACE pg_default;
+
+create trigger on_contests_update BEFORE
+update on contests for EACH row
+execute FUNCTION handle_updated_at ();
