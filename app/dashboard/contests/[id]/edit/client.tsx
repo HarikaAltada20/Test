@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info } from "lucide-react"
+import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
@@ -145,6 +145,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
     const resourceFileRef = useRef<HTMLInputElement>(null);
     const [resourceSuccess, setResourceSuccess] = useState<string | null>(null);
     const [resourceError, setResourceError] = useState<string | null>(null);
+
+    // State for bottom error display
+    const [formFeedback, setFormFeedback] = useState<string | null>(null);
+    const [formFeedbackType, setFormFeedbackType] = useState<"error" | "success" | null>(null);
 
     // Fetch subscription plans from the database
     const fetchSubscriptionPlans = async () => {
@@ -443,10 +447,22 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
         }
     }, [startDate, startTime, endDate, endTime]);
 
-    // Form submission with additional validation
+    // Form submission - show toast + bottom error on every save click
     const handleSubmit = async () => {
+        const showError = (message: string) => {
+            // Always show toast on every save click - nice white UI toast
+            toast({
+                title: "Validation Error",
+                description: message,
+                duration: 3000, // 3 seconds
+            });
+
+            // Also show at bottom
+            setFormFeedback(message);
+            setFormFeedbackType("error");
+        };
+
         setError(null);
-        setValidationError(null);
         setIsSubmitting(true);
 
         let submitTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
@@ -478,6 +494,48 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                 description: "Contest data not loaded. Cannot save changes.",
                 variant: "destructive",
             });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        // Validate mandatory fields - show toast + bottom error every time
+        if (!title || title.trim() === "") {
+            showError("Contest title is required.");
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
+            showError("Brief description is required.");
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
+            showError("Contest rules are required.");
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+        if (validInspirationLinks.length === 0) {
+            showError("At least one inspiration link is required.");
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+        }
+
+        const hasUploadedFiles = Object.keys(resourceFiles).length > 0;
+        const hasExistingResources = resources && Object.keys(resources).length > 0;
+        const totalResources = (hasUploadedFiles ? Object.keys(resourceFiles).length : 0) +
+            (hasExistingResources ? Object.keys(resources).length : 0);
+
+        if (totalResources === 0) {
+            showError("At least one resource is required.");
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
@@ -999,6 +1057,11 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
         return true;
     };
 
+    const clearBottomError = () => {
+        setFormFeedback(null);
+        setFormFeedbackType(null);
+    };
+
     if (isLoading || isPlansLoading || isUserPlanLoading) { // Check all loading states
         return (
             <div className="flex items-center justify-center h-full">
@@ -1104,7 +1167,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                         <Input
                             id="title"
                             value={title}
-                            onChange={(e) => setTitle(e.target.value)}
+                            onChange={(e) => {
+                                setTitle(e.target.value);
+                                clearBottomError();
+                            }}
                             placeholder="Game Of Creators! Get Paid to Create"
                             required
                         />
@@ -1183,7 +1249,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="brief">Brief</Label>
+                        <div className="flex items-center gap-2">
+                            <Label htmlFor="brief">Brief <span className="text-red-500">*</span></Label>
+                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">Required</span>
+                        </div>
                         <div className="bg-white rounded min-h-[300px]">
                             <NovelEditor
                                 value={briefHtml}
@@ -1193,14 +1262,18 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                 onChange={(html: string, json: any) => {
                                     setBriefHtml(html);
                                     setBriefJson(json);
+                                    clearBottomError();
                                 }}
                             />
                         </div>
                     </div>
 
                     <div className="space-y-4">
-                        <h3 className="text-lg font-medium mb-2">Inspiration Links</h3>
-                        <div className="border rounded-md p-4 bg-gray-50">
+                        <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-medium">Inspiration Links <span className="text-red-500">*</span></h3>
+                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
+                        </div>
+                        <div className="border rounded-md p-4 bg-card">
                             {inspirationLinks.length > 0 && (
                                 <ul className="space-y-2 mb-4">
                                     {inspirationLinks.map((link, index) => (
@@ -1230,7 +1303,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                 <Input
                                     placeholder="Add inspiration link (e.g., instagram, YouTube)"
                                     value={newInspirationLink}
-                                    onChange={(e) => setNewInspirationLink(e.target.value)}
+                                    onChange={(e) => {
+                                        setNewInspirationLink(e.target.value);
+                                        clearBottomError();
+                                    }}
                                 />
                                 <Button onClick={addInspirationLink} disabled={!newInspirationLink}>Add</Button>
                             </div>
@@ -1239,7 +1315,10 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-medium">Set rules</h3>
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-lg font-medium">Set rules <span className="text-red-500">*</span></h3>
+                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">Required</span>
+                            </div>
                             <div className="flex gap-2">
                                 <Button
                                     type="button"
@@ -1278,6 +1357,7 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                                         console.log("Rules editor onChange - json:", json);
                                         setRulesHtml(html);
                                         setRulesJson(json);
+                                        clearBottomError();
                                     }}
                                 />
                             </div>
@@ -1288,9 +1368,12 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
 
                     {/* Resources Section START */}
                     <div className="space-y-6"> {/* Main container for entire resources section */}
-                        <h3 className="text-lg font-medium">Resources for Participants</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-medium">Resources for Participants <span className="text-red-500">*</span></h3>
+                            <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
+                        </div>
                         <p className="text-sm text-muted-foreground">
-                            Add or remove resources that help participants understand your brand and contest requirements.
+                            Add or remove resources that help participants understand your brand and contest requirements. You need at least one resource (either upload an asset OR add an external link).
                         </p>
 
                         {resourceSuccess && (
@@ -1722,24 +1805,42 @@ export default function EditContestPage({ user, contestId }: { user: UserRespons
                     )}
 
                 </CardContent>
-                <CardFooter className="flex justify-between">
+                <CardFooter className="flex justify-between items-center pt-6">
+                    {/* Modern Error Display exactly like create contest page */}
+                    {formFeedback && formFeedbackType === 'error' && (
+                        <div className="mr-auto">
+                            <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <AlertTriangle className="h-3 w-3 text-white" />
+                                    </div>
+                                    <p className="text-sm font-medium text-red-800 dark:text-red-200">{formFeedback}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <Button
                         variant="outline"
                         onClick={() => router.back()}
                         disabled={isSubmitting} // Disable during submission
+                        className={`${!(formFeedback && formFeedbackType === 'error') ? 'mr-auto' : ''}`}
                     >
                         Cancel
                     </Button>
 
-                    <Button
-                        onClick={handleSubmit}
-                        disabled={isSubmitting || !!validationError} // Disable during submission or if validation errors exist
-                        className="bg-rose-600 hover:bg-rose-700 text-white"
-                    >
-                        {isSubmitting ? "Saving..." : "Save Changes"}
-                    </Button>
+                    <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={isSubmitting || !!validationError} // Disable during submission or if validation errors exist
+                            className="bg-rose-600 hover:bg-rose-700 text-white"
+                        >
+                            {isSubmitting ? "Saving..." : "Save Changes"}
+                        </Button>
+                    </div>
                 </CardFooter>
             </Card>
+
+
         </div>
     )
 } 

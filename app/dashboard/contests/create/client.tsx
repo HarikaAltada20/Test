@@ -166,6 +166,7 @@ export default function CreateContestPage({
   // State for inline form feedback (especially for blocking validation errors)
   const [formFeedback, setFormFeedback] = useState<string | null>(null);
   const [formFeedbackType, setFormFeedbackType] = useState<"error" | "success" | null>(null);
+  const [toastErrorMessage, setToastErrorMessage] = useState<string | null>(null);
 
   // Section-specific error states for Assets step
   const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
@@ -259,6 +260,13 @@ export default function CreateContestPage({
   const saveCurrentContent = () => {
     captureBriefContent();
     toast({ title: "Success", description: "Content saved successfully!" });
+  };
+
+  // Function to clear toast error when user starts interacting
+  const clearToastError = () => {
+    if (toastErrorMessage) {
+      setToastErrorMessage(null);
+    }
   };
 
   const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -546,6 +554,21 @@ export default function CreateContestPage({
           setFormFeedbackType("error");
           setIsLoading(false); setUploadProgress(null); return;
         }
+
+        // Validate that at least one resource is provided (either uploaded asset or external link)
+        const hasUploadedAssets = Object.keys(resources).some(key =>
+          resources[key] && (resources[key].startsWith('data:') || resources[key].includes('supabase'))
+        );
+        const hasExternalLinks = Object.keys(resources).some(key =>
+          resources[key] && !resources[key].startsWith('data:') && !resources[key].includes('supabase')
+        );
+
+        if (!hasUploadedAssets && !hasExternalLinks) {
+          setFormFeedback("Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements");
+          setFormFeedbackType("error");
+          setIsLoading(false); setUploadProgress(null); return;
+        }
+
         if (!startDate || !startTime || !endDate || !endTime) {
           setFormFeedback("Contest start and end dates/times are required for publishing");
           setFormFeedbackType("error");
@@ -918,17 +941,23 @@ export default function CreateContestPage({
   const nextStep = async () => {
     setFormFeedback(null); // Clear previous global form feedback
     setFormFeedbackType(null);
+    setToastErrorMessage(null); // Clear previous toast error
+
+    // Helper function to set both form and toast error
+    const setError = (message: string) => {
+      setFormFeedback(message);
+      setFormFeedbackType("error");
+      setToastErrorMessage(message);
+    };
 
     // Validate only what's needed for the current step
     if (step === "basics") {
       if (!title) {
-        setFormFeedback("Please enter a contest title"); // Footer feedback
-        setFormFeedbackType("error");
+        setError("Please enter a contest title");
         return;
       }
       if (!thumbnail && !thumbnailPreview) {
-        setFormFeedback("Please upload a thumbnail for your contest"); // Footer feedback
-        setFormFeedbackType("error");
+        setError("Please upload a thumbnail for your contest");
         return;
       }
       setStep("brief");
@@ -948,19 +977,31 @@ export default function CreateContestPage({
       console.log("Brief validation - briefHtml state:", briefHtml?.substring(0, 50));
 
       if (isQuillEmpty(briefToCheck)) {
-        setFormFeedback("Please enter a brief description for your contest"); // Footer feedback
-        setFormFeedbackType("error");
+        setError("Please enter a brief description for your contest");
         return;
       }
       if (isQuillEmpty(rulesToCheck)) {
-        setFormFeedback("Please provide rules for your contest"); // Footer feedback
-        setFormFeedbackType("error");
+        setError("Please provide rules for your contest");
+        return;
+      }
+      if (inspirationLinks.length === 0) {
+        setError("Please add at least one inspiration link to help creators understand your vision");
         return;
       }
       setStep("resources");
     } else if (step === "resources") {
-      // No specific blocking validation for the entire "resources" step defined here for nextStep
-      // Individual resource additions handle their own feedback internally.
+      // Validate that at least one resource is provided (either uploaded asset or external link)
+      const hasUploadedAssets = Object.keys(resources).some(key =>
+        resources[key] && (resources[key].startsWith('data:') || resources[key].includes('supabase'))
+      );
+      const hasExternalLinks = Object.keys(resources).some(key =>
+        resources[key] && !resources[key].startsWith('data:') && !resources[key].includes('supabase')
+      );
+
+      if (!hasUploadedAssets && !hasExternalLinks) {
+        setError("Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements");
+        return;
+      }
       setStep("prize");
     }
   };
@@ -968,6 +1009,7 @@ export default function CreateContestPage({
   const prevStep = () => {
     setFormFeedback(null); // Clear feedback when going back
     setFormFeedbackType(null);
+    setToastErrorMessage(null); // Clear toast error when going back
     if (step === "prize") setStep("resources");
     else if (step === "resources") setStep("brief");
     else if (step === "brief") setStep("basics");
@@ -1482,6 +1524,39 @@ export default function CreateContestPage({
   }, [startDate, startTime]);
 
   // High Budget Prompt Modal
+  // Modern Error Alert Component with auto-dismiss
+  const ErrorAlert = ({ message }: { message: string }) => {
+    const [isVisible, setIsVisible] = useState(true);
+
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        setIsVisible(false);
+      }, 3000); // Auto-dismiss after 3 seconds
+
+      return () => clearTimeout(timer);
+    }, []);
+
+    if (!isVisible) return null;
+
+    return (
+      <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2 duration-300">
+        <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4 rounded-lg shadow-2xl border border-red-400 max-w-md">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-sm mb-1">Validation Error</h4>
+              <p className="text-sm text-red-50">{message}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const HighBudgetPromptModal = () => {
     if (!showHighBudgetPrompt) return null;
 
@@ -1997,106 +2072,139 @@ export default function CreateContestPage({
 
   return (
     <div className="container mx-auto py-8">
-      <div className="flex items-center gap-2 mb-6">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/dashboard/contests">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </Button>
-        <h1 className="text-2xl font-bold">Create New Contest</h1>
+      {/* Enhanced Header with Better Back Button */}
+      <div className="mb-8">
+        <div className="flex items-center gap-4 mb-6">
+          <Button
+            variant="outline"
+            asChild
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+          >
+            <Link href="/dashboard/contests">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="font-medium">Back to Contests</span>
+            </Link>
+          </Button>
+        </div>
+        <div className="text-center">
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">Create New Contest</h1>
+          <p className="text-muted-foreground text-lg">Build your contest in 4 simple steps</p>
+        </div>
       </div>
 
-      {/* Enhanced Progress Stepper */}
+      {/* Modern Progress Stepper */}
       <div className="mb-12">
-        <div className="flex justify-center">
-          <div className="relative flex w-full max-w-4xl justify-between px-4">
-            {/* Progress line - dynamically colored */}
-            <div className="absolute top-6 left-0 right-0 h-1 bg-slate-200 dark:bg-slate-700 rounded-full">
-              <div
-                className="h-full bg-gradient-to-r from-rose-500 to-pink-500 rounded-full transition-all duration-500 ease-in-out"
-                style={{
-                  width: step === "basics" ? "0%" :
-                    step === "brief" ? "33.33%" :
-                      step === "resources" ? "66.66%" : "100%"
-                }}
-              ></div>
-            </div>
+        <div className="max-w-4xl mx-auto px-4">
+          {/* Desktop Stepper */}
+          <div className="hidden md:block">
+            <div className="relative">
+              {/* Background Progress Line */}
+              <div className="absolute top-8 left-0 right-0 h-2 bg-gradient-to-r from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 rounded-full">
+                <div
+                  className="h-full bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500 rounded-full transition-all duration-700 ease-out"
+                  style={{
+                    width: step === "basics" ? "8%" :
+                      step === "brief" ? "38%" :
+                        step === "resources" ? "70%" : "100%"
+                  }}
+                ></div>
+              </div>
 
-            {/* Step 1: Get Started */}
-            <div className="relative z-10 flex flex-col items-center group">
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
-                ${step === "basics"
-                    ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
-                    : "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200"
-                  }`}
-              >
-                <span className="text-base font-bold">1</span>
-              </div>
-              <div className="mt-3 text-center">
-                <span className={`text-sm font-semibold transition-colors duration-300
-                  ${step === "basics" ? "text-rose-600 dark:text-rose-400" : "text-slate-600 dark:text-slate-400"}
-                `}>Get Started</span>
+              {/* Step Items */}
+              <div className="relative flex justify-between">
+                {[
+                  { key: "basics", number: "1", title: "Get Started", description: "Basic information" },
+                  { key: "brief", number: "2", title: "Create Brief", description: "Project details" },
+                  { key: "resources", number: "3", title: "Resources", description: "Assets & links" },
+                  { key: "prize", number: "4", title: "Prize", description: "Rewards & timeline" }
+                ].map((stepItem, index) => {
+                  const isActive = step === stepItem.key;
+                  const isCompleted =
+                    (stepItem.key === "basics" && (step === "brief" || step === "resources" || step === "prize")) ||
+                    (stepItem.key === "brief" && (step === "resources" || step === "prize")) ||
+                    (stepItem.key === "resources" && step === "prize");
+                  const isUpcoming = !isActive && !isCompleted;
+
+                  return (
+                    <div key={stepItem.key} className="relative flex flex-col items-center group">
+                      {/* Step Circle */}
+                      <div className="relative">
+                        {/* Glow Effect for Active Step */}
+                        {isActive && (
+                          <div className="absolute inset-0 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full blur-lg opacity-30 animate-pulse"></div>
+                        )}
+
+                        <div
+                          className={`relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition-all duration-500 ${isActive
+                            ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-2xl shadow-rose-200 dark:shadow-rose-900/50 scale-110"
+                            : isCompleted
+                              ? "bg-gradient-to-br from-emerald-500 to-green-600 border-white text-white shadow-lg"
+                              : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 shadow-md"
+                            }`}
+                        >
+                          {isCompleted ? (
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            <span className="text-lg font-bold">{stepItem.number}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Step Content */}
+                      <div className="mt-4 text-center max-w-32">
+                        <h3 className={`text-sm font-semibold transition-colors duration-300 ${isActive ? "text-rose-600 dark:text-rose-400" :
+                          isCompleted ? "text-emerald-600 dark:text-emerald-400" :
+                            "text-slate-500 dark:text-slate-400"
+                          }`}>
+                          {stepItem.title}
+                        </h3>
+                        <p className={`text-xs mt-1 transition-colors duration-300 ${isActive ? "text-rose-500/80 dark:text-rose-400/80" :
+                          isCompleted ? "text-emerald-500/80 dark:text-emerald-400/80" :
+                            "text-slate-400 dark:text-slate-500"
+                          }`}>
+                          {stepItem.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
+          </div>
 
-            {/* Step 2: Create Brief */}
-            <div className="relative z-10 flex flex-col items-center group">
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
-                ${step === "brief" || step === "resources" || step === "prize"
-                    ? step === "brief"
-                      ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
-                      : "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200"
-                    : "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500"
-                  }`}
-              >
-                <span className="text-base font-bold">2</span>
+          {/* Mobile Stepper */}
+          <div className="md:hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-lg border">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-pink-600 text-white font-bold">
+                    {step === "basics" ? "1" : step === "brief" ? "2" : step === "resources" ? "3" : "4"}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">
+                      {step === "basics" ? "Get Started" :
+                        step === "brief" ? "Create Brief" :
+                          step === "resources" ? "Resources" : "Prize"}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Step {step === "basics" ? "1" : step === "brief" ? "2" : step === "resources" ? "3" : "4"} of 4
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="mt-3 text-center">
-                <span className={`text-sm font-semibold transition-colors duration-300
-                  ${step === "brief" ? "text-rose-600 dark:text-rose-400" :
-                    (step === "resources" || step === "prize") ? "text-slate-600 dark:text-slate-400" : "text-slate-400 dark:text-slate-500"}
-                `}>Create Brief</span>
-              </div>
-            </div>
 
-            {/* Step 3: Resources */}
-            <div className="relative z-10 flex flex-col items-center group">
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
-                ${step === "resources" || step === "prize"
-                    ? step === "resources"
-                      ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
-                      : "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200"
-                    : "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500"
-                  }`}
-              >
-                <span className="text-base font-bold">3</span>
-              </div>
-              <div className="mt-3 text-center">
-                <span className={`text-sm font-semibold transition-colors duration-300
-                  ${step === "resources" ? "text-rose-600 dark:text-rose-400" :
-                    step === "prize" ? "text-slate-600 dark:text-slate-400" : "text-slate-400 dark:text-slate-500"}
-                `}>Resources</span>
-              </div>
-            </div>
-
-            {/* Step 4: Prize */}
-            <div className="relative z-10 flex flex-col items-center group">
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full border-4 transition-all duration-300 shadow-lg
-                ${step === "prize"
-                    ? "bg-gradient-to-br from-rose-500 to-pink-600 border-white text-white shadow-rose-200 scale-110"
-                    : "bg-slate-100 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500"
-                  }`}
-              >
-                <span className="text-base font-bold">4</span>
-              </div>
-              <div className="mt-3 text-center">
-                <span className={`text-sm font-semibold transition-colors duration-300
-                  ${step === "prize" ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"}
-                `}>Prize</span>
+              {/* Mobile Progress Bar */}
+              <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-rose-500 to-pink-500 transition-all duration-500 ease-out"
+                  style={{
+                    width: step === "basics" ? "25%" :
+                      step === "brief" ? "50%" :
+                        step === "resources" ? "75%" : "100%"
+                  }}
+                ></div>
               </div>
             </div>
           </div>
@@ -2145,7 +2253,10 @@ export default function CreateContestPage({
                 <Input
                   id="title"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    clearToastError(); // Clear toast error when user starts typing
+                  }}
                   placeholder="e.g., Create a Viral shorts/video for our New App"
                   maxLength={100}
                   required
@@ -2264,12 +2375,8 @@ export default function CreateContestPage({
               </div>
             </CardContent>
             <CardFooter className="flex justify-between items-center pt-6">
-              {formFeedback && formFeedbackType === 'error' && (
-                <div className="text-sm text-red-600 mr-auto flex items-center">
-                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
-                </div>
-              )}
-              <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}> {/* Adjust margin based on feedback presence */}
+              {/* Only show red styled error, removed black error display */}
+              <div className="flex gap-2 ml-auto">
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
@@ -2313,7 +2420,11 @@ export default function CreateContestPage({
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="project-brief">Brief / Project Description</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="project-brief">Brief / Project Description</Label>
+                    <span className="text-red-500 font-bold text-lg">*</span>
+                    <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">Required</span>
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -2325,6 +2436,9 @@ export default function CreateContestPage({
                     </Button>
                   </div>
                 </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Provide a detailed description of your project, what you want creators to do, key messages, target audience, and specific requirements.
+                </p>
 
                 {showBriefPreview ? (
                   <div className="border rounded-lg p-4 min-h-[300px] bg-white">
@@ -2353,6 +2467,7 @@ export default function CreateContestPage({
                         setBrief(html); // Keep for backward compatibility
                         setBriefHtml(html);
                         setBriefJson(json);
+                        clearToastError(); // Clear toast error when user starts typing
                       }}
                     />
                   </div>
@@ -2360,7 +2475,14 @@ export default function CreateContestPage({
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Inspiration Content:</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-medium">Inspiration Content:</h3>
+                  <span className="text-red-500 font-bold text-lg">*</span>
+                  <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">Required</span>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok, etc.)
+                </p>
                 <ul className="list-disc pl-5 space-y-2">
                   {inspirationLinks.map((link, index) => (
                     <li
@@ -2390,7 +2512,10 @@ export default function CreateContestPage({
                   <Input
                     placeholder="Add any video inspiration link (e.g., instagram, YouTube)"
                     value={newInspirationLink}
-                    onChange={(e) => setNewInspirationLink(e.target.value)}
+                    onChange={(e) => {
+                      setNewInspirationLink(e.target.value);
+                      clearToastError(); // Clear toast error when user starts typing
+                    }}
                   />
                   <Button
                     onClick={addInspirationLink}
@@ -2403,7 +2528,11 @@ export default function CreateContestPage({
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium">Set rules</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-medium">Set rules</h3>
+                    <span className="text-red-500 font-bold text-lg">*</span>
+                    <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">Required</span>
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -2415,6 +2544,9 @@ export default function CreateContestPage({
                     </Button>
                   </div>
                 </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Define clear rules and guidelines for participants to follow when creating content for your contest.
+                </p>
 
                 {showRulesPreview ? (
                   <div className="border rounded-lg p-4 min-h-[300px] bg-white">
@@ -2442,6 +2574,7 @@ export default function CreateContestPage({
                         console.log("Rules editor onChange - json:", json);
                         setRulesHtml(html);
                         setRulesJson(json);
+                        clearToastError(); // Clear toast error when user starts typing
                       }}
                     />
                   </div>
@@ -2449,9 +2582,17 @@ export default function CreateContestPage({
               </div>
             </CardContent>
             <CardFooter className="flex justify-between items-center pt-6">
+              {/* Modern Error Display for Brief step */}
               {formFeedback && formFeedbackType === 'error' && (
-                <div className="text-sm text-red-600 mr-auto flex items-center">
-                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                <div className="mr-auto">
+                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="h-3 w-3 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">{formFeedback}</p>
+                    </div>
+                  </div>
                 </div>
               )}
               <Button
@@ -2506,13 +2647,15 @@ export default function CreateContestPage({
 
               {/* Resources Section */}
               <div className="mt-8">
-                <h3 className="text-lg font-semibold mb-2">
-                  Resources for Participants
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Add resources that will help participants understand your
-                  brand and contest requirements. You can upload assets and add
-                  external links.
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-lg font-semibold">
+                    Resources for Participants
+                  </h3>
+                  <span className="text-red-500 font-bold text-lg">*</span>
+                  <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">At least one required</span>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Provide at least one resource to help participants understand your brand and contest requirements. You can upload assets (logos, guidelines, examples) OR add external links (website, social media, portfolio).
                 </p>
 
                 <div className="space-y-6">
@@ -2806,10 +2949,17 @@ export default function CreateContestPage({
               </div>
             </CardContent>
             <CardFooter className="flex justify-between items-center pt-6">
-              {/* General step feedback for "Resources" step, if any (excluding section-specific ones) */}
+              {/* Modern Error Display for Resources step */}
               {formFeedback && formFeedbackType === 'error' && (
-                <div className="text-sm text-red-600 mr-auto flex items-center">
-                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                <div className="mr-auto">
+                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="h-3 w-3 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">{formFeedback}</p>
+                    </div>
+                  </div>
                 </div>
               )}
               <Button
@@ -2864,9 +3014,17 @@ export default function CreateContestPage({
               {renderPrizeSection()}
             </CardContent>
             <CardFooter className="flex justify-between items-center pt-6">
+              {/* Modern Error Display for Prize step */}
               {formFeedback && formFeedbackType === 'error' && (
-                <div className="text-sm text-red-600 mr-auto flex items-center">
-                  <AlertTriangle className="h-4 w-4 mr-2 shrink-0" /> {formFeedback}
+                <div className="mr-auto">
+                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="h-3 w-3 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">{formFeedback}</p>
+                    </div>
+                  </div>
                 </div>
               )}
               <Button
@@ -2946,6 +3104,11 @@ export default function CreateContestPage({
 
       {/* High Budget Prompt Modal */}
       <HighBudgetPromptModal />
+
+      {/* Floating Error Alert */}
+      {toastErrorMessage && (
+        <ErrorAlert key={toastErrorMessage} message={toastErrorMessage} />
+      )}
     </div>
   );
 }

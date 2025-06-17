@@ -50,6 +50,7 @@ import {
     ExternalLink,
     FileText,
     Lightbulb,
+    ListOrdered,
     MoreVertical,
     PlayCircle,
     ThumbsUp,
@@ -67,7 +68,9 @@ import {
     Loader2,
     Info,
     RefreshCw,
-    Trash2
+    Trash2,
+    Monitor,
+    Play
 } from "lucide-react";
 
 // --- Local Type Definitions ---
@@ -561,57 +564,142 @@ export default function ContestDetailClient({
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <h3 className="font-semibold text-base text-foreground">Platform</h3>
-                                        <p className="capitalize text-foreground bg-muted/30 p-3 rounded-lg border">{contest.platform}</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <h3 className="font-semibold text-base text-foreground">Status</h3>
-                                        <div className="bg-muted/30 p-3 rounded-lg border">
-                                            <Badge className={contestStatusBadgeInfo.className}>{contestStatusBadgeInfo.text}</Badge>
-                                        </div>
-                                    </div>
+                                {/* Contest Info Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Platform Card */}
+                                    <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                                    <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Platform</p>
+                                                    <p className="text-lg font-bold text-blue-900 dark:text-blue-100 capitalize">
+                                                        {contest.platform}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Status Card */}
+                                    <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                                    <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Status</p>
+                                                    <p className="text-lg font-bold text-purple-900 dark:text-purple-100 capitalize">
+                                                        {contestStatusBadgeInfo.text}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <h3 className="font-semibold text-base text-foreground">Start Date & Time</h3>
-                                        <p className="text-foreground bg-muted/30 p-3 rounded-lg border">{formatLocalDateTime(contest.start_date)}</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <h3 className="font-semibold text-base text-foreground">End Date & Time</h3>
-                                        <p className="text-foreground bg-muted/30 p-3 rounded-lg border">{formatLocalDateTime(contest.end_date)}</p>
-                                    </div>
+                                {/* Date & Time Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Start Date Card */}
+                                    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                                    <Play className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Start Date & Time</p>
+                                                    <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                                                        {formatLocalDateTime(contest.start_date)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* End Date Card */}
+                                    <Card className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-200 dark:border-orange-700/50 hover:shadow-lg transition-all duration-300">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                                                    <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-xs font-medium text-orange-800 dark:text-orange-300 uppercase tracking-wide">End Date & Time</p>
+                                                    <p className="text-lg font-bold text-orange-900 dark:text-orange-100">
+                                                        {formatLocalDateTime(contest.end_date)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
                                 {/* Conditional Prize Structure / CPM Details */}
                                 {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest && (
-                                    <div className="space-y-3">
+                                    <div className="space-y-4">
                                         <h3 className="font-semibold text-lg text-foreground">Prize Structure</h3>
-                                        <div className="space-y-3 border p-4 rounded-lg bg-muted/30">
-                                            <div className="flex items-center justify-between p-2 bg-background rounded border">
-                                                <span className="text-sm font-medium text-muted-foreground">Total Prize Pool</span>
-                                                <span className="font-semibold text-foreground">
-                                                    {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between p-2 bg-background rounded border">
-                                                <span className="text-sm font-medium text-muted-foreground">Number of Winners</span>
-                                                <span className="font-semibold text-foreground">
-                                                    {contest.contest_based_details.leaderboard_contest.winner_count}
-                                                </span>
-                                            </div>
-                                            {Array.isArray(contest.contest_based_details.leaderboard_contest.prizes) &&
-                                                contest.contest_based_details.leaderboard_contest.prizes.map((prize: any, index: number) => (
-                                                    <div
-                                                        key={index}
-                                                        className="flex items-center justify-between p-2 bg-background rounded border ml-4"
-                                                    >
-                                                        <span className="text-sm font-medium text-muted-foreground">Position {prize.position}</span>
-                                                        <span className="font-semibold text-foreground">{formatMoney(prize.amount)}</span>
+
+                                        {/* Prize Pool Summary */}
+                                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                                                        <Trophy className="h-5 w-5 text-green-600 dark:text-green-400" />
                                                     </div>
-                                                ))}
+                                                    <div>
+                                                        <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Prize Pool</p>
+                                                        <p className="text-xl font-bold text-green-900 dark:text-green-100">
+                                                            {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+                                                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Winners</p>
+                                                        <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
+                                                            {contest.contest_based_details.leaderboard_contest.winner_count}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Prize Distribution */}
+                                        <div className="bg-muted/30 rounded-lg p-4 border">
+                                            <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                                                <ListOrdered className="h-4 w-4" />
+                                                Prize Distribution
+                                            </h4>
+                                            <div className="space-y-2">
+                                                {Array.isArray(contest.contest_based_details.leaderboard_contest.prizes) &&
+                                                    contest.contest_based_details.leaderboard_contest.prizes
+                                                        .sort((a: any, b: any) => a.position - b.position)
+                                                        .map((prize: any, index: number) => (
+                                                            <div
+                                                                key={index}
+                                                                className="flex items-center justify-between py-3 px-3 bg-background rounded-lg border border-border"
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                                                        {prize.position}
+                                                                    </div>
+                                                                    <span className="font-medium text-foreground">
+                                                                        Position {prize.position}
+                                                                    </span>
+                                                                </div>
+                                                                <span className="font-bold text-green-600 dark:text-green-400 text-lg">
+                                                                    {formatMoney(prize.amount)}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -679,21 +767,30 @@ export default function ContestDetailClient({
                                                 <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                                                 Inspiration Links
                                             </h3>
-                                            <div className="bg-card border border-border rounded-lg p-4">
+                                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
                                                 <div className="space-y-3">
                                                     {contest.inspiration_links.map(
                                                         (link: string, idx: number) => (
-                                                            <div key={idx} className="flex items-center py-3 border-b border-border last:border-b-0">
-                                                                <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                                                                <a
-                                                                    href={link}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate flex-1"
-                                                                >
-                                                                    {link}
-                                                                </a>
-                                                            </div>
+                                                            <Card
+                                                                key={idx}
+                                                                className="bg-white dark:bg-slate-800/50 border border-purple-200 dark:border-purple-700/30 hover:shadow-md transition-all duration-300"
+                                                            >
+                                                                <CardContent className="p-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
+                                                                            <ExternalLink className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                                                        </div>
+                                                                        <a
+                                                                            href={link}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:underline font-semibold text-sm truncate flex-1"
+                                                                        >
+                                                                            {link}
+                                                                        </a>
+                                                                    </div>
+                                                                </CardContent>
+                                                            </Card>
                                                         )
                                                     )}
                                                 </div>
@@ -708,28 +805,40 @@ export default function ContestDetailClient({
                                                 <Lightbulb className="h-5 w-5 text-green-600 dark:text-green-400" />
                                                 Resources
                                             </h3>
-                                            <div className="bg-card border border-border rounded-lg p-4">
+                                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
                                                 <div className="space-y-3">
                                                     {Object.entries(contest.resources).map(
                                                         ([name, url]) => (
-                                                            <div key={name} className="flex items-center justify-between py-3 border-b border-border last:border-b-0">
-                                                                <span className="font-medium text-foreground">{name}</span>
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    asChild
-                                                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20 flex-shrink-0"
-                                                                >
-                                                                    <a
-                                                                        href={url as string}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                    >
-                                                                        <ExternalLink className="h-4 w-4 mr-1" />
-                                                                        View Resource
-                                                                    </a>
-                                                                </Button>
-                                                            </div>
+                                                            <Card
+                                                                key={name}
+                                                                className="bg-white dark:bg-slate-800/50 border border-green-200 dark:border-green-700/30 hover:shadow-md transition-all duration-300"
+                                                            >
+                                                                <CardContent className="p-4">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                                                                                <Lightbulb className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                                            </div>
+                                                                            <span className="font-semibold text-green-900 dark:text-green-100">{name}</span>
+                                                                        </div>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            asChild
+                                                                            className="text-green-600 hover:text-green-800 hover:bg-green-100 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-800/20 flex-shrink-0 font-medium"
+                                                                        >
+                                                                            <a
+                                                                                href={url as string}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                            >
+                                                                                <ExternalLink className="h-4 w-4 mr-1" />
+                                                                                View Resource
+                                                                            </a>
+                                                                        </Button>
+                                                                    </div>
+                                                                </CardContent>
+                                                            </Card>
                                                         )
                                                     )}
                                                 </div>

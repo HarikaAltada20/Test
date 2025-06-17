@@ -25,7 +25,11 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
-  Clock
+  Clock,
+  Monitor,
+  Play,
+  FileText,
+  DollarSign
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatMoney } from "@/lib/utils";
@@ -885,54 +889,96 @@ export function ContestClientPage({
                     <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     Contest Details
                   </h3>
-                  <div className="bg-card border border-border rounded-lg p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Start Date & Time</h4>
-                        <div className="bg-muted/30 border border-border rounded-md p-3">
-                          <p className="text-sm font-medium text-foreground">
-                            {contest.start_date
-                              ? formatLocalDateTime(contest.start_date)
-                              : "Not specified"}
-                          </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Start Date Card */}
+                    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                            <Play className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Start Date & Time</p>
+                            <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                              {contest.start_date
+                                ? formatLocalDateTime(contest.start_date)
+                                : "Not specified"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">End Date & Time</h4>
-                        <div className="bg-muted/30 border border-border rounded-md p-3">
-                          <p className="text-sm font-medium text-foreground">
-                            {contest.end_date
-                              ? formatLocalDateTime(contest.end_date)
-                              : "Not specified"}
-                          </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* End Date Card */}
+                    <Card className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-200 dark:border-orange-700/50 hover:shadow-lg transition-all duration-300">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                            <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-orange-800 dark:text-orange-300 uppercase tracking-wide">End Date & Time</p>
+                            <p className="text-lg font-bold text-orange-900 dark:text-orange-100">
+                              {contest.end_date
+                                ? formatLocalDateTime(contest.end_date)
+                                : "Not specified"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Platform</h4>
-                        <div className="bg-muted/30 border border-border rounded-md p-3">
-                          <p className="text-sm font-medium text-foreground capitalize">
-                            {contest.platform || "Not specified"}
-                          </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Platform Card */}
+                    <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                            <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Platform</p>
+                            <p className="text-lg font-bold text-blue-900 dark:text-blue-100 capitalize">
+                              {contest.platform || "Not specified"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Category</h4>
-                        <div className="bg-muted/30 border border-border rounded-md p-3">
-                          <p className="text-sm font-medium text-foreground capitalize">
-                            {contest.category || "Not specified"}
-                          </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Status Card */}
+                    <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                            <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Status</p>
+                            <p className="text-lg font-bold text-purple-900 dark:text-purple-100 capitalize">
+                              {contest.status || "Not specified"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Sponsor</h4>
-                        <div className="bg-muted/30 border border-border rounded-md p-3">
-                          <p className="text-sm font-medium text-foreground">
-                            {contest.advertiser_profiles?.company_name ||
-                              "Not specified"}
-                          </p>
+                      </CardContent>
+                    </Card>
+
+                    {/* Sponsor Card */}
+                    <Card className="md:col-span-2 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-700/50 hover:shadow-lg transition-all duration-300">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                            <DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-amber-800 dark:text-amber-300 uppercase tracking-wide">Sponsor</p>
+                            <p className="text-lg font-bold text-amber-900 dark:text-amber-100">
+                              {contest.advertiser_profiles?.company_name ||
+                                "Not specified"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </div>
                 <Separator />
@@ -942,21 +988,61 @@ export function ContestClientPage({
                   </h3>
                   {contest.contest_type === 'leaderboard' && (
                     Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && contest.contest_based_details.leaderboard_contest.prizes.length > 0 ? (
-                      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
-                        <ul className="space-y-2">
-                          {[...(contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])]
-                            .sort((a, b) => a.position - b.position)
-                            .map((prize) => (
-                              <li key={prize.position} className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0">
-                                <span className="font-medium text-slate-800 dark:text-slate-200">
-                                  Position {prize.position}
-                                </span>
-                                <span className="font-bold text-green-600 dark:text-green-400">
-                                  {formatMoney(prize.amount)}
-                                </span>
-                              </li>
-                            ))}
-                        </ul>
+                      <div className="space-y-4">
+                        {/* Prize Pool Summary */}
+                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                                <Trophy className="h-5 w-5 text-green-600 dark:text-green-400" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Prize Pool</p>
+                                <p className="text-xl font-bold text-green-900 dark:text-green-100">
+                                  {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+                                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Winners</p>
+                                <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
+                                  {contest.contest_based_details.leaderboard_contest.winner_count}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Prize Distribution */}
+                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                          <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                            <ListOrdered className="h-4 w-4" />
+                            Prize Distribution
+                          </h4>
+                          <ul className="space-y-2">
+                            {[...(contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])]
+                              .sort((a, b) => a.position - b.position)
+                              .map((prize) => (
+                                <li key={prize.position} className="flex items-center justify-between py-3 px-3 bg-white dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600/50">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                      {prize.position}
+                                    </div>
+                                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                                      Position {prize.position}
+                                    </span>
+                                  </div>
+                                  <span className="font-bold text-green-600 dark:text-green-400 text-lg">
+                                    {formatMoney(prize.amount)}
+                                  </span>
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-slate-600 dark:text-slate-400">
@@ -1074,48 +1160,57 @@ export function ContestClientPage({
                     <Lightbulb className="h-5 w-5 text-green-600 dark:text-green-400" />
                     Resources
                   </h3>
-                  <div className="bg-card border border-border rounded-lg p-4">
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
                     {contest.resources &&
                       typeof contest.resources === "object" &&
                       Object.keys(contest.resources).length > 0 ? (
                       <div className="space-y-3">
                         {Object.entries(contest.resources).map(
                           ([key, value]) => (
-                            <div
+                            <Card
                               key={key}
-                              className="flex items-center justify-between py-3 border-b border-border last:border-b-0"
+                              className="bg-white dark:bg-slate-800/50 border border-green-200 dark:border-green-700/30 hover:shadow-md transition-all duration-300"
                             >
-                              <span className="font-medium text-foreground">
-                                {key}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20 flex-shrink-0"
-                              >
-                                <Link
-                                  href={value as string}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                >
-                                  <ExternalLink className="h-4 w-4 mr-1" />
-                                  View Resource
-                                </Link>
-                              </Button>
-                            </div>
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                                      <Lightbulb className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    </div>
+                                    <span className="font-semibold text-green-900 dark:text-green-100">
+                                      {key}
+                                    </span>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    asChild
+                                    className="text-green-600 hover:text-green-800 hover:bg-green-100 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-800/20 flex-shrink-0 font-medium"
+                                  >
+                                    <Link
+                                      href={value as string}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      <ExternalLink className="h-4 w-4 mr-1" />
+                                      View Resource
+                                    </Link>
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
                           )
                         )}
                       </div>
                     ) : (
-                      <div className="text-center py-6">
-                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
-                          <Lightbulb className="h-6 w-6 text-muted-foreground" />
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-800/30 flex items-center justify-center">
+                          <Lightbulb className="h-8 w-8 text-green-600 dark:text-green-400" />
                         </div>
-                        <p className="text-muted-foreground text-sm mb-1">
+                        <p className="text-green-800 dark:text-green-200 text-base font-medium mb-2">
                           No additional resources provided for this contest.
                         </p>
-                        <p className="text-muted-foreground/80 text-xs">
+                        <p className="text-green-700 dark:text-green-300 text-sm">
                           Check the brief and rules above for all contest requirements.
                         </p>
                       </div>
@@ -1144,23 +1239,29 @@ export function ContestClientPage({
                           <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                           Inspiration Links
                         </h3>
-                        <div className="bg-card border border-border rounded-lg p-4">
+                        <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
                           <div className="space-y-3">
                             {links.map((link: string, index: number) => (
-                              <div
+                              <Card
                                 key={index}
-                                className="flex items-center py-3 border-b border-border last:border-b-0"
+                                className="bg-white dark:bg-slate-800/50 border border-purple-200 dark:border-purple-700/30 hover:shadow-md transition-all duration-300"
                               >
-                                <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                                <Link
-                                  href={link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate flex-1"
-                                >
-                                  {link}
-                                </Link>
-                              </div>
+                                <CardContent className="p-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
+                                      <ExternalLink className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <Link
+                                      href={link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:underline font-semibold text-sm truncate flex-1"
+                                    >
+                                      {link}
+                                    </Link>
+                                  </div>
+                                </CardContent>
+                              </Card>
                             ))}
                           </div>
                         </div>
