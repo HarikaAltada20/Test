@@ -878,41 +878,61 @@ export function ContestClientPage({
                   )}
                 </div>
                 <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Start Date & Time</h3>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {contest.start_date
-                        ? formatLocalDateTime(contest.start_date)
-                        : "Not specified"}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">End Date & Time</h3>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {contest.end_date
-                        ? formatLocalDateTime(contest.end_date)
-                        : "Not specified"}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Platform</h3>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {contest.platform || "Not specified"}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Category</h3>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {contest.category || "Not specified"}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-base mb-2 text-slate-900 dark:text-slate-100">Sponsor</h3>
-                    <p className="text-sm text-slate-700 dark:text-slate-300">
-                      {contest.advertiser_profiles?.company_name ||
-                        "Not specified"}
-                    </p>
+
+                {/* Contest Details Section */}
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    Contest Details
+                  </h3>
+                  <div className="bg-card border border-border rounded-lg p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Start Date & Time</h4>
+                        <div className="bg-muted/30 border border-border rounded-md p-3">
+                          <p className="text-sm font-medium text-foreground">
+                            {contest.start_date
+                              ? formatLocalDateTime(contest.start_date)
+                              : "Not specified"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">End Date & Time</h4>
+                        <div className="bg-muted/30 border border-border rounded-md p-3">
+                          <p className="text-sm font-medium text-foreground">
+                            {contest.end_date
+                              ? formatLocalDateTime(contest.end_date)
+                              : "Not specified"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Platform</h4>
+                        <div className="bg-muted/30 border border-border rounded-md p-3">
+                          <p className="text-sm font-medium text-foreground capitalize">
+                            {contest.platform || "Not specified"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Category</h4>
+                        <div className="bg-muted/30 border border-border rounded-md p-3">
+                          <p className="text-sm font-medium text-foreground capitalize">
+                            {contest.category || "Not specified"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 md:col-span-2">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Sponsor</h4>
+                        <div className="bg-muted/30 border border-border rounded-md p-3">
+                          <p className="text-sm font-medium text-foreground">
+                            {contest.advertiser_profiles?.company_name ||
+                              "Not specified"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <Separator />
@@ -1049,47 +1069,53 @@ export function ContestClientPage({
                 <Separator />
 
                 {/* Resources Section - Always Show */}
-                <div>
-                  <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <Lightbulb className="h-5 w-5" /> Resources
+                <div className="space-y-4">
+                  <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                    <Lightbulb className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    Resources
                   </h3>
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-3">
+                  <div className="bg-card border border-border rounded-lg p-4">
                     {contest.resources &&
                       typeof contest.resources === "object" &&
                       Object.keys(contest.resources).length > 0 ? (
-                      Object.entries(contest.resources).map(
-                        ([key, value]) => (
-                          <div
-                            key={key}
-                            className="flex items-center justify-between py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0"
-                          >
-                            <span className="font-medium text-slate-800 dark:text-slate-200">
-                              {key}
-                            </span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              asChild
-                              className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
+                      <div className="space-y-3">
+                        {Object.entries(contest.resources).map(
+                          ([key, value]) => (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between py-3 border-b border-border last:border-b-0"
                             >
-                              <Link
-                                href={value as string}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <span className="font-medium text-foreground">
+                                {key}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                asChild
+                                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20 flex-shrink-0"
                               >
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                View Resource
-                              </Link>
-                            </Button>
-                          </div>
-                        )
-                      )
+                                <Link
+                                  href={value as string}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-1" />
+                                  View Resource
+                                </Link>
+                              </Button>
+                            </div>
+                          )
+                        )}
+                      </div>
                     ) : (
-                      <div className="text-center py-4">
-                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-2">
+                      <div className="text-center py-6">
+                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-muted flex items-center justify-center">
+                          <Lightbulb className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-muted-foreground text-sm mb-1">
                           No additional resources provided for this contest.
                         </p>
-                        <p className="text-slate-400 dark:text-slate-500 text-xs">
+                        <p className="text-muted-foreground/80 text-xs">
                           Check the brief and rules above for all contest requirements.
                         </p>
                       </div>
@@ -1113,27 +1139,30 @@ export function ContestClientPage({
                   return links.length > 0 ? (
                     <>
                       <Separator />
-                      <div>
-                        <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                          <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                           Inspiration Links
                         </h3>
-                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-3">
-                          {links.map((link: string, index: number) => (
-                            <div
-                              key={index}
-                              className="flex items-center py-2 border-b border-slate-200 dark:border-slate-700 last:border-b-0"
-                            >
-                              <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                              <Link
-                                href={link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate"
+                        <div className="bg-card border border-border rounded-lg p-4">
+                          <div className="space-y-3">
+                            {links.map((link: string, index: number) => (
+                              <div
+                                key={index}
+                                className="flex items-center py-3 border-b border-border last:border-b-0"
                               >
-                                {link}
-                              </Link>
-                            </div>
-                          ))}
+                                <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                <Link
+                                  href={link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate flex-1"
+                                >
+                                  {link}
+                                </Link>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </>

@@ -49,6 +49,7 @@ import {
     Edit,
     ExternalLink,
     FileText,
+    Lightbulb,
     MoreVertical,
     PlayCircle,
     ThumbsUp,
@@ -673,55 +674,65 @@ export default function ContestDetailClient({
 
                                 {Array.isArray(contest.inspiration_links) &&
                                     contest.inspiration_links.length > 0 && (
-                                        <div>
-                                            <h3 className="font-medium mb-2">Inspiration Links</h3>
-                                            <div className="border rounded-md p-4 bg-gray-50">
-                                                <ul className="space-y-2">
+                                        <div className="space-y-4">
+                                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                                                <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                                Inspiration Links
+                                            </h3>
+                                            <div className="bg-card border border-border rounded-lg p-4">
+                                                <div className="space-y-3">
                                                     {contest.inspiration_links.map(
                                                         (link: string, idx: number) => (
-                                                            <li key={idx} className="text-sm">
+                                                            <div key={idx} className="flex items-center py-3 border-b border-border last:border-b-0">
+                                                                <ExternalLink className="h-4 w-4 mr-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                                                                 <a
                                                                     href={link}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    className="text-blue-600 hover:underline flex items-center"
+                                                                    className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:underline font-medium text-sm truncate flex-1"
                                                                 >
-                                                                    <ExternalLink className="h-3 w-3 mr-1" />
                                                                     {link}
                                                                 </a>
-                                                            </li>
+                                                            </div>
                                                         )
                                                     )}
-                                                </ul>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
 
                                 {contest.resources &&
                                     Object.keys(contest.resources).length > 0 && (
-                                        <div>
-                                            <h3 className="font-medium mb-2">Resources</h3>
-                                            <div className="border rounded-md p-4 bg-gray-50">
-                                                <ul className="space-y-2">
+                                        <div className="space-y-4">
+                                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                                                <Lightbulb className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                                Resources
+                                            </h3>
+                                            <div className="bg-card border border-border rounded-lg p-4">
+                                                <div className="space-y-3">
                                                     {Object.entries(contest.resources).map(
                                                         ([name, url]) => (
-                                                            <li key={name} className="text-sm">
-                                                                <div className="flex justify-between items-center">
-                                                                    <span className="font-medium">{name}</span>
+                                                            <div key={name} className="flex items-center justify-between py-3 border-b border-border last:border-b-0">
+                                                                <span className="font-medium text-foreground">{name}</span>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    asChild
+                                                                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20 flex-shrink-0"
+                                                                >
                                                                     <a
                                                                         href={url as string}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
-                                                                        className="text-blue-600 hover:underline flex items-center"
                                                                     >
-                                                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                                                        <ExternalLink className="h-4 w-4 mr-1" />
                                                                         View Resource
                                                                     </a>
-                                                                </div>
-                                                            </li>
+                                                                </Button>
+                                                            </div>
                                                         )
                                                     )}
-                                                </ul>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
