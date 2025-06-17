@@ -7,7 +7,7 @@ import { Suspense, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Settings, User, LogOut, ChevronRight, Moon, Sun, Contrast, RotateCcw, Maximize2, CreditCard } from "lucide-react";
+import { Menu, X, Settings, User, LogOut, ChevronRight, Moon, Sun, Contrast, RotateCcw, Maximize2, CreditCard, Maximize, Minimize } from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -29,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { useFullscreen } from "@/hooks/use-fullscreen";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import Link from "next/link";
 import Image from "next/image";
@@ -212,6 +213,7 @@ function DashboardContent({
   const [currentMode, setCurrentMode] = useState<ModeKey>('light');
   const [currentPreset, setCurrentPreset] = useState<PresetKey>('clean-professional');
   const { logout } = useClientAuth();
+  const { isFullscreen, isSupported: isFullscreenSupported, isClient: isFullscreenClient, toggleFullscreen } = useFullscreen();
   const [profileData, setProfileData] = useState<{
     fullName: string | null;
     profilePictureUrl: string | null;
@@ -1387,6 +1389,41 @@ function DashboardContent({
 
                 {/* Right Side: Actions */}
                 <div className="flex items-center gap-3">
+                  {/* Full Screen Toggle Button */}
+                  {isFullscreenClient && isFullscreenSupported && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleFullscreen()}
+                      className="h-8 w-8 backdrop-blur-sm transition-all duration-300"
+                      style={{
+                        backgroundColor: currentMode === 'light'
+                          ? `rgba(${mode.background.tertiary}, 1)`
+                          : `rgba(${mode.background.secondary}, 0.5)`,
+                        borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
+                        color: `rgba(${mode.text.muted}, 1)`,
+                        boxShadow: currentMode === 'light' ? '0 1px 2px 0 rgba(0, 0, 0, 0.05)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
+                        e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
+                        e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
+                        e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
+                        e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
+                      }}
+                    >
+                      {isFullscreen ? (
+                        <Minimize className="h-4 w-4" />
+                      ) : (
+                        <Maximize className="h-4 w-4" />
+                      )}
+                      <span className="sr-only">Toggle Fullscreen</span>
+                    </Button>
+                  )}
+
                   {/* Settings Panel Trigger - Premium Style */}
                   <Sheet open={settingsPanelOpen} onOpenChange={setSettingsPanelOpen}>
                     <SheetTrigger asChild>
@@ -1594,6 +1631,42 @@ function DashboardContent({
                                   onCheckedChange={(checked) => switchMode(checked ? 'dark' : 'light')}
                                 />
                               </div>
+
+                              {/* Full Screen Toggle */}
+                              {isFullscreenClient && isFullscreenSupported && (
+                                <div
+                                  className="flex items-center justify-between p-4 rounded-xl border"
+                                  style={{
+                                    backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: `rgba(${theme.primary}, 0.2)`,
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                      style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
+                                    >
+                                      {isFullscreen ? (
+                                        <Minimize className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                      ) : (
+                                        <Maximize className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
+                                        {isFullscreen ? 'Exit Full Screen' : 'Full Screen Mode'}
+                                      </div>
+                                      <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
+                                        Toggle full screen view
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Switch
+                                    checked={isFullscreen}
+                                    onCheckedChange={() => toggleFullscreen()}
+                                  />
+                                </div>
+                              )}
                             </div>
 
                             {/* Color Scheme */}
