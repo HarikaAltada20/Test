@@ -154,6 +154,9 @@ export function ContestClientPage({
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
+  // Post-contest status state for creator transparency
+  const [postContestStatus, setPostContestStatus] = useState<string | null>(null);
+
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
 
@@ -288,6 +291,69 @@ export function ContestClientPage({
     }
   };
 
+  const renderPostContestStatusBadge = (status: string | null) => {
+    if (!status) return null;
+
+    let badgeColor = "bg-gray-500";
+    let textColor = "text-white";
+    let text = "Unknown";
+    let icon = null;
+
+    switch (status?.toLowerCase()) {
+      case "pending_review":
+        badgeColor = "bg-blue-500";
+        text = "Under Review";
+        icon = <Clock className="h-3 w-3 mr-1" />;
+        break;
+      case "in_review":
+        badgeColor = "bg-purple-500";
+        text = "In Review";
+        icon = <RefreshCw className="h-3 w-3 mr-1" />;
+        break;
+      case "verification_complete":
+        badgeColor = "bg-green-500";
+        text = "Verification Complete";
+        icon = <CheckCircle className="h-3 w-3 mr-1" />;
+        break;
+      case "payouts_processed":
+        badgeColor = "bg-emerald-600";
+        text = "Payouts Processed";
+        icon = <DollarSign className="h-3 w-3 mr-1" />;
+        break;
+      default:
+        badgeColor = "bg-gray-500";
+        text = "Unknown Status";
+        break;
+    }
+
+    return (
+      <Badge
+        variant="secondary"
+        className={`${badgeColor} ${textColor} text-sm px-3 py-1.5 rounded-full font-medium flex items-center`}
+      >
+        {icon}
+        {text}
+      </Badge>
+    );
+  };
+
+  const getPostContestStatusDescription = (status: string | null) => {
+    if (!status) return null;
+
+    switch (status?.toLowerCase()) {
+      case "pending_review":
+        return "The contest has ended and submissions are being prepared for review.";
+      case "in_review":
+        return "Contest submissions are currently being reviewed and verified by our team.";
+      case "verification_complete":
+        return "All submissions have been verified. Winners and payouts are being finalized.";
+      case "payouts_processed":
+        return "Verification is complete and payouts have been processed to winners.";
+      default:
+        return "Contest status is being updated.";
+    }
+  };
+
   const fetchMySubmissionData = async () => {
     if (!isMounted) return;
 
@@ -336,6 +402,29 @@ export function ContestClientPage({
       if (isMounted) setMyLeaderboardEntry(null);
     } finally {
       if (isMounted) setLoadingMySubmission(false);
+    }
+  };
+
+  const fetchPostContestStatus = async () => {
+    if (!isMounted || !contestId) return;
+
+    try {
+      const { data: contestData, error } = await supabase
+        .from('contests')
+        .select('post_contest_status')
+        .eq('id', contestId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching post-contest status:', error);
+        return;
+      }
+
+      if (isMounted) {
+        setPostContestStatus(contestData?.post_contest_status || null);
+      }
+    } catch (error) {
+      console.error('Error fetching post-contest status:', error);
     }
   };
 
@@ -404,6 +493,7 @@ export function ContestClientPage({
         if (isMounted) {
           fetchLeaderboard(1);
           fetchMySubmissionData(); // This will use dummy data if flag is true
+          fetchPostContestStatus(); // Fetch post-contest status for transparency
           setLoading(false); // Done with initial loading phase
         }
       }
@@ -579,6 +669,8 @@ export function ContestClientPage({
                         {contest.contest_type === 'cpm' ? 'Performance Based' : 'Competition Based'}
                       </Badge>
                     )}
+                    {/* Post-contest status badge for ended contests */}
+                    {contest.status === "ended" && postContestStatus && renderPostContestStatusBadge(postContestStatus)}
                   </div>
 
                   {/* Contest Duration */}
@@ -846,6 +938,58 @@ export function ContestClientPage({
             </CardContent>
           </Card>
         </div>
+
+        {/* Post-Contest Status Section for Ended Contests */}
+        {contest.status === "ended" && postContestStatus && (
+          <Card className="mb-8 shadow-lg border-slate-200 dark:border-slate-700 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border-b border-blue-200 dark:border-blue-700/50">
+              <CardTitle className="text-blue-900 dark:text-blue-100 flex items-center gap-3">
+                <FileText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                Contest Status Update
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Current Status:</h3>
+                    {renderPostContestStatusBadge(postContestStatus)}
+                  </div>
+                  <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                    {getPostContestStatusDescription(postContestStatus)}
+                  </p>
+                  {postContestStatus === 'payouts_processed' && (
+                    <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-lg">
+                      <div className="flex items-center gap-2 text-green-800 dark:text-green-300">
+                        <CheckCircle className="h-5 w-5" />
+                        <span className="font-medium">Contest Complete!</span>
+                      </div>
+                      <p className="text-sm text-green-700 dark:text-green-400 mt-1">
+                        All verification and payout processes have been completed for this contest.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-shrink-0">
+                  <div className="bg-white dark:bg-slate-800/50 rounded-xl p-4 border border-slate-200 dark:border-slate-600/50 shadow-sm">
+                    <div className="text-center">
+                      <div className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
+                        Contest Ended
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {contest.end_date ? formatLocalDateTime(contest.end_date, {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        }) : "Date not specified"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-8 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">

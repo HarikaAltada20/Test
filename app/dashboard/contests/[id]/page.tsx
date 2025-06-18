@@ -160,6 +160,8 @@ export default async function ContestDetailPage({
     id: contestData.id,
     title: contestData.title,
     status: contestData.status,
+    moderation_status: contestData.moderation_status,
+    post_contest_status: contestData.post_contest_status,
     thumbnail_url: contestData.thumbnail_url,
     brief_html: contestData.brief_html,
     platform: contestData.platform,
@@ -171,6 +173,12 @@ export default async function ContestDetailPage({
     contest_type: contestData.contest_type,
     contest_based_details: contestData.contest_based_details,
     last_metrics_updated: contestData.last_metrics_updated,
+    // Add other moderation fields for completeness
+    submitted_for_approval_at: contestData.submitted_for_approval_at,
+    approved_at: contestData.approved_at,
+    approved_by: contestData.approved_by,
+    published_at: contestData.published_at,
+    rejection_reason: contestData.rejection_reason,
   };
 
   const submissions = submissionsData

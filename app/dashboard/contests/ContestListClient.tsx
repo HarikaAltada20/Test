@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +49,6 @@ type Contest = {
     start_date: string | null;
     end_date: string | null;
     live_submission_count: number | null;
-    total_prize_money_sortable: number | null;
     contest_based_details: {
         leaderboard_contest?: {
             total_prize?: number;
@@ -75,9 +74,13 @@ interface ContestListClientProps {
     isAdminView?: boolean;
 }
 
-type SortKey = 'created_at' | 'start_date' | 'end_date' | 'status' | 'live_submission_count' | 'total_prize_money_sortable';
-type SortDirection = 'asc' | 'desc';
-type SortOption = `${SortKey}_${SortDirection}`;
+type SortOptionType =
+    'created_at_desc' | 'created_at_asc' |
+    'start_date_desc' | 'start_date_asc' |
+    'end_date_asc' | 'end_date_desc' |
+    'value_desc' | 'value_asc' |
+    'cpm_rate_desc' | 'cpm_rate_asc' |
+    'submissions_desc' | 'submissions_asc';
 
 // Moderation status configuration
 const moderationStatusConfig = {
@@ -122,9 +125,12 @@ const contestStatusConfig = {
 
 export function ContestListClient({ initialContests, isAdminView = false }: ContestListClientProps) {
     const router = useRouter();
-    const [sortOption, setSortOption] = useState<SortOption>("created_at_desc");
+    const [sortOption, setSortOption] = useState<SortOptionType>("created_at_desc");
     const [selectedTab, setSelectedTab] = useState("all");
     const [platformFilter, setPlatformFilter] = useState<string>("all");
+    const [contestStatusFilter, setContestStatusFilter] = useState<string>("all"); // New contest status filter
+    const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
+    const [filteredAndSortedContests, setFilteredAndSortedContests] = useState<Contest[]>([]);
 
     const availablePlatforms = useMemo(() => {
         const platforms = new Set(initialContests.map(c => c.platform).filter(Boolean) as string[]);
@@ -155,42 +161,95 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
         return groups;
     }, [initialContests]);
 
-    const filterAndSortContests = (contestsToProcess: Contest[]) => {
-        let contests = [...contestsToProcess];
+    // useEffect for filtering and sorting - copied from opportunities
+    useEffect(() => {
+        let contestsToDisplay = [...initialContests];
 
-        if (platformFilter !== "all") {
-            contests = contests.filter(c => c.platform === platformFilter);
+        // Apply contest status filter (Live, Upcoming, Ended, All)
+        if (contestStatusFilter !== "all") {
+            contestsToDisplay = contestsToDisplay.filter(contest => {
+                if (contestStatusFilter === "live") {
+                    return contest.moderation_status === 'published' && contest.status === 'active';
+                } else if (contestStatusFilter === "upcoming") {
+                    return contest.moderation_status === 'published' && contest.status === 'upcoming';
+                } else if (contestStatusFilter === "ended") {
+                    return contest.moderation_status === 'published' && contest.status === 'ended';
+                }
+                return true;
+            });
         }
 
-        contests.sort((a, b) => {
-            const parts = sortOption.split("_");
-            const key = parts.slice(0, -1).join("_") as SortKey;
-            const direction = parts[parts.length - 1] as SortDirection;
-            const dir = direction === "asc" ? 1 : -1;
+        // Apply platform filter
+        if (platformFilter !== "all") {
+            contestsToDisplay = contestsToDisplay.filter(contest => contest.platform === platformFilter);
+        }
 
-            let valA = a[key];
-            let valB = b[key];
+        // Apply contest type filter
+        if (contestTypeFilter !== "all") {
+            contestsToDisplay = contestsToDisplay.filter(contest => contest.contest_type === contestTypeFilter);
+        }
 
-            if (valA === null || valA === undefined) return 1 * dir;
-            if (valB === null || valB === undefined) return -1 * dir;
-
-            if (key === "created_at" || key === "start_date" || key === "end_date") {
-                valA = new Date(valA as string).getTime();
-                valB = new Date(valB as string).getTime();
-            } else if (key === "live_submission_count" || key === "total_prize_money_sortable") {
-                valA = Number(valA);
-                valB = Number(valB);
-            } else if (key === "status") {
-                valA = String(valA).toLowerCase();
-                valB = String(valB).toLowerCase();
+        // Sorting - exact copy from opportunities
+        contestsToDisplay.sort((a, b) => {
+            switch (sortOption) {
+                case 'created_at_desc':
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                case 'created_at_asc':
+                    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                case 'start_date_desc':
+                    if (!a.start_date) return 1; // push contests without start_date to the bottom
+                    if (!b.start_date) return -1;
+                    return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+                case 'start_date_asc':
+                    if (!a.start_date) return 1; // push contests without start_date to the bottom
+                    if (!b.start_date) return -1;
+                    return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+                case 'end_date_asc':
+                    if (!a.end_date) return 1; // push contests without end_date to the bottom
+                    if (!b.end_date) return -1;
+                    return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+                case 'end_date_desc':
+                    if (!a.end_date) return 1;
+                    if (!b.end_date) return -1;
+                    return new Date(b.end_date).getTime() - new Date(a.end_date).getTime();
+                case 'value_desc':
+                case 'value_asc':
+                    let valueA = 0;
+                    let valueB = 0;
+                    if (a.contest_type === 'leaderboard' && a.contest_based_details?.leaderboard_contest?.total_prize) {
+                        valueA = a.contest_based_details.leaderboard_contest.total_prize;
+                    } else if (a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.total_budget) {
+                        valueA = a.contest_based_details.cpm_contest.total_budget;
+                    }
+                    if (b.contest_type === 'leaderboard' && b.contest_based_details?.leaderboard_contest?.total_prize) {
+                        valueB = b.contest_based_details.leaderboard_contest.total_prize;
+                    } else if (b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.total_budget) {
+                        valueB = b.contest_based_details.cpm_contest.total_budget;
+                    }
+                    return sortOption === 'value_desc' ? valueB - valueA : valueA - valueB;
+                case 'cpm_rate_desc':
+                case 'cpm_rate_asc':
+                    const rateA = a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.cpm_rate_usd ? a.contest_based_details.cpm_contest.cpm_rate_usd : -1;
+                    const rateB = b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.cpm_rate_usd ? b.contest_based_details.cpm_contest.cpm_rate_usd : -1;
+                    if (rateA === -1 && rateB === -1) return 0;
+                    if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
+                    if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
+                    return sortOption === 'cpm_rate_desc' ? rateB - rateA : rateA - rateB;
+                case 'submissions_desc':
+                case 'submissions_asc':
+                    const countA = a.live_submission_count ?? -1;
+                    const countB = b.live_submission_count ?? -1;
+                    if (countA === -1 && countB === -1) return 0;
+                    if (countA === -1) return 1;
+                    if (countB === -1) return -1;
+                    return sortOption === 'submissions_desc' ? countB - countA : countA - countB;
+                default:
+                    return 0;
             }
-
-            if (valA < valB) return -1 * dir;
-            if (valA > valB) return 1 * dir;
-            return 0;
         });
-        return contests;
-    };
+
+        setFilteredAndSortedContests(contestsToDisplay);
+    }, [initialContests, contestStatusFilter, platformFilter, contestTypeFilter, sortOption]);
 
     const getModerationStatusBadge = (moderationStatus: string) => {
         const config = moderationStatusConfig[moderationStatus as keyof typeof moderationStatusConfig];
@@ -236,167 +295,153 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
     };
 
     const renderContestCard = (contest: Contest) => {
-        const isDraft = contest.moderation_status === 'draft';
-        const isRejected = contest.moderation_status === 'rejected';
         const isPublished = contest.moderation_status === 'published';
 
-        // Use the pre-processed total_prize_money_sortable for display
-        const leaderboardPrizeMoney = contest.contest_type === 'leaderboard'
-            ? contest.total_prize_money_sortable
-            : null;
-
-        const cpmBudget = contest.contest_type === 'cpm'
-            ? contest.contest_based_details?.cpm_contest?.total_budget
-            : null;
-
-        const budgetSpent = contest.contest_type === 'cpm'
-            ? contest.contest_based_details?.cpm_contest?.budget_spent ?? 0
-            : 0;
-        const budgetProgress = (cpmBudget && cpmBudget !== undefined && cpmBudget > 0) ? Math.min((budgetSpent / cpmBudget) * 100, 100) : 0;
-
-        // Original design for published contests
+        // Simple opportunities-style design for published contests
         if (isPublished) {
-            const statusDisplay = getContestStatusDisplay(contest.status, contest.post_contest_status);
-
             return (
                 <Card
                     key={contest.id}
-                    className="overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out border dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 cursor-pointer w-full"
-                    onClick={(e) => {
-                        if ((e.target as HTMLElement).closest('button')) {
-                            return;
-                        }
+                    className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 w-full cursor-pointer"
+                    onClick={() => {
                         const href = isAdminView
                             ? `/dashboard/admin/contests/${contest.id}`
                             : `/dashboard/contests/${contest.id}`;
                         router.push(href);
                     }}
                 >
-                    <div className="flex flex-col flex-grow">
-                        <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
-                            {contest.thumbnail_url ? (
-                                <img
-                                    src={contest.thumbnail_url}
-                                    alt={contest.title || "Contest thumbnail"}
-                                    className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
-                                />
-                            ) : (
-                                <Trophy className="h-16 w-16 text-slate-300 dark:text-slate-600" />
-                            )}
-                            <div className="absolute top-2 right-2">
-                                <Badge
-                                    className={cn("capitalize text-xs px-2 py-0.5 font-medium border", statusDisplay.className)}
-                                >
-                                    {statusDisplay.text}
-                                </Badge>
-                            </div>
+                    <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
+                        {contest.thumbnail_url ? (
+                            <img
+                                src={contest.thumbnail_url || "/placeholder.svg"}
+                                alt={contest.title || "Contest thumbnail"}
+                                className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+                            />
+                        ) : (
+                            <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
+                        )}
+                        <div className="absolute top-2 right-2">
+                            <Badge
+                                className={cn(
+                                    "capitalize text-xs px-2 py-0.5 font-medium border",
+                                    contest.status === "active" && "bg-green-500 border-green-500 text-white",
+                                    contest.status === "upcoming" && "bg-blue-500 border-blue-500 text-white",
+                                    contest.status === "ended" && "bg-slate-500 border-slate-500 text-white",
+                                    !["active", "upcoming", "ended"].includes(contest.status || "") && "bg-yellow-400 border-yellow-400 text-yellow-900"
+                                )}
+                            >
+                                {contest.status === "active" ? "Live" : (contest.status || "Unknown")}
+                            </Badge>
                         </div>
-                        <CardHeader className="p-4 pb-2">
-                            <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300 mr-2 leading-tight truncate">
-                                {contest.title || "Untitled Contest"}
-                            </CardTitle>
-                            {isAdminView && contest.advertiser_name && (
-                                <p className="text-xs text-muted-foreground pt-1">
-                                    By: {contest.advertiser_name}
-                                </p>
-                            )}
-                            {contest.live_submission_count !== null && (
-                                <p className="text-xs text-muted-foreground pt-1">
-                                    Submissions: {contest.live_submission_count}
-                                </p>
-                            )}
-                        </CardHeader>
-                        <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                            <div className="space-y-1.5 text-sm mb-3 text-slate-600 dark:text-slate-400">
+                    </div>
+                    <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300 mr-2 leading-tight">
+                            {contest.title || "Untitled Contest"}
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
+                        <div className="space-y-1.5 text-sm mb-3 text-slate-600 dark:text-slate-400">
+                            <div className="flex items-center">
+                                <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
+                            </div>
+                            {contest.start_date && (
                                 <div className="flex items-center">
-                                    <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
-                                    <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
+                                    <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>Starts: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                                 </div>
-                                {contest.start_date && (
-                                    <div className="flex items-center">
-                                        <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                                        <span>Starts: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
-                                    </div>
-                                )}
-                                {contest.end_date && (
-                                    <div className="flex items-center">
-                                        <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                                        <span>Ends: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
-                                    </div>
-                                )}
+                            )}
+                            {contest.end_date && (
                                 <div className="flex items-center">
-                                    <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span>Contest Type: <span className="font-medium text-slate-700 dark:text-slate-300">
-                                        {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type ? contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1) : 'N/A'}
+                                    <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>Ends: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
+                                </div>
+                            )}
+                            {contest.live_submission_count !== null && contest.live_submission_count !== undefined && (
+                                <div className="flex items-center">
+                                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>Submissions: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                                </div>
+                            )}
+                            <div className="flex items-center">
+                                <Info className="h-4 w-4 mr-2 flex-shrink-0" />
+                                <span>Contest Type: <span className="font-medium text-slate-700 dark:text-slate-300">
+                                    {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type ? contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1) : 'N/A'}
+                                </span></span>
+                            </div>
+                            {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
+                                <div className="flex items-center">
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                    <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
+                                </div>
+                            )}
+                            {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
+                                <div className="flex items-center">
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                    <span>Total Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
+                                </div>
+                            )}
+                            {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null && contest.contest_based_details.leaderboard_contest.total_prize > 0 && (
+                                <div className="flex items-center">
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                    <span>Total Prize Pool: <span className="font-medium text-slate-700 dark:text-slate-300">
+                                        {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
                                     </span></span>
                                 </div>
-                                {(leaderboardPrizeMoney !== null || cpmBudget !== null) && (
-                                    <div className="flex items-center">
-                                        <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                                        <span>
-                                            Prize/Budget:
-                                            <span className="font-medium text-slate-700 dark:text-slate-300">
-                                                {' '}{formatMoney(leaderboardPrizeMoney ?? cpmBudget ?? 0)}
-                                            </span>
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Budget Spent Progress Bar for CPM contests */}
-                            {contest.contest_type === 'cpm' && cpmBudget && cpmBudget > 0 && (
-                                <div className="mt-2 mb-2">
-                                    <div className="flex justify-between items-center text-xs mb-1">
-                                        <span className="text-slate-500 dark:text-slate-400">Budget Spent</span>
-                                        <span className="font-medium text-slate-600 dark:text-slate-300">{formatMoney(budgetSpent)}</span>
-                                    </div>
-                                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                                        <div
-                                            className="bg-green-500 h-2 rounded-full"
-                                            style={{ width: `${budgetProgress}%` }}
-                                        />
-                                    </div>
-                                </div>
                             )}
+                        </div>
 
-                            <div className="flex items-center gap-2 pt-2 border-t dark:border-slate-700 mt-auto">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="w-full"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        const href = isAdminView ? `/dashboard/admin/contests/${contest.id}` : `/dashboard/contests/${contest.id}`;
-                                        router.push(href);
-                                    }}
-                                >
-                                    View Details
-                                    <ExternalLink className="h-4 w-4 ml-2" />
-                                </Button>
+                        {/* Budget Spent Progress Bar for CPM contests */}
+                        {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
+                            <div className="mt-3 mb-3">
+                                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                    <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
+                                    <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                                    <div
+                                        className="bg-rose-500 h-2 rounded-full transition-all duration-500 ease-out"
+                                        style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
+                                    ></div>
+                                </div>
+                                <div className="flex justify-center text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    <span>Remaining: {formatMoney(contest.contest_based_details.cpm_contest.total_budget - (contest.contest_based_details.cpm_contest.budget_spent || 0))}</span>
+                                </div>
                             </div>
-                        </CardContent>
-                    </div>
+                        )}
+
+                        <Button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const href = isAdminView
+                                    ? `/dashboard/admin/contests/${contest.id}`
+                                    : `/dashboard/contests/${contest.id}`;
+                                router.push(href);
+                            }}
+                            size="sm"
+                            variant="outline"
+                            className="w-full mt-auto"
+                        >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View Details
+                        </Button>
+                    </CardContent>
                 </Card>
             );
         }
 
-        // Modern design for unpublished contests (draft, pending, approved, rejected)
+        // Modified design for unpublished contests with moderation status
         return (
             <Card
                 key={contest.id}
-                className={cn(
-                    "overflow-hidden rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ease-in-out border flex flex-col group bg-white dark:bg-slate-850 cursor-pointer w-full",
-                    isRejected
-                        ? "border-red-200 dark:border-red-800 hover:border-red-400"
-                        : "dark:border-slate-700 hover:border-rose-500 dark:hover:border-rose-500"
-                )}
+                className="overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-blue-400 dark:hover:border-blue-500 cursor-pointer"
                 onClick={(e) => {
                     if ((e.target as HTMLElement).closest('button')) {
                         return;
                     }
                     const href = isAdminView
                         ? `/dashboard/admin/contests/${contest.id}`
-                        : (isDraft ? `/dashboard/contests/create?draft=${contest.id}` : `/dashboard/contests/${contest.id}`);
+                        : `/dashboard/contests/${contest.id}`;
                     router.push(href);
                 }}
             >
@@ -404,7 +449,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                     <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
                         {contest.thumbnail_url ? (
                             <img
-                                src={contest.thumbnail_url}
+                                src={contest.thumbnail_url || "/placeholder.svg"}
                                 alt={contest.title || "Contest thumbnail"}
                                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
@@ -420,130 +465,72 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </div>
                     </div>
 
-                    <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                            <CardTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 line-clamp-2 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300">
+                    <CardContent className="flex-grow p-4 flex flex-col">
+                        <div className="mb-3">
+                            <h3 className="font-bold text-lg leading-tight text-slate-900 dark:text-slate-100 line-clamp-2">
                                 {contest.title || "Untitled Contest"}
-                            </CardTitle>
+                            </h3>
                         </div>
-                        {isAdminView && contest.advertiser_name && (
-                            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                                <Building className="h-4 w-4" />
-                                {contest.advertiser_name}
-                            </div>
-                        )}
-                    </CardHeader>
 
-                    <CardContent className="pt-0 flex-grow">
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                                    <span className="font-medium capitalize">{contest.platform}</span>
-                                    <span>•</span>
-                                    <span className="capitalize">{contest.contest_type}</span>
+                        <div className="flex items-center gap-2 mb-3">
+                            <Badge variant="outline" className="text-xs">
+                                {contest.platform || "Platform"}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs capitalize">
+                                {contest.contest_type || "Type"}
+                            </Badge>
+                        </div>
+
+                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 mb-4 flex-grow">
+                            {contest.start_date && contest.end_date ? (
+                                <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    <span>{formatLocalDateTime(contest.start_date)} - {formatLocalDateTime(contest.end_date)}</span>
                                 </div>
-                            </div>
-
-                            {/* Show dates for unpublished contests */}
-                            <div className="space-y-2">
-                                {contest.start_date && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                                        <Calendar className="h-4 w-4" />
-                                        <span>Starts {formatLocalDateTime(contest.start_date)}</span>
-                                    </div>
-                                )}
-                                {contest.end_date && (
-                                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                                        <Clock className="h-4 w-4" />
-                                        <span>Ends {formatLocalDateTime(contest.end_date)}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 pt-2">
-                                {(leaderboardPrizeMoney !== null && leaderboardPrizeMoney > 0) && (
-                                    <div className="flex items-center gap-2">
-                                        <Trophy className="h-4 w-4 text-yellow-500" />
-                                        <div className="text-sm">
-                                            <div className="font-semibold text-slate-900 dark:text-slate-100">
-                                                {formatMoney(leaderboardPrizeMoney)}
-                                            </div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                Prize Pool
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {(cpmBudget !== null && cpmBudget !== undefined && cpmBudget > 0) && (
-                                    <div className="flex items-center gap-2">
-                                        <DollarSign className="h-4 w-4 text-green-500" />
-                                        <div className="text-sm">
-                                            <div className="font-semibold text-slate-900 dark:text-slate-100">
-                                                {formatMoney(budgetSpent)} / {formatMoney(cpmBudget)}
-                                            </div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                                                Budget ({Math.round(budgetProgress)}%)
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {isRejected && contest.rejection_reason && (
-                                <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                                    <div className="flex items-start gap-2">
-                                        <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                                        <div>
-                                            <div className="text-sm font-medium text-red-800 dark:text-red-200">
-                                                Rejection Reason
-                                            </div>
-                                            <div className="text-sm text-red-700 dark:text-red-300 mt-1">
-                                                {contest.rejection_reason}
-                                            </div>
-                                        </div>
-                                    </div>
+                            ) : (
+                                <div className="flex items-center gap-1 text-amber-600">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    <span>Dates not set</span>
+                                </div>
+                            )}
+                            {contest.contest_based_details && (
+                                <div className="flex items-center gap-1">
+                                    <DollarSign className="h-3 w-3" />
+                                    <span>
+                                        {contest.contest_type === 'leaderboard'
+                                            ? `Prize: ${formatMoney(contest.contest_based_details.leaderboard_contest?.total_prize || 0)}`
+                                            : `Budget: ${formatMoney(contest.contest_based_details.cpm_contest?.total_budget || 0)}`
+                                        }
+                                    </span>
+                                </div>
+                            )}
+                            {contest.rejection_reason && (
+                                <div className="flex items-start gap-1 text-red-600 dark:text-red-400">
+                                    <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                    <span className="text-xs">{contest.rejection_reason}</span>
                                 </div>
                             )}
                         </div>
 
-                        <div className="mt-4 flex gap-2">
-                            {isDraft ? (
-                                <Button
-                                    size="sm"
-                                    className="flex-1"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        router.push(`/dashboard/contests/create?draft=${contest.id}`);
-                                    }}
-                                >
-                                    <Edit className="h-4 w-4 mr-1" />
-                                    Continue Editing
-                                </Button>
-                            ) : contest.moderation_status === 'approved' ? (
-                                // Approved contests: Show Publish, Edit Dates, and Delete options
+                        <div className="flex gap-2">
+                            {contest.moderation_status === 'approved' ? (
                                 <>
                                     <Button
                                         size="sm"
                                         className="flex-1 bg-green-600 hover:bg-green-700"
                                         onClick={async (e) => {
                                             e.stopPropagation();
-
                                             try {
                                                 const response = await fetch(`/api/contests/${contest.id}/publish`, {
                                                     method: 'POST'
                                                 });
-
-                                                const result = await response.json();
-
                                                 if (response.ok) {
-                                                    // Refresh the page to show updated status
                                                     window.location.reload();
                                                 } else {
-                                                    alert(result.error || 'Failed to publish contest');
+                                                    const error = await response.json();
+                                                    alert(error.error || 'Failed to publish contest');
                                                 }
                                             } catch (error) {
-                                                console.error('Error publishing contest:', error);
                                                 alert('Failed to publish contest');
                                             }
                                         }}
@@ -609,9 +596,77 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
     };
 
     const currentContests = contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
-    const sortedAndFilteredContests = useMemo(() => {
-        return filterAndSortContests(currentContests);
-    }, [currentContests, sortOption, platformFilter]);
+
+    // Apply sorting to currentContests when no additional filters are applied
+    const sortedCurrentContests = useMemo(() => {
+        if (contestStatusFilter !== "all" || platformFilter !== "all" || contestTypeFilter !== "all") {
+            return filteredAndSortedContests; // Use filtered and sorted results
+        }
+
+        // Apply sorting to tab-based contests
+        const sortedContests = [...currentContests];
+        sortedContests.sort((a, b) => {
+            switch (sortOption) {
+                case 'created_at_desc':
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                case 'created_at_asc':
+                    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                case 'start_date_desc':
+                    if (!a.start_date) return 1; // push contests without start_date to the bottom
+                    if (!b.start_date) return -1;
+                    return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+                case 'start_date_asc':
+                    if (!a.start_date) return 1; // push contests without start_date to the bottom
+                    if (!b.start_date) return -1;
+                    return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+                case 'end_date_asc':
+                    if (!a.end_date) return 1; // push contests without end_date to the bottom
+                    if (!b.end_date) return -1;
+                    return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+                case 'end_date_desc':
+                    if (!a.end_date) return 1;
+                    if (!b.end_date) return -1;
+                    return new Date(b.end_date).getTime() - new Date(a.end_date).getTime();
+                case 'value_desc':
+                case 'value_asc':
+                    let valueA = 0;
+                    let valueB = 0;
+                    if (a.contest_type === 'leaderboard' && a.contest_based_details?.leaderboard_contest?.total_prize) {
+                        valueA = a.contest_based_details.leaderboard_contest.total_prize;
+                    } else if (a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.total_budget) {
+                        valueA = a.contest_based_details.cpm_contest.total_budget;
+                    }
+                    if (b.contest_type === 'leaderboard' && b.contest_based_details?.leaderboard_contest?.total_prize) {
+                        valueB = b.contest_based_details.leaderboard_contest.total_prize;
+                    } else if (b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.total_budget) {
+                        valueB = b.contest_based_details.cpm_contest.total_budget;
+                    }
+                    return sortOption === 'value_desc' ? valueB - valueA : valueA - valueB;
+                case 'cpm_rate_desc':
+                case 'cpm_rate_asc':
+                    const rateA = a.contest_type === 'cpm' && a.contest_based_details?.cpm_contest?.cpm_rate_usd ? a.contest_based_details.cpm_contest.cpm_rate_usd : -1;
+                    const rateB = b.contest_type === 'cpm' && b.contest_based_details?.cpm_contest?.cpm_rate_usd ? b.contest_based_details.cpm_contest.cpm_rate_usd : -1;
+                    if (rateA === -1 && rateB === -1) return 0;
+                    if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
+                    if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
+                    return sortOption === 'cpm_rate_desc' ? rateB - rateA : rateA - rateB;
+                case 'submissions_desc':
+                case 'submissions_asc':
+                    const countA = a.live_submission_count ?? -1;
+                    const countB = b.live_submission_count ?? -1;
+                    if (countA === -1 && countB === -1) return 0;
+                    if (countA === -1) return 1;
+                    if (countB === -1) return -1;
+                    return sortOption === 'submissions_desc' ? countB - countA : countA - countB;
+                default:
+                    return 0;
+            }
+        });
+
+        return sortedContests;
+    }, [currentContests, sortOption, filteredAndSortedContests, contestStatusFilter, platformFilter, contestTypeFilter]);
+
+    const displayContests = sortedCurrentContests;
 
     return (
         <div className="w-full">
@@ -619,19 +674,23 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                        <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-                            <SelectTrigger className="w-full sm:w-[180px]">
+                        <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOptionType)}>
+                            <SelectTrigger className="w-full sm:w-[200px]">
                                 <SelectValue placeholder="Sort by" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="created_at_desc">Newest First</SelectItem>
-                                <SelectItem value="created_at_asc">Oldest First</SelectItem>
-                                <SelectItem value="start_date_asc">Start Date (Asc)</SelectItem>
-                                <SelectItem value="end_date_desc">End Date (Desc)</SelectItem>
-                                <SelectItem value="total_prize_money_sortable_desc">Prize/Budget (High-Low)</SelectItem>
-                                <SelectItem value="total_prize_money_sortable_asc">Prize/Budget (Low-High)</SelectItem>
-                                <SelectItem value="live_submission_count_desc">Submissions (High-Low)</SelectItem>
-                                <SelectItem value="live_submission_count_asc">Submissions (Low-High)</SelectItem>
+                                <SelectItem value="created_at_desc">Date Created: Latest</SelectItem>
+                                <SelectItem value="created_at_asc">Date Created: Earliest</SelectItem>
+                                <SelectItem value="start_date_asc">Launch Date: Closest</SelectItem>
+                                <SelectItem value="start_date_desc">Launch Date: Farthest</SelectItem>
+                                <SelectItem value="end_date_asc">End Date: Closest</SelectItem>
+                                <SelectItem value="end_date_desc">End Date: Farthest</SelectItem>
+                                <SelectItem value="value_desc">Prize/Budget: High to Low</SelectItem>
+                                <SelectItem value="value_asc">Prize/Budget: Low to High</SelectItem>
+                                <SelectItem value="cpm_rate_desc">CPM Rate: High to Low</SelectItem>
+                                <SelectItem value="cpm_rate_asc">CPM Rate: Low to High</SelectItem>
+                                <SelectItem value="submissions_desc">Submissions: High to Low</SelectItem>
+                                <SelectItem value="submissions_asc">Submissions: Low to High</SelectItem>
                             </SelectContent>
                         </Select>
 
@@ -647,17 +706,42 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                                 )}
                             </SelectContent>
                         </Select>
+
+                        {/* Contest Status Filter */}
+                        <Select value={contestStatusFilter} onValueChange={setContestStatusFilter}>
+                            <SelectTrigger className="w-full sm:w-[150px]">
+                                <SelectValue placeholder="Contest Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="live">Live</SelectItem>
+                                <SelectItem value="upcoming">Upcoming</SelectItem>
+                                <SelectItem value="ended">Ended</SelectItem>
+                            </SelectContent>
+                        </Select>
+
+                        {/* Contest Type Filter */}
+                        <Select value={contestTypeFilter} onValueChange={setContestTypeFilter}>
+                            <SelectTrigger className="w-full sm:w-[150px]">
+                                <SelectValue placeholder="Contest Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Types</SelectItem>
+                                <SelectItem value="leaderboard">Leaderboard</SelectItem>
+                                <SelectItem value="cpm">CPM</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </div>
             </div>
 
-            {/* Enhanced Status Filter Tabs */}
+            {/* Enhanced Status Filter Tabs - More Responsive */}
             <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
                 <div className="overflow-x-auto">
-                    <TabsList className="grid w-full grid-cols-8 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm mb-8 min-w-[900px]">
+                    <TabsList className="inline-flex w-auto min-w-full h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm mb-8 rounded-lg">
                         <TabsTrigger
                             value="all"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.all.length}
@@ -665,7 +749,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="draft"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Draft <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.draft.length}
@@ -673,7 +757,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="pending_approval"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Pending Approval <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.pending_approval.length}
@@ -681,7 +765,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="ready"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Ready <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.ready.length}
@@ -689,7 +773,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="active"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Active <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.active.length}
@@ -697,7 +781,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="pending_verification"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Pending Verification <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.pending_verification.length}
@@ -705,7 +789,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="done"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Done <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.done.length}
@@ -713,7 +797,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                         </TabsTrigger>
                         <TabsTrigger
                             value="rejected"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
+                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
                         >
                             Rejected <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                                 {contestsByStatus.rejected.length}
@@ -725,13 +809,13 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
                 {Object.keys(contestsByStatus).map((tabValue) => (
                     <TabsContent key={tabValue} value={tabValue} className="mt-4">
                         <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
-                            {sortedAndFilteredContests.length > 0 ? (
-                                sortedAndFilteredContests.map((contest) => renderContestCard(contest))
+                            {displayContests.length > 0 ? (
+                                displayContests.map((contest) => renderContestCard(contest))
                             ) : (
                                 <div className="col-span-full text-center py-12">
                                     <h3 className="text-lg font-semibold">No Contests Found</h3>
                                     <p className="text-slate-500 mt-2">
-                                        {platformFilter !== "all"
+                                        {platformFilter !== "all" || contestStatusFilter !== "all" || contestTypeFilter !== "all"
                                             ? `No contests match the current filters for ${tabValue} status.`
                                             : `No contests found for ${tabValue} status.`
                                         }

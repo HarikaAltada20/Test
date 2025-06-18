@@ -47,17 +47,10 @@ export default async function ContestsPage() {
     .eq("advertiser_id", data.user.id)
     .order("created_at", { ascending: false });
 
-  const typedContests = (contestsData || []).map(contest => {
-    let total_prize_money_sortable: number | null = null;
-    if (contest.contest_type === 'leaderboard' &&
-      contest.contest_based_details &&
-      typeof contest.contest_based_details === 'object' &&
-      (contest.contest_based_details as any).leaderboard_contest &&
-      typeof (contest.contest_based_details as any).leaderboard_contest.total_prize === 'number') {
-      total_prize_money_sortable = (contest.contest_based_details as any).leaderboard_contest.total_prize;
-    }
-    return { ...contest, status: contest.status || 'unknown', total_prize_money_sortable };
-  }) as any[];
+  const typedContests = (contestsData || []).map(contest => ({
+    ...contest,
+    status: contest.status || 'unknown'
+  })) as any[];
 
 
   return (

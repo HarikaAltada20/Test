@@ -17,6 +17,22 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import {
     Table,
     TableBody,
     TableCell,
@@ -38,6 +54,8 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { formatLocalDateTime, formatMoney, cn } from "@/lib/utils";
 import {
@@ -70,7 +88,8 @@ import {
     RefreshCw,
     Trash2,
     Monitor,
-    Play
+    Play,
+    Settings
 } from "lucide-react";
 
 // --- Local Type Definitions ---
@@ -136,21 +155,32 @@ export default function ContestDetailClient({
     const { toast } = useToast();
     const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(initialSubmissions || []);
     const [isLoadingSubmission, setIsLoadingSubmission] = useState<Record<string, boolean>>({});
+    const [currentContest, setCurrentContest] = useState<Contest>(contest);
+
+    // Status update states
+    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+    const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
+    const [selectedStatus, setSelectedStatus] = useState<string>('');
+    const [statusUpdateReason, setStatusUpdateReason] = useState('');
 
     // Refresh metrics state
     const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
-    const cooldownInfo = getMetricsRefreshCooldownInfo(contest.last_metrics_updated);
+    const cooldownInfo = getMetricsRefreshCooldownInfo(currentContest.last_metrics_updated);
 
     useEffect(() => {
         setCurrentSubmissions(initialSubmissions || []);
     }, [initialSubmissions]);
 
-    if (!contest) {
+    useEffect(() => {
+        setCurrentContest(contest);
+    }, [contest]);
+
+    if (!currentContest) {
         return <p>Loading contest details or contest not found...</p>;
     }
 
-    { console.log("contest data", contest) }
+    { console.log("contest data", currentContest) }
 
     const getStatusBadgeProps = (contest: Contest) => {
         // For unpublished contests, show moderation status
@@ -170,6 +200,12 @@ export default function ContestDetailClient({
             case "upcoming": return { text: "Upcoming", className: "bg-blue-500 text-white" };
             case "ended":
                 // Show post-contest status for ended contests
+                if (contest.post_contest_status === "pending_review") {
+                    return { text: "Pending Review", className: "bg-yellow-500 text-white" };
+                }
+                if (contest.post_contest_status === "in_review") {
+                    return { text: "In Review", className: "bg-orange-500 text-white" };
+                }
                 if (contest.post_contest_status === "verification_complete") {
                     return { text: "Verified - Payment Processing", className: "bg-purple-500 text-white" };
                 }
@@ -181,7 +217,7 @@ export default function ContestDetailClient({
             default: return { text: "Unknown", className: "bg-slate-400 text-white" };
         }
     };
-    const contestStatusBadgeInfo = getStatusBadgeProps(contest);
+    const contestStatusBadgeInfo = getStatusBadgeProps(currentContest);
 
     const getSubmissionStatusBadge = (status: Submission['status']) => {
         switch (status) {
@@ -200,35 +236,116 @@ export default function ContestDetailClient({
                 .from('submissions')
                 .update({ status: newStatus })
                 .eq('id', submissionId)
-                .select();
+                .select()
+                .single();
 
             if (error) throw error;
 
-            if (!data || data.length === 0) {
-                throw new Error("No submission was updated. This is likely due to Row Level Security (RLS) policies. Please ensure you have permissions to update and select this submission.");
-            }
-
-            const updatedSubmission = data[0];
-
-            setCurrentSubmissions(prevSubs =>
-                prevSubs.map(sub => (sub.id === submissionId ? updatedSubmission : sub))
+            // Update the local submissions state
+            setCurrentSubmissions(prev =>
+                prev.map(sub =>
+                    sub.id === submissionId
+                        ? { ...sub, status: newStatus }
+                        : sub
+                )
             );
 
             toast({
-                title: "Success",
-                description: `Submission status updated to ${newStatus}.`,
+                title: "Status Updated",
+                description: `Submission status updated to ${newStatus}`,
             });
-
-        } catch (error: any) {
-            console.error("Failed to update submission status:", error);
+        } catch (error) {
+            console.error('Error updating submission status:', error);
             toast({
-                title: "Update Failed",
-                description: error.message || "Could not update submission. Please check your permissions and try again.",
+                title: "Error",
+                description: "Failed to update submission status",
                 variant: "destructive",
             });
         } finally {
             setIsLoadingSubmission(prev => ({ ...prev, [submissionId]: false }));
         }
+    };
+
+    const handleUpdateContestStatus = async () => {
+        if (!selectedStatus) {
+            toast({
+                title: "Error",
+                description: "Please select a status",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setIsUpdatingStatus(true);
+        try {
+            const response = await fetch(`/api/contests/${contestId}/update-status`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    status: selectedStatus,
+                    reason: statusUpdateReason || null,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to update status');
+            }
+
+            // Update the local contest state
+            setCurrentContest(prev => ({
+                ...prev,
+                post_contest_status: selectedStatus as any,
+            }));
+
+            toast({
+                title: "Status Updated",
+                description: result.message,
+            });
+
+            setStatusUpdateDialog(false);
+            setSelectedStatus('');
+            setStatusUpdateReason('');
+        } catch (error: any) {
+            console.error('Error updating contest status:', error);
+            toast({
+                title: "Error",
+                description: error.message || "Failed to update contest status",
+                variant: "destructive",
+            });
+        } finally {
+            setIsUpdatingStatus(false);
+        }
+    };
+
+    const canUpdateContestStatus = () => {
+        return currentContest.moderation_status === 'published' &&
+            currentContest.status === 'ended' &&
+            currentContest.post_contest_status !== 'payouts_processed';
+    };
+
+    const getAvailableStatusOptions = () => {
+        const current = currentContest.post_contest_status;
+        const options = [
+            { value: 'pending_review', label: 'Pending Review', description: 'Contest submissions are under initial review' },
+            { value: 'in_review', label: 'In Review', description: 'Active review of submissions in progress' },
+            { value: 'verification_complete', label: 'Verification Complete', description: 'All submissions verified, preparing payouts' },
+            { value: 'payouts_processed', label: 'Payouts Processed', description: 'All payments have been released' },
+        ];
+
+        // For non-admin users (brands), exclude payouts_processed and only allow moving forward
+        if (!isAdminView) {
+            const currentIndex = options.findIndex(opt => opt.value === current);
+            return options
+                .filter(opt => opt.value !== 'payouts_processed') // Brands cannot set payouts_processed
+                .filter((_, index) => index > currentIndex);
+        }
+
+        // For admins, show all options except current
+        return options.filter(opt => opt.value !== current);
     };
 
     const handleRefreshMetrics = async () => {
@@ -364,9 +481,9 @@ export default function ContestDetailClient({
         return String(value);
     };
 
-    const isContestEditable = contest.moderation_status === 'draft' || contest.moderation_status === 'rejected' ||
-        (contest.moderation_status === 'approved' && contest.status === 'upcoming');
-    const isContestDeletable = contest.moderation_status === 'draft' || contest.moderation_status === 'rejected';
+    const isContestEditable = currentContest.moderation_status === 'draft' || currentContest.moderation_status === 'rejected' ||
+        (currentContest.moderation_status === 'approved' && currentContest.status === 'upcoming');
+    const isContestDeletable = currentContest.moderation_status === 'draft' || currentContest.moderation_status === 'rejected';
 
     return (
         <div>
@@ -376,16 +493,16 @@ export default function ContestDetailClient({
                         <ArrowLeft className="h-5 w-5" />
                     </Link>
                 </Button>
-                <h1 className="text-3xl font-bold text-gray-900">{contest.title}</h1>
+                <h1 className="text-3xl font-bold text-gray-900">{currentContest.title}</h1>
                 <Badge className={cn(contestStatusBadgeInfo.className, "ml-3 text-xs shadow-sm")}>
                     {contestStatusBadgeInfo.text}
                 </Badge>
-                {contest.contest_type && (
+                {currentContest.contest_type && (
                     <Badge
-                        variant={contest.contest_type === 'cpm' ? 'secondary' : 'default'}
+                        variant={currentContest.contest_type === 'cpm' ? 'secondary' : 'default'}
                         className="capitalize ml-2 text-xs shadow-sm"
                     >
-                        {contest.contest_type === 'cpm' ? 'CPM' : 'Leaderboard'}
+                        {currentContest.contest_type === 'cpm' ? 'CPM' : 'Leaderboard'}
                     </Badge>
                 )}
             </div>
@@ -394,7 +511,7 @@ export default function ContestDetailClient({
             <div className="space-y-6 mb-8">
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-end gap-2 mb-6">
-                    {(contest.moderation_status === 'published' && (contest.status === 'active' || contest.status === 'ended')) && currentSubmissions && currentSubmissions.length > 0 && (
+                    {(currentContest.moderation_status === 'published' && (currentContest.status === 'active' || currentContest.status === 'ended')) && currentSubmissions && currentSubmissions.length > 0 && (
                         <Button
                             size="sm"
                             variant="outline"
@@ -416,6 +533,83 @@ export default function ContestDetailClient({
                         </Button>
                     )}
 
+                    {/* Contest Status Update Button */}
+                    {canUpdateContestStatus() && (
+                        <Dialog open={statusUpdateDialog} onOpenChange={setStatusUpdateDialog}>
+                            <DialogTrigger asChild>
+                                <Button size="sm" variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50 shadow-sm">
+                                    <Settings className="mr-2 h-4 w-4" />
+                                    Update Status
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[425px]">
+                                <DialogHeader>
+                                    <DialogTitle>Update Contest Status</DialogTitle>
+                                    <DialogDescription>
+                                        Change the post-contest status to reflect the current stage of verification and payouts.
+                                        Current status: <strong>{currentContest.post_contest_status || 'Not set'}</strong>
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="space-y-2">
+                                        <label htmlFor="status" className="text-sm font-medium">
+                                            New Status
+                                        </label>
+                                        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select new status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {getAvailableStatusOptions().map((option) => (
+                                                    <SelectItem key={option.value} value={option.value}>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium">{option.label}</span>
+                                                            <span className="text-xs text-muted-foreground">{option.description}</span>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label htmlFor="reason" className="text-sm font-medium">
+                                            Reason (Optional)
+                                        </label>
+                                        <Textarea
+                                            id="reason"
+                                            placeholder="Add a note about this status change..."
+                                            value={statusUpdateReason}
+                                            onChange={(e) => setStatusUpdateReason(e.target.value)}
+                                            className="resize-none"
+                                        />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setStatusUpdateDialog(false)}
+                                        disabled={isUpdatingStatus}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleUpdateContestStatus}
+                                        disabled={isUpdatingStatus || !selectedStatus}
+                                    >
+                                        {isUpdatingStatus ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Updating...
+                                            </>
+                                        ) : (
+                                            'Update Status'
+                                        )}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    )}
+
                     <Button size="sm" variant="outline" className="shadow-sm" asChild>
                         <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/share` : `/dashboard/contests/${contestId}/share`}>
                             <Share2 className="mr-2 h-4 w-4" /> Share
@@ -435,13 +629,13 @@ export default function ContestDetailClient({
                             size="sm"
                             variant="outline"
                             className="border-red-200 text-red-700 hover:bg-red-50"
-                            onClick={() => {
-                                if (confirm('Are you sure you want to delete this contest? This action cannot be undone.')) {
-                                    console.log('Delete contest', contestId);
-                                }
-                            }}
+                            asChild
                         >
-                            <Trash2 className="h-4 w-4" />
+                            <DeleteContestButton
+                                contestId={contestId}
+                                contestTitle={currentContest.title || 'this contest'}
+                                isDeletable={isContestDeletable}
+                            />
                         </Button>
                     )}
                 </div>
@@ -453,11 +647,11 @@ export default function ContestDetailClient({
                         <CardContent className="p-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                                    {getPlatformIcon(contest.platform)}
+                                    {getPlatformIcon(currentContest.platform)}
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Platform</p>
-                                    <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">{contest.platform || 'N/A'}</p>
+                                    <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">{currentContest.platform || 'N/A'}</p>
                                 </div>
                             </div>
                         </CardContent>
@@ -473,9 +667,9 @@ export default function ContestDetailClient({
                                 <div className="flex-1">
                                     <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Duration</p>
                                     <p className="text-lg font-bold text-green-900 dark:text-green-100">{durationDays !== null ? `${durationDays} ${durationDays === 1 ? 'day' : 'days'}` : 'N/A'}</p>
-                                    {contest.start_date && contest.end_date && (
+                                    {currentContest.start_date && currentContest.end_date && (
                                         <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                                            {formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric' })} - {formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric' })}
+                                            {formatLocalDateTime(currentContest.start_date, { month: 'short', day: 'numeric' })} - {formatLocalDateTime(currentContest.end_date, { month: 'short', day: 'numeric' })}
                                         </p>
                                     )}
                                 </div>
@@ -484,7 +678,7 @@ export default function ContestDetailClient({
                     </Card>
 
                     {/* Prize/Budget Card */}
-                    {(contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null) && (
+                    {(currentContest.contest_type === 'leaderboard' && currentContest.contest_based_details?.leaderboard_contest?.total_prize != null) && (
                         <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
                             <CardContent className="p-4">
                                 <div className="flex items-center gap-3">
@@ -493,15 +687,15 @@ export default function ContestDetailClient({
                                     </div>
                                     <div className="flex-1">
                                         <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">Prize Pool</p>
-                                        <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">{formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}</p>
-                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">{contest.contest_based_details.leaderboard_contest.winner_count} winners</p>
+                                        <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">{formatMoney(currentContest.contest_based_details.leaderboard_contest.total_prize)}</p>
+                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">{currentContest.contest_based_details.leaderboard_contest.winner_count} winners</p>
                                     </div>
                                 </div>
                             </CardContent>
                         </Card>
                     )}
 
-                    {(contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null) && (
+                    {(currentContest.contest_type === 'cpm' && currentContest.contest_based_details?.cpm_contest?.total_budget != null) && (
                         <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
                             <CardContent className="p-4">
                                 <div className="flex items-center gap-3">
@@ -510,8 +704,8 @@ export default function ContestDetailClient({
                                     </div>
                                     <div className="flex-1">
                                         <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Budget</p>
-                                        <p className="text-lg font-bold text-blue-900 dark:text-blue-100">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</p>
-                                        <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">${contest.contest_based_details.cpm_contest.cpm_rate_usd} CPM</p>
+                                        <p className="text-lg font-bold text-blue-900 dark:text-blue-100">{formatMoney(currentContest.contest_based_details.cpm_contest.total_budget)}</p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">${currentContest.contest_based_details.cpm_contest.cpm_rate_usd} CPM</p>
                                     </div>
                                 </div>
                             </CardContent>
@@ -569,13 +763,13 @@ export default function ContestDetailClient({
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6 p-6">
-                                {contest.thumbnail_url && (
+                                {currentContest.thumbnail_url && (
                                     <div className="space-y-3">
                                         <h3 className="font-semibold text-lg text-foreground">Thumbnail</h3>
                                         <div className="flex justify-center">
                                             <img
-                                                src={contest.thumbnail_url}
-                                                alt={`${contest.title} thumbnail`}
+                                                src={currentContest.thumbnail_url}
+                                                alt={`${currentContest.title} thumbnail`}
                                                 className="max-w-full max-h-80 object-contain border rounded-lg shadow-sm"
                                             />
                                         </div>
@@ -584,10 +778,10 @@ export default function ContestDetailClient({
 
                                 <div className="space-y-3">
                                     <h3 className="font-semibold text-lg text-foreground">Brief</h3>
-                                    {contest.brief_html ? (
+                                    {currentContest.brief_html ? (
                                         <div
                                             className="prose prose-sm max-w-none text-foreground bg-muted/30 p-4 rounded-lg border"
-                                            dangerouslySetInnerHTML={{ __html: contest.brief_html }}
+                                            dangerouslySetInnerHTML={{ __html: currentContest.brief_html }}
                                         />
                                     ) : (
                                         <p className="text-muted-foreground bg-muted/30 p-4 rounded-lg border">No brief provided</p>
@@ -606,7 +800,7 @@ export default function ContestDetailClient({
                                                 <div className="flex-1">
                                                     <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Platform</p>
                                                     <p className="text-lg font-bold text-blue-900 dark:text-blue-100 capitalize">
-                                                        {contest.platform}
+                                                        {currentContest.platform}
                                                     </p>
                                                 </div>
                                             </div>
@@ -643,7 +837,7 @@ export default function ContestDetailClient({
                                                 <div className="flex-1">
                                                     <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Start Date & Time</p>
                                                     <p className="text-lg font-bold text-green-900 dark:text-green-100">
-                                                        {formatLocalDateTime(contest.start_date)}
+                                                        {formatLocalDateTime(currentContest.start_date)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -660,7 +854,7 @@ export default function ContestDetailClient({
                                                 <div className="flex-1">
                                                     <p className="text-xs font-medium text-orange-800 dark:text-orange-300 uppercase tracking-wide">End Date & Time</p>
                                                     <p className="text-lg font-bold text-orange-900 dark:text-orange-100">
-                                                        {formatLocalDateTime(contest.end_date)}
+                                                        {formatLocalDateTime(currentContest.end_date)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -669,7 +863,7 @@ export default function ContestDetailClient({
                                 </div>
 
                                 {/* Conditional Prize Structure / CPM Details */}
-                                {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest && (
+                                {currentContest.contest_type === 'leaderboard' && currentContest.contest_based_details?.leaderboard_contest && (
                                     <div className="space-y-4">
                                         <h3 className="font-semibold text-lg text-foreground">Prize Structure</h3>
 
@@ -683,7 +877,7 @@ export default function ContestDetailClient({
                                                     <div>
                                                         <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Prize Pool</p>
                                                         <p className="text-xl font-bold text-green-900 dark:text-green-100">
-                                                            {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                                                            {formatMoney(currentContest.contest_based_details.leaderboard_contest.total_prize)}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -694,7 +888,7 @@ export default function ContestDetailClient({
                                                     <div>
                                                         <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Winners</p>
                                                         <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                                                            {contest.contest_based_details.leaderboard_contest.winner_count}
+                                                            {currentContest.contest_based_details.leaderboard_contest.winner_count}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -708,8 +902,8 @@ export default function ContestDetailClient({
                                                 Prize Distribution
                                             </h4>
                                             <div className="space-y-2">
-                                                {Array.isArray(contest.contest_based_details.leaderboard_contest.prizes) &&
-                                                    contest.contest_based_details.leaderboard_contest.prizes
+                                                {Array.isArray(currentContest.contest_based_details.leaderboard_contest.prizes) &&
+                                                    currentContest.contest_based_details.leaderboard_contest.prizes
                                                         .sort((a: any, b: any) => a.position - b.position)
                                                         .map((prize: any, index: number) => (
                                                             <div
@@ -734,35 +928,35 @@ export default function ContestDetailClient({
                                     </div>
                                 )}
 
-                                {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
+                                {currentContest.contest_type === 'cpm' && currentContest.contest_based_details?.cpm_contest && (
                                     <div className="space-y-3">
                                         <h3 className="font-semibold text-lg text-foreground">CPM Configuration</h3>
                                         <div className="space-y-4 border p-4 rounded-lg bg-muted/30">
                                             <div className="flex justify-between items-center p-2 bg-background rounded border">
                                                 <span className="text-sm font-medium text-muted-foreground">CPM Rate:</span>
                                                 <span className="font-semibold text-foreground">
-                                                    ${parseFloat(contest.contest_based_details.cpm_contest.cpm_rate_usd).toFixed(2)} per 1000 views
+                                                    ${parseFloat(currentContest.contest_based_details.cpm_contest.cpm_rate_usd).toFixed(2)} per 1000 views
                                                 </span>
                                             </div>
                                             <div className="flex justify-between items-center p-2 bg-background rounded border">
                                                 <span className="text-sm font-medium text-muted-foreground">Total Budget:</span>
                                                 <span className="font-semibold text-foreground">
-                                                    {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}
+                                                    {formatMoney(currentContest.contest_based_details.cpm_contest.total_budget)}
                                                 </span>
                                             </div>
-                                            {contest.contest_based_details.cpm_contest.min_views != null && (
+                                            {currentContest.contest_based_details.cpm_contest.min_views != null && (
                                                 <div className="flex justify-between items-center p-2 bg-background rounded border">
                                                     <span className="text-sm font-medium text-muted-foreground">Min Views:</span>
                                                     <span className="font-semibold text-foreground">
-                                                        {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                                                        {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
                                                     </span>
                                                 </div>
                                             )}
-                                            {contest.contest_based_details.cpm_contest.max_views != null && (
+                                            {currentContest.contest_based_details.cpm_contest.max_views != null && (
                                                 <div className="flex justify-between items-center p-2 bg-background rounded border">
                                                     <span className="text-sm font-medium text-muted-foreground">Max Views (Cap):</span>
                                                     <span className="font-semibold text-foreground">
-                                                        {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                                        {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
                                                     </span>
                                                 </div>
                                             )}
@@ -770,7 +964,7 @@ export default function ContestDetailClient({
                                                 <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">Terms & Conditions</h4>
                                                 <div className="p-3 border rounded-lg bg-background text-sm text-foreground">
                                                     <div className="whitespace-pre-wrap break-words">
-                                                        {contest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
+                                                        {currentContest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
                                                     </div>
                                                 </div>
                                             </div>
@@ -778,20 +972,20 @@ export default function ContestDetailClient({
                                     </div>
                                 )}
 
-                                {(contest as any).rules_html && (
+                                {(currentContest as any).rules_html && (
                                     <div className="space-y-3">
                                         <h3 className="font-semibold text-lg text-foreground">Rules</h3>
                                         <div className="border rounded-lg p-4 bg-muted/30">
                                             <div
                                                 className="prose prose-sm max-w-none text-foreground"
-                                                dangerouslySetInnerHTML={{ __html: (contest as any).rules_html }}
+                                                dangerouslySetInnerHTML={{ __html: (currentContest as any).rules_html }}
                                             />
                                         </div>
                                     </div>
                                 )}
 
-                                {Array.isArray(contest.inspiration_links) &&
-                                    contest.inspiration_links.length > 0 && (
+                                {Array.isArray(currentContest.inspiration_links) &&
+                                    currentContest.inspiration_links.length > 0 && (
                                         <div className="space-y-4">
                                             <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                                                 <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -799,7 +993,7 @@ export default function ContestDetailClient({
                                             </h3>
                                             <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
                                                 <div className="space-y-3">
-                                                    {contest.inspiration_links.map(
+                                                    {currentContest.inspiration_links.map(
                                                         (link: string, idx: number) => (
                                                             <Card
                                                                 key={idx}
@@ -828,8 +1022,8 @@ export default function ContestDetailClient({
                                         </div>
                                     )}
 
-                                {contest.resources &&
-                                    Object.keys(contest.resources).length > 0 && (
+                                {currentContest.resources &&
+                                    Object.keys(currentContest.resources).length > 0 && (
                                         <div className="space-y-4">
                                             <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                                                 <Lightbulb className="h-5 w-5 text-green-600 dark:text-green-400" />
@@ -837,7 +1031,7 @@ export default function ContestDetailClient({
                                             </h3>
                                             <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
                                                 <div className="space-y-3">
-                                                    {Object.entries(contest.resources).map(
+                                                    {Object.entries(currentContest.resources).map(
                                                         ([name, url]) => (
                                                             <Card
                                                                 key={name}
@@ -900,7 +1094,7 @@ export default function ContestDetailClient({
                                                     <TableHead className="text-center">Likes</TableHead>
                                                     <TableHead className="text-center">Comments</TableHead>
                                                     {/* Dynamic headers based on contest platform */}
-                                                    {contest.platform?.toLowerCase().includes('instagram') && (
+                                                    {currentContest.platform?.toLowerCase().includes('instagram') && (
                                                         <>
                                                             <TableHead className="text-center">Shares</TableHead>
                                                             <TableHead className="text-center">Saves</TableHead>
@@ -977,7 +1171,7 @@ export default function ContestDetailClient({
                                                                     </div>
                                                                 </TableCell>
                                                                 {/* Dynamic data cells based on contest platform */}
-                                                                {contest.platform?.toLowerCase().includes('instagram') && (
+                                                                {currentContest.platform?.toLowerCase().includes('instagram') && (
                                                                     <>
                                                                         <TableCell className="text-center font-mono text-sm">
                                                                             <div className="flex items-center justify-center gap-1">
@@ -1030,7 +1224,7 @@ export default function ContestDetailClient({
                                                                                 <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'pending')}>
                                                                                     Set to Pending
                                                                                 </DropdownMenuItem>}
-                                                                            {submission.status !== 'paid' && contest.contest_type === 'cpm' &&
+                                                                            {submission.status !== 'paid' && currentContest.contest_type === 'cpm' &&
                                                                                 <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'paid')}>
                                                                                     Mark as Paid (CPM)
                                                                                 </DropdownMenuItem>}

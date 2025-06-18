@@ -54,23 +54,11 @@ export default async function AdminContestsPage() {
             .order("created_at", { ascending: false });
 
         // Add advertiser name to contests for admin view
-        const typedContests = (contestsData || []).map(contest => {
-            let total_prize_money_sortable: number | null = null;
-            if (contest.contest_type === 'leaderboard' &&
-                contest.contest_based_details &&
-                typeof contest.contest_based_details === 'object' &&
-                (contest.contest_based_details as any).leaderboard_contest &&
-                typeof (contest.contest_based_details as any).leaderboard_contest.total_prize === 'number') {
-                total_prize_money_sortable = (contest.contest_based_details as any).leaderboard_contest.total_prize;
-            }
-
-            return {
-                ...contest,
-                status: contest.status || 'unknown',
-                total_prize_money_sortable,
-                advertiser_name: (contest.advertiser_profiles as any)?.company_name || 'Unknown Brand'
-            };
-        }) as any[];
+        const typedContests = (contestsData || []).map(contest => ({
+            ...contest,
+            status: contest.status || 'unknown',
+            advertiser_name: (contest.advertiser_profiles as any)?.company_name || 'Unknown Brand'
+        })) as any[];
 
         return (
             <div className="space-y-6">

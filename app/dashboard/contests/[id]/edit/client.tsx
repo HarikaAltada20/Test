@@ -1351,7 +1351,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
 
-            if (!parsedTotalBudget || parsedTotalBudget < planFeatures.minContestBudget) {
+            if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
                 toast({
                     title: "Budget Too Low",
                     description: `Your current plan requires a minimum total budget of ${formatCurrency(planFeatures.minContestBudget)}.`,
@@ -1382,7 +1382,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 cpm_rate_usd: parsedCpmRate,
                 min_views: parsedMinViews,
                 max_views: parsedMaxViews,
-                total_budget: parsedTotalBudget,
+                total_budget: parsedTotalBudget * 100, // Convert to cents for storage
                 budget_spent: 0,
                 terms_conditions: termsConditions.trim()
             };
@@ -2302,8 +2302,17 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     </Button>
 
                     <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
-                        {contest?.moderation_status !== 'published' ? (
-                            // Draft/Save and Submit buttons for all non-published contests
+                        {datesOnly ? (
+                            // Dates-only mode: Just save changes (no approval needed)
+                            <Button
+                                onClick={handleSubmit}
+                                disabled={isSubmitting || !!validationError}
+                                className="bg-rose-600 hover:bg-rose-700 text-white"
+                            >
+                                {isSubmitting ? "Saving..." : "Save Changes"}
+                            </Button>
+                        ) : contest?.moderation_status !== 'published' ? (
+                            // Full edit mode for non-published contests: Draft/Save and Submit buttons
                             <>
                                 <Button
                                     variant="outline"
@@ -2322,10 +2331,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 </Button>
                             </>
                         ) : (
-                            // Regular save button for published contests (dates-only editing)
+                            // Full edit mode for published contests: Just save changes (should rarely happen)
                             <Button
                                 onClick={handleSubmit}
-                                disabled={isSubmitting || !!validationError} // Disable during submission or if validation errors exist
+                                disabled={isSubmitting || !!validationError}
                                 className="bg-rose-600 hover:bg-rose-700 text-white"
                             >
                                 {isSubmitting ? "Saving..." : "Save Changes"}
