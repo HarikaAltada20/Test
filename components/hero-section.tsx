@@ -116,15 +116,15 @@ export function HeroSection() {
         <div className="text-center space-y-8 max-w-6xl relative">
           <div className="relative">
             <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[0.9]">
-              <span className="block text-white drop-shadow-2xl">Make your</span>
+              <span className="block text-white drop-shadow-2xl">Turn Your</span>
               <span className="block bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent font-black tracking-wider">
-                product
+                creativity
               </span>
               <span className="block text-4xl sm:text-5xl md:text-6xl lg:text-7xl mt-4 relative">
-                <span className="text-white">go </span>
+                <span className="text-white">into </span>
                 <span className="inline-block relative">
                   <span className="bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 bg-clip-text text-transparent font-black tracking-wider">
-                    VIRAL
+                    SUCCESS
                   </span>
                   <div className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-red-500 rounded-full"></div>
                 </span>
@@ -138,8 +138,8 @@ export function HeroSection() {
           </div>
 
           <p className="text-xl md:text-2xl text-slate-200 max-w-3xl mx-auto leading-relaxed font-medium">
-            Launch strategic creator <span className="text-violet-400 font-bold">contests</span> and achieve viral success with
-            <span className="text-amber-400 font-bold"> guaranteed results</span>
+            Connect <span className="text-violet-400 font-bold">brands</span> with <span className="text-amber-400 font-bold">creators</span> through strategic contests and achieve viral success with
+            <span className="text-emerald-400 font-bold"> guaranteed results</span>
           </p>
         </div>
 

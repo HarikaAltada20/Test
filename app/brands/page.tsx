@@ -104,31 +104,18 @@ export default function BrandsPage() {
               Launch strategic creator <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">contests</span> and achieve viral success with <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">guaranteed results</span>
             </p>
 
-            {/* Epic CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+            {/* Epic CTA Button */}
+            <div className="flex justify-center items-center mb-16">
               <Button
                 size="lg"
-                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-10 py-4 rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 text-lg overflow-hidden"
+                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-16 py-5 rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 text-xl overflow-hidden"
                 asChild
               >
                 <Link href="/auth/signup">
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Crown className="mr-3 h-5 w-5" />
-                  <span className="relative z-10">I'm a Brand</span>
-                  <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </Button>
-
-              <Button
-                size="lg"
-                variant="outline"
-                className="group bg-slate-900/50 border-2 border-violet-400/30 text-white hover:text-white hover:bg-violet-600/20 hover:border-violet-400/50 backdrop-blur-sm font-bold px-10 py-4 rounded-xl transition-all duration-300 hover:scale-105 text-lg"
-                asChild
-              >
-                <Link href="/creators">
-                  <Sparkles className="mr-3 h-5 w-5" />
-                  <span>I'm a Creator</span>
-                  <Rocket className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  <Crown className="mr-4 h-6 w-6" />
+                  <span className="relative z-10">Get Started</span>
+                  <ArrowRight className="ml-4 h-6 w-6 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
             </div>
