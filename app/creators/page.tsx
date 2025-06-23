@@ -111,7 +111,7 @@ export default function CreatorsPage() {
             <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-orange-600/20 backdrop-blur-sm border border-amber-400/30 rounded-full px-6 py-3 mb-8 shadow-xl shadow-amber-500/20">
               <Sparkles className="h-5 w-5 text-amber-400" />
               <span className="text-sm font-semibold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
-                #1 Creator Gaming Platform
+                #1 Gamified Creator Marketing Platform
               </span>
             </div>
 
@@ -126,7 +126,7 @@ export default function CreatorsPage() {
             </div>
 
             {/* Massive Gaming Title */}
-            <h1 className="text-6xl md:text-8xl lg:text-9xl font-black mb-6 leading-tight">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight">
               <span className="block text-white drop-shadow-2xl">
                 Turn Your Creativity
               </span>
@@ -142,22 +142,22 @@ export default function CreatorsPage() {
             </h1>
 
             {/* Strategic Subtitle */}
-            <p className="text-xl md:text-2xl text-slate-300 max-w-4xl mx-auto mb-12 leading-relaxed drop-shadow-lg">
+            <p className="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
               Join Game Of Creators to find creative <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">opportunities</span>, collaborate with brands, and get paid for your <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">content</span>
             </p>
 
             {/* Epic CTA Button */}
-            <div className="flex justify-center items-center mb-16">
+            <div className="flex justify-center items-center mb-12">
               <Button
                 size="lg"
-                className="group relative bg-gradient-to-r from-amber-600 via-orange-600 to-yellow-600 hover:from-amber-500 hover:via-orange-500 hover:to-yellow-500 text-white font-bold px-16 py-5 rounded-xl shadow-2xl shadow-amber-500/40 hover:shadow-amber-500/60 transition-all duration-300 hover:scale-105 border border-amber-400/30 text-xl overflow-hidden"
+                className="group relative bg-gradient-to-r from-amber-600 via-orange-600 to-yellow-600 hover:from-amber-500 hover:via-orange-500 hover:to-yellow-500 text-white font-bold px-12 py-4 rounded-xl shadow-2xl shadow-amber-500/40 hover:shadow-amber-500/60 transition-all duration-300 hover:scale-105 border border-amber-400/30 text-lg overflow-hidden"
                 asChild
               >
                 <Link href="/auth/signup">
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Palette className="mr-4 h-6 w-6" />
+                  <Palette className="mr-3 h-5 w-5" />
                   <span className="relative z-10">Get Started</span>
-                  <Rocket className="ml-4 h-6 w-6 transition-transform group-hover:translate-x-1" />
+                  <Rocket className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
             </div>
@@ -168,7 +168,7 @@ export default function CreatorsPage() {
         <section className="py-20 md:py-32 relative">
           <div className="container mx-auto px-4">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">
                 Why Join as a Creator
               </h2>
               <p className="text-xl text-slate-400 max-w-3xl mx-auto">
@@ -236,7 +236,7 @@ export default function CreatorsPage() {
 
           <div className="relative container mx-auto px-4">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">
                 How It Works
               </h2>
               <div className="w-20 h-1 bg-gradient-to-r from-amber-500 to-orange-500 mx-auto rounded-full"></div>
@@ -334,7 +334,7 @@ export default function CreatorsPage() {
 
           <div className="relative container mx-auto px-4">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">
                 What Creators Say About Us
               </h2>
               <div className="w-20 h-1 bg-gradient-to-r from-amber-500 to-orange-500 mx-auto rounded-full"></div>
@@ -375,7 +375,7 @@ export default function CreatorsPage() {
           <div className="relative container mx-auto px-4">
             <div className="max-w-4xl mx-auto">
               <div className="text-center mb-16">
-                <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">FAQ</h2>
+                <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">FAQ</h2>
                 <p className="text-xl text-slate-300">Here are some frequently asked questions</p>
               </div>
 
@@ -414,24 +414,24 @@ export default function CreatorsPage() {
                 <Sparkles className="h-16 w-16 text-amber-400/60 mx-auto mb-6" />
               </div>
 
-              <h2 className="text-5xl md:text-7xl font-black mb-8 text-white drop-shadow-2xl">
+              <h2 className="text-4xl md:text-6xl font-black mb-8 text-white drop-shadow-2xl">
                 Ready to Transform Your <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">Creativity</span>?
               </h2>
 
-              <p className="text-2xl text-slate-300 mb-12 leading-relaxed">
+              <p className="text-xl text-slate-300 mb-12 leading-relaxed">
                 Join thousands of creators and brands. Sign up today and unlock your potential!
               </p>
 
               <Button
                 size="lg"
-                className="group relative bg-gradient-to-r from-amber-600 via-orange-600 to-yellow-600 hover:from-amber-500 hover:via-orange-500 hover:to-yellow-500 text-white font-bold px-12 py-6 rounded-2xl shadow-2xl shadow-amber-500/40 hover:shadow-amber-500/60 transition-all duration-300 hover:scale-110 border border-amber-400/30 text-xl overflow-hidden"
+                className="group relative bg-gradient-to-r from-amber-600 via-orange-600 to-yellow-600 hover:from-amber-500 hover:via-orange-500 hover:to-yellow-500 text-white font-bold px-10 py-5 rounded-2xl shadow-2xl shadow-amber-500/40 hover:shadow-amber-500/60 transition-all duration-300 hover:scale-110 border border-amber-400/30 text-lg overflow-hidden"
                 asChild
               >
                 <Link href="/auth/signup">
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Sparkles className="mr-4 h-6 w-6" />
+                  <Sparkles className="mr-3 h-5 w-5" />
                   <span className="relative z-10">Join Game Of Creators</span>
-                  <ArrowRight className="ml-4 h-6 w-6 transition-transform group-hover:translate-x-2" />
+                  <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-2" />
                 </Link>
               </Button>
             </div>

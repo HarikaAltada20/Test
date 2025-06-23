@@ -1,10 +1,12 @@
 "use client"
 
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import socialPairIcon from "@/public/images/social_pair.png";
+import { HERO_TAGLINES, TAGLINE_ROTATION_INTERVAL } from "@/lib/constants";
 import {
   ArrowRight,
   ChevronDown,
@@ -54,6 +56,37 @@ const FloatingElement = ({ children, delay = 0 }: { children: React.ReactNode, d
   </div>
 );
 
+// Rotating Tagline Component
+const RotatingTagline = () => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsVisible(false);
+
+      setTimeout(() => {
+        setCurrentIndex((prevIndex) =>
+          prevIndex === HERO_TAGLINES.length - 1 ? 0 : prevIndex + 1
+        );
+        setIsVisible(true);
+      }, 300); // Half second for fade out/in
+
+    }, TAGLINE_ROTATION_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <p
+      className={`text-lg md:text-xl bg-gradient-to-r from-slate-200 to-slate-100 bg-clip-text text-transparent max-w-2xl mx-auto leading-relaxed font-medium tracking-wide transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'
+        }`}
+    >
+      {HERO_TAGLINES[currentIndex]}
+    </p>
+  );
+};
+
 export function HeroSection() {
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden">
@@ -93,7 +126,7 @@ export function HeroSection() {
         <div className="mb-6 sm:mb-8">
           <Badge className="bg-gradient-to-r from-violet-600 to-purple-600 text-white px-8 py-3 text-sm font-bold border border-violet-400/30 hover:from-violet-500 hover:to-purple-500 transition-all duration-300 hover:scale-105 shadow-xl shadow-violet-500/25 backdrop-blur-sm">
             <Crown className="mr-2 h-4 w-4" />
-            #1 Creator Platform
+            #1 Gamified Creator Marketing Platform
           </Badge>
         </div>
 
@@ -113,21 +146,20 @@ export function HeroSection() {
         </div>
 
         {/* Precision-Crafted Main Title */}
-        <div className="text-center space-y-8 max-w-6xl relative">
+        <div className="text-center space-y-6 max-w-5xl relative">
           <div className="relative">
-            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[0.9]">
-              <span className="block text-white drop-shadow-2xl">Turn Your</span>
-              <span className="block bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent font-black tracking-wider">
-                creativity
-              </span>
-              <span className="block text-4xl sm:text-5xl md:text-6xl lg:text-7xl mt-4 relative">
-                <span className="text-white">into </span>
-                <span className="inline-block relative">
-                  <span className="bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 bg-clip-text text-transparent font-black tracking-wider">
-                    SUCCESS
-                  </span>
-                  <div className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 to-red-500 rounded-full"></div>
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight leading-[0.95]">
+              <span className="block text-white drop-shadow-2xl">Game Of Creators</span>
+              <span className="block text-xl sm:text-2xl md:text-3xl lg:text-4xl mt-3 font-bold">
+                <span className="text-white">Where </span>
+                <span className="bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 bg-clip-text text-transparent font-black">
+                  Creators
                 </span>
+                <span className="text-white"> and </span>
+                <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent font-black">
+                  Brands
+                </span>
+                <span className="text-white"> Win Together</span>
               </span>
             </h1>
 
@@ -137,34 +169,31 @@ export function HeroSection() {
             <div className="absolute bottom-10 left-10 w-1 h-1 bg-gradient-to-r from-indigo-400 to-purple-500 rounded-full animate-pulse delay-2000"></div>
           </div>
 
-          <p className="text-xl md:text-2xl text-slate-200 max-w-3xl mx-auto leading-relaxed font-medium">
-            Connect <span className="text-violet-400 font-bold">brands</span> with <span className="text-amber-400 font-bold">creators</span> through strategic contests and achieve viral success with
-            <span className="text-emerald-400 font-bold"> guaranteed results</span>
-          </p>
+          <RotatingTagline />
         </div>
 
         {/* Premium CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-6 mt-12 sm:mt-16 relative">
+        <div className="flex flex-col sm:flex-row gap-4 mt-10 sm:mt-12 relative">
           <Link href="/brands" passHref>
             <Button
               size="lg"
-              className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-12 py-4 text-lg rounded-2xl shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 hover:scale-105 border border-violet-400/20 overflow-hidden backdrop-blur-sm"
+              className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-10 py-3 text-base rounded-2xl shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 hover:scale-105 border border-violet-400/20 overflow-hidden backdrop-blur-sm"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/25 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-              <Crown className="mr-3 h-5 w-5" />
+              <Crown className="mr-2 h-4 w-4" />
               I'm a Brand
-              <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
+              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </Button>
           </Link>
           <Link href="/creators" passHref>
             <Button
               size="lg"
-              className="group relative bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 text-white font-bold px-12 py-4 text-lg rounded-2xl shadow-2xl shadow-amber-500/30 hover:shadow-amber-500/50 transition-all duration-300 hover:scale-105 border border-amber-400/20 overflow-hidden backdrop-blur-sm"
+              className="group relative bg-gradient-to-r from-amber-600 via-orange-600 to-red-600 hover:from-amber-500 hover:via-orange-500 hover:to-red-500 text-white font-bold px-10 py-3 text-base rounded-2xl shadow-2xl shadow-amber-500/30 hover:shadow-amber-500/50 transition-all duration-300 hover:scale-105 border border-amber-400/20 overflow-hidden backdrop-blur-sm"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/25 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-              <Palette className="mr-3 h-5 w-5" />
+              <Palette className="mr-2 h-4 w-4" />
               I'm a Creator
-              <Sparkles className="ml-3 h-5 w-5 transition-transform group-hover:rotate-180" />
+              <Sparkles className="ml-2 h-4 w-4 transition-transform group-hover:rotate-180" />
             </Button>
           </Link>
         </div>

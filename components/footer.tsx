@@ -70,10 +70,7 @@ export function Footer() {
                             <ul className="space-y-4">
                                 {[
                                     { name: "How it Works", href: "/brands" },
-                                    { name: "Pricing", href: "/brands#pricing" },
-                                    { name: "Success Stories", href: "/brands#success-stories" },
-                                    { name: "Case Studies", href: "/case-studies" },
-                                    { name: "ROI Calculator", href: "/roi-calculator" }
+                                    { name: "Pricing", href: "/pricing" }
                                 ].map((link, index) => (
                                     <li key={index}>
                                         <Link
@@ -97,11 +94,8 @@ export function Footer() {
                             </h3>
                             <ul className="space-y-4">
                                 {[
-                                    { name: "Apply as Creator", href: "/creators" },
-                                    { name: "Available Contests", href: "/dashboard/opportunities" },
-                                    { name: "Creator Guidelines", href: "/creators#guidelines" },
-                                    { name: "Success Tips", href: "/creator-tips" },
-                                    { name: "Community", href: "/community" }
+                                    { name: "Join as Creator", href: "/creators" },
+                                    { name: "Find Opportunities", href: "/dashboard/opportunities" }
                                 ].map((link, index) => (
                                     <li key={index}>
                                         <Link
@@ -128,8 +122,7 @@ export function Footer() {
                                     { name: "About Us", href: "/about" },
                                     { name: "Contact", href: "/contact" },
                                     { name: "Privacy Policy", href: "/privacy-policy" },
-                                    { name: "Terms of Service", href: "/terms-of-service" },
-                                    { name: "Careers", href: "/careers" }
+                                    { name: "Terms of Service", href: "/terms-of-service" }
                                 ].map((link, index) => (
                                     <li key={index}>
                                         <Link
@@ -166,28 +159,6 @@ export function Footer() {
                                     <span>San Francisco, CA</span>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Newsletter section */}
-                <div className="py-12 border-t border-slate-700/50">
-                    <div className="max-w-2xl mx-auto text-center space-y-6">
-                        <h3 className="text-2xl font-bold bg-gradient-to-r from-rose-400 via-purple-400 to-blue-400 bg-clip-text text-transparent">
-                            Stay in the loop
-                        </h3>
-                        <p className="text-slate-300 text-lg">
-                            Get the latest insights, tips, and updates delivered to your inbox
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
-                            <input
-                                type="email"
-                                placeholder="Enter your email"
-                                className="flex-1 px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/30 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-500/50 transition-all duration-300"
-                            />
-                            <button className="px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-medium rounded-xl hover:from-rose-600 hover:to-pink-600 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-rose-500/25">
-                                Subscribe
-                            </button>
                         </div>
                     </div>
                 </div>

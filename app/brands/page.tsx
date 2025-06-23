@@ -66,7 +66,7 @@ export default function BrandsPage() {
             <div className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600/20 to-purple-600/20 backdrop-blur-sm border border-violet-400/30 rounded-full px-6 py-3 mb-8 shadow-xl shadow-violet-500/20">
               <Crown className="h-5 w-5 text-violet-400" />
               <span className="text-sm font-semibold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-                #1 Brand Gaming Platform
+                #1 Gamified Creator Marketing Platform
               </span>
             </div>
 
@@ -81,12 +81,9 @@ export default function BrandsPage() {
             </div>
 
             {/* Massive Gaming Title */}
-            <h1 className="text-6xl md:text-8xl lg:text-9xl font-black mb-6 leading-tight">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-black mb-6 leading-tight">
               <span className="block text-white drop-shadow-2xl">
-                Make your
-              </span>
-              <span className="block bg-gradient-to-r from-violet-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent animate-pulse drop-shadow-2xl">
-                product
+                Make your product
               </span>
               <span className="block text-white drop-shadow-2xl">
                 go{" "}
@@ -100,22 +97,22 @@ export default function BrandsPage() {
             </h1>
 
             {/* Strategic Subtitle */}
-            <p className="text-xl md:text-2xl text-slate-300 max-w-4xl mx-auto mb-12 leading-relaxed drop-shadow-lg">
+            <p className="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
               Launch strategic creator <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">contests</span> and achieve viral success with <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">guaranteed results</span>
             </p>
 
             {/* Epic CTA Button */}
-            <div className="flex justify-center items-center mb-16">
+            <div className="flex justify-center items-center mb-12">
               <Button
                 size="lg"
-                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-16 py-5 rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 text-xl overflow-hidden"
+                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-12 py-4 rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 text-lg overflow-hidden"
                 asChild
               >
                 <Link href="/auth/signup">
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Crown className="mr-4 h-6 w-6" />
+                  <Crown className="mr-3 h-5 w-5" />
                   <span className="relative z-10">Get Started</span>
-                  <ArrowRight className="ml-4 h-6 w-6 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
             </div>
@@ -126,7 +123,7 @@ export default function BrandsPage() {
         <section className="py-20 md:py-32 relative">
           <div className="container mx-auto px-4">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">
                 Why Brands Choose Game Of Creators
               </h2>
               <p className="text-xl text-slate-400 max-w-3xl mx-auto">
@@ -194,7 +191,7 @@ export default function BrandsPage() {
 
           <div className="relative container mx-auto px-4">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">
                 How It Works
               </h2>
               <div className="w-20 h-1 bg-gradient-to-r from-violet-500 to-purple-500 mx-auto rounded-full"></div>
@@ -285,7 +282,7 @@ export default function BrandsPage() {
 
           <div className="relative container mx-auto px-4">
             <div className="text-center mb-20">
-              <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">
+              <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">
                 What Brands Say About Us
               </h2>
               <div className="w-20 h-1 bg-gradient-to-r from-violet-500 to-purple-500 mx-auto rounded-full"></div>
@@ -363,7 +360,7 @@ export default function BrandsPage() {
           <div className="relative container mx-auto px-4">
             <div className="max-w-4xl mx-auto">
               <div className="text-center mb-16">
-                <h2 className="text-4xl md:text-6xl font-black mb-6 text-white drop-shadow-xl">FAQ</h2>
+                <h2 className="text-3xl md:text-5xl font-black mb-6 text-white drop-shadow-xl">FAQ</h2>
                 <p className="text-xl text-slate-300">Here are some frequently asked questions</p>
               </div>
 
@@ -402,24 +399,24 @@ export default function BrandsPage() {
                 <Crown className="h-16 w-16 text-violet-400/60 mx-auto mb-6" />
               </div>
 
-              <h2 className="text-5xl md:text-7xl font-black mb-8 text-white drop-shadow-2xl">
+              <h2 className="text-4xl md:text-6xl font-black mb-8 text-white drop-shadow-2xl">
                 Ready to Transform Your <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">Content Strategy</span>?
               </h2>
 
-              <p className="text-2xl text-slate-300 mb-12 leading-relaxed">
+              <p className="text-xl text-slate-300 mb-12 leading-relaxed">
                 Launch your first contest today and witness the power of creator-generated content.
               </p>
 
               <Button
                 size="lg"
-                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-12 py-6 rounded-2xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-110 border border-violet-400/30 text-xl overflow-hidden"
+                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-10 py-5 rounded-2xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-110 border border-violet-400/30 text-lg overflow-hidden"
                 asChild
               >
                 <Link href="/auth/signup">
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Rocket className="mr-4 h-6 w-6" />
+                  <Rocket className="mr-3 h-5 w-5" />
                   <span className="relative z-10">Launch a Contest</span>
-                  <ArrowRight className="ml-4 h-6 w-6 transition-transform group-hover:translate-x-2" />
+                  <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-2" />
                 </Link>
               </Button>
             </div>

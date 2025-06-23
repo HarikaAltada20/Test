@@ -57,4 +57,19 @@ export function formatRemainingTime(remainingMs: number): string {
       return `${hours}h ${remainingMinutes}m`;
     }
   }
-} 
+}
+
+// Taglines for home page hero section (rotating below main heading)
+export const HERO_TAGLINES = [
+  "The World's First Platform to Democratize Brand Deals",
+  "World's First Viral Creator Marketing Platform"
+];
+
+// export const HERO_TAGLINES = [
+//   "Where Creative Talent Meets Real Opportunities",
+//   "Test Content at Scale, Own What Works", 
+//   "Where Creative Contests Create Success Stories"
+// ];
+
+// Animation timing for tagline rotation (in milliseconds)
+export const TAGLINE_ROTATION_INTERVAL = 6000; // 6 seconds 
