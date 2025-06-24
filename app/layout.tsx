@@ -11,8 +11,41 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Game Of Creators",
-  description:
-    "Connect brands with content creators for viral marketing campaigns",
+  description: "Connect brands with content creators for viral marketing campaigns",
+  metadataBase: new URL('https://www.gameofcreators.com'),
+  openGraph: {
+    title: "Game Of Creators",
+    description: "Connect brands with content creators for viral marketing campaigns",
+    url: "https://www.gameofcreators.com/",
+    siteName: "Game Of Creators",
+    images: [
+      {
+        url: "/images/square_goc.png",
+        width: 1200,
+        height: 630,
+        alt: "Game Of Creators - Connect brands with content creators",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Game Of Creators",
+    description: "Connect brands with content creators for viral marketing campaigns",
+    images: ["/images/square_goc.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export default async function RootLayout({
