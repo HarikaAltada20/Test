@@ -30,8 +30,8 @@ export const metadata: Metadata = {
     locale: "en_US",
     type: "website",
   },
-  other: {
-    "fb:app_id": "9901516833263498", // Replace with your actual Facebook App ID
+  facebook: {
+    appId: "9901516833263498",
   },
   twitter: {
     card: "summary_large_image",
