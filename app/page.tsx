@@ -24,6 +24,9 @@ export const metadata: Metadata = {
     locale: "en_US",
     type: "website",
   },
+  other: {
+    "fb:app_id": "9901516833263498", // Replace with your actual Facebook App ID
+  },
   twitter: {
     card: "summary_large_image",
     title: "Game Of Creators - Connect Brands with Content Creators",
