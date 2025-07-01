@@ -13,7 +13,7 @@ import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info, Aler
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
-import { formatCurrency } from "@/lib/currency-utils"
+import { formatCurrencyFromCents } from "@/lib/currency-utils"
 import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
@@ -128,7 +128,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
     // Leaderboard specific
     const [winnerCount, setWinnerCount] = useState<number>(3)
-    const [winnerAmounts, setWinnerAmounts] = useState<number[]>([500, 300, 200]) // Note: these amounts are in cents if formatCurrency expects cents
+    const [winnerAmounts, setWinnerAmounts] = useState<number[]>([5000, 3000, 2000]) // Note: these amounts are in cents if formatCurrencyFromCents expects cents
 
     // CPM specific
     const [cpmRate, setCpmRate] = useState<number | string>(""); // Store as string for input, parse to number for saving
@@ -648,7 +648,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             if (currentTotalPrizePool < planFeatures.minContestBudget) {
                 toast({
                     title: "Prize Pool Too Low",
-                    description: `Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`,
+                    description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
                     variant: "destructive",
                 });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -657,7 +657,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
                     toast({
                         title: "Prize Amount Too Low",
-                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`,
+                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -665,7 +665,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
                     toast({
                         title: "Prize Amount Too High",
-                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`,
+                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1300,7 +1300,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             if (currentTotalPrizePool < planFeatures.minContestBudget) {
                 toast({
                     title: "Prize Pool Too Low",
-                    description: `Your current plan requires a minimum total prize pool of ${formatCurrency(planFeatures.minContestBudget)}.`,
+                    description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
                     variant: "destructive",
                 });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1309,7 +1309,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
                     toast({
                         title: "Prize Amount Too Low",
-                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`,
+                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1317,7 +1317,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
                     toast({
                         title: "Prize Amount Too High",
-                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`,
+                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1354,7 +1354,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
                 toast({
                     title: "Budget Too Low",
-                    description: `Your current plan requires a minimum total budget of ${formatCurrency(planFeatures.minContestBudget)}.`,
+                    description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
                     variant: "destructive",
                 });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1590,7 +1590,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                             {dbSubscriptionPlans.find(p => p.id === userPlan)?.name || 'Free'}
                             <span className="ml-4 text-sm text-blue-700">
                                 • Max Winners: {planFeatures.maxWinnersPerContest}
-                                • Min Prize Pool: {formatCurrency(planFeatures.minContestBudget)}
+                                • Min Prize Pool: {formatCurrencyFromCents(planFeatures.minContestBudget)}
                             </span>
                         </div>
                         <Link href="/pricing" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
@@ -2040,7 +2040,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 <h3 className="text-lg font-medium">Prize distribution</h3>
                                 <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                                     <span className="text-sm font-medium">Total Prize Pool:</span>
-                                    <span className="text-lg font-bold">{formatCurrency(totalPrizePool)}</span>
+                                    <span className="text-lg font-bold">{formatCurrencyFromCents(totalPrizePool)}</span>
                                 </div>
                             </div>
 
@@ -2049,9 +2049,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 <Info className="h-4 w-4" />
                                 <AlertDescription>
                                     <span className="font-medium">Plan Requirements: </span>
-                                    Minimum total prize pool: <strong>{formatCurrency(planFeatures.minContestBudget)}</strong>
+                                    Minimum total prize pool: <strong>{formatCurrencyFromCents(planFeatures.minContestBudget)}</strong>
                                     • Maximum winners: <strong>{planFeatures.maxWinnersPerContest}</strong>
-                                    • Minimum per winner: <strong>{formatCurrency(MIN_PRIZE_PER_WINNER)}</strong>
+                                    • Minimum per winner: <strong>{formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}</strong>
                                 </AlertDescription>
                             </Alert>
 
@@ -2146,13 +2146,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                     if (value < MIN_PRIZE_PER_WINNER) {
                                                         toast({
                                                             title: "Prize Amount Too Low",
-                                                            description: `Prize amount cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`,
+                                                            description: `Prize amount cannot be less than ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
                                                             variant: "destructive",
                                                         });
                                                     } else if (value > MAX_PRIZE_PER_WINNER) {
                                                         toast({
                                                             title: "Prize Amount Too High",
-                                                            description: `Prize amount cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`,
+                                                            description: `Prize amount cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
                                                             variant: "destructive",
                                                         });
                                                     }
@@ -2163,7 +2163,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                             className="w-48"
                                         />
                                         <div className="text-sm text-gray-500">
-                                            <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+                                            <span>Min: {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}</span>
                                         </div>
                                     </div>
                                 ))}
@@ -2172,8 +2172,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                             {totalPrizePool < planFeatures.minContestBudget && (
                                 <Alert variant="destructive" className="mt-4">
                                     <AlertDescription>
-                                        ⚠️ The minimum prize pool for your current plan is {formatCurrency(planFeatures.minContestBudget)}.
-                                        Current total: {formatCurrency(totalPrizePool)}. Please increase prize amounts.
+                                        ⚠️ The minimum prize pool for your current plan is {formatCurrencyFromCents(planFeatures.minContestBudget)}.
+                                        Current total: {formatCurrencyFromCents(totalPrizePool)}. Please increase prize amounts.
                                     </AlertDescription>
                                 </Alert>
                             )}

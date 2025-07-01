@@ -32,7 +32,8 @@ import {
   DollarSign
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { formatLocalDateTime, formatMoney } from "@/lib/utils";
+import { formatLocalDateTime } from "@/lib/utils";
+import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

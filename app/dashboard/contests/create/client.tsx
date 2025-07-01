@@ -46,7 +46,7 @@ import {
   toUTCISOString,
 
 } from "@/lib/utils";
-import { formatCurrency } from "@/lib/currency-utils";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from 'next/dynamic';
 
@@ -66,6 +66,7 @@ import {
 } from "@/constants/subscriptionPlans";
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
+import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -83,7 +84,7 @@ type SubscriptionPlan = {
   features: PlanFeatures;
 };
 
-type Step = "basics" | "brief" | "resources" | "prize";
+type Step = "basics" | "brief" | "resources" | "prize" | "payment";
 
 export default function CreateContestPage({
   user,
@@ -91,6 +92,8 @@ export default function CreateContestPage({
   user: UserResponse["data"]["user"];
 }) {
   const [step, setStep] = useState<Step>("basics");
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentCompleted, setPaymentCompleted] = useState(false);
 
   // Contest Type and CPM-specific state
   const [contestType, setContestType] = useState<"leaderboard" | "cpm">("leaderboard");
@@ -437,7 +440,7 @@ export default function CreateContestPage({
         // Client-side validation for prize amounts for leaderboard
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-            setFormFeedback(`Prize for Winner ${i + 1} must be at least ${formatCurrency(MIN_PRIZE_PER_WINNER)}`); // Footer feedback
+            setFormFeedback(`Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
             setUploadProgress(null);
@@ -502,7 +505,7 @@ export default function CreateContestPage({
         // Validate budget requirements
         if (contestType === "leaderboard") {
           if (totalPrizePool < planFeatures.minContestBudget) {
-            setFormFeedback(`The minimum prize pool for your plan is ${formatCurrency(planFeatures.minContestBudget)}. Please increase your prize amounts.`);
+            setFormFeedback(`The minimum prize pool for your plan is ${formatCurrencyFromCents(planFeatures.minContestBudget)}. Please increase your prize amounts.`);
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
@@ -516,7 +519,7 @@ export default function CreateContestPage({
         } else if (contestType === "cpm") {
           const budgetInCents = (parseFloat(totalBudget.toString()) || 0) * 100;
           if (budgetInCents < planFeatures.minContestBudget) {
-            setFormFeedback(`The minimum contest budget for your plan is ${formatCurrency(planFeatures.minContestBudget)}. Please increase your total budget.`);
+            setFormFeedback(`The minimum contest budget for your plan is ${formatCurrencyFromCents(planFeatures.minContestBudget)}. Please increase your total budget.`);
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
@@ -752,16 +755,21 @@ export default function CreateContestPage({
       }
 
       if (!isDraft) {
-        setUploadProgress("Contest submitted for review! Redirecting...");
-        if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
-        toast({
-          title: "Contest Submitted!",
-          description: "Your contest has been submitted for admin review. You'll be notified once it's approved."
-        });
+        // Get the contest fee amount based on type
+        const contestFeeAmount = contestType === "leaderboard"
+          ? totalPrizePool / 100  // Convert cents to dollars
+          : (parseFloat(totalBudget.toString()) || 0); // Budget is already in dollars
+
         const contestId = responseData?.[0]?.id;
-        setTimeout(() => {
-          router.push(contestId ? `/dashboard/contests/${contestId}` : "/dashboard/contests");
-        }, 1500);
+
+        // Show payment interface before final submission
+        setShowPayment(true);
+        setIsLoading(false);
+        setUploadProgress(null);
+
+        // Don't proceed to final submission until payment is completed
+        // This will be handled by the payment component
+        return;
       } else {
         // This 'else' block is for draft saving if handleSubmit is directly called with isDraft=true.
         setResourceFiles({});
@@ -782,6 +790,34 @@ export default function CreateContestPage({
       setIsLoading(false);
       setUploadProgress(null);
     }
+  };
+
+  const handlePaymentSuccess = async (paymentDetails: any) => {
+    setPaymentCompleted(true);
+    setShowPayment(false);
+
+    toast({
+      title: "Payment Successful!",
+      description: "Contest payment processed. Submitting for review..."
+    });
+
+    // Complete the contest submission
+    setTimeout(() => {
+      toast({
+        title: "Contest Submitted!",
+        description: "Your contest has been submitted for admin review. You'll be notified once it's approved."
+      });
+      router.push(draftId ? `/dashboard/contests/${draftId}` : "/dashboard/contests");
+    }, 1500);
+  };
+
+  const handlePaymentError = (error: string) => {
+    toast({
+      title: "Payment Failed",
+      description: `Contest creation failed: ${error}`,
+      variant: "destructive"
+    });
+    setShowPayment(false);
   };
 
   const addResource = () => {
@@ -893,9 +929,9 @@ export default function CreateContestPage({
 
       // Show validation errors only after a complete value is entered
       if (numValue < MIN_PRIZE_PER_WINNER) {
-        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot be less than ${formatCurrency(MIN_PRIZE_PER_WINNER)}`, variant: "destructive" });
+        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot be less than ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`, variant: "destructive" });
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
-        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot exceed ${formatCurrency(MAX_PRIZE_PER_WINNER)}`, variant: "destructive" });
+        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`, variant: "destructive" });
       }
     }
   };
@@ -1570,7 +1606,7 @@ export default function CreateContestPage({
           <h3 className="text-xl font-bold mb-4">High Value Contest</h3>
           <p className="mb-4">
             For contests with budgets over{" "}
-            {formatCurrency(HIGH_BUDGET_THRESHOLD)}, we recommend reaching out
+            {formatCurrencyFromCents(HIGH_BUDGET_THRESHOLD)}, we recommend reaching out
             to our team for personalized guidance and support.
           </p>
           <div className="flex justify-end gap-2">
@@ -1715,7 +1751,7 @@ export default function CreateContestPage({
                           <div className="flex items-center gap-2">
                             <span className={`text-3xl font-bold ${currentPlan.price === 0 ? "text-gray-600" : "text-blue-600"
                               }`}>
-                              {formatCurrency(currentPlan.price)}
+                              {formatCurrencyFromCents(currentPlan.price)}
                             </span>
                             <span className="text-lg text-gray-500">/month</span>
                             {currentPlan.price === 0 && (
@@ -1807,7 +1843,7 @@ export default function CreateContestPage({
                             <div className="flex items-center gap-2">
                               <span className={`text-2xl font-bold ${planFeatures.minContestBudget >= 10000 ? "text-orange-600" : "text-green-600"
                                 }`}>
-                                {formatCurrency(planFeatures.minContestBudget)}
+                                {formatCurrencyFromCents(planFeatures.minContestBudget)}
                               </span>
                               {planFeatures.minContestBudget >= 10000 && (
                                 <span className="text-orange-500 text-sm">⚠️</span>
@@ -1968,7 +2004,7 @@ export default function CreateContestPage({
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <span>Start campaigns from just {formatCurrency(planFeatures.minContestBudget)}</span>
+                        <span>Start campaigns from just {formatCurrencyFromCents(planFeatures.minContestBudget)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-white rounded-full"></div>
@@ -2115,7 +2151,7 @@ export default function CreateContestPage({
                   <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                     <span className="text-sm font-medium">Total Prize Pool:</span>
                     <span className="text-lg font-bold">
-                      {formatCurrency(totalPrizePool)}
+                      {formatCurrencyFromCents(totalPrizePool)}
                     </span>
                   </div>
                 </div>
@@ -2177,7 +2213,7 @@ export default function CreateContestPage({
                         className="w-48"
                       />
                       <div className="text-sm text-gray-500">
-                        <span>Min: {formatCurrency(MIN_PRIZE_PER_WINNER)}</span>
+                        <span>Min: {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}</span>
                       </div>
                     </div>
                   ))}
@@ -2188,7 +2224,7 @@ export default function CreateContestPage({
                   <AlertDescription>
                     The minimum prize pool for your{' '}
                     {currentPlan?.name || 'current'} plan is{' '}
-                    {formatCurrency(planFeatures.minContestBudget)}. Please
+                    {formatCurrencyFromCents(planFeatures.minContestBudget)}. Please
                     increase your prize amounts.
                   </AlertDescription>
                 </Alert>
@@ -2285,7 +2321,7 @@ export default function CreateContestPage({
                 <Alert className="mt-2">
                   <AlertDescription>
                     The minimum contest budget for your {currentPlan?.name || "current"} plan is{' '}
-                    {formatCurrency(planFeatures.minContestBudget)}. Please increase your total budget.
+                    {formatCurrencyFromCents(planFeatures.minContestBudget)}. Please increase your total budget.
                   </AlertDescription>
                 </Alert>
               )}
@@ -3514,6 +3550,41 @@ export default function CreateContestPage({
           </>
         )}
       </Card>
+
+      {/* Payment Modal */}
+      {showPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Contest Payment</h2>
+                <p className="text-gray-600">Complete payment to submit your contest for review</p>
+              </div>
+
+              <ContestPaymentSelection
+                contestAmount={contestType === "leaderboard"
+                  ? totalPrizePool / 100  // Convert cents to dollars
+                  : (parseFloat(totalBudget.toString()) || 0)} // Budget is already in dollars
+                contestTitle={title || "Untitled Contest"}
+                contestId={draftId || undefined}
+                onPaymentSuccess={handlePaymentSuccess}
+                onPaymentError={handlePaymentError}
+                disabled={isLoading}
+              />
+
+              <div className="mt-6 flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPayment(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* High Budget Prompt Modal */}
       <HighBudgetPromptModal />

@@ -9,7 +9,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Trophy, Video, User, Building, DollarSign } from "lucide-react";
-import { formatCurrency } from "@/lib/currency-utils";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 
 export default async function AdminDashboardPage() {
     // Verify admin access
@@ -139,7 +139,7 @@ export default async function AdminDashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold">
-                                {formatCurrency(totalMoneySpent)}
+                                {formatCurrencyFromCents(totalMoneySpent)}
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 Total spent by all brands

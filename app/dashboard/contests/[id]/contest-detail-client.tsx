@@ -57,7 +57,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { formatLocalDateTime, formatMoney, cn } from "@/lib/utils";
+import { formatLocalDateTime, cn } from "@/lib/utils";
+import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import {
     ArrowLeft,
     Calendar,

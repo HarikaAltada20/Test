@@ -4,14 +4,9 @@ import { RouteGuard } from "@/components/guards/RouteGuard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { formatCurrencyFromCents } from "@/lib/currency-utils"
 
-// Add the formatCurrency utility function
-function formatCurrency(amountInCents: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amountInCents / 100)
-}
+
 
 export default async function AnalyticsPage() {
   const supabase = await createClient()
@@ -113,7 +108,7 @@ export default async function AnalyticsPage() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(totalSpent)}</div>
+              <div className="text-2xl font-bold">{formatCurrencyFromCents(totalSpent)}</div>
               <p className="text-xs text-muted-foreground">Contest budgets</p>
             </CardContent>
           </Card>

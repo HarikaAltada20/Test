@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Coins, DollarSign, History } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { formatMoney } from "@/lib/utils"
+import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils"
 
 interface WalletSummaryProps {
     userType: "creator" | "advertiser"

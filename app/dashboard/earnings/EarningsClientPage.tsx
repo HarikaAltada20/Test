@@ -48,7 +48,7 @@ import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client"; // Client Supabase
 import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, PayoutMethodType, UserData, WithdrawalRequest, PayoutMethodDetails } from "@/types/earnings"; // Centralized types
-import { formatCurrency } from "@/lib/currency-utils";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner"; // Import toast
 
@@ -395,7 +395,7 @@ export default function EarningsClientPage({
                 return;
             }
             if (withdrawAmountDollars < minWithdrawalDollars) {
-                toast.error(`Minimum cash withdrawal amount is ${formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.`);
+                toast.error(`Minimum cash withdrawal amount is ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.`);
                 return;
             }
             amountToWithdraw = Math.round(withdrawAmountDollars * 100); // This is the 'amount' for cash (in cents)
@@ -440,7 +440,7 @@ export default function EarningsClientPage({
             toast.error(`Withdrawal request failed: ${rpcError.message}`);
         } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
             const createdRequest = rpcResponse[0] as WithdrawalRequest;
-            toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrency(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
+            toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrencyFromCents(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
             setWithdrawalRequests(prev => [{
                 ...createdRequest,
                 payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id === undefined ? null : createdRequest.payout_method_id)
@@ -553,7 +553,7 @@ export default function EarningsClientPage({
                                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.total_money_won)}</div>
+                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.total_money_won)}</div>
                                 <p className="text-xs text-muted-foreground">Lifetime cash earnings</p>
                             </CardContent>
                         </Card>
@@ -563,8 +563,8 @@ export default function EarningsClientPage({
                                 <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.withdrawable_balance)}</div>
-                                <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}</p>
+                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.withdrawable_balance)}</div>
+                                <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}</p>
                             </CardContent>
                         </Card>
                         <Card>
@@ -615,16 +615,31 @@ export default function EarningsClientPage({
                                         <TableHead>Type</TableHead>
                                         <TableHead>Amount</TableHead>
                                         <TableHead>Status</TableHead>
-                                        <TableHead>Request ID</TableHead>
+                                        <TableHead>Message</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {cashTransactions.length > 0 ? (
                                         cashTransactions.map((transaction) => (
-                                            <TableRow key={transaction.id}><TableCell>{formatDateTime(transaction.created_at)}</TableCell><TableCell>{transaction.description}</TableCell><TableCell className="capitalize">{transaction.type?.replace(/_/g, ' ') || 'N/A'}</TableCell><TableCell>{formatCurrency(transaction.amount)}</TableCell><TableCell><Badge variant={transaction.status === "completed" || transaction.status === "credited" ? "default" : transaction.status === "pending" ? "secondary" : transaction.status === "failed" ? "destructive" : "outline"} className="capitalize">{transaction.status?.replace(/_/g, ' ') || 'N/A'}</Badge></TableCell><TableCell>{transaction.withdrawal_request_id || "N/A"}</TableCell></TableRow>
+                                            <TableRow key={transaction.id}>
+                                                <TableCell>{formatDateTime(transaction.created_at)}</TableCell>
+                                                <TableCell>{transaction.description}</TableCell>
+                                                <TableCell className="capitalize">{transaction.type?.replace(/_/g, ' ') || 'N/A'}</TableCell>
+                                                <TableCell>{formatCurrencyFromCents(transaction.amount)}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={transaction.status === "completed" || transaction.status === "credited" || transaction.status === "success" ? "default" : transaction.status === "pending" ? "secondary" : transaction.status === "failed" ? "destructive" : "outline"} className="capitalize">
+                                                        {transaction.status?.replace(/_/g, ' ') || 'N/A'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-sm text-muted-foreground max-w-xs">
+                                                    {transaction.remarks || "—"}
+                                                </TableCell>
+                                            </TableRow>
                                         ))
                                     ) : (
-                                        <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No cash transaction history yet.</TableCell></TableRow>
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No cash transaction history yet.</TableCell>
+                                        </TableRow>
                                     )}
                                 </TableBody>
                             </Table>
@@ -651,7 +666,7 @@ export default function EarningsClientPage({
                                 <TableBody>
                                     {cashWithdrawalRequests.length > 0 ? (
                                         cashWithdrawalRequests.map((req) => (
-                                            <TableRow key={req.id}><TableCell>{formatDateTime(req.created_at)}</TableCell><TableCell>{formatCurrency(req.amount)}</TableCell><TableCell>{req.payout_method_summary}</TableCell><TableCell><Badge variant={req.status === "processed" ? "default" : req.status === "pending" || req.status === "approved" ? "secondary" : req.status === "cancelled" ? "outline" : "destructive"} className="capitalize">{req.status.replace(/_/g, ' ')}</Badge></TableCell><TableCell className="max-w-xs truncate">{req.user_notes || "N/A"}</TableCell><TableCell>{req.status === 'pending' && (<Button variant="ghost" size="sm" onClick={() => handleCancelWithdrawal(req.id, req.amount, req.amount_type)} disabled={isCancellingWithdrawal === req.id}>{isCancellingWithdrawal === req.id ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : ("Cancel")}</Button>)}</TableCell></TableRow>
+                                            <TableRow key={req.id}><TableCell>{formatDateTime(req.created_at)}</TableCell><TableCell>{formatCurrencyFromCents(req.amount)}</TableCell><TableCell>{req.payout_method_summary}</TableCell><TableCell><Badge variant={req.status === "processed" ? "default" : req.status === "pending" || req.status === "approved" ? "secondary" : req.status === "cancelled" ? "outline" : "destructive"} className="capitalize">{req.status.replace(/_/g, ' ')}</Badge></TableCell><TableCell className="max-w-xs truncate">{req.user_notes || "N/A"}</TableCell><TableCell>{req.status === 'pending' && (<Button variant="ghost" size="sm" onClick={() => handleCancelWithdrawal(req.id, req.amount, req.amount_type)} disabled={isCancellingWithdrawal === req.id}>{isCancellingWithdrawal === req.id ? (<Loader2 className="mr-2 h-4 w-4 animate-spin" />) : ("Cancel")}</Button>)}</TableCell></TableRow>
                                         ))
                                     ) : (
                                         <TableRow><TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No cash withdrawal requests yet.</TableCell></TableRow>
@@ -860,13 +875,13 @@ export default function EarningsClientPage({
                     <DialogHeader>
                         <DialogTitle>Withdraw {activeTab === 'cash' ? 'Balance' : 'Coins'}</DialogTitle>
                         <DialogDescription>
-                            Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.
+                            Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         {activeTab === 'cash' && (
                             <>
-                                <div className="text-lg">Available: <span className="font-semibold">{profile ? formatCurrency(profile.withdrawable_balance) : formatCurrency(0)}</span></div>
+                                <div className="text-lg">Available: <span className="font-semibold">{profile ? formatCurrencyFromCents(profile.withdrawable_balance) : formatCurrencyFromCents(0)}</span></div>
                                 <div>
                                     <Label htmlFor="withdrawAmountDollars">Amount to Withdraw (USD)</Label>
                                     <Input id="withdrawAmountDollars" type="number" value={withdrawAmountDollars <= 0 ? '' : withdrawAmountDollars} onChange={(e) => setWithdrawAmountDollars(parseFloat(e.target.value) || 0)} min={MIN_WITHDRAWAL_AMOUNT / 100} step="0.01" placeholder="e.g., 50.00" disabled={isLoading} />

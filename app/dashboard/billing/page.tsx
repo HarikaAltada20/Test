@@ -71,7 +71,7 @@ export default async function AdvertiserBillingServerPage() {
     // Fetch Cash Transactions
     const { data: cashData, error: cashError } = await supabase
         .from("money_transactions")
-        .select("id, created_at, description, amount, status, type")
+        .select("id, created_at, description, amount, status, type, remarks")
         .eq("user_id", authUser.id)
         .order("created_at", { ascending: false });
 
@@ -86,6 +86,7 @@ export default async function AdvertiserBillingServerPage() {
         amount: string | number;
         status: string | null;
         type: string | null;
+        remarks: string | null;
     }
 
     const initialCashTransactions: CashTransaction[] = (cashData || []).map((tx: DbCashTransaction) => ({
@@ -95,6 +96,7 @@ export default async function AdvertiserBillingServerPage() {
         amount: Math.round(parseFloat(String(tx.amount))) || 0,
         status: tx.status,
         type: tx.type,
+        remarks: tx.remarks,
     }));
 
     // Fetch Coin Transactions

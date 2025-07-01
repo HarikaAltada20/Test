@@ -15,7 +15,7 @@ import { formatLocalDateTime } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
-import { formatCurrency } from "@/lib/currency-utils";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 
 
 function DashboardPage() {
@@ -227,7 +227,7 @@ function DashboardPage() {
                   <div className="flex-1">
                     <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Total Spent</p>
                     <p className="text-lg font-bold text-red-900 dark:text-red-100">
-                      {formatCurrency(profile?.total_money_spent || 0)}
+                      {formatCurrencyFromCents(profile?.total_money_spent || 0)}
                     </p>
                     <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">Money spent on contests</p>
                   </div>
@@ -265,7 +265,7 @@ function DashboardPage() {
                   <div className="flex-1">
                     <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Earnings</p>
                     <p className="text-lg font-bold text-green-900 dark:text-green-100">
-                      {formatCurrency(profile?.total_money_won || 0)}
+                      {formatCurrencyFromCents(profile?.total_money_won || 0)}
                     </p>
                     <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Money earned from contests</p>
                   </div>

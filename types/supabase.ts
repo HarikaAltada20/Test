@@ -351,29 +351,41 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          type: "withdrawal" | "reward" | "deposit"
-          status: "pending" | "success" | "failed"
+          type: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund"
+          status: "pending" | "success" | "failed" | "cancelled"
           amount: number
-          description: string
+          description: string | null
           created_at: string
+          updated_at: string
+          currency: string | null
+          withdrawal_request_id: string | null
+          remarks: string | null
         }
         Insert: {
           id?: string
           user_id: string
-          type: "withdrawal" | "reward" | "deposit"
-          status: "pending" | "success" | "failed"
+          type: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund"
+          status?: "pending" | "success" | "failed" | "cancelled"
           amount: number
-          description: string
+          description?: string | null
           created_at?: string
+          updated_at?: string
+          currency?: string | null
+          withdrawal_request_id?: string | null
+          remarks?: string | null
         }
         Update: {
           id?: string
           user_id?: string
-          type?: "withdrawal" | "reward" | "deposit"
-          status?: "pending" | "success" | "failed"
+          type?: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund"
+          status?: "pending" | "success" | "failed" | "cancelled"
           amount?: number
-          description?: string
+          description?: string | null
           created_at?: string
+          updated_at?: string
+          currency?: string | null
+          withdrawal_request_id?: string | null
+          remarks?: string | null
         }
       }
       coin_transactions: {

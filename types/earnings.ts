@@ -33,6 +33,7 @@ export interface CashTransaction {
   status: string | null;
   type: string | null;
   withdrawal_request_id?: string | null; // Added for linking to withdrawal requests
+  remarks?: string | null; // NEW: User-friendly status message
 }
 
 // From your 'coin_transactions' table

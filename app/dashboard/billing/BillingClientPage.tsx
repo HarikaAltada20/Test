@@ -49,9 +49,10 @@ import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/utils/supabase/client";
 import { CashTransaction, CoinTransaction, AdvertiserProfileData, PayoutMethod, PayoutMethodType, UserData, WithdrawalRequest, PayoutMethodDetails, BillingClientPageProps } from "@/types/earnings";
-import { formatCurrency } from "@/lib/currency-utils";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner";
+import { WalletTopUp } from "@/components/WalletTopUp";
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
@@ -90,6 +91,7 @@ export default function BillingClientPage({
     // Modal States
     const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
     const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+    const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
     const [currentPayoutMethod, setCurrentPayoutMethod] = useState<PayoutMethod | null>(null);
     const [activeTab, setActiveTab] = useState<'cash' | 'coins'>('cash');
     const [selectedPayoutType, setSelectedPayoutType] = useState<PayoutMethodType>("crypto");
@@ -143,6 +145,7 @@ export default function BillingClientPage({
         setAuthUser(initialAuthUser);
         setProfile(initialProfile);
         setUserData(initialUserData);
+        // Keep transaction amounts in cents (raw database values)
         setCashTransactions(initialCashTransactions);
         setCoinTransactionsState(initialCoinTransactions);
         setPayoutMethods(initialPayoutMethods);
@@ -347,7 +350,7 @@ export default function BillingClientPage({
                 return;
             }
             if (withdrawAmountDollars < minWithdrawalDollars) {
-                toast.error(`Minimum cash withdrawal amount is ${formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.`);
+                toast.error(`Minimum cash withdrawal amount is ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.`);
                 return;
             }
             amountToWithdraw = Math.round(withdrawAmountDollars * 100); // Convert to cents
@@ -390,7 +393,7 @@ export default function BillingClientPage({
             toast.error(`Withdrawal request failed: ${rpcError.message}`);
         } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
             const createdRequest = rpcResponse[0] as WithdrawalRequest;
-            toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrency(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
+            toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrencyFromCents(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
             setWithdrawalRequests(prev => [{
                 ...createdRequest,
                 payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id === undefined ? null : createdRequest.payout_method_id)
@@ -409,6 +412,42 @@ export default function BillingClientPage({
             console.error("Withdrawal request RPC returned unexpected data:", rpcResponse);
             toast.error("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
         }
+    };
+
+    // Handle balance update after successful top-up
+    const handleBalanceUpdate = (newBalanceInCents: number) => {
+        console.log('💰 BillingPage: Balance update received:', newBalanceInCents);
+        console.log('💰 BillingPage: Previous balance was:', profile?.available_deposit_balance);
+
+        setProfile(prev => {
+            const updated = prev ? { ...prev, available_deposit_balance: newBalanceInCents } : null;
+            console.log('💰 BillingPage: Profile updated:', updated);
+            return updated;
+        });
+
+        // Refresh transactions to show the new deposit
+        const refreshTransactions = async () => {
+            try {
+                console.log('🔄 BillingPage: Refreshing transaction history...');
+                const { data: cashData, error } = await supabase
+                    .from("money_transactions")
+                    .select("id, created_at, description, amount, status, type, remarks")
+                    .eq("user_id", authUser?.id)
+                    .order("created_at", { ascending: false });
+
+                if (!error && cashData) {
+                    console.log('📊 BillingPage: Transaction refresh successful, count:', cashData.length);
+                    // Keep transaction amounts in cents (raw database values)
+                    setCashTransactions(cashData);
+                } else {
+                    console.error('❌ BillingPage: Error refreshing transactions:', error);
+                }
+            } catch (error) {
+                console.error('❌ BillingPage: Error refreshing transactions:', error);
+            }
+        };
+
+        refreshTransactions();
     };
 
     const handleCancelWithdrawal = async (requestId: string, amountToRestore: number, amountType: 'cash' | 'coins') => {
@@ -510,7 +549,7 @@ export default function BillingClientPage({
                                 <TrendingDown className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.total_money_spent)}</div>
+                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.total_money_spent)}</div>
                                 <p className="text-xs text-muted-foreground">Lifetime contest spending</p>
                             </CardContent>
                         </Card>
@@ -532,7 +571,7 @@ export default function BillingClientPage({
                                 <Banknote className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.available_deposit_balance)}</div>
+                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.available_deposit_balance)}</div>
                                 <p className="text-xs text-muted-foreground">Ready for contests</p>
                             </CardContent>
                         </Card>
@@ -543,16 +582,23 @@ export default function BillingClientPage({
                                 <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrency(profile.withdrawable_balance)}</div>
+                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.withdrawable_balance)}</div>
                                 <p className="text-xs text-muted-foreground">From referrals & bonuses</p>
                             </CardContent>
                         </Card>
                     </div>
 
-                    <div className="flex flex-col md:flex-row gap-4 mb-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <Button
+                            onClick={() => setIsTopUpModalOpen(true)}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            disabled={isLoading}
+                        >
+                            <CreditCard className="h-4 w-4 mr-2" /> Top Up Wallet
+                        </Button>
                         <Button
                             onClick={() => setIsWithdrawModalOpen(true)}
-                            className="flex-1"
+                            variant="outline"
                             disabled={!profile || (profile.withdrawable_balance || 0) < MIN_WITHDRAWAL_AMOUNT || payoutMethods.length === 0 || isLoading}
                         >
                             <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw Balance
@@ -560,7 +606,6 @@ export default function BillingClientPage({
                         <Button
                             variant="outline"
                             onClick={() => { resetPayoutForm(); setIsPayoutModalOpen(true); }}
-                            className="flex-1"
                             disabled={isLoading}
                         >
                             <PlusCircle className="h-4 w-4 mr-2" /> Manage Payout Methods
@@ -586,12 +631,13 @@ export default function BillingClientPage({
                                         <TableHead>Type</TableHead>
                                         <TableHead>Amount</TableHead>
                                         <TableHead>Status</TableHead>
+                                        <TableHead>Message</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {cashTransactions.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center text-muted-foreground">
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground">
                                                 No cash transaction history yet
                                             </TableCell>
                                         </TableRow>
@@ -603,16 +649,19 @@ export default function BillingClientPage({
                                                 <TableCell className="capitalize">
                                                     {transaction.type?.replace(/_/g, ' ') || 'N/A'}
                                                 </TableCell>
-                                                <TableCell>{formatCurrency(transaction.amount)}</TableCell>
+                                                <TableCell>{formatCurrencyFromCents(transaction.amount)}</TableCell>
                                                 <TableCell>
                                                     <Badge variant={
-                                                        transaction.status === 'completed' || transaction.status === 'credited' ? 'default' :
+                                                        transaction.status === 'completed' || transaction.status === 'credited' || transaction.status === 'success' ? 'default' :
                                                             transaction.status === 'pending' ? 'secondary' :
                                                                 transaction.status === 'failed' ? 'destructive' :
                                                                     'outline'
                                                     } className="capitalize">
                                                         {transaction.status?.replace(/_/g, ' ') || 'N/A'}
                                                     </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-sm text-muted-foreground max-w-xs">
+                                                    {transaction.remarks || "—"}
                                                 </TableCell>
                                             </TableRow>
                                         ))
@@ -644,7 +693,7 @@ export default function BillingClientPage({
                                         {cashWithdrawalRequests.map((req) => (
                                             <TableRow key={req.id}>
                                                 <TableCell>{formatDateTime(req.created_at)}</TableCell>
-                                                <TableCell>{formatCurrency(req.amount)}</TableCell>
+                                                <TableCell>{formatCurrencyFromCents(req.amount)}</TableCell>
                                                 <TableCell>{req.payout_method_summary}</TableCell>
                                                 <TableCell>
                                                     <Badge variant={
@@ -1064,14 +1113,14 @@ export default function BillingClientPage({
                     <DialogHeader>
                         <DialogTitle>Withdraw {activeTab === 'cash' ? 'Balance' : 'Coins'}</DialogTitle>
                         <DialogDescription>
-                            Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrency(MIN_WITHDRAWAL_AMOUNT)}.
+                            Withdraw funds to your preferred payout method. Minimum withdrawal is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
                         {activeTab === 'cash' && (
                             <>
                                 <div className="text-lg">
-                                    Available: <span className="font-semibold">{profile ? formatCurrency(profile.withdrawable_balance) : formatCurrency(0)}</span>
+                                    Available: <span className="font-semibold">{profile ? formatCurrencyFromCents(profile.withdrawable_balance) : formatCurrencyFromCents(0)}</span>
                                 </div>
                                 <div>
                                     <Label htmlFor="withdrawAmountDollars">Amount to Withdraw (USD)</Label>
@@ -1170,6 +1219,45 @@ export default function BillingClientPage({
                             )}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Top Up Wallet Modal */}
+            <Dialog open={isTopUpModalOpen} onOpenChange={setIsTopUpModalOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Top Up Your Wallet</DialogTitle>
+                        <DialogDescription>
+                            Add funds to your wallet balance for contest payments. Your wallet balance can be used for all contest fees.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <WalletTopUp
+                            currentBalance={(profile?.available_deposit_balance || 0)}
+                            onBalanceUpdate={handleBalanceUpdate}
+                            onClose={() => setIsTopUpModalOpen(false)}
+                            onTransactionUpdate={async () => {
+                                // Refresh transaction history
+                                try {
+                                    console.log('🔄 BillingPage: Refreshing transaction history from WalletTopUp...');
+                                    const { data: cashData, error } = await supabase
+                                        .from("money_transactions")
+                                        .select("id, created_at, description, amount, status, type, remarks")
+                                        .eq("user_id", authUser?.id)
+                                        .order("created_at", { ascending: false });
+
+                                    if (!error && cashData) {
+                                        console.log('📊 BillingPage: Transaction refresh successful, count:', cashData.length);
+                                        setCashTransactions(cashData);
+                                    } else {
+                                        console.error('❌ BillingPage: Error refreshing transactions:', error);
+                                    }
+                                } catch (error) {
+                                    console.error('❌ BillingPage: Error refreshing transactions:', error);
+                                }
+                            }}
+                        />
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>

@@ -57,7 +57,7 @@ export function formatRemainingTime(remainingMs: number): string {
       return `${hours}h ${remainingMinutes}m`;
     }
   }
-}
+} 
 
 // Taglines for home page hero section (rotating below main heading)
 export const HERO_TAGLINES = [

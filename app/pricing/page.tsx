@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/accordion";
 import { createClient } from "@/utils/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatCurrencyFromCents } from "@/lib/currency-utils";
 
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
@@ -136,11 +137,7 @@ export default function PricingPage() {
     fetchSubscriptionPlans();
   }, [supabase]); // Dependency array includes supabase client
 
-  // Add formatCurrency function for consistent display
-  const formatCurrency = (cents: number | undefined): string => {
-    if (typeof cents !== "number") return "$0.00"; // Handle undefined price
-    return `$${(cents / 100).toFixed(2)}`;
-  };
+
 
   const handleBillingCycleChange = (value: string) => {
     setBillingCycle(value as "monthly" | "yearly");
@@ -252,7 +249,7 @@ export default function PricingPage() {
               <div className="flex items-center mb-4">
                 <Crown className="h-5 w-5 text-purple-600 mr-2" />
                 <h3 className="text-xl font-bold text-purple-700">
-                  Starting at {formatCurrency(50000)}/month
+                  Starting at {formatCurrencyFromCents(50000)}/month
                 </h3>
               </div>
               <ul className="space-y-2">
@@ -409,7 +406,7 @@ export default function PricingPage() {
                     <CardTitle className="text-center text-lg">{plan.name}</CardTitle>
                     <div className="mt-3 text-center">
                       <span className="text-2xl font-bold">
-                        {formatCurrency(
+                        {formatCurrencyFromCents(
                           billingCycle === "monthly"
                             ? plan.price
                             : getDiscountedPrice(plan.price)
@@ -456,7 +453,7 @@ export default function PricingPage() {
                         <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                         <span className="text-sm">
                           Min. budget{" "}
-                          {formatCurrency(plan.features.minContestBudget)}
+                          {formatCurrencyFromCents(plan.features.minContestBudget)}
                         </span>
                       </li>
                       <li className="flex items-start">

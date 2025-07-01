@@ -76,7 +76,7 @@ export default async function CreatorEarningsServerPage() {
   // Fetch Cash Transactions (from money_transactions table)
   const { data: cashData, error: cashError } = await supabase
     .from("money_transactions")
-    .select("id, created_at, description, amount, status, type") // 'amount' here is assumed to be in CENTS as per user's decision
+    .select("id, created_at, description, amount, status, type, remarks") // 'amount' here is assumed to be in CENTS as per user's decision
     .eq("user_id", authUser.id)
     .order("created_at", { ascending: false });
 
@@ -92,6 +92,7 @@ export default async function CreatorEarningsServerPage() {
     amount: string | number; // Raw amount from DB (already in cents)
     status: string | null;
     type: string | null;
+    remarks: string | null;
   }
   const initialCashTransactions: CashTransaction[] = (cashData || []).map((tx: DbCashTransaction) => ({
     id: tx.id,
@@ -100,6 +101,7 @@ export default async function CreatorEarningsServerPage() {
     amount: Math.round(parseFloat(String(tx.amount))) || 0, // Changed amount_cents to amount
     status: tx.status,
     type: tx.type,
+    remarks: tx.remarks,
   }));
 
 

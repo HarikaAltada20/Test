@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { formatLocalDateTime, formatMoney } from "@/lib/utils";
+import { formatLocalDateTime } from "@/lib/utils";
+import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import {
     Shield,
     Clock,

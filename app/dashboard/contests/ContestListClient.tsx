@@ -34,7 +34,8 @@ import {
     Building,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
-import { formatLocalDateTime, formatMoney, cn } from "@/lib/utils";
+import { formatLocalDateTime, cn } from "@/lib/utils";
+import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 
 // Define the type for a contest
 type Contest = {
