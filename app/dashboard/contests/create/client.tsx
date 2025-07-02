@@ -74,6 +74,10 @@ type PlanFeatures = {
   minContestBudget: number;
   maxWinnersPerContest: number;
   commisionPercentage: number;
+  contestTypes?: string[];
+  analytics?: string;
+  support?: string;
+  description?: string;
 };
 
 // Define type for subscription plan
@@ -501,6 +505,16 @@ export default function CreateContestPage({
 
         // Validate subscription plan requirements
         const planFeatures = getPlanFeatures(userPlan);
+
+        // Validate contest type access
+        if (contestType === "cpm") {
+          const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
+          if (!hasCpmAccess) {
+            setFormFeedback("CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.");
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+        }
 
         // Validate budget requirements
         if (contestType === "leaderboard") {
@@ -1001,6 +1015,18 @@ export default function CreateContestPage({
         setError("Please upload a thumbnail for your contest");
         return;
       }
+
+      // Validate contest type access
+      if (contestType === "cpm") {
+        const planFeatures = getPlanFeatures(userPlan);
+        const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
+
+        if (!hasCpmAccess) {
+          setError("CPM-based contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type.");
+          return;
+        }
+      }
+
       setStep("brief");
     } else if (step === "brief") {
       // Small delay to ensure state is updated from editor
@@ -1393,6 +1419,23 @@ export default function CreateContestPage({
                 commisionPercentage:
                   plan.json_features?.commisionPercentage ??
                   subscriptionPlans[0].features.commisionPercentage, // Check DB for actual key name
+                // Add the missing new fields
+                contestTypes:
+                  plan.json_features?.contestTypes ??
+                  (subscriptionPlans.find(p => p.name === plan.name)?.features.contestTypes ||
+                    subscriptionPlans[0].features.contestTypes),
+                analytics:
+                  plan.json_features?.analytics ??
+                  (subscriptionPlans.find(p => p.name === plan.name)?.features.analytics ||
+                    subscriptionPlans[0].features.analytics),
+                support:
+                  plan.json_features?.support ??
+                  (subscriptionPlans.find(p => p.name === plan.name)?.features.support ||
+                    subscriptionPlans[0].features.support),
+                description:
+                  plan.json_features?.description ??
+                  (subscriptionPlans.find(p => p.name === plan.name)?.features.description ||
+                    subscriptionPlans[0].features.description),
               },
             })
           );
@@ -1784,46 +1827,75 @@ export default function CreateContestPage({
 
                   {/* Plan Features with Descriptions */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Max Winners Feature */}
-                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.maxWinnersPerContest <= 3
-                      ? "bg-orange-50/80 border-orange-200" // Limited feature - warm warning
-                      : "bg-white/80 border-gray-200/50"
-                      }`}>
-                      <div className="flex items-start gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.maxWinnersPerContest <= 3
-                          ? "bg-gradient-to-br from-orange-500 to-orange-600" // Limited
-                          : "bg-gradient-to-br from-blue-500 to-blue-600" // Good
-                          }`}>
-                          <span className="text-white font-bold text-lg">W</span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="text-lg font-semibold text-gray-900">Maximum Winners</h5>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-2xl font-bold ${planFeatures.maxWinnersPerContest <= 3 ? "text-orange-600" : "text-blue-600"
-                                }`}>
-                                {planFeatures.maxWinnersPerContest === Infinity ? '∞' : planFeatures.maxWinnersPerContest}
-                              </span>
-                              {planFeatures.maxWinnersPerContest <= 3 && (
-                                <span className="text-orange-500 text-sm">⚠️</span>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-sm text-gray-600 leading-relaxed">
-                            The maximum number of creators you can reward in a single contest. More winners means broader reach and engagement for your brand.
-                          </p>
-                          <div className={`mt-3 text-xs font-medium ${planFeatures.maxWinnersPerContest <= 3
-                            ? "text-orange-600"
-                            : "text-blue-600"
+                    {/* Max Winners Feature - Only show for Leaderboard contests */}
+                    {contestType === 'leaderboard' && (
+                      <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.maxWinnersPerContest <= 3
+                        ? "bg-orange-50/80 border-orange-200" // Limited feature - warm warning
+                        : "bg-white/80 border-gray-200/50"
+                        }`}>
+                        <div className="flex items-start gap-4">
+                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.maxWinnersPerContest <= 3
+                            ? "bg-gradient-to-br from-orange-500 to-orange-600" // Limited
+                            : "bg-gradient-to-br from-blue-500 to-blue-600" // Good
                             }`}>
-                            {planFeatures.maxWinnersPerContest <= 3
-                              ? "⚡ Upgrade for more winner slots!"
-                              : "💡 Tip: More winners = higher participation rates"
-                            }
+                            <span className="text-white font-bold text-lg">W</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="text-lg font-semibold text-gray-900">Maximum Winners</h5>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-2xl font-bold ${planFeatures.maxWinnersPerContest <= 3 ? "text-orange-600" : "text-blue-600"
+                                  }`}>
+                                  {planFeatures.maxWinnersPerContest === Infinity ? '∞' : planFeatures.maxWinnersPerContest}
+                                </span>
+                                {planFeatures.maxWinnersPerContest <= 3 && (
+                                  <span className="text-orange-500 text-sm">⚠️</span>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-sm text-gray-600 leading-relaxed">
+                              The maximum number of creators you can reward in a single leaderboard contest. More winners means broader reach and engagement for your brand.
+                            </p>
+                            <div className={`mt-3 text-xs font-medium ${planFeatures.maxWinnersPerContest <= 3
+                              ? "text-orange-600"
+                              : "text-blue-600"
+                              }`}>
+                              {planFeatures.maxWinnersPerContest <= 3
+                                ? "⚡ Upgrade for more winner slots!"
+                                : "💡 Tip: More winners = higher participation rates"
+                              }
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
+
+                    {/* CPM Rate Info - Only show for CPM contests */}
+                    {contestType === 'cpm' && (
+                      <div className="backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-purple-50/80 border-purple-200">
+                        <div className="flex items-start gap-4">
+                          <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500 to-purple-600">
+                            <span className="text-white font-bold text-lg">📈</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="text-lg font-semibold text-gray-900">Total Winners</h5>
+                              <div className="flex items-center gap-2">
+                                <span className="text-2xl font-bold text-purple-600">
+                                  ∞
+                                </span>
+                              </div>
+                            </div>
+                            <p className="text-sm text-gray-600 leading-relaxed">
+                              In CPM contests, there's no limit on winners. All participating creators get paid based on their content's performance (views) & eligibility.
+                            </p>
+                            <div className="mt-3 text-xs font-medium text-purple-600">
+                              💡 Pay for performance - reward creators based on actual results
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Min Budget Feature */}
                     <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.minContestBudget >= 10000
@@ -1998,10 +2070,20 @@ export default function CreateContestPage({
                         <div className="w-2 h-2 bg-white rounded-full"></div>
                         <span>Launch up to {planFeatures.maxActiveContests === Infinity ? 'unlimited' : planFeatures.maxActiveContests} simultaneous marketing campaigns</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <span>Reward up to {planFeatures.maxWinnersPerContest === Infinity ? 'unlimited' : planFeatures.maxWinnersPerContest} creators per contest</span>
-                      </div>
+                      {/* Only show winner limit for leaderboard contests */}
+                      {contestType === 'leaderboard' && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                          <span>Reward up to {planFeatures.maxWinnersPerContest === Infinity ? 'unlimited' : planFeatures.maxWinnersPerContest} creators per contest (Leaderboard)</span>
+                        </div>
+                      )}
+                      {/* Show CPM info for CPM contests */}
+                      {contestType === 'cpm' && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                          <span>Performance-based rewards - no winner limits (CPM)</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-white rounded-full"></div>
                         <span>Start campaigns from just {formatCurrencyFromCents(planFeatures.minContestBudget)}</span>
@@ -2584,7 +2666,16 @@ export default function CreateContestPage({
                 <Label className="text-base font-semibold">Contest Type</Label>
                 <RadioGroup
                   value={contestType}
-                  onValueChange={(value: "leaderboard" | "cpm") => setContestType(value)}
+                  onValueChange={(value: "leaderboard" | "cpm") => {
+                    const planFeatures = getPlanFeatures(userPlan);
+                    const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
+
+                    // Only allow CPM selection if user has access
+                    if (value === "cpm" && !hasCpmAccess) {
+                      return; // Don't change the value
+                    }
+                    setContestType(value);
+                  }}
                   className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-2"
                 >
                   <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-accent hover:text-accent-foreground cursor-pointer flex-1">
@@ -2594,13 +2685,56 @@ export default function CreateContestPage({
                       <p className="text-xs text-muted-foreground">Creators compete for top spots based on performance. Prizes are awarded to winners.</p>
                     </Label>
                   </div>
-                  <div className="flex items-center space-x-2 p-4 border rounded-lg hover:bg-accent hover:text-accent-foreground cursor-pointer flex-1">
-                    <RadioGroupItem value="cpm" id="cpm" />
-                    <Label htmlFor="cpm" className="cursor-pointer">
-                      <span className="font-medium">CPM Based Contest</span>
-                      <p className="text-xs text-muted-foreground">Creators are paid based on the number of views their content receives, at a pre-defined CPM rate.</p>
-                    </Label>
-                  </div>
+                  {(() => {
+                    const planFeatures = getPlanFeatures(userPlan);
+                    const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
+                    const currentPlan = dbSubscriptionPlans.find(p => p.id === userPlan);
+                    const isFreePlan = !currentPlan || currentPlan.price === 0;
+
+                    return (
+                      <div className={`flex items-center space-x-2 p-4 border rounded-lg flex-1 relative ${!hasCpmAccess
+                        ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                        : 'hover:bg-accent hover:text-accent-foreground cursor-pointer'
+                        }`}>
+                        <RadioGroupItem
+                          value="cpm"
+                          id="cpm"
+                          disabled={!hasCpmAccess}
+                        />
+                        <Label htmlFor="cpm" className={hasCpmAccess ? "cursor-pointer" : "cursor-not-allowed"}>
+                          <span className="font-medium">CPM Based Contest</span>
+                          <p className="text-xs text-muted-foreground">
+                            Creators are paid based on the number of views their content receives, at a pre-defined CPM rate.
+                          </p>
+                          {!hasCpmAccess && (
+                            <div className="mt-2 space-y-2">
+                              <p className="text-xs text-orange-600 font-medium">
+                                🔒 Available in paid plans only
+                              </p>
+                              {isFreePlan && (
+                                <Button
+                                  size="sm"
+                                  className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1 h-6"
+                                  asChild
+                                >
+                                  <Link href="/pricing">
+                                    Upgrade Plan
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </Label>
+                        {!hasCpmAccess && (
+                          <div className="absolute top-2 right-2">
+                            <span className="bg-orange-100 text-orange-600 px-2 py-1 rounded-full text-xs font-medium">
+                              Premium
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </RadioGroup>
               </div>
 
