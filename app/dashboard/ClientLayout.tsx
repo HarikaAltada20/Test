@@ -387,7 +387,7 @@ function DashboardContent({
   // Get subscription plan details
   const getCurrentPlan = () => {
     if (!profileData.subscriptionPlan || userRole !== "advertiser") {
-      return subscriptionPlans[0]; // Default to FREE plan
+      return subscriptionPlans[0]; // Default to EXPLORER plan
     }
     return subscriptionPlans.find(plan => plan.id === profileData.subscriptionPlan) || subscriptionPlans[0];
   };

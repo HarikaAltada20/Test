@@ -1168,13 +1168,13 @@ export default function CreateContestPage({
       console.warn(
         `Plan with ID ${planId} not found in fetched plans. Using default features.`
       );
-      // Attempt to find the 'free' plan by name if ID fails, or use the first available plan, or default
-      const freePlan = dbSubscriptionPlans.find(
-        (p) => p.name.toLowerCase() === "FREE"
+      // Attempt to find the 'explorer' plan by name if ID fails, or use the first available plan, or default
+      const explorerPlan = dbSubscriptionPlans.find(
+        (p) => p.name.toLowerCase() === "EXPLORER"
       );
       return (
+        explorerPlan?.features ||
         dbSubscriptionPlans[0]?.features ||
-        freePlan?.features ||
         defaultFreePlanFeatures
       );
     }

@@ -32,11 +32,16 @@ type PlanFeatures = {
   minContestBudget: number;
   maxWinnersPerContest: number;
   commisionPercentage: number;
+  contestTypes?: string[];
+  analytics?: string;
+  support?: string;
+  description?: string;
 };
 
 type SubscriptionPlan = {
   id: string;
   name: string;
+  displayName?: string;
   price: number; // Assuming price is stored in cents
   features: PlanFeatures;
 };
@@ -117,6 +122,10 @@ export default function PricingPage() {
                   plan.json_features?.maxWinnersPerContest ?? 10,
                 commisionPercentage:
                   plan.json_features?.commisionPercentage ?? 40,
+                contestTypes: plan.json_features?.contestTypes ?? ['leaderboard'],
+                analytics: plan.json_features?.analytics ?? 'basic',
+                support: plan.json_features?.support ?? 'basic',
+                description: plan.json_features?.description ?? '',
               },
             })
           );
@@ -308,7 +317,7 @@ export default function PricingPage() {
       </div>
 
       {/* All Pricing Plans */}
-      <div id="pricing" className="scroll-mt-20">
+      <div id="pricing" className="scroll-mt-20 px-4">
         <div className="text-center mb-10">
           <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
             Choose Your Game Plan
@@ -358,32 +367,31 @@ export default function PricingPage() {
 
         {/* Display Plans only if not loading and no error */}
         {!isLoading && !error && (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
             {dbSubscriptionPlans.map((plan) => {
               // Determine if this plan is the 'most popular' (e.g., by name or a specific ID)
-              const isMostPopular = plan.name.toUpperCase() === "DIAMOND"; // Example logic
+              const isMostPopular = plan.name.toUpperCase() === "BUILDER"; // Builder plan is most popular
 
               // Determine background color based on plan name/id
               const getPlanBgColor = (planName: string) => {
                 const nameUpper = planName.toUpperCase();
-                if (nameUpper === "BRONZE") return "bg-orange-500";
-                if (nameUpper === "SILVER") return "bg-gray-400";
-                if (nameUpper === "GOLD") return "bg-yellow-500";
-                if (nameUpper === "PLATINUM") return "bg-indigo-500";
-                if (nameUpper === "DIAMOND") return "bg-purple-600";
-                return "bg-gray-500"; // Default for FREE or others
+                if (nameUpper === "EXPLORER") return "bg-gray-500";
+                if (nameUpper === "STARTER") return "bg-orange-500";
+                if (nameUpper === "BUILDER") return "bg-purple-600";
+                if (nameUpper === "CHAMPION") return "bg-yellow-500";
+                return "bg-gray-500"; // Default
               };
 
               const getPlanIcon = (planName: string) => {
                 const nameUpper = planName.toUpperCase();
-                if (nameUpper === "DIAMOND") return <Crown className="h-5 w-5 text-white" />;
+                if (nameUpper === "CHAMPION") return <Crown className="h-5 w-5 text-white" />;
                 return <Trophy className="h-5 w-5 text-white" />;
               };
 
               return (
                 <Card
                   key={plan.id}
-                  className={`flex flex-col border-2 relative ${isMostPopular
+                  className={`flex flex-col border-2 relative w-full max-w-sm mx-auto ${isMostPopular
                     ? "border-purple-500 shadow-lg scale-105"
                     : "border-gray-200"
                     }`}
@@ -403,7 +411,9 @@ export default function PricingPage() {
                         {getPlanIcon(plan.name)}
                       </div>
                     </div>
-                    <CardTitle className="text-center text-lg">{plan.name}</CardTitle>
+                    <CardTitle className="text-center text-lg">
+                      {plan.displayName || `${plan.name} Plan`}
+                    </CardTitle>
                     <div className="mt-3 text-center">
                       <span className="text-2xl font-bold">
                         {formatCurrencyFromCents(
@@ -417,34 +427,28 @@ export default function PricingPage() {
                       </span>
                     </div>
                     <CardDescription className="text-center mt-2 text-sm h-8">
-                      {plan.name.toUpperCase() === "FREE" &&
-                        "Get started for free"}
-                      {plan.name.toUpperCase() === "BRONZE" &&
-                        "Perfect for getting started"}
-                      {plan.name.toUpperCase() === "SILVER" &&
-                        "Best for growing brands"}
-                      {plan.name.toUpperCase() === "GOLD" &&
-                        "For established businesses"}
-                      {plan.name.toUpperCase() === "PLATINUM" &&
-                        "For scaling content strategy"}
-                      {plan.name.toUpperCase() === "DIAMOND" &&
+                      {plan.name.toUpperCase() === "EXPLORER" &&
+                        "Perfect for testing the platform"}
+                      {plan.name.toUpperCase() === "STARTER" &&
+                        "Great for small businesses"}
+                      {plan.name.toUpperCase() === "BUILDER" &&
+                        "Best for scaling brands"}
+                      {plan.name.toUpperCase() === "CHAMPION" &&
                         "Enterprise-grade solution"}
                       {![
-                        "FREE",
-                        "BRONZE",
-                        "SILVER",
-                        "GOLD",
-                        "PLATINUM",
-                        "DIAMOND",
+                        "EXPLORER",
+                        "STARTER",
+                        "BUILDER",
+                        "CHAMPION",
                       ].includes(plan.name.toUpperCase()) &&
                         "Custom plan features"}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex-grow pt-0">
-                    <ul className="space-y-2">
+                    <ul className="space-y-2.5">
                       <li className="flex items-start">
                         <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <span className="text-sm">
+                        <span className="text-sm font-medium">
                           {plan.features.maxActiveContests} active contest
                           {plan.features.maxActiveContests !== 1 ? "s" : ""}
                         </span>
@@ -453,26 +457,78 @@ export default function PricingPage() {
                         <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                         <span className="text-sm">
                           Min. budget{" "}
-                          {formatCurrencyFromCents(plan.features.minContestBudget)}
+                          <span className="font-medium">
+                            {formatCurrencyFromCents(plan.features.minContestBudget)}
+                          </span>
                         </span>
                       </li>
                       <li className="flex items-start">
                         <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                         <span className="text-sm">
-                          Up to {plan.features.maxWinnersPerContest} winner
-                          {plan.features.maxWinnersPerContest !== 1 ? "s" : ""}
+                          Up to <span className="font-medium">{plan.features.maxWinnersPerContest}</span> winner
+                          {plan.features.maxWinnersPerContest !== 1 ? "s" : ""} (Leaderboard contests)
                         </span>
                       </li>
                       <li className="flex items-start">
                         <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                         <span className="text-sm">
-                          {plan.features.commisionPercentage}% commission
+                          <span className="font-medium">{plan.features.commisionPercentage}%</span> commission
                         </span>
                       </li>
-                      <li className="flex items-start">
-                        <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <span className="text-sm">Access to 5,000+ creators</span>
-                      </li>
+
+                      <div className="border-t pt-2 mt-3">
+                        <li className="flex items-start mb-2">
+                          <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                          <span className="text-sm">
+                            {plan.features.contestTypes && plan.features.contestTypes.includes('cpm') ? (
+                              <>
+                                Leaderboard & CPM-based contests
+                                <span className="text-xs text-green-600 block mt-0.5 font-medium">
+                                  ✓ Both contest types available
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                Leaderboard-based contests only
+                                {plan.name.toUpperCase() === "EXPLORER" && (
+                                  <span className="text-xs text-gray-500 block mt-0.5">
+                                    CPM contests available in paid plans
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </span>
+                        </li>
+                        {plan.features.analytics && (
+                          <li className="flex items-start mb-2">
+                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                            <span className="text-sm">
+                              {plan.features.analytics === 'basic' && 'Basic analytics & insights'}
+                              {plan.features.analytics === 'advanced' && 'Advanced analytics & reports'}
+                              {plan.features.analytics === 'comprehensive' && 'Comprehensive analytics dashboard'}
+                            </span>
+                          </li>
+                        )}
+                        {plan.features.support && plan.features.support !== 'basic' && (
+                          <li className="flex items-start mb-2">
+                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                            <span className="text-sm">
+                              {plan.features.support === 'priority' && 'Prioritized customer support'}
+                              {plan.features.support === 'premium' && 'Premium 24/7 dedicated support'}
+                            </span>
+                          </li>
+                        )}
+
+                        {/* Common features for all plans */}
+                        <li className="flex items-start mb-2">
+                          <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                          <span className="text-sm">Lifetime access to winning content</span>
+                        </li>
+                        <li className="flex items-start">
+                          <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                          <span className="text-sm">Organic content validation</span>
+                        </li>
+                      </div>
                     </ul>
                   </CardContent>
                   <CardFooter className="pt-4">
@@ -484,7 +540,11 @@ export default function PricingPage() {
                       asChild
                     >
                       <Link href={`/signup?plan=${String(plan.id)}`}>
-                        {isMostPopular ? "Start Free Trial" : "Get Started"}
+                        {plan.name.toUpperCase() === "EXPLORER"
+                          ? "Start Free"
+                          : isMostPopular
+                            ? "Start Free Trial"
+                            : "Get Started"}
                       </Link>
                     </Button>
                   </CardFooter>
@@ -493,6 +553,51 @@ export default function PricingPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* All Plans Include Section */}
+      <div className="my-16 px-4">
+        <h3 className="text-xl font-semibold text-center mb-10">What's Included in Every Plan</h3>
+        <div className="max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="flex items-start">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3 shrink-0">
+                <Check className="h-4 w-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-900 mb-1">Lifetime Access to Winning Content</h4>
+                <p className="text-sm text-gray-600">Keep all the winning content from contests to use in your campaigns forever.</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3 shrink-0">
+                <Check className="h-4 w-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-900 mb-1">Organic Content Validation</h4>
+                <p className="text-sm text-gray-600">Test and validate your content with real, engaged audiences to find what works best.</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3 shrink-0">
+                <Check className="h-4 w-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-900 mb-1">Authentic Creator Network</h4>
+                <p className="text-sm text-gray-600">Access to our growing community of verified creators across all platforms.</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3 shrink-0">
+                <Check className="h-4 w-4 text-green-600" />
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-900 mb-1">Secure Payment Processing</h4>
+                <p className="text-sm text-gray-600">Safe and secure payment handling for all contest prizes and platform fees.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Book a Demo Section */}

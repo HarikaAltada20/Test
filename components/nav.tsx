@@ -53,10 +53,10 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
 
   // Function to get plan name from plan ID
   const getPlanName = (planId: string | null | undefined): string => {
-    if (!planId) return "Free Plan";
+    if (!planId) return "Explorer Plan";
 
     const plan = subscriptionPlans.find(p => p.id === planId);
-    return plan ? plan.name : "Free Plan";
+    return plan ? (plan.displayName || plan.name) : "Explorer Plan";
   };
 
   // Enhanced user info with fallbacks

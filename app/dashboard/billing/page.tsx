@@ -53,7 +53,7 @@ export default async function AdvertiserBillingServerPage() {
         total_contests_run: profileData.total_contests_run || 0,
         available_deposit_balance: profileData.available_deposit_balance || 0,
         withdrawable_balance: profileData.withdrawable_balance || 0,
-        subscription_plan: profileData.subscription_plan || 'free',
+        subscription_plan: profileData.subscription_plan || 'explorer',
     } : null;
 
     // Fetch Payout Methods

@@ -209,17 +209,17 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             if (!advertiserError && advertiserData?.subscription_plan) {
                 setUserPlan(advertiserData.subscription_plan);
             } else {
-                // Default to free plan if not found or error (assuming ID exists)
-                const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
-                setUserPlan(freePlanId);
+                // Default to explorer plan if not found or error (assuming ID exists)
+                const explorerPlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
+                setUserPlan(explorerPlanId);
                 if (advertiserError && advertiserError.code !== 'PGRST116') { // Ignore 'single row not found'
                     console.error("Error fetching advertiser profile:", advertiserError);
                 }
             }
         } catch (error) {
             console.error("Error in getUserPlan:", error);
-            const freePlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
-            setUserPlan(freePlanId); // Default to free plan on error
+            const explorerPlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
+            setUserPlan(explorerPlanId); // Default to explorer plan on error
         } finally {
             setIsUserPlanLoading(false);
         }
@@ -234,16 +234,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         }
 
         if (!planId) {
-            // Find free plan by name if planId is null
-            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE');
-            return freePlan?.features || defaultFreePlanFeatures;
+            // Find explorer plan by name if planId is null
+            const explorerPlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER');
+            return explorerPlan?.features || defaultFreePlanFeatures;
         }
 
         const plan = dbSubscriptionPlans.find((p: SubscriptionPlan) => p.id === planId);
 
         if (!plan) {
-            const freePlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'FREE');
-            return freePlan?.features || dbSubscriptionPlans[0]?.features || defaultFreePlanFeatures;
+            const explorerPlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER');
+            return explorerPlan?.features || dbSubscriptionPlans[0]?.features || defaultFreePlanFeatures;
         }
         return plan.features;
     };
