@@ -55,7 +55,7 @@ export async function createTopUpPaymentIntent(
   amount: number
 ): Promise<PaymentIntent | null> {
   try {
-    const paymentIntent = await stripe.paymentIntents.create({
+    const paymentIntent = await stripe().paymentIntents.create({
       amount: formatAmountForStripe(amount),
       currency: 'usd',
       metadata: {

@@ -1,11 +1,21 @@
 import Stripe from 'stripe';
 import { loadStripe } from '@stripe/stripe-js';
 
-// Server-side Stripe instance
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil',
-  typescript: true,
-});
+// Server-side Stripe instance - use lazy initialization
+let stripeInstance: Stripe | null = null;
+
+export const stripe = (): Stripe => {
+  if (!stripeInstance) {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
+    }
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2025-05-28.basil',
+      typescript: true,
+    });
+  }
+  return stripeInstance;
+};
 
 // Client-side Stripe instance
 let stripePromise: Promise<import('@stripe/stripe-js').Stripe | null>;

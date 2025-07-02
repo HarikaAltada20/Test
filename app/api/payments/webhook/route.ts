@@ -6,6 +6,8 @@ import { updateTransactionStatus } from '@/lib/payment-utils';
 
 export async function POST(request: NextRequest) {
   console.log('🔔 WEBHOOK RECEIVED!');
+  console.log('📍 Environment:', process.env.NODE_ENV);
+  console.log('🌐 Webhook Secret configured:', !!process.env.STRIPE_WEBHOOK_SECRET);
   
   try {
     const body = await request.text();
@@ -22,15 +24,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
+      return NextResponse.json(
+        { error: 'Webhook secret not configured' },
+        { status: 500 }
+      );
+    }
+
     let event;
     try {
-      event = stripe.webhooks.constructEvent(
+      event = stripe().webhooks.constructEvent(
         body,
         signature,
         process.env.STRIPE_WEBHOOK_SECRET!
       );
+      console.log('✅ Webhook signature verified successfully');
     } catch (err) {
-      console.error('Webhook signature verification failed:', err);
+      console.error('❌ Webhook signature verification failed:', err);
+      console.error('🔧 Debug info:');
+      console.error('  - Signature length:', signature?.length || 0);
+      console.error('  - Body length:', body.length);
+      console.error('  - Webhook secret length:', process.env.STRIPE_WEBHOOK_SECRET?.length || 0);
+      
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 400 }

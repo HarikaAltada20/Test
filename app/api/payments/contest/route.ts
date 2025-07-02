@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     } else if (paymentMethod === 'stripe') {
       // Pay entirely via Stripe
-      const paymentIntent = await stripe.paymentIntents.create({
+      const paymentIntent = await stripe().paymentIntents.create({
         amount: formatAmountForStripe(amount),
         currency: 'usd',
         metadata: {
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Create Stripe payment intent for remaining amount
-      const paymentIntent = await stripe.paymentIntents.create({
+      const paymentIntent = await stripe().paymentIntents.create({
         amount: formatAmountForStripe(stripeAmount),
         currency: 'usd',
         metadata: {

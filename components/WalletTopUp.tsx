@@ -39,7 +39,67 @@ const CheckoutForm = ({
     const stripe = useStripe();
     const elements = useElements();
     const [isProcessing, setIsProcessing] = useState(false);
-    const [paymentIntentId, setPaymentIntentId] = useState<string>('');
+    const [processingStep, setProcessingStep] = useState<'idle' | 'creating' | 'confirming' | 'polling'>('idle');
+    const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+
+    // Function to poll payment status
+    const pollPaymentStatus = async (paymentIntentId: string): Promise<void> => {
+        const maxAttempts = 30; // Poll for up to 30 seconds
+        const interval = 1000; // Poll every 1 second
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                console.log(`🔄 Polling payment status (attempt ${attempt + 1}/${maxAttempts})`);
+
+                const response = await fetch(`/api/payments/status?payment_intent_id=${paymentIntentId}`);
+                const data = await response.json();
+
+                console.log('📊 Payment status:', data);
+
+                if (data.status === 'success') {
+                    console.log('✅ Payment confirmed as successful');
+                    onSuccess();
+                    return;
+                } else if (data.status === 'failed') {
+                    console.log('❌ Payment confirmed as failed');
+                    onError(data.message || 'Payment failed');
+                    return;
+                }
+
+                // If status is still 'pending', continue polling
+                console.log('⏳ Payment still pending, continuing to poll...');
+                await new Promise(resolve => setTimeout(resolve, interval));
+            } catch (error) {
+                console.error('❌ Error polling payment status:', error);
+                // Continue polling on error (might be temporary network issue)
+            }
+        }
+
+        // If we've exhausted all attempts, consider it a timeout
+        console.log('⏰ Payment status polling timed out');
+        onError('Payment processing timed out. Please contact support if you were charged.');
+    };
+
+    // Handle frontend payment failures (before Stripe confirmation)
+    const handleFrontendPaymentFailure = async (paymentIntentId: string, errorMessage: string) => {
+        try {
+            const response = await fetch('/api/payments/failure', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    paymentIntentId,
+                    errorMessage,
+                    source: 'frontend'
+                })
+            });
+
+            if (!response.ok) {
+                console.error('Failed to update payment failure status');
+            }
+        } catch (error) {
+            console.error('Error updating payment failure status:', error);
+        }
+    };
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -49,29 +109,29 @@ const CheckoutForm = ({
         }
 
         setIsProcessing(true);
+        setProcessingStep('creating');
 
         try {
             // Create payment intent
             const response = await fetch('/api/payments/deposit', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ amount }),
             });
 
-            const { clientSecret, paymentIntentId: piId, error } = await response.json();
+            const { clientSecret, paymentIntentId: piId } = await response.json();
 
-            if (error) {
-                onError(error);
-                setIsProcessing(false);
-                return;
+            if (!clientSecret) {
+                throw new Error('Failed to create payment intent');
             }
+
+            console.log('💳 Payment intent created:', piId);
 
             // Store payment intent ID for failure handling
             setPaymentIntentId(piId);
 
             // Confirm payment
+            setProcessingStep('confirming');
             const { error: stripeError } = await stripe.confirmCardPayment(clientSecret, {
                 payment_method: {
                     card: elements.getElement(CardElement)!,
@@ -89,7 +149,10 @@ const CheckoutForm = ({
 
                 onError(stripeError.message || 'Payment failed');
             } else {
-                onSuccess();
+                console.log('✅ Stripe payment confirmed, starting status polling...');
+                // Start polling for payment status instead of showing immediate success
+                setProcessingStep('polling');
+                await pollPaymentStatus(piId);
             }
         } catch (error) {
             console.error('💥 Unexpected error in wallet top-up:', error);
@@ -103,6 +166,7 @@ const CheckoutForm = ({
         }
 
         setIsProcessing(false);
+        setProcessingStep('idle');
     };
 
     return (
@@ -144,7 +208,10 @@ const CheckoutForm = ({
                 {isProcessing ? (
                     <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing...
+                        {processingStep === 'creating' && 'Creating payment...'}
+                        {processingStep === 'confirming' && 'Confirming payment...'}
+                        {processingStep === 'polling' && 'Verifying payment...'}
+                        {processingStep === 'idle' && 'Processing...'}
                     </>
                 ) : (
                     <>
