@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     // Build query with filters
     let query = supabase
       .from('money_transactions')
-      .select('id, created_at, description, amount, status, type, remarks', { count: 'exact' })
+      .select('id, created_at, description, amount, status, type, remarks, payment_method', { count: 'exact' })
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     

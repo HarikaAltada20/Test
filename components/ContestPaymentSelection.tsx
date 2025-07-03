@@ -64,6 +64,11 @@ const StripeCheckoutForm = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentIntentId, setPaymentIntentId] = useState<string>('');
 
+    // Calculate the card amount (what will actually be charged to the card)
+    const totalAmountInCents = Math.round(amount * 100);
+    const walletAmountInCents = walletAmount ? Math.round(walletAmount * 100) : 0;
+    const cardAmountInCents = totalAmountInCents - walletAmountInCents;
+
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
 
@@ -86,95 +91,76 @@ const StripeCheckoutForm = ({
             };
 
             if (paymentMethod === 'split' && walletAmount) {
-                body.walletAmount = walletAmount / 100; // Convert cents to dollars for API
+                body.walletAmount = walletAmount; // Already in dollars
             }
 
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             });
 
             const result = await response.json();
 
-            if (!response.ok || !result.success) {
-                onError(result.error || 'Payment processing failed');
-                setIsProcessing(false);
-                return;
-            }
-
-            // If this was a wallet-only payment, we're done
-            if (paymentMethod === 'wallet') {
-                onSuccess(result);
-                setIsProcessing(false);
-                return;
-            }
-
-            // Store payment intent ID for failure handling
-            if (result.paymentIntentId) {
-                setPaymentIntentId(result.paymentIntentId);
+            if (!response.ok) {
+                throw new Error(result.error || 'Payment failed');
             }
 
             // For Stripe or split payments, confirm the payment
             if (result.clientSecret) {
+                // Get card element and validate it exists
+                const cardElement = elements.getElement(CardElement);
+
+                if (!cardElement) {
+                    console.error('❌ Card element not found - Stripe not properly initialized');
+                    onError('Payment form not properly loaded. Please refresh and try again.');
+                    setIsProcessing(false);
+                    return;
+                }
+
                 const { error: stripeError } = await stripe.confirmCardPayment(result.clientSecret, {
                     payment_method: {
-                        card: elements.getElement(CardElement)!,
+                        card: cardElement,
                     },
                 });
 
                 if (stripeError) {
-                    console.log('🔴 Contest payment Stripe error:', stripeError.message);
-
-                    // Handle frontend failure - update transaction status to failed
-                    if (result.paymentIntentId) {
-                        console.log('📝 Updating contest payment transaction to failed:', result.paymentIntentId);
-                        await handleFrontendPaymentFailure(result.paymentIntentId, stripeError.message || 'Payment failed');
-                    }
-
+                    console.error('💥 Stripe payment failed:', stripeError);
                     onError(stripeError.message || 'Payment failed');
                 } else {
+                    console.log('✅ Payment succeeded!');
                     onSuccess(result);
                 }
+            } else {
+                // Wallet-only payment completed immediately
+                console.log('✅ Wallet payment completed!');
+                onSuccess(result);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('💥 Unexpected error in contest payment:', error);
-
-            // Handle unexpected failures
-            if (paymentIntentId) {
-                await handleFrontendPaymentFailure(paymentIntentId, 'An unexpected error occurred');
-            }
-
-            onError('An unexpected error occurred');
+            onError(error.message || 'An unexpected error occurred');
+        } finally {
+            setIsProcessing(false);
         }
-
-        setIsProcessing(false);
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            {(paymentMethod === 'stripe' || paymentMethod === 'split') && (
-                <div className="p-4 border rounded-lg bg-gray-50">
-                    <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                        Card Details
-                    </Label>
-                    <CardElement
-                        options={{
-                            style: {
-                                base: {
-                                    fontSize: '16px',
-                                    color: '#424770',
-                                    '::placeholder': {
-                                        color: '#aab7c4',
-                                    },
+            <div className="p-4 border rounded-lg">
+                <CardElement
+                    options={{
+                        style: {
+                            base: {
+                                fontSize: '16px',
+                                color: '#424770',
+                                '::placeholder': {
+                                    color: '#aab7c4',
                                 },
                             },
-                        }}
-                    />
-                </div>
-            )}
+                        },
+                    }}
+                />
+            </div>
 
             <Button
                 type="submit"
@@ -190,11 +176,98 @@ const StripeCheckoutForm = ({
                 ) : (
                     <>
                         <CreditCard className="mr-2 h-4 w-4" />
-                        Complete Payment
+                        Charge Card {formatCurrencyFromCents(cardAmountInCents)}
                     </>
                 )}
             </Button>
         </form>
+    );
+};
+
+// Wallet-only payment component
+const WalletOnlyPayment = ({
+    contestId,
+    amount,
+    commissionPercentage,
+    isIncrease,
+    isDecrease,
+    onSuccess,
+    onError
+}: {
+    contestId?: string;
+    amount: number;
+    commissionPercentage: number;
+    isIncrease?: boolean;
+    isDecrease?: boolean;
+    onSuccess: (details: any) => void;
+    onError: (error: string) => void;
+}) => {
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    const handleWalletPayment = async () => {
+        setIsProcessing(true);
+
+        try {
+            const response = await fetch('/api/payments/contest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contestId,
+                    amount,
+                    paymentMethod: 'wallet',
+                    commissionPercentage,
+                    isIncrease: isIncrease || false,
+                    isDecrease: isDecrease || false
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Wallet payment failed');
+            }
+
+            console.log('✅ Wallet payment completed!');
+            onSuccess(result);
+        } catch (error: any) {
+            console.error('💥 Wallet payment error:', error);
+            onError(error.message || 'Wallet payment failed');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="p-4 border rounded-lg bg-green-50 border-green-200">
+                <div className="flex items-center gap-2 text-green-700 mb-2">
+                    <Wallet className="h-5 w-5" />
+                    <span className="font-medium">Wallet Payment</span>
+                </div>
+                <p className="text-sm text-green-600">
+                    Your payment of {formatCurrencyFromCents(Math.round(amount * 100))} will be deducted from your wallet balance instantly.
+                </p>
+            </div>
+
+            <Button
+                onClick={handleWalletPayment}
+                disabled={isProcessing}
+                className="w-full"
+                size="lg"
+            >
+                {isProcessing ? (
+                    <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing Payment...
+                    </>
+                ) : (
+                    <>
+                        <Wallet className="mr-2 h-4 w-4" />
+                        Pay from Wallet {formatCurrencyFromCents(Math.round(amount * 100))}
+                    </>
+                )}
+            </Button>
+        </div>
     );
 };
 
@@ -313,45 +386,23 @@ export function ContestPaymentSelection({
         // Close payment form but keep the main component open
         setShowPaymentForm(false);
 
-        // Show failure animation
-        setShowAnimation(true);
-
-        // Also notify parent component
+        // Update parent component
         onPaymentError(error);
     };
 
     const handleAnimationComplete = () => {
         setShowAnimation(false);
-
-        if (animationType === 'success') {
-            // On success: show success toast
-            toast.success('Contest payment successful! Your contest has been submitted for review.');
-            // Parent component should handle any navigation or modal closing
-        } else {
-            // On failure: show error toast but keep component open for retry
-            toast.error(`Payment failed: ${errorMessage}`);
-            // Don't close anything - user can retry by clicking the payment button again
-        }
+        setErrorMessage('');
     };
 
-    const stripeAmount = totalAmountInCents - walletAmount;
+    // Calculate derived values
     const canUseWallet = walletBalance >= totalAmountInCents;
-    const needsStripe = stripeAmount > 0;
-
-    if (isLoadingBalance) {
-        return (
-            <Card>
-                <CardContent className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                    <span>Loading payment options...</span>
-                </CardContent>
-            </Card>
-        );
-    }
+    const needsStripe = paymentMethod === 'stripe' || paymentMethod === 'split';
+    const stripeAmount = needsStripe ? totalAmountInCents - (paymentMethod === 'split' ? walletAmount : 0) : 0;
 
     return (
-        <>
-            <Card>
+        <Elements stripe={stripePromise}>
+            <Card className="w-full max-w-2xl mx-auto">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <DollarSign className="h-5 w-5" />
@@ -359,41 +410,57 @@ export function ContestPaymentSelection({
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {/* Contest Details */}
+                    {/* Contest Summary */}
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                        <h4 className="font-semibold text-blue-900 mb-2">{contestTitle}</h4>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-blue-700">
-                                    {isIncrease ? "Prize Pool Increase:" : "Prize Pool:"}
-                                </span>
-                                <span className="text-lg font-semibold text-blue-900">
-                                    {formatCurrencyFromCents(prizePoolInCents)}
-                                </span>
+                        <h3 className="font-semibold text-blue-900 mb-2">Contest: {contestTitle}</h3>
+                        <div className="space-y-1 text-sm text-blue-800">
+                            <div className="flex justify-between">
+                                <span>Prize Pool:</span>
+                                <span className="font-medium">{formatCurrencyFromCents(prizePoolInCents)}</span>
                             </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-blue-700">
-                                    Commission ({commissionPercentage}%){isIncrease ? " on increase:" : ":"}
-                                </span>
-                                <span className="text-lg font-semibold text-blue-900">
-                                    {formatCurrencyFromCents(commissionAmountInCents)}
-                                </span>
+                            <div className="flex justify-between">
+                                <span>Platform Commission ({commissionPercentage}%):</span>
+                                <span className="font-medium">{formatCurrencyFromCents(commissionAmountInCents)}</span>
                             </div>
-                            <hr className="border-blue-300" />
-                            <div className="flex items-center justify-between">
-                                <span className="text-blue-800 font-semibold">
-                                    {isIncrease ? "Additional Payment:" : "Total Amount:"}
-                                </span>
-                                <span className="text-xl font-bold text-blue-900">
-                                    {formatCurrencyFromCents(totalAmountInCents)}
-                                </span>
+                            <Separator />
+                            <div className="flex justify-between font-semibold">
+                                <span>Total Amount:</span>
+                                <span>{formatCurrencyFromCents(totalAmountInCents)}</span>
                             </div>
+
+                            {/* Payment Breakdown - Show when using card or split payment */}
+                            {(paymentMethod === 'stripe' || paymentMethod === 'split') && (
+                                <>
+                                    <Separator className="my-2" />
+                                    <div className="text-xs font-medium text-blue-700 mb-1">Payment Breakdown:</div>
+
+                                    {paymentMethod === 'split' && walletAmount > 0 && (
+                                        <div className="flex justify-between text-xs">
+                                            <span className="flex items-center gap-1">
+                                                <Wallet className="h-3 w-3" />
+                                                From Wallet:
+                                            </span>
+                                            <span className="font-medium">{formatCurrencyFromCents(walletAmount)}</span>
+                                        </div>
+                                    )}
+
+                                    {stripeAmount > 0 && (
+                                        <div className="flex justify-between text-xs">
+                                            <span className="flex items-center gap-1">
+                                                <CreditCard className="h-3 w-3" />
+                                                {paymentMethod === 'split' ? 'From Card:' : 'Card Payment:'}
+                                            </span>
+                                            <span className="font-medium text-blue-900">{formatCurrencyFromCents(stripeAmount)}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
 
-                    {/* Wallet Balance */}
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                        <div className="flex items-center justify-between">
+                    {/* Wallet Balance Display */}
+                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                        <div className="flex justify-between items-center">
                             <span className="text-green-700 flex items-center gap-2">
                                 <Wallet className="h-4 w-4" />
                                 Available Wallet Balance:
@@ -565,19 +632,31 @@ export function ContestPaymentSelection({
                                 </Button>
                             </div>
 
-                            <Elements stripe={stripePromise}>
-                                <StripeCheckoutForm
-                                    amount={totalAmountInDollars}
+                            {/* Wallet-only payment */}
+                            {paymentMethod === 'wallet' ? (
+                                <WalletOnlyPayment
                                     contestId={contestId}
-                                    paymentMethod={paymentMethod}
-                                    walletAmount={paymentMethod === 'split' ? walletAmount : undefined}
+                                    amount={totalAmountInDollars}
                                     commissionPercentage={commissionPercentage}
                                     isIncrease={isIncrease}
                                     isDecrease={isDecrease}
                                     onSuccess={handlePaymentSuccess}
                                     onError={handlePaymentError}
                                 />
-                            </Elements>
+                            ) : (
+                                /* Stripe or Split payment */
+                                <StripeCheckoutForm
+                                    amount={totalAmountInDollars}
+                                    contestId={contestId}
+                                    paymentMethod={paymentMethod}
+                                    walletAmount={paymentMethod === 'split' ? walletAmount / 100 : undefined}
+                                    commissionPercentage={commissionPercentage}
+                                    isIncrease={isIncrease}
+                                    isDecrease={isDecrease}
+                                    onSuccess={handlePaymentSuccess}
+                                    onError={handlePaymentError}
+                                />
+                            )}
                         </div>
                     )}
                 </CardContent>
@@ -591,6 +670,6 @@ export function ContestPaymentSelection({
                 error={errorMessage}
                 onComplete={handleAnimationComplete}
             />
-        </>
+        </Elements>
     );
 } 

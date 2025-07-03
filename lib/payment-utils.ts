@@ -81,15 +81,14 @@ export async function addToDepositBalance(
   try {
     const supabase = await getSupabaseClient();
     
-    // Get current balance and add the new amount (both in cents)
+    // Get current balance (in cents)
     const currentBalance = await getAdvertiserDepositBalance(userId);
     if (!currentBalance.success) {
       return currentBalance;
     }
 
+    // Add deposit amount to balance (both in cents)
     const newBalance = (currentBalance.balance || 0) + amountInCents;
-    
-    // Update the deposit balance
     const { data, error } = await supabase
       .from('advertiser_profiles')
       .update({ available_deposit_balance: newBalance })
@@ -98,12 +97,25 @@ export async function addToDepositBalance(
       .single();
 
     if (error) {
-      console.error('Error updating deposit balance:', error);
-      return { success: false, balance: 0, error: error.message };
+      console.error('Error adding to deposit balance:', error);
+      return { success: false, balance: currentBalance.balance, error: error.message };
     }
 
-    // Log the transaction in cents
-    await logTransaction(userId, 'deposit', amountInCents, 'success', `Deposit via Stripe: ${paymentIntentId}`, paymentIntentId);
+    // Create meaningful deposit description
+    const depositDescription = `Wallet top-up via Stripe payment`;
+    const depositRemarks = `Deposit added to wallet balance`;
+
+    // Log the deposit transaction in cents
+    await logTransaction(
+      userId, 
+      'deposit', 
+      amountInCents, 
+      'success', 
+      depositDescription,
+      paymentIntentId,
+      depositRemarks,
+      'stripe'
+    );
 
     return { 
       success: true, 
@@ -119,7 +131,8 @@ export async function addToDepositBalance(
 export async function deductFromDepositBalance(
   userId: string, 
   amountInCents: number, 
-  description: string
+  description: string,
+  paymentMethod: 'wallet' | 'split' = 'wallet' // NEW: Specify if this is wallet-only or part of split
 ): Promise<DepositBalanceResponse> {
   try {
     const supabase = await getSupabaseClient();
@@ -148,8 +161,29 @@ export async function deductFromDepositBalance(
       return { success: false, balance: currentBalance.balance, error: error.message };
     }
 
-    // Log the transaction in cents
-    await logTransaction(userId, 'contest_payment', amountInCents, 'success', description);
+    // Create meaningful description and remarks based on payment method
+    let enhancedDescription = description;
+    let remarks = '';
+    
+    if (paymentMethod === 'wallet') {
+      enhancedDescription = `${description} (Wallet Payment)`;
+      remarks = 'Paid from wallet balance';
+    } else if (paymentMethod === 'split') {
+      enhancedDescription = `${description} (Wallet Portion)`;
+      remarks = 'Wallet portion of split payment';
+    }
+
+    // Log the transaction in cents with payment method
+    await logTransaction(
+      userId, 
+      'contest_payment', 
+      amountInCents, 
+      'success', 
+      enhancedDescription,
+      undefined, // No payment intent for wallet transactions
+      remarks,
+      paymentMethod
+    );
 
     return { 
       success: true, 
@@ -202,7 +236,8 @@ export async function createContestPaymentIntent(
   userId: string, 
   contestId: string,
   amount: number,
-  description: string
+  description: string,
+  paymentMethod: 'stripe' | 'split' = 'stripe' // NEW: Specify if this is Stripe-only or part of split
 ): Promise<PaymentIntent | null> {
   try {
     const paymentIntent = await stripe().paymentIntents.create({
@@ -214,22 +249,36 @@ export async function createContestPaymentIntent(
         type: 'contest_payment',
         amount: amount.toString(),
         description,
+        paymentMethod, // NEW: Include payment method in metadata
       },
       automatic_payment_methods: {
         enabled: true,
       },
     });
 
-    // 🚀 NEW: Log initial pending transaction for the Stripe portion
+    // Create meaningful description and remarks based on payment method
+    let enhancedDescription = description;
+    let remarks = '';
+    
+    if (paymentMethod === 'stripe') {
+      enhancedDescription = `${description} (Stripe Payment)`;
+      remarks = 'Stripe payment processing';
+    } else if (paymentMethod === 'split') {
+      enhancedDescription = `${description} (Stripe Portion)`;
+      remarks = 'Stripe portion of split payment';
+    }
+
+    // Log initial pending transaction for the Stripe portion
     // This ensures split payments show as two separate transactions
     await logTransaction(
       userId,
       'contest_payment',
       amount, // amount is already in cents
       'pending',
-      description,
+      enhancedDescription,
       paymentIntent.id, // Link to payment intent for webhook updates
-      'Stripe payment processing'
+      remarks,
+      paymentMethod
     );
 
     return {
@@ -306,7 +355,7 @@ export async function processContestPayment(
 
     // If using wallet for partial payment, deduct wallet amount first
     if (walletAmount > 0) {
-      const deductResult = await deductFromDepositBalance(userId, walletAmount, `Partial payment for: ${description}`);
+      const deductResult = await deductFromDepositBalance(userId, walletAmount, description);
       
       if (!deductResult.success) {
         return {
@@ -374,13 +423,20 @@ export async function refundContestPayment(
       return { success: false, balance: currentBalance.balance, error: error.message };
     }
 
+    // Create meaningful refund description
+    const refundDescription = `${reason} - Contest ID: ${contestId}`;
+    const refundRemarks = `Refund processed to wallet balance`;
+
     // Log the refund transaction in cents
     await logTransaction(
       userId, 
       'refund', 
       amountInCents, 
       'success', 
-      `${reason} - Contest ID: ${contestId}`
+      refundDescription,
+      undefined, // No payment intent for refunds
+      refundRemarks,
+      'refund'
     );
 
     return { 
@@ -393,16 +449,16 @@ export async function refundContestPayment(
   }
 }
 
-// Log transaction to money_transactions table (amount in cents)
-// Enhanced transaction logging with payment_intent_id for performance
+// Enhanced transaction logging with payment method and meaningful descriptions
 export async function logTransaction(
   userId: string,
   type: 'deposit' | 'contest_payment' | 'refund' | 'withdrawal',
   amountInCents: number,
   status: 'pending' | 'success' | 'failed',
   description: string,
-  paymentIntentId?: string, // NEW: Optional payment intent ID for fast lookups
-  remarks?: string // NEW: User-friendly status message
+  paymentIntentId?: string, // Optional payment intent ID for fast lookups
+  remarks?: string, // User-friendly status message
+  paymentMethod?: 'wallet' | 'stripe' | 'split' | 'refund' // NEW: Payment method for clarity
 ): Promise<boolean> {
   try {
     console.log('📝 Logging transaction:', {
@@ -411,6 +467,7 @@ export async function logTransaction(
       amountInCents,
       status,
       paymentIntentId,
+      paymentMethod,
       remarks,
       description: description.substring(0, 100) + '...' // Truncate for readability
     });
@@ -423,8 +480,9 @@ export async function logTransaction(
       status,
       amount: amountInCents, // Store in cents (consistent with system)
       description,
-      payment_intent_id: paymentIntentId, // NEW: Store for lightning-fast lookups
-      remarks, // NEW: User-friendly message
+      payment_intent_id: paymentIntentId, // Store for lightning-fast lookups
+      payment_method: paymentMethod, // NEW: Store payment method for clarity
+      remarks, // User-friendly message
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -447,6 +505,7 @@ export async function logTransaction(
       id: data?.id,
       type: data?.type,
       amount: data?.amount,
+      payment_method: data?.payment_method,
       payment_intent_id: data?.payment_intent_id,
       remarks: data?.remarks,
       description: data?.description?.substring(0, 50) + '...'
@@ -645,11 +704,13 @@ export async function processContestPaymentV2(
 
     // Create Stripe payment intent if needed
     if (stripeAmount > 0) {
+      const stripePaymentMethod = walletAmount > 0 ? 'split' : 'stripe';
       paymentIntent = await createContestPaymentIntent(
         userId, 
         contestId, 
         stripeAmount, 
-        description
+        description,
+        stripePaymentMethod
       );
 
       if (!paymentIntent) {
@@ -663,7 +724,13 @@ export async function processContestPaymentV2(
 
     // Process wallet payment if needed
     if (walletAmount > 0) {
-      const deductResult = await deductFromDepositBalance(userId, walletAmount, description);
+      const walletPaymentMethod = stripeAmount > 0 ? 'split' : 'wallet';
+      const deductResult = await deductFromDepositBalance(
+        userId, 
+        walletAmount, 
+        description,
+        walletPaymentMethod
+      );
       
       if (!deductResult.success) {
         return {
@@ -757,17 +824,26 @@ export async function refundContestPaymentV2(
       return { success: false, balance: currentBalance.balance, error: error.message };
     }
 
+    // Create meaningful refund description with breakdown
+    const prizePoolDecrease = refundAmountInCents - Math.round(refundAmountInCents * (currentPaymentDetails.commission_percentage / (100 + currentPaymentDetails.commission_percentage)));
+    const commissionRefund = refundAmountInCents - prizePoolDecrease;
+    
+    const refundDescription = `${reason} - Contest ID: ${contestId}`;
+    const refundRemarks = `Prize pool reduced by $${(prizePoolDecrease / 100).toFixed(2)}, commission refund: $${(commissionRefund / 100).toFixed(2)}`;
+
     // Log the refund transaction
     await logTransaction(
       userId, 
       'refund', 
       refundAmountInCents, 
       'success', 
-      `${reason} - Contest ID: ${contestId}`
+      refundDescription,
+      undefined, // No payment intent for refunds
+      refundRemarks,
+      'refund'
     );
 
     // Update payment details to reflect the refund
-    const prizePoolDecrease = refundAmountInCents - Math.round(refundAmountInCents * (currentPaymentDetails.commission_percentage / (100 + currentPaymentDetails.commission_percentage)));
     const updatedPaymentDetails = addBudgetChangeToPaymentDetails(
       currentPaymentDetails,
       -prizePoolDecrease,

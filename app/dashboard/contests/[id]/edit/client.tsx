@@ -3097,7 +3097,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                 <div className="text-sm mt-1">
                                                     {budgetDifference > 0
                                                         ? `Prize pool increased by ${formatCurrencyFromCents(budgetDifference)}. Additional payment (including commission) will be required.`
-                                                        : `Prize pool decreased by ${formatCurrencyFromCents(Math.abs(budgetDifference))}. Amount (including commission) will be refunded to your wallet.`
+                                                        : `Prize pool decreased by ${formatCurrencyFromCents(Math.abs(budgetDifference))}. You will be refunded this amount plus commission.`
                                                     }
                                                 </div>
                                             </div>
