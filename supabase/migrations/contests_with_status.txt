@@ -7,24 +7,29 @@ select
   contests.start_date,
   contests.end_date,
   contests.thumbnail_url,
-  contests.brief,
-  contests.brief_html,
-  contests.brief_json,
-  contests.rules,
   contests.resources,
   contests.category,
   contests.inspiration_links,
   contests.created_at,
-  contests.is_draft,
   contests.subscription_plan_of_user,
   contests.updated_at,
   contests.contest_type,
   contests.contest_based_details,
-  contests.post_contest_status,
   contests.live_submission_count,
+  contests.post_contest_status,
+  contests.brief_html,
+  contests.brief_json,
   contests.last_metrics_updated,
+  contests.rules_html,
+  contests.rules_json,
+  contests.moderation_status,
+  contests.submitted_for_approval_at,
+  contests.approved_at,
+  contests.approved_by,
+  contests.published_at,
+  contests.rejection_reason,
   case
-    when contests.is_draft then 'draft'::text
+    when contests.moderation_status <> 'published'::contest_moderation_status_enum then null::text
     when contests.start_date is null
     or contests.end_date is null then 'incomplete'::text
     when (now() AT TIME ZONE 'UTC'::text) < contests.start_date then 'upcoming'::text

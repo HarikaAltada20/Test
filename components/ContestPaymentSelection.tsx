@@ -27,12 +27,15 @@ import { handleFrontendPaymentFailure } from '@/lib/payment-utils-client';
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 interface ContestPaymentSelectionProps {
-    contestAmount: number;
+    contestAmount: number; // Prize pool amount in dollars
     contestTitle: string;
     contestId?: string;
+    commissionPercentage: number; // Commission percentage from user's plan
     onPaymentSuccess: (paymentDetails: any) => void;
     onPaymentError: (error: string) => void;
     disabled?: boolean;
+    isIncrease?: boolean; // Budget increase
+    isDecrease?: boolean; // Budget decrease
 }
 
 const StripeCheckoutForm = ({
@@ -40,6 +43,9 @@ const StripeCheckoutForm = ({
     contestId,
     paymentMethod,
     walletAmount,
+    commissionPercentage,
+    isIncrease,
+    isDecrease,
     onSuccess,
     onError
 }: {
@@ -47,6 +53,9 @@ const StripeCheckoutForm = ({
     contestId?: string;
     paymentMethod: string;
     walletAmount?: number;
+    commissionPercentage: number;
+    isIncrease?: boolean;
+    isDecrease?: boolean;
     onSuccess: (details: any) => void;
     onError: (error: string) => void;
 }) => {
@@ -71,10 +80,13 @@ const StripeCheckoutForm = ({
                 contestId,
                 amount,
                 paymentMethod,
+                commissionPercentage: commissionPercentage,
+                isIncrease: isIncrease || false,
+                isDecrease: isDecrease || false
             };
 
             if (paymentMethod === 'split' && walletAmount) {
-                body.walletAmount = walletAmount;
+                body.walletAmount = walletAmount / 100; // Convert cents to dollars for API
             }
 
             const response = await fetch(endpoint, {
@@ -190,10 +202,19 @@ export function ContestPaymentSelection({
     contestAmount,
     contestTitle,
     contestId,
+    commissionPercentage,
     onPaymentSuccess,
     onPaymentError,
-    disabled = false
+    disabled = false,
+    isIncrease = false,
+    isDecrease = false
 }: ContestPaymentSelectionProps) {
+    // Calculate commission and total amounts
+    const prizePoolInCents = Math.round(contestAmount * 100);
+    const commissionAmountInCents = Math.round(prizePoolInCents * (commissionPercentage / 100));
+    const totalAmountInCents = prizePoolInCents + commissionAmountInCents;
+    const totalAmountInDollars = totalAmountInCents / 100;
+
     const [walletBalance, setWalletBalance] = useState<number>(0);
     const [isLoadingBalance, setIsLoadingBalance] = useState(true);
     const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'stripe' | 'split'>('wallet');
@@ -203,6 +224,7 @@ export function ContestPaymentSelection({
     const [animationType, setAnimationType] = useState<'success' | 'failure'>('success');
     const [animationAmount, setAnimationAmount] = useState<number>(0);
     const [errorMessage, setErrorMessage] = useState<string>('');
+    const [defaultMethodSet, setDefaultMethodSet] = useState(false);
 
     // Fetch wallet balance on component mount
     useEffect(() => {
@@ -223,28 +245,46 @@ export function ContestPaymentSelection({
         fetchBalance();
     }, []);
 
+    // Smart default payment method selection based on wallet balance
+    useEffect(() => {
+        if (!isLoadingBalance && !defaultMethodSet) {
+            let defaultMethod: 'wallet' | 'stripe' | 'split' = 'stripe';
+
+            if (walletBalance >= totalAmountInCents) {
+                // Sufficient wallet balance - default to wallet
+                defaultMethod = 'wallet';
+            } else if (walletBalance > 0) {
+                // Some wallet balance but insufficient - default to split
+                defaultMethod = 'split';
+            } else {
+                // No wallet balance - default to stripe
+                defaultMethod = 'stripe';
+            }
+
+            setPaymentMethod(defaultMethod);
+            setDefaultMethodSet(true);
+        }
+    }, [isLoadingBalance, walletBalance, totalAmountInCents, defaultMethodSet]);
+
     // Auto-set wallet amount for split payment when switching to it
     useEffect(() => {
         if (paymentMethod === 'split') {
-            const contestAmountInCents = Math.round(contestAmount * 100);
-            const maxFromWallet = Math.min(walletBalance, contestAmountInCents);
+            const maxFromWallet = Math.min(walletBalance, totalAmountInCents);
             setWalletAmount(maxFromWallet);
         } else if (paymentMethod === 'wallet') {
-            const contestAmountInCents = Math.round(contestAmount * 100);
-            setWalletAmount(contestAmountInCents);
+            setWalletAmount(totalAmountInCents);
         } else {
             setWalletAmount(0);
         }
-    }, [paymentMethod, walletBalance, contestAmount]);
+    }, [paymentMethod, walletBalance, totalAmountInCents]);
 
     const handlePaymentMethodChange = (value: string) => {
         setPaymentMethod(value as 'wallet' | 'stripe' | 'split');
     };
 
     const handleWalletAmountChange = (value: number) => {
-        const contestAmountInCents = Math.round(contestAmount * 100);
         const valueInCents = Math.round(value * 100);
-        const maxWallet = Math.min(walletBalance, contestAmountInCents);
+        const maxWallet = Math.min(walletBalance, totalAmountInCents);
 
         if (valueInCents >= 0 && valueInCents <= maxWallet) {
             setWalletAmount(valueInCents);
@@ -294,9 +334,8 @@ export function ContestPaymentSelection({
         }
     };
 
-    const contestAmountInCents = Math.round(contestAmount * 100);
-    const stripeAmount = contestAmountInCents - walletAmount;
-    const canUseWallet = walletBalance >= contestAmountInCents;
+    const stripeAmount = totalAmountInCents - walletAmount;
+    const canUseWallet = walletBalance >= totalAmountInCents;
     const needsStripe = stripeAmount > 0;
 
     if (isLoadingBalance) {
@@ -323,11 +362,32 @@ export function ContestPaymentSelection({
                     {/* Contest Details */}
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                         <h4 className="font-semibold text-blue-900 mb-2">{contestTitle}</h4>
-                        <div className="flex items-center justify-between">
-                            <span className="text-blue-700">Contest Prize Amount:</span>
-                            <span className="text-xl font-bold text-blue-900">
-                                {formatCurrencyFromCents(contestAmountInCents)}
-                            </span>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-blue-700">
+                                    {isIncrease ? "Prize Pool Increase:" : "Prize Pool:"}
+                                </span>
+                                <span className="text-lg font-semibold text-blue-900">
+                                    {formatCurrencyFromCents(prizePoolInCents)}
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-blue-700">
+                                    Commission ({commissionPercentage}%){isIncrease ? " on increase:" : ":"}
+                                </span>
+                                <span className="text-lg font-semibold text-blue-900">
+                                    {formatCurrencyFromCents(commissionAmountInCents)}
+                                </span>
+                            </div>
+                            <hr className="border-blue-300" />
+                            <div className="flex items-center justify-between">
+                                <span className="text-blue-800 font-semibold">
+                                    {isIncrease ? "Additional Payment:" : "Total Amount:"}
+                                </span>
+                                <span className="text-xl font-bold text-blue-900">
+                                    {formatCurrencyFromCents(totalAmountInCents)}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -377,8 +437,8 @@ export function ContestPaymentSelection({
                                             </Label>
                                             <p className="text-sm text-gray-600 mt-1">
                                                 {canUseWallet
-                                                    ? `Pay ${formatCurrencyFromCents(contestAmountInCents)} from your wallet balance`
-                                                    : `Insufficient balance. Need ${formatCurrencyFromCents(contestAmountInCents - walletBalance)} more.`
+                                                    ? `Pay ${formatCurrencyFromCents(totalAmountInCents)} from your wallet balance`
+                                                    : `Insufficient balance. Need ${formatCurrencyFromCents(totalAmountInCents - walletBalance)} more.`
                                                 }
                                             </p>
                                         </div>
@@ -393,13 +453,13 @@ export function ContestPaymentSelection({
                                                 Pay with Credit Card
                                             </Label>
                                             <p className="text-sm text-gray-600 mt-1">
-                                                Pay {formatCurrencyFromCents(contestAmountInCents)} with your credit card
+                                                Pay {formatCurrencyFromCents(totalAmountInCents)} with your credit card
                                             </p>
                                         </div>
                                     </div>
 
                                     {/* Split Payment Option */}
-                                    {walletBalance > 0 && walletBalance < contestAmountInCents && (
+                                    {walletBalance > 0 && walletBalance < totalAmountInCents && (
                                         <div className="flex items-center space-x-2 p-4 border rounded-lg">
                                             <RadioGroupItem value="split" id="split" disabled={disabled} />
                                             <div className="flex-1">
@@ -420,7 +480,7 @@ export function ContestPaymentSelection({
                                                 {paymentMethod === 'split' && (
                                                     <div className="mt-3 space-y-2">
                                                         <Label htmlFor="wallet-amount" className="text-xs">
-                                                            Wallet Amount (max: {formatCurrencyFromCents(Math.min(walletBalance, contestAmountInCents))})
+                                                            Wallet Amount (max: {formatCurrencyFromCents(Math.min(walletBalance, totalAmountInCents))})
                                                         </Label>
                                                         <Input
                                                             id="wallet-amount"
@@ -428,7 +488,7 @@ export function ContestPaymentSelection({
                                                             value={(walletAmount / 100).toFixed(2)}
                                                             onChange={(e) => handleWalletAmountChange(parseFloat(e.target.value) || 0)}
                                                             min="0"
-                                                            max={(Math.min(walletBalance, contestAmountInCents) / 100).toFixed(2)}
+                                                            max={(Math.min(walletBalance, totalAmountInCents) / 100).toFixed(2)}
                                                             step="0.01"
                                                             className="text-sm"
                                                         />
@@ -468,7 +528,7 @@ export function ContestPaymentSelection({
                                 <Separator />
                                 <div className="flex justify-between font-semibold">
                                     <span>Total:</span>
-                                    <span>{formatCurrencyFromCents(contestAmountInCents)}</span>
+                                    <span>{formatCurrencyFromCents(totalAmountInCents)}</span>
                                 </div>
                             </div>
 
@@ -507,10 +567,13 @@ export function ContestPaymentSelection({
 
                             <Elements stripe={stripePromise}>
                                 <StripeCheckoutForm
-                                    amount={contestAmount}
+                                    amount={totalAmountInDollars}
                                     contestId={contestId}
                                     paymentMethod={paymentMethod}
                                     walletAmount={paymentMethod === 'split' ? walletAmount : undefined}
+                                    commissionPercentage={commissionPercentage}
+                                    isIncrease={isIncrease}
+                                    isDecrease={isDecrease}
                                     onSuccess={handlePaymentSuccess}
                                     onError={handlePaymentError}
                                 />

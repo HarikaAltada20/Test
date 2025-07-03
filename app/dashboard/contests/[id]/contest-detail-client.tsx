@@ -64,6 +64,7 @@ import {
     Calendar,
     ChevronDown,
     Clock,
+    CreditCard,
     DollarSign,
     Edit,
     ExternalLink,
@@ -90,7 +91,8 @@ import {
     Trash2,
     Monitor,
     Play,
-    Settings
+    Settings,
+    Wallet
 } from "lucide-react";
 
 // --- Local Type Definitions ---
@@ -114,6 +116,8 @@ interface Contest {
     resources?: any | null;
     contest_based_details?: any | null;
     last_metrics_updated?: string | null;
+    // Payment information
+    payment_details?: any | null;
     // Moderation tracking fields
     submitted_for_approval_at?: string | null;
     approved_at?: string | null;
@@ -967,6 +971,176 @@ export default function ContestDetailClient({
                                                     <div className="whitespace-pre-wrap break-words">
                                                         {currentContest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
                                                     </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Payment Information */}
+                                {(currentContest as any).payment_details && (
+                                    <div className="space-y-4">
+                                        <h3 className="font-semibold text-lg text-foreground">Payment Information</h3>
+
+                                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+                                                        <Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Prize Pool</p>
+                                                        <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
+                                                            {(() => {
+                                                                const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                                    ? JSON.parse((currentContest as any).payment_details)
+                                                                    : (currentContest as any).payment_details;
+                                                                return formatMoney(paymentDetails.total_prize_pool || 0);
+                                                            })()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
+                                                        <CreditCard className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">
+                                                            Commission ({(() => {
+                                                                const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                                    ? JSON.parse((currentContest as any).payment_details)
+                                                                    : (currentContest as any).payment_details;
+                                                                return paymentDetails.commission_percentage || 0;
+                                                            })()}%)
+                                                        </p>
+                                                        <p className="text-xl font-bold text-purple-900 dark:text-purple-100">
+                                                            {(() => {
+                                                                const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                                    ? JSON.parse((currentContest as any).payment_details)
+                                                                    : (currentContest as any).payment_details;
+                                                                return formatMoney(paymentDetails.commission_amount || 0);
+                                                            })()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Total Paid and Payment Method */}
+                                            <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700/50">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                                                            <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Paid</p>
+                                                            <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                                                                {(() => {
+                                                                    const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                                        ? JSON.parse((currentContest as any).payment_details)
+                                                                        : (currentContest as any).payment_details;
+                                                                    return formatMoney(paymentDetails.total_amount_paid || 0);
+                                                                })()}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {(() => {
+                                                        const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                            ? JSON.parse((currentContest as any).payment_details)
+                                                            : (currentContest as any).payment_details;
+                                                        const walletUsed = paymentDetails.wallet_amount_used || 0;
+                                                        const stripeUsed = paymentDetails.stripe_amount_paid || 0;
+
+                                                        if (walletUsed > 0 && stripeUsed > 0) {
+                                                            // Split payment
+                                                            return (
+                                                                <>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="p-2 bg-emerald-100 dark:bg-emerald-800/30 rounded-lg">
+                                                                            <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">From Wallet</p>
+                                                                            <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
+                                                                                {formatMoney(walletUsed)}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="p-2 bg-indigo-100 dark:bg-indigo-800/30 rounded-lg">
+                                                                            <CreditCard className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs font-medium text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">From Card</p>
+                                                                            <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">
+                                                                                {formatMoney(stripeUsed)}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </>
+                                                            );
+                                                        } else if (walletUsed > 0) {
+                                                            // Wallet only
+                                                            return (
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="p-2 bg-emerald-100 dark:bg-emerald-800/30 rounded-lg">
+                                                                        <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">Payment Method</p>
+                                                                        <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">Wallet</p>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        } else if (stripeUsed > 0) {
+                                                            // Credit card only
+                                                            return (
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="p-2 bg-indigo-100 dark:bg-indigo-800/30 rounded-lg">
+                                                                        <CreditCard className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-medium text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">Payment Method</p>
+                                                                        <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">Credit Card</p>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
+                                                </div>
+
+                                                {/* Payment Status and Date */}
+                                                <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700/50 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                        <span className="text-sm font-medium text-green-800 dark:text-green-300">
+                                                            Payment {(() => {
+                                                                const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                                    ? JSON.parse((currentContest as any).payment_details)
+                                                                    : (currentContest as any).payment_details;
+                                                                return paymentDetails.payment_status === 'completed' ? 'Completed' : 'Pending';
+                                                            })()}
+                                                        </span>
+                                                    </div>
+                                                    {(() => {
+                                                        const paymentDetails = typeof (currentContest as any).payment_details === 'string'
+                                                            ? JSON.parse((currentContest as any).payment_details)
+                                                            : (currentContest as any).payment_details;
+                                                        return paymentDetails.paid_at ? (
+                                                            <span className="text-xs text-blue-700 dark:text-blue-400">
+                                                                Paid on {formatLocalDateTime(paymentDetails.paid_at, {
+                                                                    month: 'short',
+                                                                    day: 'numeric',
+                                                                    year: 'numeric',
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit'
+                                                                })}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>

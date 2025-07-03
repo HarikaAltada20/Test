@@ -11,9 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/use-toast";
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface DeleteContestButtonProps {
   contestId: string;
@@ -36,155 +36,30 @@ export function DeleteContestButton({
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const supabase = createClient();
 
   // Don't show delete button if it's not deletable (e.g., live or ended contests)
   if (!isDeletable) {
     return null;
   }
 
-  // Clean up storage files associated with the contest
-  const cleanupStorageFiles = async () => {
-    try {
-      // Get the current user ID
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData?.user) return;
-
-      const userId = authData.user.id;
-
-      // First, fetch the contest to get its thumbnail_url and resources
-      const { data: contestData, error: contestError } = await supabase
-        .from("contests")
-        .select("thumbnail_url, resources")
-        .eq("id", contestId)
-        .single();
-
-      if (contestError) {
-        console.error("Error getting contest data:", contestError);
-        return;
-      }
-
-      // Delete thumbnail if exists
-      if (contestData?.thumbnail_url) {
-        try {
-          const thumbnailUrl = contestData.thumbnail_url;
-          if (
-            thumbnailUrl.includes(
-              "supabase.co/storage/v1/object/public/contest-assets/"
-            )
-          ) {
-            // Extract file path from URL
-            const filePath = thumbnailUrl.split("public/contest-assets/")[1];
-            if (filePath) {
-              await supabase.storage.from("contest-assets").remove([filePath]);
-            }
-          }
-        } catch (err) {
-          console.error("Error removing thumbnail:", err);
-        }
-      }
-
-      // Delete resources if exist
-      if (contestData?.resources && typeof contestData.resources === "object") {
-        try {
-          const resourceUrls = Object.values(contestData.resources);
-          for (const url of resourceUrls) {
-            if (
-              typeof url === "string" &&
-              url.includes(
-                "supabase.co/storage/v1/object/public/contest-assets/"
-              )
-            ) {
-              // Extract file path from URL
-              const filePath = url.split("public/contest-assets/")[1];
-              if (filePath) {
-                await supabase.storage
-                  .from("contest-assets")
-                  .remove([filePath]);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Error removing resources:", err);
-        }
-      }
-
-      // As a fallback, also try to find and delete any files that might contain the contestId
-      // Clean up thumbnail files
-      try {
-        // List files in the contest_thumbnails folder
-        const { data: thumbnailFiles, error: thumbnailError } =
-          await supabase.storage
-            .from("contest-assets")
-            .list("contest_thumbnails", {
-              search: contestId,
-            });
-
-        if (thumbnailError) {
-          console.error("Error listing thumbnail files:", thumbnailError);
-        } else if (thumbnailFiles && thumbnailFiles.length > 0) {
-          // Delete all found thumbnail files
-          const thumbnailFilePaths = thumbnailFiles.map(
-            (file) => `contest_thumbnails/${file.name}`
-          );
-          await supabase.storage
-            .from("contest-assets")
-            .remove(thumbnailFilePaths);
-        }
-      } catch (err) {
-        console.error("Error deleting thumbnail files:", err);
-      }
-
-      // Clean up resource files
-      try {
-        // List files in the contest_resources folder
-        const { data: resourceFiles, error: resourceError } =
-          await supabase.storage
-            .from("contest-assets")
-            .list("contest_resources", {
-              search: contestId,
-            });
-
-        if (resourceError) {
-          console.error("Error listing resource files:", resourceError);
-        } else if (resourceFiles && resourceFiles.length > 0) {
-          // Delete all found resource files
-          const resourceFilePaths = resourceFiles.map(
-            (file) => `contest_resources/${file.name}`
-          );
-          await supabase.storage
-            .from("contest-assets")
-            .remove(resourceFilePaths);
-        }
-      } catch (err) {
-        console.error("Error deleting resource files:", err);
-      }
-    } catch (error) {
-      console.error("Error cleaning up storage files:", error);
-    }
-  };
-
   const handleDelete = async () => {
     try {
       setIsDeleting(true);
 
-      // First clean up storage files
-      await cleanupStorageFiles();
+      const response = await fetch(`/api/contests/${contestId}/delete`, {
+        method: 'DELETE',
+      });
 
-      // Then delete the contest from the database
-      const { error } = await supabase
-        .from("contests")
-        .delete()
-        .eq("id", contestId);
+      const result = await response.json();
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete contest');
       }
 
       // Show success toast
       toast({
-        title: "Contest deleted",
-        description: `"${contestTitle}" was successfully deleted.`,
+        title: "Contest Deleted",
+        description: result.message || `"${contestTitle}" was successfully deleted.`,
         variant: "default",
       });
 
@@ -222,16 +97,16 @@ export function DeleteContestButton({
         Delete
       </Button>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Contest</DialogTitle>
-            <DialogDescription>
+      <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contest</AlertDialogTitle>
+            <AlertDialogDescription>
               Are you sure you want to delete the contest "{contestTitle}"? This
               action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
             <Button
               variant="outline"
               onClick={() => setIsOpen(false)}
@@ -246,9 +121,9 @@ export function DeleteContestButton({
             >
               {isDeleting ? "Deleting..." : "Delete Contest"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

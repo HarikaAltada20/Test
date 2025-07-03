@@ -1,0 +1,56 @@
+create table public.money_transactions (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  type text null,
+  status text null,
+  amount integer null,
+  description text null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  currency text null,
+  withdrawal_request_id uuid null,
+  payment_intent_id text null,
+  remarks text null,
+  constraint money_transactions_pkey primary key (id),
+  constraint fk_withdrawal_request foreign KEY (withdrawal_request_id) references withdrawal_requests (id) on delete set null,
+  constraint money_transactions_user_id_fkey foreign KEY (user_id) references users (id),
+  constraint money_transactions_status_check check (
+    (
+      status = any (
+        array[
+          'pending'::text,
+          'success'::text,
+          'failed'::text,
+          'cancelled'::text
+        ]
+      )
+    )
+  ),
+  constraint money_transactions_type_check check (
+    (
+      type = any (
+        array[
+          'withdrawal'::text,
+          'reward'::text,
+          'deposit'::text
+        ]
+      )
+    )
+  )
+) TABLESPACE pg_default;
+
+create index IF not exists idx_money_transactions_payment_intent_id on public.money_transactions using btree (payment_intent_id) TABLESPACE pg_default
+where
+  (status = 'pending'::text);
+
+create index IF not exists idx_money_transactions_user_status on public.money_transactions using btree (user_id, status) TABLESPACE pg_default;
+
+create index IF not exists idx_money_transactions_created_at on public.money_transactions using btree (created_at desc) TABLESPACE pg_default;
+
+create index IF not exists idx_money_transactions_webhook_lookup on public.money_transactions using btree (payment_intent_id, status, created_at desc) TABLESPACE pg_default
+where
+  (payment_intent_id is not null);
+
+create index IF not exists idx_money_transactions_remarks on public.money_transactions using btree (remarks) TABLESPACE pg_default
+where
+  (remarks is not null);

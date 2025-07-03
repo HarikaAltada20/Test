@@ -51,6 +51,8 @@ import { CashTransaction, CoinTransaction, CreatorProfileData, PayoutMethod, Pay
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner"; // Import toast
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/use-pagination";
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
@@ -90,7 +92,7 @@ export default function EarningsClientPage({
     const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
     const [profile, setProfile] = useState<CreatorProfileData | null>(initialProfile);
     const [userData, setUserData] = useState<UserData | null>(initialUserData);
-    const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(initialCashTransactions);
+    // Note: Cash transactions now handled by pagination hook
     const [coinTransactions, setCoinTransactionsState] = useState<CoinTransaction[]>(initialCoinTransactions);
     const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>(initialPayoutMethods);
     // Initialize withdrawalRequests without summary first, then add summary in useEffect
@@ -129,6 +131,20 @@ export default function EarningsClientPage({
     const [cryptoNetwork, setCryptoNetwork] = useState<string>('BNB_BEP20'); // Added for crypto network
     const [payoutFriendlyName, setPayoutFriendlyName] = useState<string>(''); // Added for friendly name
 
+    // Pagination for cash transactions
+    const {
+        data: paginatedCashTransactions,
+        pagination: cashPagination,
+        loading: cashTransactionsLoading,
+        error: cashTransactionsError,
+        setPage: setCashPage,
+        setLimit: setCashLimit,
+        refresh: refreshCashTransactions,
+    } = usePagination<CashTransaction>({
+        apiEndpoint: '/api/money-transactions',
+        initialLimit: 25,
+    });
+
     const getPayoutMethodSummary = (method: PayoutMethod): string => {
         switch (method.method_type) {
             case "crypto":
@@ -157,7 +173,7 @@ export default function EarningsClientPage({
         setAuthUser(initialAuthUser);
         setProfile(initialProfile);
         setUserData(initialUserData);
-        setCashTransactions(initialCashTransactions);
+        // Note: Cash transactions now handled by pagination hook
         setCoinTransactionsState(initialCoinTransactions);
         setPayoutMethods(initialPayoutMethods);
         setWithdrawalRequests(
@@ -167,7 +183,7 @@ export default function EarningsClientPage({
             }))
         );
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialAuthUser, initialProfile, initialUserData, initialCashTransactions, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
+    }, [initialAuthUser, initialProfile, initialUserData, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
 
     const handleSavePayoutMethod = async () => {
         if (!authUser) {
@@ -606,7 +622,13 @@ export default function EarningsClientPage({
                         <CardHeader>
                             <CardTitle>Cash Transaction History</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-4">
+                            {cashTransactionsError && (
+                                <div className="text-center text-red-500 p-4">
+                                    Error loading transactions: {cashTransactionsError}
+                                </div>
+                            )}
+
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -619,8 +641,23 @@ export default function EarningsClientPage({
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {cashTransactions.length > 0 ? (
-                                        cashTransactions.map((transaction) => (
+                                    {cashTransactionsLoading ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground h-32">
+                                                <div className="flex items-center justify-center">
+                                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                                    Loading transactions...
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : paginatedCashTransactions.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground h-32">
+                                                No cash transaction history yet.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        paginatedCashTransactions.map((transaction) => (
                                             <TableRow key={transaction.id}>
                                                 <TableCell>{formatDateTime(transaction.created_at)}</TableCell>
                                                 <TableCell>{transaction.description}</TableCell>
@@ -636,13 +673,24 @@ export default function EarningsClientPage({
                                                 </TableCell>
                                             </TableRow>
                                         ))
-                                    ) : (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">No cash transaction history yet.</TableCell>
-                                        </TableRow>
                                     )}
                                 </TableBody>
                             </Table>
+
+                            {/* Pagination Controls */}
+                            {!cashTransactionsLoading && cashPagination.totalPages > 0 && (
+                                <PaginationControls
+                                    page={cashPagination.page}
+                                    limit={cashPagination.limit}
+                                    total={cashPagination.total}
+                                    totalPages={cashPagination.totalPages}
+                                    hasNextPage={cashPagination.hasNextPage}
+                                    hasPreviousPage={cashPagination.hasPreviousPage}
+                                    onPageChange={setCashPage}
+                                    onLimitChange={setCashLimit}
+                                    loading={cashTransactionsLoading}
+                                />
+                            )}
                         </CardContent>
                     </Card>
 

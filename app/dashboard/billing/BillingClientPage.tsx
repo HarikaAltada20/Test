@@ -53,6 +53,8 @@ import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner";
 import { WalletTopUp } from "@/components/WalletTopUp";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { usePagination } from "@/hooks/use-pagination";
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
@@ -67,7 +69,7 @@ export default function BillingClientPage({
     initialAuthUser,
     initialProfile,
     initialUserData,
-    initialCashTransactions,
+    initialCashTransactions, // Note: Not used anymore, kept for compatibility
     initialCoinTransactions,
     initialPayoutMethods,
     initialWithdrawalRequests,
@@ -79,7 +81,7 @@ export default function BillingClientPage({
     const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
     const [profile, setProfile] = useState<AdvertiserProfileData | null>(initialProfile);
     const [userData, setUserData] = useState<UserData | null>(initialUserData);
-    const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>(initialCashTransactions);
+    // Note: Cash transactions now handled by pagination hook
     const [coinTransactions, setCoinTransactionsState] = useState<CoinTransaction[]>(initialCoinTransactions);
     const [payoutMethods, setPayoutMethods] = useState<PayoutMethod[]>(initialPayoutMethods);
     const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(initialWithdrawalRequests);
@@ -116,6 +118,20 @@ export default function BillingClientPage({
     const [selectedWithdrawMethodId, setSelectedWithdrawMethodId] = useState<string | null>(null);
     const [withdrawalUserNotes, setWithdrawalUserNotes] = useState("");
 
+    // Pagination for cash transactions
+    const {
+        data: paginatedCashTransactions,
+        pagination: cashPagination,
+        loading: cashTransactionsLoading,
+        error: cashTransactionsError,
+        setPage: setCashPage,
+        setLimit: setCashLimit,
+        refresh: refreshCashTransactions,
+    } = usePagination<CashTransaction>({
+        apiEndpoint: '/api/money-transactions',
+        initialLimit: 25,
+    });
+
     // Get payout method summary
     const getPayoutMethodSummary = (method: PayoutMethod): string => {
         switch (method.method_type) {
@@ -145,8 +161,7 @@ export default function BillingClientPage({
         setAuthUser(initialAuthUser);
         setProfile(initialProfile);
         setUserData(initialUserData);
-        // Keep transaction amounts in cents (raw database values)
-        setCashTransactions(initialCashTransactions);
+        // Note: Cash transactions now handled by pagination hook
         setCoinTransactionsState(initialCoinTransactions);
         setPayoutMethods(initialPayoutMethods);
         setWithdrawalRequests(
@@ -156,7 +171,7 @@ export default function BillingClientPage({
             }))
         );
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialAuthUser, initialProfile, initialUserData, initialCashTransactions, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
+    }, [initialAuthUser, initialProfile, initialUserData, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
 
     // Reset form function
     const resetPayoutForm = () => {
@@ -425,29 +440,9 @@ export default function BillingClientPage({
             return updated;
         });
 
-        // Refresh transactions to show the new deposit
-        const refreshTransactions = async () => {
-            try {
-                console.log('🔄 BillingPage: Refreshing transaction history...');
-                const { data: cashData, error } = await supabase
-                    .from("money_transactions")
-                    .select("id, created_at, description, amount, status, type, remarks")
-                    .eq("user_id", authUser?.id)
-                    .order("created_at", { ascending: false });
-
-                if (!error && cashData) {
-                    console.log('📊 BillingPage: Transaction refresh successful, count:', cashData.length);
-                    // Keep transaction amounts in cents (raw database values)
-                    setCashTransactions(cashData);
-                } else {
-                    console.error('❌ BillingPage: Error refreshing transactions:', error);
-                }
-            } catch (error) {
-                console.error('❌ BillingPage: Error refreshing transactions:', error);
-            }
-        };
-
-        refreshTransactions();
+        // Refresh paginated transactions to show the new deposit
+        console.log('🔄 BillingPage: Refreshing transaction history...');
+        refreshCashTransactions();
     };
 
     const handleCancelWithdrawal = async (requestId: string, amountToRestore: number, amountType: 'cash' | 'coins') => {
@@ -622,7 +617,13 @@ export default function BillingClientPage({
                         <CardHeader>
                             <CardTitle>Cash Transaction History</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-4">
+                            {cashTransactionsError && (
+                                <div className="text-center text-red-500 p-4">
+                                    Error loading transactions: {cashTransactionsError}
+                                </div>
+                            )}
+
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -635,14 +636,23 @@ export default function BillingClientPage({
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {cashTransactions.length === 0 ? (
+                                    {cashTransactionsLoading ? (
                                         <TableRow>
-                                            <TableCell colSpan={6} className="text-center text-muted-foreground">
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground h-32">
+                                                <div className="flex items-center justify-center">
+                                                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                                                    Loading transactions...
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : paginatedCashTransactions.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center text-muted-foreground h-32">
                                                 No cash transaction history yet
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        cashTransactions.map((transaction) => (
+                                        paginatedCashTransactions.map((transaction) => (
                                             <TableRow key={transaction.id}>
                                                 <TableCell>{formatDateTime(transaction.created_at)}</TableCell>
                                                 <TableCell>{transaction.description || "No description"}</TableCell>
@@ -668,6 +678,21 @@ export default function BillingClientPage({
                                     )}
                                 </TableBody>
                             </Table>
+
+                            {/* Pagination Controls */}
+                            {!cashTransactionsLoading && cashPagination.totalPages > 0 && (
+                                <PaginationControls
+                                    page={cashPagination.page}
+                                    limit={cashPagination.limit}
+                                    total={cashPagination.total}
+                                    totalPages={cashPagination.totalPages}
+                                    hasNextPage={cashPagination.hasNextPage}
+                                    hasPreviousPage={cashPagination.hasPreviousPage}
+                                    onPageChange={setCashPage}
+                                    onLimitChange={setCashLimit}
+                                    loading={cashTransactionsLoading}
+                                />
+                            )}
                         </CardContent>
                     </Card>
 
@@ -1236,25 +1261,10 @@ export default function BillingClientPage({
                             currentBalance={(profile?.available_deposit_balance || 0)}
                             onBalanceUpdate={handleBalanceUpdate}
                             onClose={() => setIsTopUpModalOpen(false)}
-                            onTransactionUpdate={async () => {
-                                // Refresh transaction history
-                                try {
-                                    console.log('🔄 BillingPage: Refreshing transaction history from WalletTopUp...');
-                                    const { data: cashData, error } = await supabase
-                                        .from("money_transactions")
-                                        .select("id, created_at, description, amount, status, type, remarks")
-                                        .eq("user_id", authUser?.id)
-                                        .order("created_at", { ascending: false });
-
-                                    if (!error && cashData) {
-                                        console.log('📊 BillingPage: Transaction refresh successful, count:', cashData.length);
-                                        setCashTransactions(cashData);
-                                    } else {
-                                        console.error('❌ BillingPage: Error refreshing transactions:', error);
-                                    }
-                                } catch (error) {
-                                    console.error('❌ BillingPage: Error refreshing transactions:', error);
-                                }
+                            onTransactionUpdate={() => {
+                                // Refresh paginated transaction history
+                                console.log('🔄 BillingPage: Refreshing transaction history from WalletTopUp...');
+                                refreshCashTransactions();
                             }}
                         />
                     </div>

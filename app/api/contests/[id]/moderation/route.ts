@@ -26,8 +26,8 @@ export async function POST(
 
     // Verify user owns this contest
     const { data: contest, error: contestError } = await supabase
-      .from('contests')
-      .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url')
+      .from('contests_with_status')
+      .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url, payment_details, status')
       .eq('id', contestId)
       .eq('advertiser_id', user.id)
       .single();
@@ -39,11 +39,52 @@ export async function POST(
     if (action === 'submit_for_approval') {
       // Validate required fields
       const errors = [];
+      
+      console.log('🔍 Validation - Contest data:', {
+        title: contest.title,
+        brief_html: contest.brief_html,
+        start_date: contest.start_date,
+        end_date: contest.end_date,
+        payment_details: contest.payment_details
+      });
+      
       if (!contest.title?.trim()) errors.push('Title is required');
       if (!contest.brief_html?.trim()) errors.push('Brief is required');
       if (!contest.start_date || !contest.end_date) errors.push('Dates are required');
+      
+      // NOTE: Active contest limit validation is done during contest creation, not submission
+      // The contest is already created and paid for, so no need to check limits again
+
+      // Validate payment has been made
+      if (!contest.payment_details) {
+        errors.push('Contest payment is required before submission for approval');
+        console.log('❌ No payment details found');
+      } else {
+        try {
+          const paymentDetails = typeof contest.payment_details === 'string' 
+            ? JSON.parse(contest.payment_details) 
+            : contest.payment_details;
+          
+          console.log('💰 Payment details:', paymentDetails);
+          
+          if (!paymentDetails.payment_status || paymentDetails.payment_status !== 'completed') {
+            errors.push('Contest payment must be completed before submission for approval');
+            console.log('❌ Payment status not completed:', paymentDetails.payment_status);
+          }
+        } catch (err) {
+          errors.push('Invalid payment details');
+          console.log('❌ Invalid payment details JSON:', err);
+        }
+      }
+
+      console.log('📋 Validation errors:', errors);
 
       if (errors.length > 0) {
+        console.error('❌ Contest submission validation failed:', {
+          contestId: contestId,
+          userId: user.id,
+          errors: errors
+        });
         return NextResponse.json({ error: 'Validation failed', errors }, { status: 400 });
       }
 

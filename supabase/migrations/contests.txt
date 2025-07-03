@@ -6,13 +6,10 @@ create table public.contests (
   start_date timestamp with time zone null,
   end_date timestamp with time zone null,
   thumbnail_url text null,
-  brief text null,
-  rules jsonb null,
   resources jsonb null,
   category text null,
   inspiration_links text null,
   created_at timestamp with time zone null default now(),
-  is_draft boolean null default false,
   subscription_plan_of_user text null,
   updated_at timestamp with time zone null default now(),
   contest_type public.contest_type_enum null,
@@ -22,13 +19,33 @@ create table public.contests (
   brief_html text null,
   brief_json jsonb null,
   last_metrics_updated timestamp with time zone null,
+  rules_html text null,
+  rules_json jsonb null,
+  moderation_status public.contest_moderation_status_enum null default 'draft'::contest_moderation_status_enum,
+  submitted_for_approval_at timestamp with time zone null,
+  approved_at timestamp with time zone null,
+  approved_by uuid null,
+  published_at timestamp with time zone null,
+  rejection_reason text null,
+  payment_details jsonb null,
   constraint contests_pkey primary key (id),
-  constraint contests_advertiser_id_fkey1 foreign KEY (advertiser_id) references advertiser_profiles (id)
+  constraint contests_advertiser_id_fkey foreign KEY (advertiser_id) references advertiser_profiles (id),
+  constraint contests_approved_by_fkey foreign KEY (approved_by) references auth.users (id)
 ) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_moderation_status on public.contests using btree (moderation_status) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_post_contest_status on public.contests using btree (post_contest_status) TABLESPACE pg_default;
 
 create index IF not exists idx_contests_brief_html on public.contests using gin (to_tsvector('english'::regconfig, brief_html)) TABLESPACE pg_default;
 
 create index IF not exists idx_contests_last_metrics_updated on public.contests using btree (last_metrics_updated) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_rules_html on public.contests using gin (to_tsvector('english'::regconfig, rules_html)) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_approved_by on public.contests using btree (approved_by) TABLESPACE pg_default
+where
+  (approved_by is not null);
 
 create trigger on_contests_update BEFORE
 update on contests for EACH row

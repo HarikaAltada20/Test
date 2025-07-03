@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { stripe } from '@/lib/stripe';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { updateTransactionStatus } from '@/lib/payment-utils';
+import { updateTransactionStatus, logTransaction } from '@/lib/payment-utils';
 
 export async function POST(request: NextRequest) {
   console.log('🔔 WEBHOOK RECEIVED!');
@@ -160,8 +160,142 @@ async function handlePaymentSuccess(paymentIntent: any) {
         'Contest payment completed successfully'
       );
 
+      // Update contest payment details to 'completed' status
+      try {
+        
+        // Get current payment details and update status
+        const { data: contest, error: fetchError } = await supabase
+          .from('contests')
+          .select('payment_details')
+          .eq('id', contestId)
+          .single();
+
+        if (!fetchError && contest?.payment_details) {
+          const paymentDetails = typeof contest.payment_details === 'string' 
+            ? JSON.parse(contest.payment_details) 
+            : contest.payment_details;
+
+          // Update payment status and paid_at timestamp
+          const updatedPaymentDetails = {
+            ...paymentDetails,
+            payment_status: 'completed',
+            paid_at: new Date().toISOString(),
+            total_amount_paid: paymentDetails.total_amount_paid || Math.round(amountInDollars * 100) // Ensure total_amount_paid is set
+          };
+
+          const { error: updateError } = await supabase
+            .from('contests')
+            .update({ payment_details: updatedPaymentDetails })
+            .eq('id', contestId);
+
+          if (updateError) {
+            console.error('Error updating contest payment details:', updateError);
+          } else {
+            console.log('✅ Contest payment details updated to completed');
+          }
+        }
+      } catch (error) {
+        console.error('Error updating contest payment details:', error);
+      }
+
       console.log(`Contest payment successful: $${amountInDollars} for contest ${contestId}`);
-      console.log(`Contest transaction updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+      console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+    }
+
+    if (type === 'contest_payment_split') {
+      // Handle atomic split payment completion
+      const { contestId, walletAmount, totalAmount } = paymentIntent.metadata;
+      const stripeAmountInDollars = parseFloat(amount);
+      const walletAmountInDollars = parseFloat(walletAmount);
+      const totalAmountInDollars = parseFloat(totalAmount);
+      
+      console.log('🔄 Processing atomic split payment completion');
+      console.log(`💰 Wallet: $${walletAmountInDollars}, Stripe: $${stripeAmountInDollars}, Total: $${totalAmountInDollars}`);
+
+      try {
+        // Get contest payment details to find original wallet balance
+        const { data: contest, error: fetchError } = await supabase
+          .from('contests')
+          .select('payment_details')
+          .eq('id', contestId)
+          .single();
+
+        if (fetchError || !contest?.payment_details) {
+          console.error('❌ Failed to fetch contest payment details:', fetchError);
+          return;
+        }
+
+        const paymentDetails = typeof contest.payment_details === 'string' 
+          ? JSON.parse(contest.payment_details) 
+          : contest.payment_details;
+
+        const originalWalletBalance = paymentDetails.original_wallet_balance;
+        if (!originalWalletBalance) {
+          console.error('❌ No original wallet balance found for atomic rollback');
+          return;
+        }
+
+        // NOW perform atomic wallet deduction (Stripe has succeeded)
+        const walletAmountInCents = Math.round(walletAmountInDollars * 100);
+        const newBalance = originalWalletBalance - walletAmountInCents;
+        
+        console.log(`💳 Deducting ${walletAmountInCents} cents from wallet (${originalWalletBalance} → ${newBalance})`);
+
+        const { error: updateError } = await supabase
+          .from('advertiser_profiles')
+          .update({ available_deposit_balance: newBalance })
+          .eq('id', userId);
+
+        if (updateError) {
+          console.error('❌ CRITICAL: Failed to deduct wallet amount after Stripe success:', updateError);
+          // TODO: This requires manual intervention - Stripe succeeded but wallet deduction failed
+          return;
+        }
+
+        // Log successful wallet transaction now that both payments completed
+        await logTransaction(
+          userId,
+          'contest_payment',
+          walletAmountInCents,
+          'success',
+          `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
+          undefined,
+          'Wallet portion of split payment completed successfully'
+        );
+
+        // Update Stripe transaction status
+        const updateSuccess = await updateTransactionStatus(
+          paymentIntent.id,
+          'success',
+          `Contest payment (Stripe portion) completed - Contest: ${contestId}, Payment Intent: ${paymentIntent.id}`,
+          'Stripe portion of split payment completed successfully'
+        );
+
+        // Update contest payment details to 'completed' status
+        const updatedPaymentDetails = {
+          ...paymentDetails,
+          payment_status: 'completed',
+          paid_at: new Date().toISOString(),
+          total_amount_paid: Math.round(totalAmountInDollars * 100) // Store in cents
+        };
+
+        const { error: paymentUpdateError } = await supabase
+          .from('contests')
+          .update({ payment_details: updatedPaymentDetails })
+          .eq('id', contestId);
+
+        if (paymentUpdateError) {
+          console.error('❌ Error updating contest payment details:', paymentUpdateError);
+        } else {
+          console.log('✅ Split payment completed successfully - both wallet and Stripe portions processed');
+        }
+
+        console.log(`Split payment successful: $${walletAmountInDollars} (wallet) + $${stripeAmountInDollars} (Stripe) = $${totalAmountInDollars} for contest ${contestId}`);
+        console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+
+      } catch (error) {
+        console.error('❌ Error processing split payment completion:', error);
+      }
     }
 
   } catch (error) {
@@ -171,7 +305,13 @@ async function handlePaymentSuccess(paymentIntent: any) {
 
 async function handlePaymentFailure(paymentIntent: any) {
   try {
-    const { userId, type, amount } = paymentIntent.metadata;
+    // Use service role client for webhook operations (bypasses RLS)
+    const supabase = createServiceClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
+    const { userId, type, amount, contestId, walletAmount, totalAmount } = paymentIntent.metadata;
     const amountInDollars = parseFloat(amount);
 
     // Generate user-friendly failure remark
@@ -180,16 +320,65 @@ async function handlePaymentFailure(paymentIntent: any) {
       paymentIntent.last_payment_error?.code
     );
 
-    // Update existing pending transaction to failed (instead of creating new one)
-    const updateSuccess = await updateTransactionStatus(
-      paymentIntent.id,
-      'failed',
-      `Payment failed - Payment Intent: ${paymentIntent.id}`,
-      failureRemark
-    );
+    if (type === 'contest_payment_split') {
+      // Handle split payment failure - ensure no partial deductions
+      console.log('🔄 Processing split payment failure - ensuring atomic rollback');
+      
+      try {
+        // Since we implemented atomic transactions, wallet should NOT have been deducted yet
+        // But let's verify and fix if there was any partial deduction
+        const { data: contest } = await supabase
+          .from('contests')
+          .select('payment_details')
+          .eq('id', contestId)
+          .single();
 
-    console.log(`Payment failed for user ${userId}: $${amountInDollars}`);
-    console.log(`Transaction status updated to failed: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+        if (contest?.payment_details) {
+          const paymentDetails = typeof contest.payment_details === 'string' 
+            ? JSON.parse(contest.payment_details) 
+            : contest.payment_details;
+
+          // Update contest payment details to failed status
+          const updatedPaymentDetails = {
+            ...paymentDetails,
+            payment_status: 'failed',
+            failure_reason: failureRemark,
+            failed_at: new Date().toISOString()
+          };
+
+          await supabase
+            .from('contests')
+            .update({ payment_details: updatedPaymentDetails })
+            .eq('id', contestId);
+
+          console.log('✅ Split payment failure processed - no rollback needed due to atomic design');
+        }
+      } catch (error) {
+        console.error('❌ Error handling split payment failure:', error);
+      }
+
+      // Update Stripe transaction status
+      const updateSuccess = await updateTransactionStatus(
+        paymentIntent.id,
+        'failed',
+        `Split payment failed - Contest: ${contestId}, Payment Intent: ${paymentIntent.id}`,
+        failureRemark
+      );
+
+      console.log(`Split payment failed for user ${userId}: Stripe portion $${amountInDollars} failed, wallet portion not deducted (atomic design)`);
+      console.log(`Transaction status updated to failed: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+    } else {
+      // Handle regular payment failures
+      const updateSuccess = await updateTransactionStatus(
+        paymentIntent.id,
+        'failed',
+        `Payment failed - Payment Intent: ${paymentIntent.id}`,
+        failureRemark
+      );
+
+      console.log(`Payment failed for user ${userId}: $${amountInDollars}`);
+      console.log(`Transaction status updated to failed: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+    }
 
   } catch (error) {
     console.error('Error handling payment failure:', error);

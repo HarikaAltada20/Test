@@ -26,6 +26,21 @@ export interface PaymentProcessingResult {
   error?: string;
 }
 
+export interface PaymentDetails {
+  first_payment_at: string;
+  last_updated: string;
+  payment_status: 'pending' | 'completed' | 'failed';
+  total_prize_pool: number;
+  commission_amount: number;
+  total_amount_paid: number;
+  commission_percentage: number;
+  payment_intent_ids: (string | null)[];
+  stripe_amounts_paid: number[];
+  wallet_amounts_used: number[];
+  amount_changes: number[];
+  change_history: string[];
+}
+
 // Server-only client getter
 async function getSupabaseClient() {
   return await createServerClient();
@@ -204,6 +219,18 @@ export async function createContestPaymentIntent(
         enabled: true,
       },
     });
+
+    // 🚀 NEW: Log initial pending transaction for the Stripe portion
+    // This ensures split payments show as two separate transactions
+    await logTransaction(
+      userId,
+      'contest_payment',
+      amount, // amount is already in cents
+      'pending',
+      description,
+      paymentIntent.id, // Link to payment intent for webhook updates
+      'Stripe payment processing'
+    );
 
     return {
       id: paymentIntent.id,
@@ -503,5 +530,260 @@ export async function updateTransactionStatus(
   } catch (error) {
     console.error('❌ Error in updateTransactionStatus:', error);
     throw error; // Re-throw to ensure failures are not silently ignored
+  }
+}
+
+// 🚀 NEW: Create initial payment details for a contest
+export function createInitialPaymentDetails(
+  prizePoolInCents: number,
+  commissionPercentage: number,
+  walletAmount: number = 0,
+  stripeAmount: number = 0,
+  paymentIntentId: string | null = null
+): PaymentDetails {
+  const commissionAmount = Math.round(prizePoolInCents * (commissionPercentage / 100));
+  const totalAmount = prizePoolInCents + commissionAmount;
+  const now = new Date().toISOString();
+
+  return {
+    first_payment_at: now,
+    last_updated: now,
+    payment_status: 'pending',
+    total_prize_pool: prizePoolInCents,
+    commission_amount: commissionAmount,
+    total_amount_paid: totalAmount,
+    commission_percentage: commissionPercentage,
+    payment_intent_ids: [paymentIntentId],
+    stripe_amounts_paid: [stripeAmount],
+    wallet_amounts_used: [walletAmount],
+    amount_changes: [totalAmount],
+    change_history: ['initial_payment']
+  };
+}
+
+// 🚀 NEW: Add a budget change to existing payment details
+export function addBudgetChangeToPaymentDetails(
+  currentPaymentDetails: PaymentDetails,
+  prizePoolChangeInCents: number,
+  changeType: 'increase' | 'decrease',
+  walletAmount: number = 0,
+  stripeAmount: number = 0,
+  paymentIntentId: string | null = null
+): PaymentDetails {
+  const commissionOnChange = Math.round(Math.abs(prizePoolChangeInCents) * (currentPaymentDetails.commission_percentage / 100));
+  const totalChangeAmount = prizePoolChangeInCents + (prizePoolChangeInCents >= 0 ? commissionOnChange : -commissionOnChange);
+
+  const newPrizePool = currentPaymentDetails.total_prize_pool + prizePoolChangeInCents;
+  const newCommissionAmount = Math.round(newPrizePool * (currentPaymentDetails.commission_percentage / 100));
+  const newTotalPaid = currentPaymentDetails.total_amount_paid + totalChangeAmount;
+
+  return {
+    ...currentPaymentDetails,
+    last_updated: new Date().toISOString(),
+    total_prize_pool: newPrizePool,
+    commission_amount: newCommissionAmount,
+    total_amount_paid: newTotalPaid,
+    payment_intent_ids: [...currentPaymentDetails.payment_intent_ids, paymentIntentId],
+    stripe_amounts_paid: [...currentPaymentDetails.stripe_amounts_paid, stripeAmount],
+    wallet_amounts_used: [...currentPaymentDetails.wallet_amounts_used, walletAmount],
+    amount_changes: [...currentPaymentDetails.amount_changes, totalChangeAmount],
+    change_history: [...currentPaymentDetails.change_history, changeType]
+  };
+}
+
+// 🚀 NEW: Mark payment as completed
+export function markPaymentAsCompleted(paymentDetails: PaymentDetails): PaymentDetails {
+  return {
+    ...paymentDetails,
+    last_updated: new Date().toISOString(),
+    payment_status: 'completed'
+  };
+}
+
+// 🚀 NEW: Enhanced contest payment processing with new schema
+export async function processContestPaymentV2(
+  userId: string,
+  contestId: string,
+  prizePoolInCents: number,
+  commissionPercentage: number,
+  description: string,
+  useWalletFirst: boolean = true,
+  existingPaymentDetails?: PaymentDetails,
+  changeType?: 'increase' | 'decrease'
+): Promise<PaymentProcessingResult & { paymentDetails?: PaymentDetails }> {
+  try {
+    const totalAmount = prizePoolInCents + Math.round(prizePoolInCents * (commissionPercentage / 100));
+    
+    const currentBalance = await getAdvertiserDepositBalance(userId);
+    
+    if (!currentBalance.success) {
+      return {
+        success: false,
+        paymentMethod: 'wallet',
+        error: 'Failed to check wallet balance'
+      };
+    }
+
+    let walletAmount = 0;
+    let stripeAmount = 0;
+    let paymentIntent: PaymentIntent | null = null;
+
+    // Determine payment split
+    if (useWalletFirst && currentBalance.balance >= totalAmount) {
+      // Full wallet payment
+      walletAmount = totalAmount;
+      stripeAmount = 0;
+    } else if (useWalletFirst && currentBalance.balance > 0) {
+      // Split payment
+      walletAmount = currentBalance.balance;
+      stripeAmount = totalAmount - walletAmount;
+    } else {
+      // Full Stripe payment
+      walletAmount = 0;
+      stripeAmount = totalAmount;
+    }
+
+    // Create Stripe payment intent if needed
+    if (stripeAmount > 0) {
+      paymentIntent = await createContestPaymentIntent(
+        userId, 
+        contestId, 
+        stripeAmount, 
+        description
+      );
+
+      if (!paymentIntent) {
+        return {
+          success: false,
+          paymentMethod: 'stripe',
+          error: 'Failed to create payment intent'
+        };
+      }
+    }
+
+    // Process wallet payment if needed
+    if (walletAmount > 0) {
+      const deductResult = await deductFromDepositBalance(userId, walletAmount, description);
+      
+      if (!deductResult.success) {
+        return {
+          success: false,
+          paymentMethod: 'wallet',
+          error: 'Failed to deduct from wallet'
+        };
+      }
+    }
+
+    // Create or update payment details
+    let paymentDetails: PaymentDetails;
+    
+    if (existingPaymentDetails && changeType) {
+      // This is a budget change
+      const prizePoolChange = changeType === 'increase' ? prizePoolInCents : -prizePoolInCents;
+      paymentDetails = addBudgetChangeToPaymentDetails(
+        existingPaymentDetails,
+        prizePoolChange,
+        changeType,
+        walletAmount,
+        stripeAmount,
+        paymentIntent?.id || null
+      );
+    } else {
+      // This is initial payment
+      paymentDetails = createInitialPaymentDetails(
+        prizePoolInCents,
+        commissionPercentage,
+        walletAmount,
+        stripeAmount,
+        paymentIntent?.id || null
+      );
+    }
+
+    // If no Stripe payment needed, mark as completed immediately
+    if (stripeAmount === 0) {
+      paymentDetails = markPaymentAsCompleted(paymentDetails);
+    }
+
+    const paymentMethod = walletAmount > 0 && stripeAmount > 0 ? 'split' :
+                         walletAmount > 0 ? 'wallet' : 'stripe';
+
+         return {
+       success: true,
+       paymentMethod,
+       amountFromWallet: walletAmount,
+       amountFromStripe: stripeAmount,
+       paymentIntent: paymentIntent || undefined,
+       paymentDetails
+     };
+
+  } catch (error) {
+    console.error('Error in processContestPaymentV2:', error);
+    return {
+      success: false,
+      paymentMethod: 'wallet',
+      error: 'Unknown error occurred'
+    };
+  }
+}
+
+// 🚀 NEW: Enhanced refund with payment details update
+export async function refundContestPaymentV2(
+  userId: string,
+  contestId: string,
+  refundAmountInCents: number,
+  currentPaymentDetails: PaymentDetails,
+  reason: string = 'Contest budget decreased'
+): Promise<DepositBalanceResponse & { paymentDetails?: PaymentDetails }> {
+  try {
+    const supabase = await getSupabaseClient();
+    
+    // Get current balance (in cents)
+    const currentBalance = await getAdvertiserDepositBalance(userId);
+    if (!currentBalance.success) {
+      return currentBalance;
+    }
+
+    // Add refund amount to deposit balance (both in cents)
+    const newBalance = (currentBalance.balance || 0) + refundAmountInCents;
+    const { data, error } = await supabase
+      .from('advertiser_profiles')
+      .update({ available_deposit_balance: newBalance })
+      .eq('id', userId)
+      .select('available_deposit_balance')
+      .single();
+
+    if (error) {
+      console.error('Error processing refund:', error);
+      return { success: false, balance: currentBalance.balance, error: error.message };
+    }
+
+    // Log the refund transaction
+    await logTransaction(
+      userId, 
+      'refund', 
+      refundAmountInCents, 
+      'success', 
+      `${reason} - Contest ID: ${contestId}`
+    );
+
+    // Update payment details to reflect the refund
+    const prizePoolDecrease = refundAmountInCents - Math.round(refundAmountInCents * (currentPaymentDetails.commission_percentage / (100 + currentPaymentDetails.commission_percentage)));
+    const updatedPaymentDetails = addBudgetChangeToPaymentDetails(
+      currentPaymentDetails,
+      -prizePoolDecrease,
+      'decrease',
+      0, // No wallet involved in refund
+      0, // No Stripe involved in refund
+      null // No payment intent for refund
+    );
+
+    return { 
+      success: true, 
+      balance: data?.available_deposit_balance || 0,
+      paymentDetails: updatedPaymentDetails
+    };
+  } catch (error) {
+    console.error('Error in refundContestPaymentV2:', error);
+    return { success: false, balance: 0, error: 'Unknown error occurred' };
   }
 } 

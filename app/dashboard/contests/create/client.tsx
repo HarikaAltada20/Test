@@ -539,6 +539,24 @@ export default function CreateContestPage({
           }
         }
 
+        // Validate active contest limits before submission
+        if (userId) {
+          try {
+            const { canCreateNewContest } = await import('@/lib/contest-utils-client');
+            const activeCheck = await canCreateNewContest(userId, planFeatures.maxActiveContests);
+            if (!activeCheck.canCreate) {
+              setFormFeedback(activeCheck.error || `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.`);
+              setFormFeedbackType("error");
+              setIsLoading(false); setUploadProgress(null); return;
+            }
+          } catch (error: any) {
+            console.error("Error checking active contest limit:", error);
+            setFormFeedback("Unable to validate contest limits. Please try again.");
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+        }
+
         if (!thumbnail && !thumbnailPreview) {
           setFormFeedback("Contest thumbnail is required for submission");
           setFormFeedbackType("error");
@@ -610,8 +628,8 @@ export default function CreateContestPage({
 
           const durationMs = endDateTime.getTime() - startDateTime.getTime();
           const oneDayMs = 24 * 60 * 60 * 1000;
-          if (durationMs <= oneDayMs) {
-            setFormFeedback("Contest duration must be more than 24 hours (at least 1 day gap)");
+          if (durationMs < oneDayMs) {
+            setFormFeedback("Contest duration must be at least 24 hours (minimum 1 day)");
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
@@ -743,8 +761,8 @@ export default function CreateContestPage({
         resources,
         inspiration_links: inspirationLinks,
         subscription_plan_of_user: userPlan,
-        moderation_status: isDraft ? 'draft' : 'pending_approval', // Draft or submit for approval
-        submitted_for_approval_at: isDraft ? null : new Date().toISOString(),
+        moderation_status: 'draft', // Always create as draft first, payment will update to pending_approval
+        submitted_for_approval_at: null,
         start_date: formattedStartDate,
         end_date: formattedEndDate,
         contest_type: contestType,
@@ -764,7 +782,8 @@ export default function CreateContestPage({
 
       if (responseError) throw responseError;
 
-      if (isDraft && !draftId && responseData && responseData.length > 0) {
+      // Set draftId for both draft and non-draft contests to ensure we have the contest ID
+      if (!draftId && responseData && responseData.length > 0) {
         setDraftId(responseData[0].id);
       }
 
@@ -812,17 +831,68 @@ export default function CreateContestPage({
 
     toast({
       title: "Payment Successful!",
-      description: "Contest payment processed. Submitting for review..."
+      description: "Contest payment processed. We are now submitting your contest for review...",
     });
 
-    // Complete the contest submission
-    setTimeout(() => {
+    const contestId = draftId || paymentDetails?.contestId;
+    if (!contestId) {
       toast({
-        title: "Contest Submitted!",
-        description: "Your contest has been submitted for admin review. You'll be notified once it's approved."
+        title: "Submission Error",
+        description: "Could not find Contest ID after payment. Please refresh and visit the contest page to submit manually.",
+        variant: "destructive",
       });
-      router.push(draftId ? `/dashboard/contests/${draftId}` : "/dashboard/contests");
-    }, 1500);
+      return;
+    }
+
+    const submitForApproval = async (retries = 3, delay = 2000) => {
+      try {
+        console.log(`Attempting to submit contest for approval. Retries left: ${retries}`);
+        const response = await fetch(`/api/contests/${contestId}/moderation`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'submit_for_approval',
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          // If the error is that the payment is not completed, retry.
+          if (result.error?.includes('payment must be completed') && retries > 0) {
+            console.warn(`Submission failed (payment pending), retrying in ${delay / 1000}s...`);
+            await new Promise(res => setTimeout(res, delay));
+            return submitForApproval(retries - 1, delay);
+          }
+          // For other errors, throw immediately.
+          throw new Error(result.error || 'Failed to submit contest for approval');
+        }
+
+        // Success!
+        console.log("Contest submitted for approval successfully!");
+        toast({
+          title: "Contest Submitted!",
+          description: "Your contest is now pending for admin review.",
+        });
+        router.push(`/dashboard/contests/${contestId}`);
+
+      } catch (error: any) {
+        console.error("Fatal error submitting contest for approval:", error);
+        toast({
+          title: "Submission Error",
+          description: `Payment was successful but we failed to automatically submit your contest. Please go to the contest page and click 'Submit for Approval'. Error: ${error.message}`,
+          variant: "destructive",
+          duration: 10000,
+        });
+        // Still redirect to contest page so user can retry submission manually
+        router.push(`/dashboard/contests/${contestId}`);
+      }
+    };
+
+    // Initial call to start the submission process
+    await submitForApproval();
   };
 
   const handlePaymentError = (error: string) => {
@@ -2216,7 +2286,7 @@ export default function CreateContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              Contest duration must be more than 24 hours (at least 1 day gap). The end date will
+              Contest duration must be at least 24 hours (minimum 1 day). The end date will
               automatically adjust to maintain this minimum duration.
             </p>
           </div>
@@ -3701,6 +3771,7 @@ export default function CreateContestPage({
                   : (parseFloat(totalBudget.toString()) || 0)} // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={draftId || undefined}
+                commissionPercentage={getPlanFeatures(userPlan).commisionPercentage}
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
                 disabled={isLoading}

@@ -18,6 +18,7 @@ import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, 
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
 import { useToast } from "@/hooks/use-toast"
+import { ContestPaymentSelection } from "@/components/ContestPaymentSelection"
 import dynamic from 'next/dynamic'
 
 // Dynamically import the Novel editor
@@ -80,6 +81,8 @@ type ContestData = {
     // Moderation fields
     moderation_status: string;
     rejection_reason: string | null;
+    // Payment information
+    payment_details?: any | null;
     // Old fields to be phased out or mapped from contest_based_details
     prizes?: { position: number; amount: number }[];
     total_prize?: number;
@@ -152,6 +155,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     // State for bottom error display
     const [formFeedback, setFormFeedback] = useState<string | null>(null);
     const [formFeedbackType, setFormFeedbackType] = useState<"error" | "success" | null>(null);
+
+    // Payment state management
+    const [showPayment, setShowPayment] = useState(false);
+    const [isPaymentRequired, setIsPaymentRequired] = useState(false);
+
+    // Budget change tracking
+    const [originalBudget, setOriginalBudget] = useState<number>(0); // Store original budget in cents
+    const [budgetChanged, setBudgetChanged] = useState(false);
+    const [budgetDifference, setBudgetDifference] = useState<number>(0); // Positive = increase, Negative = decrease
 
     // Fetch subscription plans from the database
     const fetchSubscriptionPlans = async () => {
@@ -371,13 +383,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                             const lbDetails = data.contest_based_details?.leaderboard_contest;
                             if (lbDetails && Array.isArray(lbDetails.prizes)) {
                                 setWinnerCount(lbDetails.winner_count || lbDetails.prizes.length);
-                                setWinnerAmounts(lbDetails.prizes.map((prize: { amount: number }) => prize.amount));
+                                const prizes = lbDetails.prizes.map((prize: { amount: number }) => prize.amount);
+                                setWinnerAmounts(prizes);
+                                // Set original budget for tracking changes (prize pool only)
+                                const originalBudgetInCents = prizes.reduce((sum: number, amount: number) => sum + amount, 0);
+                                setOriginalBudget(originalBudgetInCents);
                             } else if (Array.isArray(data.prizes)) { // Fallback to old structure if new one not present
                                 setWinnerCount(data.winner_count || data.prizes.length);
-                                setWinnerAmounts(data.prizes.map((prize: { amount: number }) => prize.amount));
+                                const prizes = data.prizes.map((prize: { amount: number }) => prize.amount);
+                                setWinnerAmounts(prizes);
+                                // Set original budget for tracking changes (prize pool only)
+                                const originalBudgetInCents = prizes.reduce((sum: number, amount: number) => sum + amount, 0);
+                                setOriginalBudget(originalBudgetInCents);
                             } else {
                                 setWinnerCount(3); // Default
                                 setWinnerAmounts([5000, 3000, 2000]); // Default
+                                // Set default original budget (prize pool only)
+                                setOriginalBudget(10000); // Default total
                             }
                         } else if (data.contest_type === 'cpm') {
                             const cpmDetails = data.contest_based_details?.cpm_contest;
@@ -387,6 +409,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 setMaxViews(cpmDetails.max_views?.toString() || "");
                                 setTotalBudget(cpmDetails.total_budget ? (cpmDetails.total_budget / 100).toString() : "");
                                 setTermsConditions(cpmDetails.terms_conditions || "");
+                                // Set original budget for tracking changes (cpm budget is stored in cents, prize pool only)
+                                setOriginalBudget(cpmDetails.total_budget || 0);
                             }
                         }
 
@@ -411,6 +435,75 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
         fetchInitialData();
     }, [contestId, user, supabase]); // Rerun if user or contestId changes
+
+    // Re-check budget changes when original budget is set or contest type changes
+    useEffect(() => {
+        if (originalBudget > 0) {
+            checkBudgetChange();
+        }
+    }, [originalBudget, contestType]);
+
+    // Refresh contest data function
+    const refreshContestData = async () => {
+        try {
+            const { data, error: contestError } = await supabase
+                .from("contests")
+                .select("*, advertiser_id")
+                .eq("id", contestId)
+                .single();
+
+            if (contestError) {
+                console.error("Error refreshing contest data:", contestError);
+                return;
+            }
+
+            if (data) {
+                setContest(data as ContestData);
+                console.log("✅ Contest data refreshed after payment");
+
+                // Update form fields with latest contest data if it's a budget-related change
+                const refreshedContest = data as ContestData;
+                if (refreshedContest.contest_based_details) {
+                    if (refreshedContest.contest_type === 'leaderboard' && refreshedContest.contest_based_details.leaderboard_contest) {
+                        const leaderboardData = refreshedContest.contest_based_details.leaderboard_contest;
+                        if (leaderboardData.prizes && Array.isArray(leaderboardData.prizes)) {
+                            // Update winner amounts with latest data from database
+                            const updatedAmounts = leaderboardData.prizes.map(prize => prize.amount);
+                            setWinnerAmounts(updatedAmounts);
+                            setWinnerCount(leaderboardData.winner_count || updatedAmounts.length);
+
+                            // Update originalBudget with current total from database
+                            const currentTotal = leaderboardData.total_prize || updatedAmounts.reduce((sum, amount) => sum + amount, 0);
+                            setOriginalBudget(currentTotal);
+
+                            console.log("🔄 Updated leaderboard amounts from database:", {
+                                updatedAmounts,
+                                totalPrize: currentTotal,
+                                winnerCount: leaderboardData.winner_count
+                            });
+                        }
+                    } else if (refreshedContest.contest_type === 'cpm' && refreshedContest.contest_based_details.cpm_contest) {
+                        const cpmData = refreshedContest.contest_based_details.cpm_contest;
+                        if (cpmData.total_budget) {
+                            // Update total budget with latest data from database
+                            const budgetInDollars = cpmData.total_budget / 100; // Convert cents to dollars
+                            setTotalBudget(budgetInDollars.toString());
+
+                            // Update originalBudget with current total from database
+                            setOriginalBudget(cpmData.total_budget);
+
+                            console.log("🔄 Updated CPM budget from database:", {
+                                totalBudgetCents: cpmData.total_budget,
+                                totalBudgetDollars: budgetInDollars
+                            });
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error refreshing contest data:", error);
+        }
+    };
 
     // Get minimum allowed start date and time (current date/time)
     const getMinDateTime = () => {
@@ -606,10 +699,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 }
                 const durationMs = endDateTime.getTime() - startDateTime.getTime();
                 const oneDayMs = 24 * 60 * 60 * 1000;
-                if (durationMs <= oneDayMs) {
+                if (durationMs < oneDayMs) {
                     toast({
                         title: "Invalid Duration",
-                        description: "Contest duration must be more than 24 hours (at least 1 day gap).",
+                        description: "Contest duration must be at least 24 hours (minimum 1 day).",
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1088,18 +1181,641 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         setFormFeedbackType(null);
     };
 
+    // Helper function to check if contest payment has been completed
+    const isContestPaid = (): boolean => {
+        if (!contest?.payment_details) return false;
+
+        try {
+            const paymentDetails = typeof contest.payment_details === 'string'
+                ? JSON.parse(contest.payment_details)
+                : contest.payment_details;
+
+            return paymentDetails.payment_status === 'completed';
+        } catch (error) {
+            console.error('Error parsing payment details:', error);
+            return false;
+        }
+    };
+
+    // Helper function to validate form for submission
+    const validateFormForSubmission = (): string | null => {
+        if (!title || title.trim() === "") {
+            return "Contest title is required.";
+        }
+
+        if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
+            return "Brief description is required.";
+        }
+
+        if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
+            return "Contest rules are required.";
+        }
+
+        // Validate thumbnail - either uploaded file or existing preview
+        if (!thumbnail && !thumbnailPreview) {
+            return "Contest thumbnail is required.";
+        }
+
+        const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+        if (validInspirationLinks.length === 0) {
+            return "At least one inspiration link is required.";
+        }
+
+        const hasUploadedFiles = Object.keys(resourceFiles).length > 0;
+        const hasExistingResources = resources && Object.keys(resources).length > 0;
+        const totalResources = (hasUploadedFiles ? Object.keys(resourceFiles).length : 0) +
+            (hasExistingResources ? Object.keys(resources).length : 0);
+
+        if (totalResources === 0) {
+            return "At least one resource is required.";
+        }
+
+        if (!startDate || !startTime || !endDate || !endTime) {
+            return "Contest start and end dates/times are required.";
+        }
+
+        // Validate dates
+        try {
+            const startDateTime = new Date(`${startDate}T${startTime}`);
+            const endDateTime = new Date(`${endDate}T${endTime}`);
+            const now = new Date();
+
+            if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+                return "Please check your date and time entries.";
+            }
+
+            const originalStartDate = contest?.start_date ? new Date(contest.start_date) : null;
+            if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
+                return "Contest start time must be in the future.";
+            }
+
+            if (endDateTime <= startDateTime) {
+                return "Contest end time must be after the start time.";
+            }
+
+            const durationMs = endDateTime.getTime() - startDateTime.getTime();
+            const oneDayMs = 24 * 60 * 60 * 1000;
+            if (durationMs < oneDayMs) {
+                return "Contest duration must be at least 24 hours (minimum 1 day).";
+            }
+        } catch (error) {
+            return "There was an error with the date/time format. Please check your entries.";
+        }
+
+        // Validate contest type specific fields
+        if (contestType === 'leaderboard') {
+            const planFeatures = getPlanFeatures(userPlan);
+            const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+
+            if (winnerCount > planFeatures.maxWinnersPerContest) {
+                return `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`;
+            }
+
+            if (currentTotalPrizePool < planFeatures.minContestBudget) {
+                return `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`;
+            }
+
+            for (let i = 0; i < winnerCount; i++) {
+                if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+                    return `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
+                }
+                if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+                    return `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
+                }
+            }
+        }
+
+        if (contestType === 'cpm') {
+            const planFeatures = getPlanFeatures(userPlan);
+            const parsedCpmRate = typeof cpmRate === 'string' ? parseFloat(cpmRate) : cpmRate;
+            const parsedTotalBudget = typeof totalBudget === 'string' ? parseFloat(totalBudget) : totalBudget;
+
+            if (!parsedCpmRate || parsedCpmRate <= 0) {
+                return "CPM rate must be a positive number.";
+            }
+
+            if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
+                return `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`;
+            }
+
+            if (!termsConditions || termsConditions.trim() === "") {
+                return "Terms and conditions are required for CPM contests.";
+            }
+        }
+
+        return null;
+    };
+
+    // Payment success handler
+    const handlePaymentSuccess = async (paymentDetails: any) => {
+        console.log("Payment successful:", paymentDetails);
+        setShowPayment(false);
+
+        try {
+            // Handle budget changes - both increases and decreases
+            if (budgetChanged && Math.abs(budgetDifference) > 0) {
+                console.log("🔄 Processing budget change:", {
+                    budgetDifference,
+                    isIncrease: budgetDifference > 0,
+                    isDecrease: budgetDifference < 0
+                });
+
+                // Handle budget decrease (refund) - only if not already processed
+                if (budgetDifference < 0 && paymentDetails.paymentMethod !== 'refund') {
+                    // Calculate total refund amount: prize pool decrease + commission on that decrease
+                    const prizePoolDecrease = Math.abs(budgetDifference);
+                    const commissionPercentage = getPlanFeatures(userPlan).commisionPercentage;
+                    const commissionRefund = Math.round(prizePoolDecrease * (commissionPercentage / 100));
+                    const totalRefundAmount = prizePoolDecrease + commissionRefund;
+
+                    console.log(`💰 Processing refund: ${prizePoolDecrease} cents prize pool + ${commissionRefund} cents commission = ${totalRefundAmount} cents total`);
+
+                    // Call refund API endpoint
+                    const response = await fetch('/api/payments/refund', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            contestId,
+                            refundAmount: totalRefundAmount,
+                            reason: 'Contest budget decreased'
+                        }),
+                    });
+
+                    const refundResult = await response.json();
+
+                    if (!response.ok || !refundResult.success) {
+                        throw new Error(refundResult.error || 'Failed to process refund');
+                    }
+
+                    console.log("✅ Refund processed successfully");
+
+                    // Show detailed refund breakdown if available
+                    const refundMessage = refundResult.breakdown
+                        ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(2)}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(2)} + $${refundResult.breakdown.commissionRefund.toFixed(2)} commission = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
+                        : `$${(totalRefundAmount / 100).toFixed(2)} has been refunded to your wallet`;
+
+                    toast({
+                        title: "Refund Processed",
+                        description: refundMessage,
+                        variant: "default",
+                    });
+                } else if (budgetDifference < 0 && paymentDetails.paymentMethod === 'refund') {
+                    console.log("✅ Refund already processed, skipping duplicate refund processing");
+                }
+
+                // Update ALL contest data in database after payment (including any edits made)
+                console.log("💾 Updating complete contest data in database after payment...");
+
+                const contestBasedDetails = contestType === 'leaderboard'
+                    ? {
+                        leaderboard_contest: {
+                            prizes: winnerAmounts.map((amount, index) => ({
+                                position: index + 1,
+                                amount: amount
+                            })),
+                            total_prize: winnerAmounts.reduce((sum, amount) => sum + amount, 0),
+                            winner_count: winnerCount
+                        }
+                    }
+                    : {
+                        cpm_contest: {
+                            cpm_rate_usd: parseFloat(cpmRate.toString()),
+                            min_views: minViews ? parseInt(minViews.toString()) : null,
+                            max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                            total_budget: Math.round(parseFloat(totalBudget.toString()) * 100),
+                            terms_conditions: termsConditions
+                        }
+                    };
+
+                // Prepare complete contest update with ALL form data
+                const contestUpdate = {
+                    title: title.trim(),
+                    category,
+                    brief_html: briefHtml,
+                    brief_json: briefJson,
+                    rules_html: rulesHtml,
+                    rules_json: rulesJson,
+                    start_date: `${startDate}T${startTime}:00.000Z`,
+                    end_date: `${endDate}T${endTime}:00.000Z`,
+                    inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+                    resources: {
+                        ...resources, ...Object.fromEntries(
+                            Object.entries(resourceFiles).map(([key, file]) => [key, file.name])
+                        )
+                    },
+                    contest_type: contestType,
+                    contest_based_details: contestBasedDetails,
+                    moderation_status: 'draft' // Save as draft after successful payment
+                };
+
+                // Update contest with complete data
+                if (!user?.id) {
+                    throw new Error('User not authenticated');
+                }
+
+                const { error: updateError } = await supabase
+                    .from('contests')
+                    .update(contestUpdate)
+                    .eq('id', contestId)
+                    .eq('advertiser_id', user.id);
+
+                if (updateError) {
+                    console.error("❌ Failed to update complete contest data:", updateError);
+                    throw new Error(`Failed to update contest: ${updateError.message}`);
+                }
+
+                console.log("✅ Complete contest data updated in database after payment");
+
+            } else {
+                // No budget change - save all current form data as draft after successful payment
+                console.log("📝 No budget change - saving all form data as draft after payment");
+
+                // Prepare contest data update with all current form data
+                const contestBasedDetails = contestType === 'leaderboard'
+                    ? {
+                        leaderboard_contest: {
+                            prizes: winnerAmounts.map((amount, index) => ({
+                                position: index + 1,
+                                amount: amount
+                            })),
+                            total_prize: winnerAmounts.reduce((sum, amount) => sum + amount, 0),
+                            winner_count: winnerCount
+                        }
+                    }
+                    : {
+                        cpm_contest: {
+                            cpm_rate_usd: parseFloat(cpmRate.toString()),
+                            min_views: minViews ? parseInt(minViews.toString()) : null,
+                            max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                            total_budget: Math.round(parseFloat(totalBudget.toString()) * 100),
+                            terms_conditions: termsConditions
+                        }
+                    };
+
+                const contestUpdate = {
+                    title: title.trim(),
+                    category,
+                    brief_html: briefHtml,
+                    brief_json: briefJson,
+                    rules_html: rulesHtml,
+                    rules_json: rulesJson,
+                    start_date: `${startDate}T${startTime}:00.000Z`,
+                    end_date: `${endDate}T${endTime}:00.000Z`,
+                    inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+                    resources: {
+                        ...resources, ...Object.fromEntries(
+                            Object.entries(resourceFiles).map(([key, file]) => [key, file.name])
+                        )
+                    },
+                    contest_type: contestType,
+                    contest_based_details: contestBasedDetails,
+                    moderation_status: 'draft' // Save as draft after successful payment
+                };
+
+                const { data: updatedContest, error: updateError } = await supabase
+                    .from('contests')
+                    .update(contestUpdate)
+                    .eq('id', contestId)
+                    .select()
+                    .single();
+
+                if (updateError) {
+                    console.error("❌ Failed to save contest as draft:", updateError);
+                    throw new Error(`Failed to save contest: ${updateError.message}`);
+                }
+
+                console.log("✅ Contest saved as draft with all form data after payment");
+            }
+
+            toast({
+                title: "Payment Successful",
+                description: budgetChanged && budgetDifference !== 0
+                    ? budgetDifference > 0
+                        ? "Additional payment processed, contest saved as draft. Submitting for approval..."
+                        : "Refund processed, contest saved as draft. Submitting for approval..."
+                    : "Payment completed, contest saved as draft. Submitting for approval...",
+                variant: "default",
+            });
+
+            // Reset budget change tracking since payment is now complete
+            setBudgetChanged(false);
+            setBudgetDifference(0);
+
+            // Update originalBudget to the new budget to prevent false change detection
+            if (contestType === 'leaderboard') {
+                const newTotalPrize = winnerAmounts.reduce((sum, amount) => sum + amount, 0);
+                setOriginalBudget(newTotalPrize);
+            } else if (contestType === 'cpm') {
+                const newBudgetInCents = Math.round(parseFloat(totalBudget.toString()) * 100);
+                setOriginalBudget(newBudgetInCents);
+            }
+
+            // Refresh contest data to show updated payment details
+            await refreshContestData();
+
+            // Force a re-render by clearing and resetting budget change detection
+            console.log("🔄 Forcing budget change check to clear any residual state...");
+            setTimeout(() => {
+                if (contestType === 'leaderboard') {
+                    checkBudgetChange(winnerAmounts);
+                } else if (contestType === 'cpm') {
+                    checkBudgetChange(undefined, totalBudget.toString());
+                }
+            }, 100);
+
+            // Now submit for approval using the moderation API with retries
+            const submitForApproval = async (retries = 3, delay = 2000) => {
+                for (let attempt = 1; attempt <= retries; attempt++) {
+                    try {
+                        console.log(`Submission attempt ${attempt}/${retries} for contest ${contestId}`);
+
+                        const response = await fetch(`/api/contests/${contestId}/moderation`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                action: 'submit_for_approval'
+                            }),
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.success) {
+                            toast({
+                                title: "Success",
+                                description: "Contest submitted for approval successfully!",
+                                variant: "default",
+                            });
+                            router.push(`/dashboard/contests/${contestId}`);
+                            return;
+                        } else {
+                            throw new Error(result.error || 'Failed to submit for approval');
+                        }
+                    } catch (error: any) {
+                        console.log(`Attempt ${attempt} failed:`, error.message);
+
+                        if (attempt === retries) {
+                            toast({
+                                title: "Submission Failed",
+                                description: `Failed to submit contest for approval: ${error.message}`,
+                                variant: "destructive",
+                            });
+                            return;
+                        }
+
+                        // Wait before retrying
+                        console.log(`Waiting ${delay}ms before retry ${attempt + 1}...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            };
+
+            await submitForApproval();
+
+        } catch (error: any) {
+            console.error("❌ Error in payment success handler:", error);
+            toast({
+                title: "Update Failed",
+                description: `Payment succeeded but failed to update contest: ${error.message}`,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // Payment error handler
+    const handlePaymentError = (error: string) => {
+        console.error("Payment failed:", error);
+        setShowPayment(false);
+        toast({
+            title: "Payment Failed",
+            description: error,
+            variant: "destructive",
+        });
+    };
+
+    // Budget change detection helper
+    const checkBudgetChange = (newWinnerAmounts?: number[], newTotalBudget?: string) => {
+        let currentPrizePool = 0;
+
+        if (contestType === 'leaderboard') {
+            const amounts = newWinnerAmounts || winnerAmounts;
+            currentPrizePool = amounts.reduce((sum: number, amount: number) => sum + amount, 0);
+        } else if (contestType === 'cpm') {
+            const budget = newTotalBudget || totalBudget;
+            currentPrizePool = Math.round(parseFloat(budget.toString()) * 100); // Convert to cents
+        }
+
+        // Calculate ONLY the prize pool difference (for better UX)
+        const prizePoolDifference = currentPrizePool - originalBudget;
+
+        setBudgetDifference(prizePoolDifference); // Store prize pool difference only
+        setBudgetChanged(Math.abs(prizePoolDifference) > 0);
+
+        console.log("💰 Budget change check:", {
+            contestType,
+            originalBudget,
+            currentPrizePool,
+            prizePoolDifference,
+            budgetChanged: Math.abs(prizePoolDifference) > 0,
+            newWinnerAmounts: newWinnerAmounts?.slice(0, 3),
+            newTotalBudget
+        });
+
+        return { currentBudget: currentPrizePool, difference: prizePoolDifference };
+    };
+
+    // Update budget change detection when prize amounts change
+    const updateBudgetTracking = (amounts = winnerAmounts) => {
+        checkBudgetChange(amounts);
+    };
+
     // Handle save as draft for rejected contests
     const handleSaveAsDraft = async () => {
         await handleSubmitWithStatus('draft');
+        // Refresh contest data after saving to ensure UI is up to date
+        await refreshContestData();
     };
 
     // Handle resubmit for approval for rejected contests  
     const handleResubmitForApproval = async () => {
-        await handleSubmitWithStatus('pending_approval');
+        // First validate the form
+        const validationError = validateFormForSubmission();
+        if (validationError) {
+            toast({
+                title: "Validation Error",
+                description: validationError,
+                variant: "destructive",
+            });
+            setFormFeedback(validationError);
+            setFormFeedbackType("error");
+            return;
+        }
+
+        // Check if payment has been completed
+        if (!contest) {
+            toast({
+                title: "Error",
+                description: "Contest data not loaded. Please refresh the page.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        // Check if payment/refund processing is required 
+        // - New contest (no payment) OR budget increased (need payment) OR budget decreased (need refund)
+        const paymentProcessingRequired = !isContestPaid() || (budgetChanged && budgetDifference !== 0);
+
+        console.log("🔍 Payment validation:", {
+            isContestPaid: isContestPaid(),
+            budgetChanged,
+            budgetDifference,
+            originalBudget,
+            currentPrizePool: contestType === 'leaderboard'
+                ? winnerAmounts.reduce((sum: number, amount: number) => sum + amount, 0)
+                : Math.round(parseFloat(totalBudget.toString()) * 100),
+            paymentProcessingRequired
+        });
+
+        if (paymentProcessingRequired) {
+            const reason = !isContestPaid()
+                ? "No payment"
+                : budgetDifference > 0
+                    ? "Budget increased"
+                    : "Budget decreased";
+            console.log("Payment processing required for contest submission:", reason);
+
+            // Handle budget decrease (refund) immediately without payment modal
+            if (budgetChanged && budgetDifference < 0) {
+                try {
+                    setIsSubmitting(true);
+
+                    // Calculate total refund amount: prize pool decrease + commission on that decrease
+                    const prizePoolDecrease = Math.abs(budgetDifference);
+                    const commissionPercentage = getPlanFeatures(userPlan).commisionPercentage;
+                    const commissionRefund = Math.round(prizePoolDecrease * (commissionPercentage / 100));
+                    const totalRefundAmount = prizePoolDecrease + commissionRefund;
+
+                    console.log(`💰 Processing refund: ${prizePoolDecrease} cents prize pool + ${commissionRefund} cents commission = ${totalRefundAmount} cents total`);
+
+                    // Call refund API endpoint
+                    const response = await fetch('/api/payments/refund', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            contestId,
+                            refundAmount: totalRefundAmount,
+                            reason: 'Contest budget decreased'
+                        }),
+                    });
+
+                    const refundResult = await response.json();
+
+                    if (!response.ok || !refundResult.success) {
+                        throw new Error(refundResult.error || 'Failed to process refund');
+                    }
+
+                    console.log("✅ Refund processed successfully");
+
+                    // Show detailed refund breakdown if available
+                    const refundMessage = refundResult.breakdown
+                        ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(2)}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(2)} + $${refundResult.breakdown.commissionRefund.toFixed(2)} commission = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
+                        : `$${(totalRefundAmount / 100).toFixed(2)} has been refunded to your wallet`;
+
+                    toast({
+                        title: "Refund Processed",
+                        description: refundMessage,
+                        variant: "default",
+                    });
+
+                    // Now call handlePaymentSuccess to update contest structure
+                    await handlePaymentSuccess({
+                        paymentMethod: 'refund',
+                        refundAmount: totalRefundAmount
+                    });
+
+                } catch (error) {
+                    console.error("Error processing refund:", error);
+                    toast({
+                        title: "Error",
+                        description: "Failed to process refund. Please try again.",
+                        variant: "destructive",
+                    });
+                } finally {
+                    setIsSubmitting(false);
+                }
+                return;
+            }
+
+            // For budget increases or new payments, show payment modal
+            try {
+                setIsSubmitting(true);
+                await handleSubmitWithStatus('draft', true); // Skip redirect since we're showing payment modal
+
+                // After successful save, show payment modal
+                setShowPayment(true);
+                setIsPaymentRequired(true);
+            } catch (error) {
+                console.error("Error saving contest before payment:", error);
+                toast({
+                    title: "Error",
+                    description: "Failed to save contest data before payment. Please try again.",
+                    variant: "destructive",
+                });
+            } finally {
+                setIsSubmitting(false);
+            }
+        } else {
+            // Payment already completed, save any pending edits and submit for approval
+            try {
+                setIsSubmitting(true);
+
+                // First save any pending edits to the contest data
+                console.log("💾 Saving any pending edits before submitting for approval...");
+                await handleSubmitWithStatus('draft', true); // Save as draft first
+
+                // Then submit for approval using moderation API
+                const response = await fetch(`/api/contests/${contestId}/moderation`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'submit_for_approval'
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    toast({
+                        title: "Success",
+                        description: "Contest updated and submitted for approval successfully!",
+                        variant: "default",
+                    });
+                    router.push(`/dashboard/contests/${contestId}`);
+                } else {
+                    throw new Error(result.error || 'Failed to submit for approval');
+                }
+            } catch (error: any) {
+                console.error("Error submitting for approval:", error);
+                toast({
+                    title: "Submission Failed",
+                    description: error.message || "Failed to submit contest for approval. Please try again.",
+                    variant: "destructive",
+                });
+            } finally {
+                setIsSubmitting(false);
+            }
+        }
     };
 
-    // Modified submit function that accepts a moderation status
-    const handleSubmitWithStatus = async (moderationStatus?: 'draft' | 'pending_approval') => {
+    // Modified submit function that accepts a moderation status and skipRedirect option
+    const handleSubmitWithStatus = async (moderationStatus?: 'draft' | 'pending_approval', skipRedirect: boolean = false) => {
         const showError = (message: string) => {
             toast({
                 title: "Validation Error",
@@ -1258,10 +1974,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 }
                 const durationMs = endDateTime.getTime() - startDateTime.getTime();
                 const oneDayMs = 24 * 60 * 60 * 1000;
-                if (durationMs <= oneDayMs) {
+                if (durationMs < oneDayMs) {
                     toast({
                         title: "Invalid Duration",
-                        description: "Contest duration must be more than 24 hours (at least 1 day gap).",
+                        description: "Contest duration must be at least 24 hours (minimum 1 day).",
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1390,6 +2106,54 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             updatePayload.contest_based_details = contestBasedDetails;
         }
 
+        // Validate active contest limits when submitting for approval
+        if (moderationStatus === 'pending_approval') {
+            try {
+                // Import getActiveContestCount for custom validation
+                const { getActiveContestCount } = await import('@/lib/contest-utils-client');
+                const countResult = await getActiveContestCount(user.id);
+
+                if (!countResult.success) {
+                    toast({
+                        title: "Validation Error",
+                        description: countResult.error || "Unable to validate contest limits. Please try again.",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false);
+                    if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                    return;
+                }
+
+                // Check if current contest would be considered "new" active contest
+                // If it's currently draft or rejected, then changing to pending_approval adds +1 to active count
+                let effectiveActiveCount = countResult.activeCount;
+                if (contest.moderation_status === 'draft' || contest.moderation_status === 'rejected') {
+                    effectiveActiveCount += 1; // This contest will become active
+                }
+
+                if (effectiveActiveCount > planFeatures.maxActiveContests) {
+                    toast({
+                        title: "Active Contest Limit Exceeded",
+                        description: `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. You currently have ${countResult.activeCount} active contests. Please upgrade your plan or wait for existing contests to end.`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false);
+                    if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                    return;
+                }
+            } catch (error: any) {
+                console.error("Error checking active contest limit:", error);
+                toast({
+                    title: "Validation Error",
+                    description: "Unable to validate contest limits. Please try again.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false);
+                if (submitTimeoutId) clearTimeout(submitTimeoutId);
+                return;
+            }
+        }
+
         // Continue with file uploads and database update...
         const finalDbResources: Record<string, string> = {};
 
@@ -1479,7 +2243,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 variant: "default",
             });
 
-            router.push(`/dashboard/contests/${contestId}`);
+            // Only redirect if not skipping redirect (e.g., when preparing for payment)
+            if (!skipRedirect) {
+                router.push(`/dashboard/contests/${contestId}`);
+            }
         } catch (err: any) {
             toast({
                 title: "Update Failed",
@@ -2027,7 +2794,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         </div>
 
                         <p className="text-sm text-gray-500 mt-1">
-                            Contest duration must be more than 24 hours (at least 1 day gap).
+                            Contest duration must be at least 24 hours (minimum 1 day).
                         </p>
                     </div>
 
@@ -2070,6 +2837,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                     setWinnerCount(newCount);
                                                     const newAmounts = [...winnerAmounts].slice(0, newCount);
                                                     setWinnerAmounts(newAmounts);
+                                                    updateBudgetTracking(newAmounts);
                                                 }
                                             }}
                                             disabled={winnerCount <= 1}
@@ -2091,6 +2859,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                     const position = newCount;
                                                     newAmounts.push(DEFAULT_PRIZE_ALLOCATIONS[position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS] || MIN_PRIZE_PER_WINNER);
                                                     setWinnerAmounts(newAmounts);
+                                                    updateBudgetTracking(newAmounts);
                                                 } else {
                                                     // Show toast notification instead of setValidationError
                                                     toast({
@@ -2141,6 +2910,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                     const newAmounts = [...winnerAmounts];
                                                     newAmounts[i] = value;
                                                     setWinnerAmounts(newAmounts);
+                                                    updateBudgetTracking(newAmounts);
 
                                                     // Show toast validation messages instead of setValidationError
                                                     if (value < MIN_PRIZE_PER_WINNER) {
@@ -2209,7 +2979,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         id="totalBudget"
                                         type="number"
                                         value={totalBudget}
-                                        onChange={(e) => setTotalBudget(e.target.value)}
+                                        onChange={(e) => {
+                                            setTotalBudget(e.target.value);
+                                            checkBudgetChange(undefined, e.target.value);
+                                        }}
                                         placeholder="e.g., 10000"
                                         step="0.01"
                                     />
@@ -2314,6 +3087,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         ) : contest?.moderation_status !== 'published' ? (
                             // Full edit mode for non-published contests: Draft/Save and Submit buttons
                             <>
+                                {/* Prize Pool Change Warning */}
+                                {budgetChanged && isContestPaid() && (
+                                    <div className="w-full mb-4">
+                                        <Alert variant={budgetDifference > 0 ? "destructive" : "default"} className={budgetDifference > 0 ? "border-orange-200 bg-orange-50" : "border-green-200 bg-green-50"}>
+                                            <AlertTriangle className="h-4 w-4" />
+                                            <div>
+                                                <div className="font-medium">Prize Pool Changed</div>
+                                                <div className="text-sm mt-1">
+                                                    {budgetDifference > 0
+                                                        ? `Prize pool increased by ${formatCurrencyFromCents(budgetDifference)}. Additional payment (including commission) will be required.`
+                                                        : `Prize pool decreased by ${formatCurrencyFromCents(Math.abs(budgetDifference))}. Amount (including commission) will be refunded to your wallet.`
+                                                    }
+                                                </div>
+                                            </div>
+                                        </Alert>
+                                    </div>
+                                )}
+
                                 <Button
                                     variant="outline"
                                     onClick={handleSaveAsDraft}
@@ -2327,7 +3118,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                     disabled={isSubmitting || !!validationError}
                                     className="bg-orange-600 hover:bg-orange-700 text-white"
                                 >
-                                    {isSubmitting ? "Submitting..." : "Submit for Approval"}
+                                    {isSubmitting ? "Processing..." :
+                                        (contest && isContestPaid() && !budgetChanged) ? "Submit for Approval" :
+                                            (contest && isContestPaid() && budgetChanged && budgetDifference > 0) ? "Update & Pay" :
+                                                (contest && isContestPaid() && budgetChanged && budgetDifference < 0) ? "Update Contest" :
+                                                    "Submit & Pay"}
                                 </Button>
                             </>
                         ) : (
@@ -2344,6 +3139,54 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 </CardFooter>
             </Card>
 
+            {/* Payment Modal */}
+            {showPayment && contest && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="mb-6">
+                                <h2 className="text-2xl font-bold text-gray-900 mb-2">Contest Payment</h2>
+                                <p className="text-gray-600">Complete payment to submit your contest for review</p>
+                            </div>
+
+                            {budgetChanged && budgetDifference > 0 && (
+                                <Alert className="mb-4 border-orange-200 bg-orange-50">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertDescription>
+                                        <strong>Prize Pool Increased:</strong> Your prize pool increased by {formatCurrencyFromCents(budgetDifference)}. The payment below includes this amount plus commission.
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
+                            <ContestPaymentSelection
+                                contestAmount={budgetChanged && budgetDifference > 0
+                                    ? budgetDifference / 100 // Prize pool increase amount in dollars
+                                    : contestType === "leaderboard"
+                                        ? winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0) / 100  // Convert cents to dollars
+                                        : (parseFloat(totalBudget.toString()) || 0)} // Budget is already in dollars
+                                contestTitle={title || "Untitled Contest"}
+                                contestId={contestId}
+                                commissionPercentage={getPlanFeatures(userPlan).commisionPercentage}
+                                onPaymentSuccess={handlePaymentSuccess}
+                                onPaymentError={handlePaymentError}
+                                disabled={isSubmitting}
+                                isIncrease={budgetChanged && budgetDifference > 0}
+                                isDecrease={budgetChanged && budgetDifference < 0}
+                            />
+
+                            <div className="mt-6 flex justify-end">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowPayment(false)}
+                                    disabled={isSubmitting}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     )

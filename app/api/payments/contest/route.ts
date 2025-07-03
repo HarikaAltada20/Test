@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { stripe, formatAmountForStripe } from '@/lib/stripe';
-import { getAdvertiserDepositBalance, logTransaction } from '@/lib/payment-utils';
+import { processContestPaymentV2, PaymentDetails } from '@/lib/payment-utils';
 
 export async function POST(request: NextRequest) {
   try {
-    const { contestId, amount, paymentMethod } = await request.json();
+    const body = await request.json();
+    const { contestId, amount, paymentMethod, commissionPercentage, walletAmount, changeType, isIncrease, isDecrease } = body;
     
     // Validate inputs
     if (!contestId || !amount || amount <= 0) {
       return NextResponse.json(
         { error: 'Invalid contest ID or amount' },
+        { status: 400 }
+      );
+    }
+
+    if (!commissionPercentage || commissionPercentage < 0) {
+      return NextResponse.json(
+        { error: 'Invalid commission percentage' },
         { status: 400 }
       );
     }
@@ -50,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Verify contest belongs to the user and get current contest status
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('id, advertiser_id, total_prize, title')
+      .select('id, advertiser_id, title, contest_based_details, payment_details')
       .eq('id', contestId)
       .eq('advertiser_id', user.id)
       .single();
@@ -62,188 +70,72 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current deposit balance
-    const balanceResult = await getAdvertiserDepositBalance(user.id);
-    if (!balanceResult.success) {
+    // Determine if this is initial payment or budget change
+    const existingPaymentDetails = contest.payment_details as PaymentDetails | null;
+    const budgetChangeType = isIncrease ? 'increase' : isDecrease ? 'decrease' : undefined;
+
+    // Calculate prize pool from total amount (working backwards from commission)
+    const totalAmountInCents = Math.round(amount * 100);
+    const commissionRate = commissionPercentage / 100;
+    const prizePoolInCents = Math.round(totalAmountInCents / (1 + commissionRate));
+
+    // Use the new payment processing function
+    const paymentResult = await processContestPaymentV2(
+      user.id,
+      contestId,
+      prizePoolInCents,
+      commissionPercentage,
+      `Contest payment for "${contest.title}" (ID: ${contestId})`,
+      paymentMethod !== 'stripe', // useWalletFirst
+      existingPaymentDetails || undefined,
+      budgetChangeType
+    );
+
+    if (!paymentResult.success) {
       return NextResponse.json(
-        { error: 'Failed to fetch balance' },
-        { status: 500 }
+        { error: paymentResult.error },
+        { status: 400 }
       );
     }
 
-    const currentBalance = balanceResult.balance;
-
-    // Handle different payment methods
-    if (paymentMethod === 'wallet') {
-      // Pay entirely from wallet (amount comes in dollars, convert to cents for database)
-      const amountInCents = Math.round(amount * 100);
-      
-      if (currentBalance < amountInCents) {
-        return NextResponse.json(
-          { 
-            error: 'Insufficient wallet balance',
-            currentBalance: currentBalance / 100, // Convert to dollars for error message
-            required: amount
-          },
-          { status: 400 }
-        );
-      }
-
-      // Deduct from wallet balance (both in cents)
-      const newBalance = currentBalance - amountInCents;
+    // Store the updated payment details in the contest
+    if (paymentResult.paymentDetails) {
       const { error: updateError } = await supabase
-        .from('advertiser_profiles')
-        .update({ available_deposit_balance: newBalance })
-        .eq('id', user.id);
+        .from('contests')
+        .update({ payment_details: paymentResult.paymentDetails })
+        .eq('id', contestId)
+        .eq('advertiser_id', user.id);
 
       if (updateError) {
+        console.error('Error storing payment details:', updateError);
         return NextResponse.json(
-          { error: 'Failed to process wallet payment' },
+          { error: 'Failed to store payment details' },
           { status: 500 }
         );
       }
-
-      // Log transaction in cents (consistent with database storage)
-      await logTransaction(
-        user.id,
-        'contest_payment',
-        amountInCents,
-        'success',
-        `Contest payment for "${contest.title}" (ID: ${contestId})`,
-        undefined,
-        'Payment completed successfully'
-      );
-
-      return NextResponse.json({
-        success: true,
-        paymentMethod: 'wallet',
-        amountFromWallet: amount,
-        remainingBalance: newBalance / 100, // Convert back to dollars for response
-      });
-
-    } else if (paymentMethod === 'stripe') {
-      // Pay entirely via Stripe
-      const paymentIntent = await stripe().paymentIntents.create({
-        amount: formatAmountForStripe(amount),
-        currency: 'usd',
-        metadata: {
-          userId: user.id,
-          type: 'contest_payment',
-          contestId,
-          amount: amount.toString(),
-        },
-        automatic_payment_methods: {
-          enabled: true,
-        },
-      });
-
-      // Log pending transaction in cents (consistent with database storage)
-      const amountInCents = Math.round(amount * 100);
-      await logTransaction(
-        user.id,
-        'contest_payment',
-        amountInCents,
-        'pending',
-        `Contest payment via Stripe for "${contest.title}" (ID: ${contestId}) - Payment Intent: ${paymentIntent.id}`,
-        paymentIntent.id,  // 🚀 OPTIMIZATION: Store payment_intent_id for fast lookups
-        'Processing payment...'
-      );
-
-      return NextResponse.json({
-        success: true,
-        paymentMethod: 'stripe',
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        amountFromStripe: amount,
-      });
-
-    } else if (paymentMethod === 'split') {
-      // Split payment between wallet and Stripe
-      const { walletAmount } = await request.json();
-      
-      if (!walletAmount || walletAmount < 0 || walletAmount > currentBalance) {
-        return NextResponse.json(
-          { error: 'Invalid wallet amount for split payment' },
-          { status: 400 }
-        );
-      }
-
-      const stripeAmount = amount - walletAmount;
-      
-      if (stripeAmount <= 0) {
-        return NextResponse.json(
-          { error: 'Invalid Stripe amount for split payment' },
-          { status: 400 }
-        );
-      }
-
-      // Convert amounts to cents for database operations
-      const walletAmountInCents = Math.round(walletAmount * 100);
-      const stripeAmountInCents = Math.round(stripeAmount * 100);
-      
-      // Deduct from wallet first (both amounts in cents)
-      const newBalance = currentBalance - walletAmountInCents;
-      const { error: updateError } = await supabase
-        .from('advertiser_profiles')
-        .update({ available_deposit_balance: newBalance })
-        .eq('id', user.id);
-
-      if (updateError) {
-        return NextResponse.json(
-          { error: 'Failed to process wallet portion of split payment' },
-          { status: 500 }
-        );
-      }
-
-      // Create Stripe payment intent for remaining amount
-      const paymentIntent = await stripe().paymentIntents.create({
-        amount: formatAmountForStripe(stripeAmount),
-        currency: 'usd',
-        metadata: {
-          userId: user.id,
-          type: 'contest_payment',
-          contestId,
-          amount: stripeAmount.toString(),
-          walletAmount: walletAmount.toString(),
-          totalAmount: amount.toString(),
-        },
-        automatic_payment_methods: {
-          enabled: true,
-        },
-      });
-
-      // Log transactions in cents (consistent with database storage)
-      await Promise.all([
-        logTransaction(
-          user.id,
-          'contest_payment',
-          walletAmountInCents,
-          'success',
-          `Contest payment (wallet portion) for "${contest.title}" (ID: ${contestId})`,
-          undefined,  // No payment intent ID for wallet portion
-          'Payment completed successfully'
-        ),
-        logTransaction(
-          user.id,
-          'contest_payment',
-          stripeAmountInCents,
-          'pending',
-          `Contest payment (Stripe portion) for "${contest.title}" (ID: ${contestId}) - Payment Intent: ${paymentIntent.id}`,
-          paymentIntent.id,  // 🚀 OPTIMIZATION: Store payment_intent_id for fast lookups
-          'Processing payment...'
-        )
-      ]);
-
-      return NextResponse.json({
-        success: true,
-        paymentMethod: 'split',
-        amountFromWallet: walletAmount,
-        amountFromStripe: stripeAmount,
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        remainingBalance: newBalance / 100, // Convert back to dollars for response
-      });
     }
+
+    // Format response based on payment method
+    const response: any = {
+      success: true,
+      paymentMethod: paymentResult.paymentMethod,
+      paymentDetails: paymentResult.paymentDetails
+    };
+
+    if (paymentResult.amountFromWallet && paymentResult.amountFromWallet > 0) {
+      response.amountFromWallet = paymentResult.amountFromWallet / 100; // Convert to dollars
+    }
+
+    if (paymentResult.amountFromStripe && paymentResult.amountFromStripe > 0) {
+      response.amountFromStripe = paymentResult.amountFromStripe / 100; // Convert to dollars
+    }
+
+    if (paymentResult.paymentIntent) {
+      response.clientSecret = paymentResult.paymentIntent.client_secret;
+      response.paymentIntentId = paymentResult.paymentIntent.id;
+    }
+
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('Error in contest payment endpoint:', error);
