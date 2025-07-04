@@ -1,0 +1,19 @@
+create table public.advertiser_profiles (
+  id uuid not null,
+  company_name text null,
+  website_url text null,
+  total_money_spent numeric null default 0,
+  total_contests_run integer null default 0,
+  available_deposit_balance numeric null default 0,
+  withdrawable_balance numeric null default 0,
+  subscription_plan text null default 'free'::text,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  constraint advertiser_profiles_pkey primary key (id),
+  constraint advertiser_profiles_id_fkey foreign KEY (id) references users (id)
+) TABLESPACE pg_default;
+
+create trigger update_advertiser_profiles_updated_at BEFORE
+update on advertiser_profiles for EACH row
+execute FUNCTION update_updated_at_column ();
+

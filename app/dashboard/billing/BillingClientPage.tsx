@@ -89,6 +89,7 @@ export default function BillingClientPage({
     const [isLoading, setIsLoading] = useState(false);
     const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
     const [isCancellingWithdrawal, setIsCancellingWithdrawal] = useState<string | null>(null);
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
     // Modal States
     const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -566,7 +567,9 @@ export default function BillingClientPage({
                                 <Banknote className="h-4 w-4 text-muted-foreground" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">{formatCurrencyFromCents(profile.available_deposit_balance)}</div>
+                                <div className="text-2xl font-bold transition-all duration-300 ease-in-out">
+                                    {formatCurrencyFromCents(profile.available_deposit_balance)}
+                                </div>
                                 <p className="text-xs text-muted-foreground">Ready for contests</p>
                             </CardContent>
                         </Card>
@@ -697,25 +700,25 @@ export default function BillingClientPage({
                     </Card>
 
                     {/* Cash Withdrawal Requests */}
-                    {cashWithdrawalRequests.length > 0 && (
-                        <Card className="mt-8">
-                            <CardHeader>
-                                <CardTitle>Cash Withdrawal Request History</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date Submitted</TableHead>
-                                            <TableHead>Amount</TableHead>
-                                            <TableHead>Method</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Your Notes</TableHead>
-                                            <TableHead>Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {cashWithdrawalRequests.map((req) => (
+                    <Card className="mt-8">
+                        <CardHeader>
+                            <CardTitle>Cash Withdrawal Request History</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date Submitted</TableHead>
+                                        <TableHead>Amount</TableHead>
+                                        <TableHead>Method</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Your Notes</TableHead>
+                                        <TableHead>Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {cashWithdrawalRequests.length > 0 ? (
+                                        cashWithdrawalRequests.map((req) => (
                                             <TableRow key={req.id}>
                                                 <TableCell>{formatDateTime(req.created_at)}</TableCell>
                                                 <TableCell>{formatCurrencyFromCents(req.amount)}</TableCell>
@@ -747,12 +750,18 @@ export default function BillingClientPage({
                                                     )}
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
-                    )}
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                                                No cash withdrawal requests yet.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* Coin Wallet Tab */}
@@ -850,25 +859,25 @@ export default function BillingClientPage({
                     </Card>
 
                     {/* Coin Withdrawal Requests */}
-                    {coinWithdrawalRequests.length > 0 && (
-                        <Card className="mt-8">
-                            <CardHeader>
-                                <CardTitle>Coin Redemption History</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Date Submitted</TableHead>
-                                            <TableHead>Coins</TableHead>
-                                            <TableHead>Redeemed Item</TableHead>
-                                            <TableHead>User Notes</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {coinWithdrawalRequests.map((req) => (
+                    <Card className="mt-8">
+                        <CardHeader>
+                            <CardTitle>Coin Redemption History</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Date Submitted</TableHead>
+                                        <TableHead>Coins</TableHead>
+                                        <TableHead>Redeemed Item</TableHead>
+                                        <TableHead>User Notes</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {coinWithdrawalRequests.length > 0 ? (
+                                        coinWithdrawalRequests.map((req) => (
                                             <TableRow key={req.id}>
                                                 <TableCell>{formatDateTime(req.created_at)}</TableCell>
                                                 <TableCell>{formatCoins(req.amount)}</TableCell>
@@ -905,12 +914,18 @@ export default function BillingClientPage({
                                                     )}
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </CardContent>
-                        </Card>
-                    )}
+                                        ))
+                                    ) : (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                                                No coin redemption requests yet.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
             </Tabs>
 
@@ -1248,12 +1263,30 @@ export default function BillingClientPage({
             </Dialog>
 
             {/* Top Up Wallet Modal */}
-            <Dialog open={isTopUpModalOpen} onOpenChange={setIsTopUpModalOpen}>
+            <Dialog open={isTopUpModalOpen} onOpenChange={(open) => {
+                // Prevent closing if payment is processing
+                if (!open && isProcessingPayment) {
+                    return; // Don't close
+                }
+                setIsTopUpModalOpen(open);
+            }}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
-                        <DialogTitle>Top Up Your Wallet</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2">
+                            Top Up Your Wallet
+                            {isProcessingPayment && (
+                                <span className="text-sm text-orange-600 font-normal">
+                                    (Processing - Please wait)
+                                </span>
+                            )}
+                        </DialogTitle>
                         <DialogDescription>
                             Add funds to your wallet balance for contest payments. Your wallet balance can be used for all contest fees.
+                            {isProcessingPayment && (
+                                <span className="block mt-2 text-orange-600 text-sm">
+                                    ⚠️ Please don't close this window while payment is processing
+                                </span>
+                            )}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
@@ -1266,6 +1299,7 @@ export default function BillingClientPage({
                                 console.log('🔄 BillingPage: Refreshing transaction history from WalletTopUp...');
                                 refreshCashTransactions();
                             }}
+                            onProcessingChange={setIsProcessingPayment}
                         />
                     </div>
                 </DialogContent>

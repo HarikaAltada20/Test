@@ -2245,7 +2245,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
             // Only redirect if not skipping redirect (e.g., when preparing for payment)
             if (!skipRedirect) {
-                router.push(`/dashboard/contests/${contestId}`);
+                // For draft saves, redirect to contests list; for other updates, go to contest detail
+                if (moderationStatus === 'draft') {
+                    router.push('/dashboard/contests');
+                } else {
+                    router.push(`/dashboard/contests/${contestId}`);
+                }
             }
         } catch (err: any) {
             toast({

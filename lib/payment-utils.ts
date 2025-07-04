@@ -39,6 +39,8 @@ export interface PaymentDetails {
   wallet_amounts_used: number[];
   amount_changes: number[];
   change_history: string[];
+  original_wallet_balance?: number; // For atomic split payment rollback
+  wallet_deduction_pending?: boolean; // Flag for pending wallet deduction in split payments
 }
 
 // Server-only client getter
@@ -139,16 +141,36 @@ export async function deductFromDepositBalance(
     
     // Check current balance first (both in cents)
     const currentBalance = await getAdvertiserDepositBalance(userId);
-    if (!currentBalance.success || currentBalance.balance < amountInCents) {
+    if (!currentBalance.success) {
       return { 
         success: false, 
         balance: currentBalance.balance, 
-        error: 'Insufficient balance' 
+        error: 'Failed to check wallet balance' 
+      };
+    }
+    
+    if (currentBalance.balance < amountInCents) {
+      console.error(`❌ INSUFFICIENT BALANCE: Attempted to deduct ${amountInCents} cents from ${currentBalance.balance} cents`);
+      return { 
+        success: false, 
+        balance: currentBalance.balance, 
+        error: `Insufficient balance. Required: $${(amountInCents/100).toFixed(2)}, Available: $${(currentBalance.balance/100).toFixed(2)}` 
       };
     }
 
     // Update the deposit balance (both amounts in cents)
     const newBalance = currentBalance.balance - amountInCents;
+    
+    // CRITICAL SAFETY CHECK: Prevent negative balances at database level
+    if (newBalance < 0) {
+      console.error(`🚨 CRITICAL: Attempted to create negative balance! Current: ${currentBalance.balance}, Deducting: ${amountInCents}, Result: ${newBalance}`);
+      return { 
+        success: false, 
+        balance: currentBalance.balance, 
+        error: `Operation would create negative balance. Available: $${(currentBalance.balance/100).toFixed(2)}, Required: $${(amountInCents/100).toFixed(2)}` 
+      };
+    }
+    
     const { data, error } = await supabase
       .from('advertiser_profiles')
       .update({ available_deposit_balance: newBalance })
@@ -174,7 +196,8 @@ export async function deductFromDepositBalance(
     }
 
     // Log the transaction in cents with payment method
-    await logTransaction(
+    console.log(`📝 Logging wallet transaction: ${amountInCents} cents for user ${userId}`);
+    const logResult = await logTransaction(
       userId, 
       'contest_payment', 
       amountInCents, 
@@ -184,6 +207,12 @@ export async function deductFromDepositBalance(
       remarks,
       paymentMethod
     );
+    
+    if (!logResult) {
+      console.error(`❌ CRITICAL: Failed to log wallet transaction for user ${userId}, amount: ${amountInCents} cents`);
+    } else {
+      console.log(`✅ Wallet transaction logged successfully for user ${userId}`);
+    }
 
     return { 
       success: true, 
@@ -237,20 +266,33 @@ export async function createContestPaymentIntent(
   contestId: string,
   amount: number,
   description: string,
-  paymentMethod: 'stripe' | 'split' = 'stripe' // NEW: Specify if this is Stripe-only or part of split
+  paymentMethod: 'stripe' | 'split' = 'stripe', // NEW: Specify if this is Stripe-only or part of split
+  walletAmount?: number, // NEW: Wallet amount for split payments (in cents)
+  totalAmount?: number, // NEW: Total amount for split payments (in cents)
+  originalWalletBalance?: number // NEW: Original wallet balance for atomic rollback
 ): Promise<PaymentIntent | null> {
   try {
+    // Build metadata object
+    const metadata: any = {
+      userId,
+      contestId,
+      type: paymentMethod === 'split' ? 'contest_payment_split' : 'contest_payment',
+      amount: amount.toString(),
+      description,
+      paymentMethod, // NEW: Include payment method in metadata
+    };
+
+    // Add split payment specific metadata for atomic transactions
+    if (paymentMethod === 'split' && walletAmount !== undefined && totalAmount !== undefined) {
+      metadata.walletAmount = (walletAmount / 100).toString(); // Store in dollars for webhook
+      metadata.totalAmount = (totalAmount / 100).toString(); // Store in dollars for webhook
+      metadata.originalWalletBalance = originalWalletBalance?.toString() || '0'; // Store in cents
+    }
+
     const paymentIntent = await stripe().paymentIntents.create({
       amount: formatAmountForStripe(amount),
       currency: 'usd',
-      metadata: {
-        userId,
-        contestId,
-        type: 'contest_payment',
-        amount: amount.toString(),
-        description,
-        paymentMethod, // NEW: Include payment method in metadata
-      },
+      metadata,
       automatic_payment_methods: {
         enabled: true,
       },
@@ -705,13 +747,28 @@ export async function processContestPaymentV2(
     // Create Stripe payment intent if needed
     if (stripeAmount > 0) {
       const stripePaymentMethod = walletAmount > 0 ? 'split' : 'stripe';
-      paymentIntent = await createContestPaymentIntent(
-        userId, 
-        contestId, 
-        stripeAmount, 
-        description,
-        stripePaymentMethod
-      );
+      
+      // For split payments, pass additional metadata for atomic transactions
+      if (stripePaymentMethod === 'split') {
+        paymentIntent = await createContestPaymentIntent(
+          userId, 
+          contestId, 
+          stripeAmount, 
+          description,
+          stripePaymentMethod,
+          walletAmount, // Pass wallet amount for atomic transaction
+          totalAmount, // Pass total amount for atomic transaction
+          currentBalance.balance // Pass original balance for rollback capability
+        );
+      } else {
+        paymentIntent = await createContestPaymentIntent(
+          userId, 
+          contestId, 
+          stripeAmount, 
+          description,
+          stripePaymentMethod
+        );
+      }
 
       if (!paymentIntent) {
         return {
@@ -725,24 +782,39 @@ export async function processContestPaymentV2(
     // Process wallet payment if needed
     if (walletAmount > 0) {
       const walletPaymentMethod = stripeAmount > 0 ? 'split' : 'wallet';
-      const deductResult = await deductFromDepositBalance(
-        userId, 
-        walletAmount, 
-        description,
-        walletPaymentMethod
-      );
       
-      if (!deductResult.success) {
-        return {
-          success: false,
-          paymentMethod: 'wallet',
-          error: 'Failed to deduct from wallet'
-        };
+      // FOR ATOMIC TRANSACTIONS: Only deduct wallet immediately for wallet-only payments
+      // For split payments, defer wallet deduction until Stripe payment succeeds (handled in webhook)
+      if (walletPaymentMethod === 'wallet') {
+        // Wallet-only payment - safe to deduct immediately
+        console.log(`💰 Processing wallet-only payment: ${walletAmount} cents`);
+        const deductResult = await deductFromDepositBalance(
+          userId, 
+          walletAmount, 
+          description,
+          walletPaymentMethod
+        );
+        
+        if (!deductResult.success) {
+          console.error(`❌ Wallet deduction failed: ${deductResult.error}`);
+          return {
+            success: false,
+            paymentMethod: 'wallet',
+            error: deductResult.error || 'Failed to deduct from wallet'
+          };
+        }
+        console.log(`✅ Wallet deduction successful. New balance: ${deductResult.balance} cents`);
+      } else {
+        // Split payment - defer to webhook
+        console.log(`⏳ Split payment detected: Wallet ${walletAmount} cents will be deducted after Stripe success`);
       }
+      // NOTE: For split payments, wallet deduction is deferred to webhook after Stripe success
     }
 
     // Create or update payment details
     let paymentDetails: PaymentDetails;
+    const isWalletOnly = walletAmount > 0 && stripeAmount === 0;
+    const isSplit = walletAmount > 0 && stripeAmount > 0;
     
     if (existingPaymentDetails && changeType) {
       // This is a budget change
@@ -751,19 +823,31 @@ export async function processContestPaymentV2(
         existingPaymentDetails,
         prizePoolChange,
         changeType,
-        walletAmount,
+        isWalletOnly ? walletAmount : 0, // Only record wallet amount if already deducted
         stripeAmount,
         paymentIntent?.id || null
       );
+      
+      // CRITICAL: For split payment budget changes, also store atomic transaction metadata
+      if (isSplit) {
+        paymentDetails.original_wallet_balance = currentBalance.balance;
+        paymentDetails.wallet_deduction_pending = true;
+      }
     } else {
       // This is initial payment
       paymentDetails = createInitialPaymentDetails(
         prizePoolInCents,
         commissionPercentage,
-        walletAmount,
+        isWalletOnly ? walletAmount : 0, // Only record wallet amount if already deducted
         stripeAmount,
         paymentIntent?.id || null
       );
+      
+      // For split payments, store metadata for atomic transaction
+      if (isSplit) {
+        paymentDetails.original_wallet_balance = currentBalance.balance;
+        paymentDetails.wallet_deduction_pending = true;
+      }
     }
 
     // If no Stripe payment needed, mark as completed immediately
@@ -774,14 +858,14 @@ export async function processContestPaymentV2(
     const paymentMethod = walletAmount > 0 && stripeAmount > 0 ? 'split' :
                          walletAmount > 0 ? 'wallet' : 'stripe';
 
-         return {
-       success: true,
-       paymentMethod,
-       amountFromWallet: walletAmount,
-       amountFromStripe: stripeAmount,
-       paymentIntent: paymentIntent || undefined,
-       paymentDetails
-     };
+    return {
+      success: true,
+      paymentMethod,
+      amountFromWallet: isWalletOnly ? walletAmount : 0, // Only report deducted amounts
+      amountFromStripe: stripeAmount,
+      paymentIntent: paymentIntent || undefined,
+      paymentDetails
+    };
 
   } catch (error) {
     console.error('Error in processContestPaymentV2:', error);

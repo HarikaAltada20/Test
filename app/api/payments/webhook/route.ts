@@ -253,15 +253,28 @@ async function handlePaymentSuccess(paymentIntent: any) {
         }
 
         // Log successful wallet transaction now that both payments completed
-        await logTransaction(
-          userId,
-          'contest_payment',
-          walletAmountInCents,
-          'success',
-          `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
-          undefined,
-          'Wallet portion of split payment completed successfully'
-        );
+        console.log('🔄 Attempting to log wallet transaction...');
+        console.log(`💳 Wallet transaction details: ${walletAmountInCents} cents for user ${userId}`);
+        
+        try {
+          const walletLogResult = await logTransaction(
+            userId,
+            'contest_payment',
+            walletAmountInCents,
+            'success',
+            `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
+            undefined, // No payment intent for wallet portion
+            'Wallet portion of split payment completed successfully',
+            'split'
+          );
+          console.log(`📝 Wallet transaction logged: ${walletLogResult ? 'SUCCESS' : 'FAILED'}`);
+          
+          if (!walletLogResult) {
+            console.error('❌ CRITICAL: Failed to log wallet transaction in split payment webhook');
+          }
+        } catch (logError) {
+          console.error('❌ ERROR logging wallet transaction:', logError);
+        }
 
         // Update Stripe transaction status
         const updateSuccess = await updateTransactionStatus(
@@ -272,11 +285,29 @@ async function handlePaymentSuccess(paymentIntent: any) {
         );
 
         // Update contest payment details to 'completed' status
+        // Update the wallet amount in the payment details since it was deferred
+        const updatedWalletAmounts = [...paymentDetails.wallet_amounts_used];
+        
+        // Find the entry that corresponds to this payment (should be 0 and have wallet_deduction_pending: true)
+        const lastIndex = updatedWalletAmounts.length - 1;
+        if (lastIndex >= 0 && paymentDetails.wallet_deduction_pending) {
+          // Update the last entry with the actual wallet amount deducted
+          updatedWalletAmounts[lastIndex] = walletAmountInCents;
+          console.log(`📝 Updated wallet_amounts_used[${lastIndex}] from ${paymentDetails.wallet_amounts_used[lastIndex]} to ${walletAmountInCents}`);
+        } else {
+          console.warn(`⚠️ Unexpected state: lastIndex=${lastIndex}, wallet_deduction_pending=${paymentDetails.wallet_deduction_pending}`);
+          console.warn(`⚠️ Current wallet_amounts_used:`, paymentDetails.wallet_amounts_used);
+          // Fallback: add the wallet amount as a new entry if we can't find the right place
+          updatedWalletAmounts.push(walletAmountInCents);
+        }
+
         const updatedPaymentDetails = {
           ...paymentDetails,
           payment_status: 'completed',
           paid_at: new Date().toISOString(),
-          total_amount_paid: Math.round(totalAmountInDollars * 100) // Store in cents
+          total_amount_paid: Math.round(totalAmountInDollars * 100), // Store in cents
+          wallet_amounts_used: updatedWalletAmounts,
+          wallet_deduction_pending: false // Clear the pending flag
         };
 
         const { error: paymentUpdateError } = await supabase
@@ -343,7 +374,8 @@ async function handlePaymentFailure(paymentIntent: any) {
             ...paymentDetails,
             payment_status: 'failed',
             failure_reason: failureRemark,
-            failed_at: new Date().toISOString()
+            failed_at: new Date().toISOString(),
+            wallet_deduction_pending: false // Clear the pending flag since payment failed
           };
 
           await supabase

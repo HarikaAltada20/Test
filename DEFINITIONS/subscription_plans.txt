@@ -1,0 +1,11 @@
+create table public.subscription_plans (
+  id uuid not null default gen_random_uuid (),
+  name text not null,
+  price numeric not null,
+  json_features jsonb null,
+  stripe_price_id text null,
+  razorpay_plan_id text null,
+  created_at timestamp without time zone null default now(),
+  constraint subscription_plans_pkey primary key (id),
+  constraint subscription_plans_name_key unique (name)
+) TABLESPACE pg_default;

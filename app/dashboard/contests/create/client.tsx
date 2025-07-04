@@ -810,6 +810,8 @@ export default function CreateContestPage({
         setIsLoading(false);
         setUploadProgress(null);
         toast({ title: "Draft Saved", description: "Your contest draft has been saved successfully!" });
+        // Redirect to contests list page to see the draft among all contests
+        router.push('/dashboard/contests');
       }
     } catch (err: any) {
       console.error("Error submitting contest:", err);

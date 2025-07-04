@@ -25,16 +25,19 @@ interface WalletTopUpProps {
     onBalanceUpdate: (newBalance: number) => void;
     onClose?: () => void;
     onTransactionUpdate?: () => void;
+    onProcessingChange?: (isProcessing: boolean) => void;
 }
 
 const CheckoutForm = ({
     amount,
     onSuccess,
-    onError
+    onError,
+    onProcessingChange
 }: {
     amount: number;
     onSuccess: () => void;
     onError: (error: string) => void;
+    onProcessingChange?: (isProcessing: boolean) => void;
 }) => {
     const stripe = useStripe();
     const elements = useElements();
@@ -110,6 +113,7 @@ const CheckoutForm = ({
 
         setIsProcessing(true);
         setProcessingStep('creating');
+        onProcessingChange?.(true);
 
         try {
             // Create payment intent
@@ -167,6 +171,7 @@ const CheckoutForm = ({
 
         setIsProcessing(false);
         setProcessingStep('idle');
+        onProcessingChange?.(false);
     };
 
     return (
@@ -234,7 +239,7 @@ const formatDollarAmount = (amount: number): string => {
     }).format(amount);
 };
 
-export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransactionUpdate }: WalletTopUpProps) {
+export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransactionUpdate, onProcessingChange }: WalletTopUpProps) {
     const [amount, setAmount] = useState<number>(50); // Default $50
     const [showPaymentForm, setShowPaymentForm] = useState(false);
     const [showAnimation, setShowAnimation] = useState(false);
@@ -253,18 +258,19 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
         // Show success animation
         setShowAnimation(true);
 
-        // Fetch updated balance and refresh transactions
-        try {
-            console.log('🔄 WalletTopUp: Fetching updated balance...');
-            const response = await fetch('/api/payments/balance');
-            const data = await response.json();
-            console.log('📊 WalletTopUp: Balance API response:', data);
+        // Wait a moment for webhook to process, then refresh balance
+        setTimeout(async () => {
+            try {
+                console.log('🔄 WalletTopUp: Fetching updated balance after payment...');
+                const response = await fetch('/api/payments/balance');
+                const data = await response.json();
 
-            if (data.balance !== undefined) {
-                console.log('💰 WalletTopUp: Updating balance from', currentBalance, 'to', data.balance);
-                onBalanceUpdate(data.balance); // Balance is already in cents from API
-            } else {
-                console.error('❌ WalletTopUp: No balance in API response');
+                if (data.balance !== undefined) {
+                    console.log('💰 WalletTopUp: Updating balance to:', data.balance);
+                    onBalanceUpdate(data.balance);
+                }
+            } catch (error) {
+                console.error('❌ WalletTopUp: Error fetching balance:', error);
             }
 
             // Refresh transaction history
@@ -272,9 +278,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                 console.log('🔄 WalletTopUp: Refreshing transaction history...');
                 onTransactionUpdate();
             }
-        } catch (error) {
-            console.error('❌ WalletTopUp: Error fetching updated balance:', error);
-        }
+        }, 2000); // Wait 2 seconds for webhook to process
     };
 
     const handleError = (error: string) => {
@@ -329,7 +333,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                             <span className="text-sm font-medium text-green-800">
                                 Current Balance
                             </span>
-                            <span className="text-2xl font-bold text-green-900">
+                            <span className="text-2xl font-bold text-green-900 transition-all duration-300 ease-in-out">
                                 {formatCurrencyFromCents(currentBalance)}
                             </span>
                         </div>
@@ -393,6 +397,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                                     amount={amount}
                                     onSuccess={handleSuccess}
                                     onError={handleError}
+                                    onProcessingChange={onProcessingChange}
                                 />
                             </Elements>
                         </div>

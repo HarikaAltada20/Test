@@ -1,0 +1,19 @@
+create table public.creator_profiles (
+  id uuid not null,
+  bio text null,
+  youtube_account jsonb null,
+  instagram_account jsonb null,
+  total_contests_participated integer null default 0,
+  total_contests_won integer null default 0,
+  total_money_won numeric null default 0,
+  withdrawable_balance numeric null default 0,
+  total_views bigint null default 0,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  constraint creator_profiles_pkey primary key (id),
+  constraint creator_profiles_id_fkey foreign KEY (id) references users (id)
+) TABLESPACE pg_default;
+
+create trigger update_creator_profiles_updated_at BEFORE
+update on creator_profiles for EACH row
+execute FUNCTION update_updated_at_column ();
