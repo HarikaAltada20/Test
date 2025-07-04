@@ -410,12 +410,153 @@ export default function CreateContestPage({
     }
   };
 
+  /**
+   * Comprehensive validation function that checks ALL contest requirements
+   * before allowing payment. This prevents users from paying and then
+   * getting validation errors.
+   */
+  const validateContestForPayment = async (userId: string, planFeatures: any): Promise<{ isValid: boolean; error?: string }> => {
+    try {
+      // 1. Basic field validation
+      if (!title.trim()) {
+        return { isValid: false, error: "Contest title is required" };
+      }
+
+      if (!thumbnail && !thumbnailPreview) {
+        return { isValid: false, error: "Contest thumbnail is required" };
+      }
+
+      // 2. Brief and rules validation
+      const currentBrief = captureBriefContent();
+      const briefToValidate = currentBrief || briefHtml;
+      if (!briefToValidate || isQuillEmpty(briefToValidate)) {
+        return { isValid: false, error: "Contest brief is required" };
+      }
+
+      const currentRulesHtml = captureRulesContent();
+      const rulesToValidate = currentRulesHtml || rulesHtml;
+      if (!rulesToValidate || isQuillEmpty(rulesToValidate)) {
+        return { isValid: false, error: "Contest rules are required" };
+      }
+
+      // 3. Resources validation
+      const hasUploadedAssets = Object.keys(resources).some(key =>
+        resources[key] && (resources[key].startsWith('data:') || resources[key].includes('supabase'))
+      );
+      const hasExternalLinks = Object.keys(resources).some(key =>
+        resources[key] && !resources[key].startsWith('data:') && !resources[key].includes('supabase')
+      );
+
+      if (!hasUploadedAssets && !hasExternalLinks) {
+        return { isValid: false, error: "At least one resource is required - upload an asset OR add an external resource link" };
+      }
+
+      // 4. Date validation
+      if (!startDate || !startTime || !endDate || !endTime) {
+        return { isValid: false, error: "Contest start and end dates/times are required" };
+      }
+
+      try {
+        const startDateTime = new Date(`${startDate}T${startTime}`);
+        const endDateTime = new Date(`${endDate}T${endTime}`);
+        const now = new Date();
+
+        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+          return { isValid: false, error: "Invalid date or time format. Please check your entries." };
+        }
+
+        if (startDateTime < now) {
+          return { isValid: false, error: "Contest start time must be in the future" };
+        }
+
+        if (endDateTime <= startDateTime) {
+          return { isValid: false, error: "Contest end time must be after the start time" };
+        }
+
+        const durationMs = endDateTime.getTime() - startDateTime.getTime();
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        if (durationMs < oneDayMs) {
+          return { isValid: false, error: "Contest duration must be at least 24 hours (minimum 1 day)" };
+        }
+      } catch (error) {
+        return { isValid: false, error: "There was an error with the date/time format. Please check your entries." };
+      }
+
+      // 5. Contest type specific validation
+      if (contestType === "leaderboard") {
+        // Prize amount validation
+        for (let i = 0; i < winnerCount; i++) {
+          if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+            return { isValid: false, error: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}` };
+          }
+
+          // CRITICAL: Check maximum prize per winner (this was missing!)
+          if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+            return { isValid: false, error: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}. Please reduce the prize amount.` };
+          }
+        }
+
+        // Total prize pool validation
+        if (totalPrizePool < planFeatures.minContestBudget) {
+          return { isValid: false, error: `The minimum prize pool for your plan is ${formatCurrencyFromCents(planFeatures.minContestBudget)}. Please increase your prize amounts.` };
+        }
+
+        // Winner count validation
+        if (winnerCount > planFeatures.maxWinnersPerContest) {
+          return { isValid: false, error: `Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners. Please reduce the number of winners.` };
+        }
+      } else if (contestType === "cpm") {
+        // CPM validation
+        if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
+          return { isValid: false, error: "CPM Rate must be a positive number." };
+        }
+
+        if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+          return { isValid: false, error: "Total Budget must be a positive number for CPM contests." };
+        }
+
+        if (!termsConditions) {
+          return { isValid: false, error: "Terms & Conditions are required for CPM contests." };
+        }
+
+        const budgetInCents = (parseFloat(totalBudget.toString()) || 0) * 100;
+        if (budgetInCents < planFeatures.minContestBudget) {
+          return { isValid: false, error: `The minimum contest budget for your plan is ${formatCurrencyFromCents(planFeatures.minContestBudget)}. Please increase your total budget.` };
+        }
+      }
+
+      // 6. Plan and subscription validation
+      if (contestType === "cpm") {
+        const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
+        if (!hasCpmAccess) {
+          return { isValid: false, error: "CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest." };
+        }
+      }
+
+      // 7. Active contest limit validation
+      try {
+        const { canCreateNewContest } = await import('@/lib/contest-utils-client');
+        const activeCheck = await canCreateNewContest(userId, planFeatures.maxActiveContests);
+        if (!activeCheck.canCreate) {
+          return { isValid: false, error: activeCheck.error || `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.` };
+        }
+      } catch (error: any) {
+        console.error("Error checking active contest limit:", error);
+        return { isValid: false, error: "Unable to validate contest limits. Please try again." };
+      }
+
+      return { isValid: true };
+    } catch (error: any) {
+      console.error("Error in validateContestForPayment:", error);
+      return { isValid: false, error: "An unexpected error occurred during validation. Please try again." };
+    }
+  };
+
   const handleSubmit = async (isDraft: boolean = false) => {
     // Reset global form feedback
     setFormFeedback(null);
     setFormFeedbackType(null);
     setIsLoading(true);
-
 
     let prepTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
@@ -436,6 +577,20 @@ export default function CreateContestPage({
         setIsLoading(false);
         setUploadProgress(null);
         return;
+      }
+
+      // CRITICAL: For non-draft submissions, run comprehensive validation BEFORE any processing
+      if (!isDraft) {
+        const planFeatures = getPlanFeatures(userPlan);
+        const validationResult = await validateContestForPayment(userId!, planFeatures);
+
+        if (!validationResult.isValid) {
+          setFormFeedback(validationResult.error!);
+          setFormFeedbackType("error");
+          setIsLoading(false);
+          setUploadProgress(null);
+          return;
+        }
       }
 
       let contestBasedDetails: any = {};
@@ -493,7 +648,7 @@ export default function CreateContestPage({
         };
       }
 
-      // Only run comprehensive validations if we're submitting for approval
+      // Only run old validation logic if we're submitting for approval (after the new comprehensive validation passed)
       if (!isDraft) {
         setUploadProgress("Preparing contest...");
         prepTimeoutId = setTimeout(() => {
@@ -503,7 +658,8 @@ export default function CreateContestPage({
           }
         }, 5000);
 
-        // Validate subscription plan requirements
+        // These validations are now redundant as they're covered in validateContestForPayment,
+        // but keeping them for backwards compatibility during transition
         const planFeatures = getPlanFeatures(userPlan);
 
         // Validate contest type access

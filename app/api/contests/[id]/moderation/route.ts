@@ -52,8 +52,8 @@ export async function POST(
       if (!contest.brief_html?.trim()) errors.push('Brief is required');
       if (!contest.start_date || !contest.end_date) errors.push('Dates are required');
       
-      // NOTE: Active contest limit validation is done during contest creation, not submission
-      // The contest is already created and paid for, so no need to check limits again
+      // NOTE: Active contest limit validation is enforced during payment processing
+      // This prevents users from bypassing limits by creating contests and paying later
 
       // Validate payment has been made
       if (!contest.payment_details) {

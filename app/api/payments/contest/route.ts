@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { stripe, formatAmountForStripe } from '@/lib/stripe';
 import { processContestPaymentV2, PaymentDetails } from '@/lib/payment-utils';
+import { canCreateNewContest } from '@/lib/contest-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,6 +74,63 @@ export async function POST(request: NextRequest) {
     // Determine if this is initial payment or budget change
     const existingPaymentDetails = contest.payment_details as PaymentDetails | null;
     const budgetChangeType = isIncrease ? 'increase' : isDecrease ? 'decrease' : undefined;
+    const isInitialPayment = !existingPaymentDetails || existingPaymentDetails.payment_status !== 'completed';
+
+    // SECURITY: Check active contest limits for initial payments only
+    // Budget changes don't count against limits since contest is already paid for
+    if (isInitialPayment) {
+      // Get user's current plan details
+      const { data: advertiserProfile, error: planError } = await supabase
+        .from('advertiser_profiles')
+        .select('subscription_plan')
+        .eq('id', user.id)
+        .single();
+
+      if (planError || !advertiserProfile) {
+        return NextResponse.json(
+          { error: 'Failed to get user plan details' },
+          { status: 500 }
+        );
+      }
+
+      // Get plan features (fallback to EXPLORER if no plan set)
+      const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
+      const userPlan = subscriptionPlans.find(p => p.name === advertiserProfile.subscription_plan) 
+        || subscriptionPlans[0]; // Default to EXPLORER
+
+      const maxActiveContests = userPlan.features.maxActiveContests;
+
+      // Check if user can create/pay for this contest
+      const canCreate = await canCreateNewContest(user.id, maxActiveContests);
+      
+      if (!canCreate.canCreate) {
+        console.log(`❌ Active contest limit exceeded for user ${user.id}:`, {
+          currentCount: canCreate.currentCount,
+          maxAllowed: maxActiveContests,
+          contestId: contestId
+        });
+        
+        return NextResponse.json(
+          { 
+            error: canCreate.error || 'Active contest limit exceeded',
+            details: {
+              currentActiveContests: canCreate.currentCount,
+              maxActiveContests: maxActiveContests,
+              planName: userPlan.displayName
+            }
+          },
+          { status: 400 }
+        );
+      }
+
+      console.log(`✅ Active contest limit check passed for user ${user.id}:`, {
+        currentCount: canCreate.currentCount,
+        maxAllowed: maxActiveContests,
+        contestId: contestId
+      });
+    } else {
+      console.log(`ℹ️ Skipping active contest limit check for budget change (contest ${contestId})`);
+    }
 
     // Calculate prize pool from total amount (working backwards from commission)
     const totalAmountInCents = Math.round(amount * 100);

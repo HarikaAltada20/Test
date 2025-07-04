@@ -1754,6 +1754,21 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             // For budget increases or new payments, show payment modal
             try {
                 setIsSubmitting(true);
+
+                // CRITICAL: Run comprehensive validation BEFORE processing payment
+                const validationError = validateFormForSubmission();
+                if (validationError) {
+                    toast({
+                        title: "Validation Error",
+                        description: validationError,
+                        variant: "destructive",
+                    });
+                    setFormFeedback(validationError);
+                    setFormFeedbackType("error");
+                    setIsSubmitting(false);
+                    return;
+                }
+
                 await handleSubmitWithStatus('draft', true); // Skip redirect since we're showing payment modal
 
                 // After successful save, show payment modal
