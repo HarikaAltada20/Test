@@ -17,36 +17,36 @@ VALUES
     "maxActiveContests": 1,
     "minContestBudget": 10000,
     "maxWinnersPerContest": 10,
-    "commisionPercentage": 40
+    "commissionPercentage": 40
   }'),
   (gen_random_uuid(), 'bronze', 10000, '{
     "maxActiveContests": 5,
     "minContestBudget": 10000,
     "maxWinnersPerContest": 10,
-    "commisionPercentage": 20
+    "commissionPercentage": 20
   }'),
   (gen_random_uuid(), 'silver', 20000, '{
     "maxActiveContests": 10,
     "minContestBudget": 7500,
     "maxWinnersPerContest": 20,
-    "commisionPercentage": 15
+    "commissionPercentage": 15
   }'),
   (gen_random_uuid(), 'gold', 30000, '{
     "maxActiveContests": 20,
     "minContestBudget": 5000,
     "maxWinnersPerContest": 30,
-    "commisionPercentage": 12
+    "commissionPercentage": 12
   }'),
   (gen_random_uuid(), 'platinum', 40000, '{
     "maxActiveContests": 30,
     "minContestBudget": 5000,
     "maxWinnersPerContest": 50,
-    "commisionPercentage": 10
+    "commissionPercentage": 10
   }'),
   (gen_random_uuid(), 'diamond', 50000, '{
     "maxActiveContests": 100,
     "minContestBudget": 5000,
     "maxWinnersPerContest": 100,
-    "commisionPercentage": 10
+    "commissionPercentage": 10
   }')
 ON CONFLICT (name) DO NOTHING; 

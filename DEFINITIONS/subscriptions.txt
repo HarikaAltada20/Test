@@ -1,0 +1,23 @@
+create table public.subscriptions (
+  id uuid not null default gen_random_uuid (),
+  user_id uuid null,
+  plan_id uuid null,
+  gateway text null,
+  external_subscription_id text null,
+  status text null,
+  start_date date null,
+  expiry_date date null,
+  renews_on date null,
+  cancel_at_period_end boolean null default false,
+  trial_end date null,
+  created_at timestamp with time zone null,
+  updated_at timestamp with time zone null,
+  constraint subscriptions_pkey primary key (id),
+  constraint subscriptions_plan_id_fkey foreign KEY (plan_id) references subscription_plans (id),
+  constraint subscriptions_user_id_fkey foreign KEY (user_id) references users (id),
+  constraint subscriptions_gateway_check check (
+    (
+      gateway = any (array['stripe'::text, 'razorpay'::text])
+    )
+  )
+) TABLESPACE pg_default;

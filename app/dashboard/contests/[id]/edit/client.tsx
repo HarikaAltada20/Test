@@ -31,7 +31,7 @@ type PlanFeatures = {
     maxActiveContests: number;
     minContestBudget: number;
     maxWinnersPerContest: number;
-    commisionPercentage: number; // Make sure this matches your DB json_features key
+    commissionPercentage: number; // Make sure this matches your DB json_features key
 }
 
 type SubscriptionPlan = {
@@ -165,35 +165,26 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const [budgetChanged, setBudgetChanged] = useState(false);
     const [budgetDifference, setBudgetDifference] = useState<number>(0); // Positive = increase, Negative = decrease
 
-    // Fetch subscription plans from the database
-    const fetchSubscriptionPlans = async () => {
+    // Load subscription plans from constants (new system)
+    const loadSubscriptionPlans = async () => {
         setIsPlansLoading(true);
         setError(null);
         try {
-            const { data: plansData, error: plansError } = await supabase
-                .from("subscription_plans")
-                .select("id, name, price, json_features");
-
-            if (plansError) throw plansError;
-
-            if (plansData) {
-                const mappedPlans: SubscriptionPlan[] = plansData.map((plan: any, index: number) => ({
-                    id: plan.id,
-                    name: plan.name,
-                    price: plan.price,
-                    features: {
-                        maxActiveContests: plan.json_features?.maxActiveContests,
-                        minContestBudget: plan.json_features?.minContestBudget,
-                        maxWinnersPerContest: plan.json_features?.maxWinnersPerContest,
-                        commisionPercentage: plan.json_features?.commisionPercentage
-                    }
-                }));
-                setDbSubscriptionPlans(mappedPlans);
-            } else {
-                setDbSubscriptionPlans([]);
-            }
+            // Import plans from constants (new subscription system)
+            const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map((plan) => ({
+                id: plan.id, // Now real Stripe product ID
+                name: plan.name,
+                price: plan.price, // Already in cents
+                features: {
+                    maxActiveContests: plan.features.maxActiveContests,
+                    minContestBudget: plan.features.minContestBudget,
+                    maxWinnersPerContest: plan.features.maxWinnersPerContest,
+                    commissionPercentage: plan.features.commissionPercentage
+                }
+            }));
+            setDbSubscriptionPlans(mappedPlans);
         } catch (error: any) {
-            console.error("Error fetching subscription plans:", error);
+            console.error("Error loading subscription plans:", error);
             setError(`Failed to load subscription plans: ${error.message}. Using defaults.`);
             setDbSubscriptionPlans([]);
         } finally {
@@ -201,7 +192,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         }
     };
 
-    // Fetch the current user's subscription plan
+    // Get the current user's subscription from new subscription system
     const getUserPlan = async () => {
         if (!user) return;
         setIsUserPlanLoading(true);
@@ -214,15 +205,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
             const { data: advertiserData, error: advertiserError } = await supabase
                 .from("advertiser_profiles")
-                .select("subscription_plan")
+                .select("subscription_info")
                 .eq("id", userId)
                 .single();
 
-            if (!advertiserError && advertiserData?.subscription_plan) {
-                setUserPlan(advertiserData.subscription_plan);
+            if (!advertiserError && advertiserData?.subscription_info?.product_id) {
+                setUserPlan(advertiserData.subscription_info.product_id);
             } else {
-                // Default to explorer plan if not found or error (assuming ID exists)
-                const explorerPlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
+                // Default to EXPLORER plan (free plan) if not found or error
+                const explorerPlan = subscriptionPlans.find(p => p.name === 'EXPLORER');
+                const explorerPlanId = explorerPlan?.id || subscriptionPlans[0].id;
                 setUserPlan(explorerPlanId);
                 if (advertiserError && advertiserError.code !== 'PGRST116') { // Ignore 'single row not found'
                     console.error("Error fetching advertiser profile:", advertiserError);
@@ -230,32 +222,31 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             }
         } catch (error) {
             console.error("Error in getUserPlan:", error);
-            const explorerPlanId = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER')?.id || subscriptionPlans[0].id; // Fallback hardcoded ID
-            setUserPlan(explorerPlanId); // Default to explorer plan on error
+            // Default to EXPLORER plan (free plan) on error
+            const explorerPlan = subscriptionPlans.find(p => p.name === 'EXPLORER');
+            const explorerPlanId = explorerPlan?.id || subscriptionPlans[0].id;
+            setUserPlan(explorerPlanId);
         } finally {
             setIsUserPlanLoading(false);
         }
     };
 
-    // Get features for a given plan ID
+    // Get features for a given plan ID using constants
     const getPlanFeatures = (planId: string | null): PlanFeatures => {
         const defaultFreePlanFeatures: PlanFeatures = subscriptionPlans[0].features
 
-        if (isPlansLoading || dbSubscriptionPlans.length === 0) {
-            return defaultFreePlanFeatures;
-        }
-
         if (!planId) {
-            // Find explorer plan by name if planId is null
-            const explorerPlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER');
+            // Find EXPLORER plan by name if planId is null
+            const explorerPlan = subscriptionPlans.find(p => p.name === 'EXPLORER');
             return explorerPlan?.features || defaultFreePlanFeatures;
         }
 
-        const plan = dbSubscriptionPlans.find((p: SubscriptionPlan) => p.id === planId);
+        const plan = subscriptionPlans.find((p) => p.id === planId);
 
         if (!plan) {
-            const explorerPlan = dbSubscriptionPlans.find(p => p.name.toLowerCase() === 'EXPLORER');
-            return explorerPlan?.features || dbSubscriptionPlans[0]?.features || defaultFreePlanFeatures;
+            // Default to EXPLORER plan if plan not found
+            const explorerPlan = subscriptionPlans.find(p => p.name === 'EXPLORER');
+            return explorerPlan?.features || defaultFreePlanFeatures;
         }
         return plan.features;
     };
@@ -264,7 +255,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     useEffect(() => {
         async function fetchInitialData() {
             setIsLoading(true); // General loading state for the page
-            await fetchSubscriptionPlans(); // Fetch plans first
+            await loadSubscriptionPlans(); // Load plans first
 
             if (!user) {
                 setIsLoading(false); // Stop loading if no user
@@ -1324,7 +1315,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 if (budgetDifference < 0 && paymentDetails.paymentMethod !== 'refund') {
                     // Calculate total refund amount: prize pool decrease + commission on that decrease
                     const prizePoolDecrease = Math.abs(budgetDifference);
-                    const commissionPercentage = getPlanFeatures(userPlan).commisionPercentage;
+                    const commissionPercentage = getPlanFeatures(userPlan).commissionPercentage;
                     const commissionRefund = Math.round(prizePoolDecrease * (commissionPercentage / 100));
                     const totalRefundAmount = prizePoolDecrease + commissionRefund;
 
@@ -1694,7 +1685,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
                     // Calculate total refund amount: prize pool decrease + commission on that decrease
                     const prizePoolDecrease = Math.abs(budgetDifference);
-                    const commissionPercentage = getPlanFeatures(userPlan).commisionPercentage;
+                    const commissionPercentage = getPlanFeatures(userPlan).commissionPercentage;
                     const commissionRefund = Math.round(prizePoolDecrease * (commissionPercentage / 100));
                     const totalRefundAmount = prizePoolDecrease + commissionRefund;
 
@@ -2374,7 +2365,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     <AlertDescription className="flex items-center justify-between">
                         <div>
                             <span className="font-medium">Current Plan: </span>
-                            {dbSubscriptionPlans.find(p => p.id === userPlan)?.name || 'Free'}
+                            {subscriptionPlans.find(p => p.id === userPlan)?.name || 'EXPLORER'}
                             <span className="ml-4 text-sm text-blue-700">
                                 • Max Winners: {planFeatures.maxWinnersPerContest}
                                 • Min Prize Pool: {formatCurrencyFromCents(planFeatures.minContestBudget)}
@@ -3186,7 +3177,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         : (parseFloat(totalBudget.toString()) || 0)} // Budget is already in dollars
                                 contestTitle={title || "Untitled Contest"}
                                 contestId={contestId}
-                                commissionPercentage={getPlanFeatures(userPlan).commisionPercentage}
+                                commissionPercentage={getPlanFeatures(userPlan).commissionPercentage}
                                 onPaymentSuccess={handlePaymentSuccess}
                                 onPaymentError={handlePaymentError}
                                 disabled={isSubmitting}

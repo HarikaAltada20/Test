@@ -85,11 +85,11 @@ export default async function RootLayout({
       userType = userData.user_type as "advertiser" | "creator" | "admin" | null;
     }
 
-    // Fetch subscription plan only for advertisers
+    // Fetch subscription info only for advertisers
     if (userType === "advertiser") {
       const { data: advertiserData, error: advertiserError } = await supabase
         .from("advertiser_profiles")
-        .select("subscription_plan")
+        .select("subscription_info")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -97,8 +97,9 @@ export default async function RootLayout({
         console.error("Error fetching advertiser profile in layout:", advertiserError.message);
       }
 
-      if (advertiserData) {
-        subscriptionPlan = advertiserData.subscription_plan;
+      if (advertiserData?.subscription_info) {
+        // Extract product_id from subscription_info for display
+        subscriptionPlan = advertiserData.subscription_info.product_id || null;
       }
     }
   }

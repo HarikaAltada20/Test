@@ -9,11 +9,11 @@ export interface CreatorProfileData {
 
 // Advertiser profile data for billing section
 export interface AdvertiserProfileData {
-  total_money_spent: number;
-  total_contests_run: number;
-  available_deposit_balance: number;
-  withdrawable_balance: number;
-  subscription_plan: string;
+    total_money_spent: number;
+    total_contests_run: number;
+    available_deposit_balance: number;
+    withdrawable_balance: number;
+    subscription_plan: string; // Keep this for now - it's mapped from subscription_info.product_id
 }
 
 // Data fetched from the 'users' table

@@ -79,26 +79,18 @@ export async function POST(request: NextRequest) {
     // SECURITY: Check active contest limits for initial payments only
     // Budget changes don't count against limits since contest is already paid for
     if (isInitialPayment) {
-      // Get user's current plan details
-      const { data: advertiserProfile, error: planError } = await supabase
-        .from('advertiser_profiles')
-        .select('subscription_plan')
-        .eq('id', user.id)
-        .single();
+      // Get user's current plan features using new subscription system
+      const { getUserPlanFeatures } = await import('@/lib/subscription-utils');
+      const planFeatures = await getUserPlanFeatures(user.id);
 
-      if (planError || !advertiserProfile) {
+      if (!planFeatures) {
         return NextResponse.json(
           { error: 'Failed to get user plan details' },
           { status: 500 }
         );
       }
 
-      // Get plan features (fallback to EXPLORER if no plan set)
-      const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
-      const userPlan = subscriptionPlans.find(p => p.name === advertiserProfile.subscription_plan) 
-        || subscriptionPlans[0]; // Default to EXPLORER
-
-      const maxActiveContests = userPlan.features.maxActiveContests;
+      const maxActiveContests = planFeatures.maxActiveContests;
 
       // Check if user can create/pay for this contest
       const canCreate = await canCreateNewContest(user.id, maxActiveContests);
@@ -116,7 +108,7 @@ export async function POST(request: NextRequest) {
             details: {
               currentActiveContests: canCreate.currentCount,
               maxActiveContests: maxActiveContests,
-              planName: userPlan.displayName
+              planName: 'Current Plan' // We could fetch this if needed ()
             }
           },
           { status: 400 }

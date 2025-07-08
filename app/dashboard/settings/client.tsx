@@ -55,7 +55,7 @@ interface CreatorProfile {
 interface AdvertiserProfile {
   company_name: string;
   website_url: string;
-  subscription_plan: string;
+  subscription_info: any;
 }
 
 export default function SettingsPage({
@@ -139,7 +139,7 @@ export default function SettingsPage({
         } else if (userData.user_type === "advertiser") {
           const { data, error } = await supabase
             .from("advertiser_profiles")
-            .select("company_name, website_url, subscription_plan")
+            .select("company_name, website_url, subscription_info")
             .eq("id", user!.id)
             .single();
 

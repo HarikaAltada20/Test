@@ -228,7 +228,15 @@ export function VerifyOtpForm() {
 
         const profileTable = userMetaData?.user_type === 'advertiser' ? 'advertiser_profiles' : 'creator_profiles';
         const profileData = userMetaData?.user_type === 'advertiser' ?
-          { id: authUser.id, subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198' } :
+          {
+            id: authUser.id,
+            subscription_info: {
+              product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free) plan
+              price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+              subscription_id: null,
+              last_synced: new Date().toISOString()
+            }
+          } :
           { id: authUser.id };
         await supabase.from(profileTable).upsert(profileData, { onConflict: 'id' });
 

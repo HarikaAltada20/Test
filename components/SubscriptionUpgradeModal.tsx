@@ -1,0 +1,356 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import {
+    Crown,
+    Star,
+    Zap,
+    Calendar,
+    AlertTriangle,
+    CheckCircle2,
+    Loader2,
+    TrendingUp,
+    Clock,
+    DollarSign,
+    Users,
+    Trophy
+} from 'lucide-react';
+import { formatCurrencyFromCents } from '@/lib/currency-utils';
+import { subscriptionPlans } from '@/constants/subscriptionPlans';
+import type { SubscriptionPlan } from '@/lib/subscription-types';
+
+interface SubscriptionUpgradeModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    currentPlan: SubscriptionPlan;
+    targetPlan: SubscriptionPlan;
+    onUpgradeSuccess: () => void;
+    onUpgradeError: (error: string) => void;
+}
+
+type UpgradeType = 'immediate' | 'scheduled';
+
+export function SubscriptionUpgradeModal({
+    isOpen,
+    onClose,
+    currentPlan,
+    targetPlan,
+    onUpgradeSuccess,
+    onUpgradeError
+}: SubscriptionUpgradeModalProps) {
+    const [upgradeType, setUpgradeType] = useState<UpgradeType>('scheduled');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [scheduledDate, setScheduledDate] = useState<string>('');
+
+    const isUpgrade = targetPlan.price > currentPlan.price;
+    const priceDifference = targetPlan.price - currentPlan.price;
+    const monthlyDifference = priceDifference;
+
+    // Calculate next billing date (approximate - 30 days from now)
+    const nextBillingDate = new Date();
+    nextBillingDate.setDate(nextBillingDate.getDate() + 30);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Default scheduled date to next billing cycle
+            setScheduledDate(nextBillingDate.toISOString().split('T')[0]);
+            setUpgradeType('scheduled'); // Default to scheduled upgrade
+        }
+    }, [isOpen]);
+
+    const handleUpgrade = async () => {
+        setIsProcessing(true);
+
+        try {
+            // Get the monthly price ID for the target plan
+            const targetPriceId = targetPlan.prices?.monthly?.id;
+            if (!targetPriceId) {
+                throw new Error('Price ID not found for target plan');
+            }
+
+            const response = await fetch('/api/subscriptions/upgrade', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    targetProductId: targetPlan.id,
+                    targetPriceId,
+                    upgradeType,
+                    scheduledDate: upgradeType === 'scheduled' ? scheduledDate : undefined
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Upgrade failed');
+            }
+
+            if (result.checkoutUrl) {
+                // Redirect to Stripe checkout for immediate upgrades
+                window.location.href = result.checkoutUrl;
+            } else {
+                // Show success message for scheduled upgrades or free plan upgrades
+                toast.success(result.message || 'Upgrade processed successfully');
+                onUpgradeSuccess();
+                onClose();
+            }
+
+        } catch (error) {
+            console.error('Upgrade error:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Failed to process upgrade';
+            toast.error(errorMessage);
+            onUpgradeError(errorMessage);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const getPlanIcon = (planName: string) => {
+        const name = planName.toUpperCase();
+        if (name === 'CHAMPION') return <Crown className="h-6 w-6" />;
+        if (name === 'BUILDER') return <Star className="h-6 w-6" />;
+        if (name === 'STARTER') return <Zap className="h-6 w-6" />;
+        return <Trophy className="h-6 w-6" />;
+    };
+
+    const getPlanColor = (planName: string) => {
+        const name = planName.toUpperCase();
+        if (name === 'CHAMPION') return 'from-yellow-500 to-orange-600';
+        if (name === 'BUILDER') return 'from-purple-500 to-blue-600';
+        if (name === 'STARTER') return 'from-orange-500 to-red-600';
+        return 'from-gray-500 to-gray-600';
+    };
+
+    const getFeatureDifferences = () => {
+        const differences = [];
+
+        if (targetPlan.features.maxActiveContests !== currentPlan.features.maxActiveContests) {
+            differences.push({
+                label: 'Active Contests',
+                current: currentPlan.features.maxActiveContests,
+                target: targetPlan.features.maxActiveContests,
+                icon: <Users className="h-4 w-4" />
+            });
+        }
+
+        if (targetPlan.features.commissionPercentage !== currentPlan.features.commissionPercentage) {
+            differences.push({
+                label: 'Commission Rate',
+                current: `${currentPlan.features.commissionPercentage}%`,
+                target: `${targetPlan.features.commissionPercentage}%`,
+                icon: <DollarSign className="h-4 w-4" />
+            });
+        }
+
+        if (targetPlan.features.maxWinnersPerContest !== currentPlan.features.maxWinnersPerContest) {
+            differences.push({
+                label: 'Max Winners',
+                current: currentPlan.features.maxWinnersPerContest,
+                target: targetPlan.features.maxWinnersPerContest,
+                icon: <Trophy className="h-4 w-4" />
+            });
+        }
+
+        return differences;
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                        {isUpgrade ? 'Upgrade' : 'Change'} Your Subscription
+                    </DialogTitle>
+                    <DialogDescription>
+                        Choose how you'd like to {isUpgrade ? 'upgrade' : 'change'} from {currentPlan.displayName || currentPlan.name} to {targetPlan.displayName || targetPlan.name}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-6">
+                    {/* Plan Comparison */}
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Current Plan */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(currentPlan.name)} text-white`}>
+                                        {getPlanIcon(currentPlan.name)}
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-sm text-gray-600">Current Plan</CardTitle>
+                                        <p className="font-semibold">{currentPlan.displayName || currentPlan.name}</p>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">
+                                    {formatCurrencyFromCents(currentPlan.price)}
+                                    <span className="text-sm font-normal text-gray-600">/month</span>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Target Plan */}
+                        <Card className="border-2 border-green-200">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(targetPlan.name)} text-white`}>
+                                        {getPlanIcon(targetPlan.name)}
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-sm text-green-600">New Plan</CardTitle>
+                                        <p className="font-semibold">{targetPlan.displayName || targetPlan.name}</p>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-green-600">
+                                    {formatCurrencyFromCents(targetPlan.price)}
+                                    <span className="text-sm font-normal text-gray-600">/month</span>
+                                </div>
+                                {priceDifference !== 0 && (
+                                    <div className="text-sm text-gray-600 mt-1">
+                                        {priceDifference > 0 ? '+' : ''}{formatCurrencyFromCents(priceDifference)} difference
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Feature Differences */}
+                    {getFeatureDifferences().length > 0 && (
+                        <div>
+                            <h4 className="font-semibold mb-3">What's changing:</h4>
+                            <div className="space-y-2">
+                                {getFeatureDifferences().map((diff, index) => (
+                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            {diff.icon}
+                                            <span className="font-medium">{diff.label}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <Badge variant="outline">{diff.current}</Badge>
+                                            <span>→</span>
+                                            <Badge className="bg-green-100 text-green-800">{diff.target}</Badge>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Upgrade Options */}
+                    <div>
+                        <h4 className="font-semibold mb-4">Choose your upgrade option:</h4>
+                        <RadioGroup value={upgradeType} onValueChange={(value) => setUpgradeType(value as UpgradeType)}>
+
+                            {/* Scheduled Upgrade Option */}
+                            <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="scheduled" id="scheduled" />
+                                    <Label htmlFor="scheduled" className="flex items-center gap-2 cursor-pointer">
+                                        <Calendar className="h-4 w-4 text-blue-600" />
+                                        <span className="font-medium">Scheduled Upgrade (Recommended)</span>
+                                        <Badge className="bg-blue-100 text-blue-800">No immediate charge</Badge>
+                                    </Label>
+                                </div>
+                                {upgradeType === 'scheduled' && (
+                                    <Alert className="ml-6">
+                                        <Clock className="h-4 w-4" />
+                                        <AlertDescription>
+                                            Your new plan will be activated on <strong>{new Date(scheduledDate).toLocaleDateString()}</strong>.
+                                            You will not be charged now - billing will continue normally on your next cycle.
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                            </div>
+
+                            {/* Immediate Upgrade Option */}
+                            <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="immediate" id="immediate" />
+                                    <Label htmlFor="immediate" className="flex items-center gap-2 cursor-pointer">
+                                        <Zap className="h-4 w-4 text-orange-600" />
+                                        <span className="font-medium">Immediate Upgrade</span>
+                                        <Badge className="bg-orange-100 text-orange-800">Full charge now</Badge>
+                                    </Label>
+                                </div>
+                                {upgradeType === 'immediate' && (
+                                    <Alert className="ml-6">
+                                        <AlertTriangle className="h-4 w-4" />
+                                        <AlertDescription>
+                                            <strong>Warning:</strong> You will be charged <strong>{formatCurrencyFromCents(targetPlan.price)}</strong> immediately.
+                                            Your current plan will be canceled, and any remaining days will be forfeited.
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+                            </div>
+                        </RadioGroup>
+                    </div>
+
+                    {/* Success Info */}
+                    <Alert className="bg-green-50 border-green-200">
+                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-green-800">
+                            {upgradeType === 'scheduled'
+                                ? `Your upgrade is scheduled for ${new Date(scheduledDate).toLocaleDateString()}. You can cancel this scheduled upgrade anytime before it takes effect.`
+                                : 'Your upgrade will take effect immediately after payment confirmation.'
+                            }
+                        </AlertDescription>
+                    </Alert>
+                </div>
+
+                <DialogFooter className="flex items-center justify-between">
+                    <Button variant="outline" onClick={onClose} disabled={isProcessing}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleUpgrade}
+                        disabled={isProcessing}
+                        className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
+                    >
+                        {isProcessing ? (
+                            <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Processing...
+                            </>
+                        ) : (
+                            <>
+                                {upgradeType === 'scheduled' ? (
+                                    <>
+                                        <Calendar className="h-4 w-4 mr-2" />
+                                        Schedule Upgrade
+                                    </>
+                                ) : (
+                                    <>
+                                        <Zap className="h-4 w-4 mr-2" />
+                                        Upgrade Now - {formatCurrencyFromCents(targetPlan.price)}
+                                    </>
+                                )}
+                            </>
+                        )}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+} 

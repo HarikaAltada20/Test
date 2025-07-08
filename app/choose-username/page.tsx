@@ -360,7 +360,15 @@ export default function ChooseUsernamePage() {
             // Create profile table entry based on user type
             const profileTable = userType === 'advertiser' ? 'advertiser_profiles' : 'creator_profiles';
             const profileTableData = userType === 'advertiser'
-                ? { id: userData.id, subscription_plan: 'a28ef5c0-3391-44a1-a9ef-f9b999ff0198' }
+                ? {
+                    id: userData.id,
+                    subscription_info: {
+                        product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free) plan
+                        price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+                        subscription_id: null,
+                        last_synced: new Date().toISOString()
+                    }
+                }
                 : { id: userData.id };
 
             const { error: specificProfileError } = await supabase

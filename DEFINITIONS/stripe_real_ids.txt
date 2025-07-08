@@ -1,0 +1,8 @@
+Price ID,Product ID,Product Name,Product Statement Descriptor,Product Tax Code,Description,Created (UTC),Amount,Currency,Interval,Interval Count,Usage Type,Aggregate Usage,Billing Scheme,Trial Period Days,Tax Behavior
+price_1Rid7nDCKN2LN0QesH6RO4pO,prod_Sdunp5Rbb6V8Ax,CHAMPION,,txcd_10103001,,2025-07-08 15:08,5000.00,usd,year,1,licensed,,per_unit,,exclusive
+price_1Rid7PDCKN2LN0QeDCQwHKCB,prod_SdunoupDPLZfkU,BUILDER,,txcd_10103001,,2025-07-08 15:07,2500.00,usd,year,1,licensed,,per_unit,,exclusive
+price_1Rid6wDCKN2LN0Qemz2ugwmI,prod_Sdum3O1ZM4wK1v,STARTER,,txcd_10103001,,2025-07-08 15:07,1000.00,usd,year,1,licensed,,per_unit,,exclusive
+price_1RicyCDCKN2LN0Qe7g4JO6RF,prod_Sdunp5Rbb6V8Ax,CHAMPION,,txcd_10103001,,2025-07-08 14:58,500.00,usd,month,1,licensed,,per_unit,,exclusive
+price_1RicxUDCKN2LN0Qe3f13Nmel,prod_SdunoupDPLZfkU,BUILDER,,txcd_10103001,,2025-07-08 14:57,250.00,usd,month,1,licensed,,per_unit,,exclusive
+price_1RicwmDCKN2LN0QeMBwxwt1K,prod_Sdum3O1ZM4wK1v,STARTER,,txcd_10103001,,2025-07-08 14:56,100.00,usd,month,1,licensed,,per_unit,,exclusive
+price_1RicueDCKN2LN0QeqyngXhRM,prod_Sduka9mKXu35Ii,EXPLORER,,txcd_10103001,,2025-07-08 14:54,0.00,usd,month,1,licensed,,per_unit,,exclusive

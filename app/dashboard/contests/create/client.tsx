@@ -73,7 +73,7 @@ type PlanFeatures = {
   maxActiveContests: number;
   minContestBudget: number;
   maxWinnersPerContest: number;
-  commisionPercentage: number;
+  commissionPercentage: number;
   contestTypes?: string[];
   analytics?: string;
   support?: string;
@@ -916,7 +916,36 @@ export default function CreateContestPage({
         rules_json: rulesJson,
         resources,
         inspiration_links: inspirationLinks,
-        subscription_plan_of_user: userPlan,
+        subscription_info_of_user: await (async () => {
+          try {
+            // Get user's subscription info using new system
+            const { getUserSubscription } = await import('@/lib/subscription-utils-client');
+            const subscription = await getUserSubscription(user?.id || '');
+
+            if (subscription && subscription.subscription_info) {
+              return subscription.subscription_info;
+            } else {
+              // Fallback: create subscription info from current plan
+              const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
+              const plan = subscriptionPlans.find(p => p.id === userPlan) || subscriptionPlans[0];
+              return {
+                product_id: plan.id,
+                price_id: plan.prices?.monthly?.id || 'price_1RicueDCKN2LN0QeqyngXhRM', // Default to EXPLORER monthly
+                subscription_id: 'no-subscription', // Will be updated when user subscribes
+                last_synced: new Date().toISOString()
+              };
+            }
+          } catch (error) {
+            console.error('Error getting subscription info:', error);
+            // Fallback to EXPLORER plan
+            return {
+              product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER
+              price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // EXPLORER monthly
+              subscription_id: 'no-subscription',
+              last_synced: new Date().toISOString()
+            };
+          }
+        })(),
         moderation_status: 'draft', // Always create as draft first, payment will update to pending_approval
         submitted_for_approval_at: null,
         start_date: formattedStartDate,
@@ -1365,30 +1394,36 @@ export default function CreateContestPage({
 
       if (authError || !authData.user) {
         console.error("Authentication error in getUserPlan:", authError);
-        setUserPlan(subscriptionPlans[0].id); // Default to free plan
+        setUserPlan(subscriptionPlans[0].id); // Default to EXPLORER plan
         return;
       }
 
       const userId = authData.user.id;
 
-      // First check advertiser_profiles
+      // Use new subscription utilities to get user's subscription
       try {
-        const { data: advertiserData, error: advertiserError } = await supabase
-          .from("advertiser_profiles")
-          .select("subscription_plan")
-          .eq("id", userId)
-          .single();
+        const { getUserSubscription } = await import('@/lib/subscription-utils-client');
+        const subscription = await getUserSubscription(userId);
 
-        if (!advertiserError && advertiserData?.subscription_plan) {
-          setUserPlan(advertiserData.subscription_plan);
-          return;
+        if (subscription && subscription.product_id) {
+          // Map real Stripe product ID to plan name for UI compatibility
+          const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
+          const plan = subscriptionPlans.find(p => p.id === subscription.product_id);
+
+          if (plan) {
+            setUserPlan(plan.id); // Use Stripe product ID
+          } else {
+            console.warn('Unknown product ID:', subscription.product_id);
+            setUserPlan(subscriptionPlans[0].id); // Default to EXPLORER
+          }
+        } else {
+          // No active subscription found, default to EXPLORER (free) plan
+          setUserPlan(subscriptionPlans[0].id);
         }
       } catch (err) {
-        console.error("Error fetching advertiser profile:", err);
+        console.error("Error fetching subscription with new system:", err);
+        setUserPlan(subscriptionPlans[0].id);
       }
-
-      // If we couldn't find a subscription anywhere, default to 'free'
-      setUserPlan(subscriptionPlans[0].id);
     } catch (error) {
       console.error("Error in getUserPlan:", error);
       setUserPlan(subscriptionPlans[0].id);
@@ -1613,66 +1648,33 @@ export default function CreateContestPage({
 
   // Call this once when component mounts
   useEffect(() => {
-    // Function to fetch subscription plans from the database
-    const fetchSubscriptionPlans = async () => {
+    // Load subscription plans from constants (new system)
+    const loadSubscriptionPlans = async () => {
       setIsPlansLoading(true);
       try {
-        const { data: plansData, error: plansError } = await supabase
-          .from("subscription_plans")
-          .select("id, name, price, json_features");
+        // Import plans from constants (new subscription system)
+        const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
 
-        if (plansError) {
-          throw plansError;
-        }
+        // Convert to the format expected by the UI
+        const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map((plan) => ({
+          id: plan.id, // Now real Stripe product ID
+          name: plan.name,
+          price: plan.price, // Already in cents
+          features: {
+            maxActiveContests: plan.features.maxActiveContests,
+            minContestBudget: plan.features.minContestBudget,
+            maxWinnersPerContest: plan.features.maxWinnersPerContest,
+            commissionPercentage: plan.features.commissionPercentage,
+            contestTypes: plan.features.contestTypes,
+            analytics: plan.features.analytics,
+            support: plan.features.support,
+            description: plan.features.description,
+          },
+        }));
 
-        if (plansData) {
-          // Map the data from the DB to the SubscriptionPlan structure
-          const mappedPlans: SubscriptionPlan[] = plansData.map(
-            (plan: any) => ({
-              id: plan.id,
-              name: plan.name,
-              price: plan.price, // Assuming price is stored correctly (e.g., in cents)
-              features: {
-                // Safely access nested properties from json_features
-                // Provide default values if properties are missing
-                maxActiveContests:
-                  plan.json_features?.maxActiveContests ??
-                  subscriptionPlans[0].features.maxActiveContests,
-                minContestBudget:
-                  plan.json_features?.minContestBudget ??
-                  subscriptionPlans[0].features.minContestBudget,
-                maxWinnersPerContest:
-                  plan.json_features?.maxWinnersPerContest ??
-                  subscriptionPlans[0].features.maxWinnersPerContest,
-                commisionPercentage:
-                  plan.json_features?.commisionPercentage ??
-                  subscriptionPlans[0].features.commisionPercentage, // Check DB for actual key name
-                // Add the missing new fields
-                contestTypes:
-                  plan.json_features?.contestTypes ??
-                  (subscriptionPlans.find(p => p.name === plan.name)?.features.contestTypes ||
-                    subscriptionPlans[0].features.contestTypes),
-                analytics:
-                  plan.json_features?.analytics ??
-                  (subscriptionPlans.find(p => p.name === plan.name)?.features.analytics ||
-                    subscriptionPlans[0].features.analytics),
-                support:
-                  plan.json_features?.support ??
-                  (subscriptionPlans.find(p => p.name === plan.name)?.features.support ||
-                    subscriptionPlans[0].features.support),
-                description:
-                  plan.json_features?.description ??
-                  (subscriptionPlans.find(p => p.name === plan.name)?.features.description ||
-                    subscriptionPlans[0].features.description),
-              },
-            })
-          );
-          setDbSubscriptionPlans(mappedPlans);
-        } else {
-          setDbSubscriptionPlans([]); // Set to empty array if no data
-        }
+        setDbSubscriptionPlans(mappedPlans);
       } catch (error: any) {
-        console.error("Error fetching subscription plans:", error);
+        console.error("Error loading subscription plans:", error);
         toast({ title: "Error", description: `Failed to load subscription plans: ${error.message}. Using defaults.`, variant: "destructive" });
         setDbSubscriptionPlans([]);
       } finally {
@@ -1684,9 +1686,9 @@ export default function CreateContestPage({
     const initializeData = async () => {
       try {
         setIsPlansLoading(true); // Ensure loading state is set initially
-        await fetchSubscriptionPlans(); // Fetch plans first
+        await loadSubscriptionPlans(); // Load plans first
         await checkStorageAvailability();
-        await getUserPlan(); // getUserPlan might depend on fetched plans if defaults change
+        await getUserPlan(); // getUserPlan might depend on loaded plans if defaults change
         await loadDraftData();
 
         // Set initial default prize allocations for the default 3 winners
@@ -2221,16 +2223,16 @@ export default function CreateContestPage({
                     </div>
 
                     {/* Commission Feature */}
-                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.commisionPercentage >= 40
+                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.commissionPercentage >= 40
                       ? "bg-red-50/80 border-red-200" // Very high commission - red warning
-                      : planFeatures.commisionPercentage >= 20
+                      : planFeatures.commissionPercentage >= 20
                         ? "bg-orange-50/80 border-orange-200" // High commission - orange warning  
                         : "bg-white/80 border-gray-200/50"
                       }`}>
                       <div className="flex items-start gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.commisionPercentage >= 40
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.commissionPercentage >= 40
                           ? "bg-gradient-to-br from-red-500 to-red-600" // Very high commission
-                          : planFeatures.commisionPercentage >= 20
+                          : planFeatures.commissionPercentage >= 20
                             ? "bg-gradient-to-br from-orange-500 to-red-600" // High commission
                             : "bg-gradient-to-br from-green-500 to-emerald-600" // Low commission
                           }`}>
@@ -2240,16 +2242,16 @@ export default function CreateContestPage({
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="text-lg font-semibold text-gray-900">Platform Commission</h5>
                             <div className="flex items-center gap-2">
-                              <span className={`text-2xl font-bold ${planFeatures.commisionPercentage >= 40
+                              <span className={`text-2xl font-bold ${planFeatures.commissionPercentage >= 40
                                 ? "text-red-600"
-                                : planFeatures.commisionPercentage >= 20
+                                : planFeatures.commissionPercentage >= 20
                                   ? "text-orange-600"
                                   : "text-green-600"
                                 }`}>
-                                {planFeatures.commisionPercentage}%
+                                {planFeatures.commissionPercentage}%
                               </span>
-                              {planFeatures.commisionPercentage >= 20 && (
-                                <span className={`text-sm ${planFeatures.commisionPercentage >= 40 ? "text-red-500" : "text-orange-500"
+                              {planFeatures.commissionPercentage >= 20 && (
+                                <span className={`text-sm ${planFeatures.commissionPercentage >= 40 ? "text-red-500" : "text-orange-500"
                                   }`}>⚠️</span>
                               )}
                             </div>
@@ -2257,15 +2259,15 @@ export default function CreateContestPage({
                           <p className="text-sm text-gray-600 leading-relaxed">
                             Our service fee taken from your total prize pool. Higher-tier plans have lower commission rates, saving you money on larger campaigns.
                           </p>
-                          <div className={`mt-3 text-xs font-medium ${planFeatures.commisionPercentage >= 40
+                          <div className={`mt-3 text-xs font-medium ${planFeatures.commissionPercentage >= 40
                             ? "text-red-600"
-                            : planFeatures.commisionPercentage >= 20
+                            : planFeatures.commissionPercentage >= 20
                               ? "text-orange-600"
                               : "text-green-600"
                             }`}>
-                            {planFeatures.commisionPercentage >= 40
+                            {planFeatures.commissionPercentage >= 40
                               ? "🚨 High commission rate - upgrade to save!"
-                              : planFeatures.commisionPercentage >= 20
+                              : planFeatures.commissionPercentage >= 20
                                 ? "⚡ Upgrade to reduce commission fees!"
                                 : "💡 Tip: Great rate - you're saving on fees!"
                             }
@@ -2318,12 +2320,12 @@ export default function CreateContestPage({
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <span>Only {planFeatures.commisionPercentage}% platform fee on your budget</span>
+                        <span>Only {planFeatures.commissionPercentage}% platform fee on your budget</span>
                       </div>
                     </div>
 
                     {/* Upgrade CTA for lower tier plans */}
-                    {(currentPlan.price === 0 || planFeatures.commisionPercentage >= 20) && (
+                    {(currentPlan.price === 0 || planFeatures.commissionPercentage >= 20) && (
                       <div className="mt-6 pt-6 border-t border-white/20">
                         <div className="flex items-start justify-between gap-6">
                           <div className="flex-1 min-w-0">
@@ -3929,7 +3931,7 @@ export default function CreateContestPage({
                   : (parseFloat(totalBudget.toString()) || 0)} // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={draftId || undefined}
-                commissionPercentage={getPlanFeatures(userPlan).commisionPercentage}
+                commissionPercentage={getPlanFeatures(userPlan).commissionPercentage}
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
                 disabled={isLoading}

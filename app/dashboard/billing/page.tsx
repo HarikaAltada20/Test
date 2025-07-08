@@ -39,7 +39,7 @@ export default async function AdvertiserBillingServerPage() {
     // Fetch advertiser profile (money fields)
     const { data: profileData, error: profileError } = await supabase
         .from("advertiser_profiles")
-        .select("total_money_spent, total_contests_run, available_deposit_balance, withdrawable_balance, subscription_plan")
+        .select("total_money_spent, total_contests_run, available_deposit_balance, withdrawable_balance, subscription_info")
         .eq("id", authUser.id)
         .single();
 
@@ -53,7 +53,7 @@ export default async function AdvertiserBillingServerPage() {
         total_contests_run: profileData.total_contests_run || 0,
         available_deposit_balance: profileData.available_deposit_balance || 0,
         withdrawable_balance: profileData.withdrawable_balance || 0,
-        subscription_plan: profileData.subscription_plan || 'explorer',
+        subscription_plan: profileData.subscription_info?.product_id || 'prod_Sduka9mKXu35Ii', // Default to EXPLORER
     } : null;
 
     // Fetch Payout Methods

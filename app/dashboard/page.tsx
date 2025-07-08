@@ -68,7 +68,7 @@ function DashboardPage() {
           const { data: advertiserProfile, error: profileError } =
             await supabase
               .from("advertiser_profiles")
-              .select("*, subscription_plan")
+              .select("*, subscription_info")
               .eq("id", user.id)
               .single();
 

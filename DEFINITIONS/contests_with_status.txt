@@ -1,42 +1,42 @@
 create view public.contests_with_status as
 select
-  id,
-  advertiser_id,
-  title,
-  platform,
-  start_date,
-  end_date,
-  thumbnail_url,
-  resources,
-  category,
-  inspiration_links,
-  created_at,
-  subscription_plan_of_user,
-  updated_at,
-  contest_type,
-  contest_based_details,
-  live_submission_count,
-  post_contest_status,
-  brief_html,
-  brief_json,
-  last_metrics_updated,
-  rules_html,
-  rules_json,
-  moderation_status,
-  submitted_for_approval_at,
-  approved_at,
-  approved_by,
-  published_at,
-  rejection_reason,
-  payment_details,
+  contests.id,
+  contests.advertiser_id,
+  contests.title,
+  contests.platform,
+  contests.start_date,
+  contests.end_date,
+  contests.thumbnail_url,
+  contests.resources,
+  contests.category,
+  contests.inspiration_links,
+  contests.created_at,
+  contests.subscription_plan_of_user,
+  contests.updated_at,
+  contests.contest_type,
+  contests.contest_based_details,
+  contests.live_submission_count,
+  contests.post_contest_status,
+  contests.brief_html,
+  contests.brief_json,
+  contests.last_metrics_updated,
+  contests.rules_html,
+  contests.rules_json,
+  contests.moderation_status,
+  contests.submitted_for_approval_at,
+  contests.approved_at,
+  contests.approved_by,
+  contests.published_at,
+  contests.rejection_reason,
+  contests.payment_details,
   case
-    when moderation_status <> 'published'::contest_moderation_status_enum then null::text
-    when start_date is null
-    or end_date is null then 'incomplete'::text
-    when (now() AT TIME ZONE 'UTC'::text) < start_date then 'upcoming'::text
-    when (now() AT TIME ZONE 'UTC'::text) >= start_date
-    and (now() AT TIME ZONE 'UTC'::text) < end_date then 'active'::text
-    when (now() AT TIME ZONE 'UTC'::text) >= end_date then 'ended'::text
+    when contests.moderation_status <> 'published'::contest_moderation_status_enum then null::text
+    when contests.start_date is null
+    or contests.end_date is null then 'incomplete'::text
+    when (now() AT TIME ZONE 'UTC'::text) < contests.start_date then 'upcoming'::text
+    when (now() AT TIME ZONE 'UTC'::text) >= contests.start_date
+    and (now() AT TIME ZONE 'UTC'::text) < contests.end_date then 'active'::text
+    when (now() AT TIME ZONE 'UTC'::text) >= contests.end_date then 'ended'::text
     else 'unknown'::text
   end as status
 from

@@ -254,11 +254,11 @@ function DashboardContent({
         if (profile.user_type === 'advertiser') {
           const { data: advertiserProfile } = await supabase
             .from('advertiser_profiles')
-            .select('subscription_plan')
+            .select('subscription_info')
             .eq('id', user.id)
             .single();
 
-          subscriptionPlan = advertiserProfile?.subscription_plan || null;
+          subscriptionPlan = advertiserProfile?.subscription_info?.product_id || null;
         }
 
         setProfileData({

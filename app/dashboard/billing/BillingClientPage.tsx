@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
     Table,
@@ -55,6 +55,7 @@ import { toast } from "sonner";
 import { WalletTopUp } from "@/components/WalletTopUp";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
+import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 
 const formatCoins = (coins: number | bigint = 0): string => {
     return new Intl.NumberFormat().format(Number(coins));
@@ -527,12 +528,15 @@ export default function BillingClientPage({
             </div>
 
             <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
-                <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsList className="grid w-full grid-cols-3 mb-6">
                     <TabsTrigger value="cash">
                         <DollarSign className="h-5 w-5 mr-2" /> Cash Account
                     </TabsTrigger>
                     <TabsTrigger value="coins">
                         <Coins className="h-5 w-5 mr-2" /> Coin Wallet
+                    </TabsTrigger>
+                    <TabsTrigger value="subscription">
+                        <CreditCard className="h-5 w-5 mr-2" /> Subscription
                     </TabsTrigger>
                 </TabsList>
 
@@ -926,6 +930,23 @@ export default function BillingClientPage({
                             </Table>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* Subscription Tab */}
+                <TabsContent value="subscription">
+                    <div className="space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Subscription Management</CardTitle>
+                                <CardDescription>
+                                    Manage your subscription plan, billing, and payment methods
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <SubscriptionManagement />
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
             </Tabs>
 

@@ -25,13 +25,14 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
   maxActiveContests: number;
   minContestBudget: number;
   maxWinnersPerContest: number;
-  commisionPercentage: number;
+  commissionPercentage: number;
   contestTypes?: string[];
   analytics?: string;
   support?: string;
@@ -83,6 +84,8 @@ export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
     "monthly"
   );
+  const [user, setUser] = useState<any>(null);
+  const [userType, setUserType] = useState<string | null>(null);
   const supabase = createClient(); // Initialize Supabase client
 
   // State for fetched plans, loading, and error
@@ -92,59 +95,68 @@ export default function PricingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch subscription plans on component mount
+  // Check for authenticated user
   useEffect(() => {
-    const fetchSubscriptionPlans = async () => {
+    const checkUser = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        setUser(authUser);
+
+        // Get user type
+        const { data: userData } = await supabase
+          .from('users')
+          .select('user_type')
+          .eq('id', authUser.id)
+          .single();
+
+        if (userData) {
+          setUserType(userData.user_type);
+        }
+      }
+    };
+
+    checkUser();
+  }, [supabase]);
+
+  // Load subscription plans from constants (new system)
+  useEffect(() => {
+    const loadSubscriptionPlans = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch plans ordered by price (optional, but good for display)
-        const { data: plansData, error: plansError } = await supabase
-          .from("subscription_plans")
-          .select("id, name, price, json_features")
-          .order("price", { ascending: true }); // Order by price
+        // Import plans from constants (new subscription system)
+        const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
 
-        if (plansError) {
-          throw plansError;
-        }
+        // Convert to the format expected by the UI
+        const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map((plan) => ({
+          id: plan.id, // Now real Stripe product ID
+          name: plan.name,
+          displayName: plan.displayName,
+          price: plan.price, // Already in cents
+          features: {
+            maxActiveContests: plan.features.maxActiveContests,
+            minContestBudget: plan.features.minContestBudget,
+            maxWinnersPerContest: plan.features.maxWinnersPerContest,
+            commissionPercentage: plan.features.commissionPercentage,
+            contestTypes: plan.features.contestTypes,
+            analytics: plan.features.analytics,
+            support: plan.features.support,
+            description: plan.features.description,
+          },
+        }));
 
-        if (plansData) {
-          const mappedPlans: SubscriptionPlan[] = plansData.map(
-            (plan: any) => ({
-              id: plan.id,
-              name: plan.name,
-              price: plan.price, // Use price directly from DB (assume cents)
-              features: {
-                // Safely access nested properties, provide defaults
-                maxActiveContests: plan.json_features?.maxActiveContests ?? 1,
-                minContestBudget: plan.json_features?.minContestBudget ?? 10000,
-                maxWinnersPerContest:
-                  plan.json_features?.maxWinnersPerContest ?? 10,
-                commisionPercentage:
-                  plan.json_features?.commisionPercentage ?? 40,
-                contestTypes: plan.json_features?.contestTypes ?? ['leaderboard'],
-                analytics: plan.json_features?.analytics ?? 'basic',
-                support: plan.json_features?.support ?? 'basic',
-                description: plan.json_features?.description ?? '',
-              },
-            })
-          );
-          setDbSubscriptionPlans(mappedPlans);
-        } else {
-          setDbSubscriptionPlans([]);
-          setError("No subscription plans found."); // Inform user if no plans are configured
-        }
+        setDbSubscriptionPlans(mappedPlans);
       } catch (error: any) {
-        console.error("Error fetching subscription plans:", error);
+        console.error("Error loading subscription plans:", error);
         setError(`Failed to load pricing plans: ${error.message}`);
-        setDbSubscriptionPlans([]); // Ensure state is empty on error
+        setDbSubscriptionPlans([]);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchSubscriptionPlans();
-  }, [supabase]); // Dependency array includes supabase client
+    loadSubscriptionPlans();
+  }, []); // No dependencies needed since we're using constants
 
 
 
@@ -318,240 +330,257 @@ export default function PricingPage() {
 
       {/* All Pricing Plans */}
       <div id="pricing" className="scroll-mt-20 px-4">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
-            Choose Your Game Plan
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Select the perfect plan to start winning with creator contests
-          </p>
-
-          <div className="mt-6 flex justify-center">
-            <Tabs
-              defaultValue="monthly"
-              value={billingCycle}
-              onValueChange={handleBillingCycleChange}
-              className="w-fit"
-            >
-              <TabsList className="grid w-[280px] grid-cols-2">
-                <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                <TabsTrigger value="yearly">
-                  Yearly
-                  <Badge
-                    variant="outline"
-                    className="ml-2 bg-green-100 text-green-800 border-green-200 text-xs"
-                  >
-                    Save 20%
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </div>
-
-        {/* Loading State */}
-        {isLoading && (
-          <div className="text-center py-8">
-            <div className="animate-pulse">
-              <p className="text-gray-600">Loading pricing plans...</p>
+        {/* Show subscription management for authenticated advertisers */}
+        {user && userType === 'advertiser' ? (
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
+                Manage Your Subscription
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Upgrade, downgrade, or manage your current subscription plan
+              </p>
             </div>
+            <SubscriptionManagement />
           </div>
-        )}
+        ) : (
+          <>
+            <div className="text-center mb-10">
+              <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
+                Choose Your Game Plan
+              </h2>
+              <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Select the perfect plan to start winning with creator contests
+              </p>
 
-        {/* Error State */}
-        {error && !isLoading && (
-          <Alert variant="destructive" className="mb-12 max-w-2xl mx-auto">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Display Plans only if not loading and no error */}
-        {!isLoading && !error && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
-            {dbSubscriptionPlans.map((plan) => {
-              // Determine if this plan is the 'most popular' (e.g., by name or a specific ID)
-              const isMostPopular = plan.name.toUpperCase() === "BUILDER"; // Builder plan is most popular
-
-              // Determine background color based on plan name/id
-              const getPlanBgColor = (planName: string) => {
-                const nameUpper = planName.toUpperCase();
-                if (nameUpper === "EXPLORER") return "bg-gray-500";
-                if (nameUpper === "STARTER") return "bg-orange-500";
-                if (nameUpper === "BUILDER") return "bg-purple-600";
-                if (nameUpper === "CHAMPION") return "bg-yellow-500";
-                return "bg-gray-500"; // Default
-              };
-
-              const getPlanIcon = (planName: string) => {
-                const nameUpper = planName.toUpperCase();
-                if (nameUpper === "CHAMPION") return <Crown className="h-5 w-5 text-white" />;
-                return <Trophy className="h-5 w-5 text-white" />;
-              };
-
-              return (
-                <Card
-                  key={plan.id}
-                  className={`flex flex-col border-2 relative w-full max-w-sm mx-auto ${isMostPopular
-                    ? "border-purple-500 shadow-lg scale-105"
-                    : "border-gray-200"
-                    }`}
+              <div className="mt-6 flex justify-center">
+                <Tabs
+                  defaultValue="monthly"
+                  value={billingCycle}
+                  onValueChange={handleBillingCycleChange}
+                  className="w-fit"
                 >
-                  {isMostPopular && (
-                    <div className="absolute -top-3 left-0 right-0 mx-auto w-fit px-3 py-1 bg-gradient-to-r from-purple-600 to-rose-600 text-white text-xs font-medium rounded-full">
-                      Most Popular
-                    </div>
-                  )}
-                  <CardHeader className="pb-4">
-                    <div className="flex justify-center mb-3">
-                      <div
-                        className={`w-12 h-12 rounded-full flex items-center justify-center ${getPlanBgColor(
-                          plan.name
-                        )}`}
+                  <TabsList className="grid w-[280px] grid-cols-2">
+                    <TabsTrigger value="monthly">Monthly</TabsTrigger>
+                    <TabsTrigger value="yearly">
+                      Yearly
+                      <Badge
+                        variant="outline"
+                        className="ml-2 bg-green-100 text-green-800 border-green-200 text-xs"
                       >
-                        {getPlanIcon(plan.name)}
-                      </div>
-                    </div>
-                    <CardTitle className="text-center text-lg">
-                      {plan.displayName || `${plan.name} Plan`}
-                    </CardTitle>
-                    <div className="mt-3 text-center">
-                      <span className="text-2xl font-bold">
-                        {formatCurrencyFromCents(
-                          billingCycle === "monthly"
-                            ? plan.price
-                            : getDiscountedPrice(plan.price)
-                        )}
-                      </span>
-                      <span className="text-gray-600 text-sm ml-1">
-                        /{billingCycle === "monthly" ? "month" : "year"}
-                      </span>
-                    </div>
-                    <CardDescription className="text-center mt-2 text-sm h-8">
-                      {plan.name.toUpperCase() === "EXPLORER" &&
-                        "Perfect for testing the platform"}
-                      {plan.name.toUpperCase() === "STARTER" &&
-                        "Great for small businesses"}
-                      {plan.name.toUpperCase() === "BUILDER" &&
-                        "Best for scaling brands"}
-                      {plan.name.toUpperCase() === "CHAMPION" &&
-                        "Enterprise-grade solution"}
-                      {![
-                        "EXPLORER",
-                        "STARTER",
-                        "BUILDER",
-                        "CHAMPION",
-                      ].includes(plan.name.toUpperCase()) &&
-                        "Custom plan features"}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex-grow pt-0">
-                    <ul className="space-y-2.5">
-                      <li className="flex items-start">
-                        <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <span className="text-sm font-medium">
-                          {plan.features.maxActiveContests} active contest
-                          {plan.features.maxActiveContests !== 1 ? "s" : ""}
-                        </span>
-                      </li>
-                      <li className="flex items-start">
-                        <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <span className="text-sm">
-                          Min. budget{" "}
-                          <span className="font-medium">
-                            {formatCurrencyFromCents(plan.features.minContestBudget)}
-                          </span>
-                        </span>
-                      </li>
-                      <li className="flex items-start">
-                        <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <span className="text-sm">
-                          Up to <span className="font-medium">{plan.features.maxWinnersPerContest}</span> winner
-                          {plan.features.maxWinnersPerContest !== 1 ? "s" : ""} (Leaderboard contests)
-                        </span>
-                      </li>
-                      <li className="flex items-start">
-                        <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                        <span className="text-sm">
-                          <span className="font-medium">{plan.features.commisionPercentage}%</span> commission
-                        </span>
-                      </li>
+                        Save 20%
+                      </Badge>
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
 
-                      <div className="border-t pt-2 mt-3">
-                        <li className="flex items-start mb-2">
-                          <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                          <span className="text-sm">
-                            {plan.features.contestTypes && plan.features.contestTypes.includes('cpm') ? (
-                              <>
-                                Leaderboard & CPM-based contests
-                                <span className="text-xs text-green-600 block mt-0.5 font-medium">
-                                  ✓ Both contest types available
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                Leaderboard-based contests only
-                                {plan.name.toUpperCase() === "EXPLORER" && (
-                                  <span className="text-xs text-gray-500 block mt-0.5">
-                                    CPM contests available in paid plans
-                                  </span>
-                                )}
-                              </>
+            {/* Loading State */}
+            {isLoading && (
+              <div className="text-center py-8">
+                <div className="animate-pulse">
+                  <p className="text-gray-600">Loading pricing plans...</p>
+                </div>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && !isLoading && (
+              <Alert variant="destructive" className="mb-12 max-w-2xl mx-auto">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Display Plans only if not loading and no error */}
+            {!isLoading && !error && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
+                {dbSubscriptionPlans.map((plan) => {
+                  // Determine if this plan is the 'most popular' (e.g., by name or a specific ID)
+                  const isMostPopular = plan.name.toUpperCase() === "BUILDER"; // Builder plan is most popular
+
+                  // Determine background color based on plan name/id
+                  const getPlanBgColor = (planName: string) => {
+                    const nameUpper = planName.toUpperCase();
+                    if (nameUpper === "EXPLORER") return "bg-gray-500";
+                    if (nameUpper === "STARTER") return "bg-orange-500";
+                    if (nameUpper === "BUILDER") return "bg-purple-600";
+                    if (nameUpper === "CHAMPION") return "bg-yellow-500";
+                    return "bg-gray-500"; // Default
+                  };
+
+                  const getPlanIcon = (planName: string) => {
+                    const nameUpper = planName.toUpperCase();
+                    if (nameUpper === "CHAMPION") return <Crown className="h-5 w-5 text-white" />;
+                    return <Trophy className="h-5 w-5 text-white" />;
+                  };
+
+                  return (
+                    <Card
+                      key={plan.id}
+                      className={`flex flex-col border-2 relative w-full max-w-sm mx-auto ${isMostPopular
+                        ? "border-purple-500 shadow-lg scale-105"
+                        : "border-gray-200"
+                        }`}
+                    >
+                      {isMostPopular && (
+                        <div className="absolute -top-3 left-0 right-0 mx-auto w-fit px-3 py-1 bg-gradient-to-r from-purple-600 to-rose-600 text-white text-xs font-medium rounded-full">
+                          Most Popular
+                        </div>
+                      )}
+                      <CardHeader className="pb-4">
+                        <div className="flex justify-center mb-3">
+                          <div
+                            className={`w-12 h-12 rounded-full flex items-center justify-center ${getPlanBgColor(
+                              plan.name
+                            )}`}
+                          >
+                            {getPlanIcon(plan.name)}
+                          </div>
+                        </div>
+                        <CardTitle className="text-center text-lg">
+                          {plan.displayName || `${plan.name} Plan`}
+                        </CardTitle>
+                        <div className="mt-3 text-center">
+                          <span className="text-2xl font-bold">
+                            {formatCurrencyFromCents(
+                              billingCycle === "monthly"
+                                ? plan.price
+                                : getDiscountedPrice(plan.price)
                             )}
                           </span>
-                        </li>
-                        {plan.features.analytics && (
-                          <li className="flex items-start mb-2">
+                          <span className="text-gray-600 text-sm ml-1">
+                            /{billingCycle === "monthly" ? "month" : "year"}
+                          </span>
+                        </div>
+                        <CardDescription className="text-center mt-2 text-sm h-8">
+                          {plan.name.toUpperCase() === "EXPLORER" &&
+                            "Perfect for testing the platform"}
+                          {plan.name.toUpperCase() === "STARTER" &&
+                            "Great for small businesses"}
+                          {plan.name.toUpperCase() === "BUILDER" &&
+                            "Best for scaling brands"}
+                          {plan.name.toUpperCase() === "CHAMPION" &&
+                            "Enterprise-grade solution"}
+                          {![
+                            "EXPLORER",
+                            "STARTER",
+                            "BUILDER",
+                            "CHAMPION",
+                          ].includes(plan.name.toUpperCase()) &&
+                            "Custom plan features"}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-grow pt-0">
+                        <ul className="space-y-2.5">
+                          <li className="flex items-start">
                             <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                            <span className="text-sm">
-                              {plan.features.analytics === 'basic' && 'Basic analytics & insights'}
-                              {plan.features.analytics === 'advanced' && 'Advanced analytics & reports'}
-                              {plan.features.analytics === 'comprehensive' && 'Comprehensive analytics dashboard'}
+                            <span className="text-sm font-medium">
+                              {plan.features.maxActiveContests} active contest
+                              {plan.features.maxActiveContests !== 1 ? "s" : ""}
                             </span>
                           </li>
-                        )}
-                        {plan.features.support && plan.features.support !== 'basic' && (
-                          <li className="flex items-start mb-2">
+                          <li className="flex items-start">
                             <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
                             <span className="text-sm">
-                              {plan.features.support === 'priority' && 'Prioritized customer support'}
-                              {plan.features.support === 'premium' && 'Premium 24/7 dedicated support'}
+                              Min. budget{" "}
+                              <span className="font-medium">
+                                {formatCurrencyFromCents(plan.features.minContestBudget)}
+                              </span>
                             </span>
                           </li>
-                        )}
+                          <li className="flex items-start">
+                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                            <span className="text-sm">
+                              Up to <span className="font-medium">{plan.features.maxWinnersPerContest}</span> winner
+                              {plan.features.maxWinnersPerContest !== 1 ? "s" : ""} (Leaderboard contests)
+                            </span>
+                          </li>
+                          <li className="flex items-start">
+                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                            <span className="text-sm">
+                              <span className="font-medium">{plan.features.commissionPercentage}%</span> commission
+                            </span>
+                          </li>
 
-                        {/* Common features for all plans */}
-                        <li className="flex items-start mb-2">
-                          <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                          <span className="text-sm">Lifetime access to winning content</span>
-                        </li>
-                        <li className="flex items-start">
-                          <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                          <span className="text-sm">Organic content validation</span>
-                        </li>
-                      </div>
-                    </ul>
-                  </CardContent>
-                  <CardFooter className="pt-4">
-                    <Button
-                      className={`w-full text-sm ${isMostPopular
-                        ? "bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700"
-                        : ""
-                        }`}
-                      asChild
-                    >
-                      <Link href={`/signup?plan=${String(plan.id)}`}>
-                        {plan.name.toUpperCase() === "EXPLORER"
-                          ? "Start Free"
-                          : isMostPopular
-                            ? "Start Free Trial"
-                            : "Get Started"}
-                      </Link>
-                    </Button>
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
+                          <div className="border-t pt-2 mt-3">
+                            <li className="flex items-start mb-2">
+                              <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                              <span className="text-sm">
+                                {plan.features.contestTypes && plan.features.contestTypes.includes('cpm') ? (
+                                  <>
+                                    Leaderboard & CPM-based contests
+                                    <span className="text-xs text-green-600 block mt-0.5 font-medium">
+                                      ✓ Both contest types available
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    Leaderboard-based contests only
+                                    {plan.name.toUpperCase() === "EXPLORER" && (
+                                      <span className="text-xs text-gray-500 block mt-0.5">
+                                        CPM contests available in paid plans
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </span>
+                            </li>
+                            {plan.features.analytics && (
+                              <li className="flex items-start mb-2">
+                                <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                <span className="text-sm">
+                                  {plan.features.analytics === 'basic' && 'Basic analytics & insights'}
+                                  {plan.features.analytics === 'advanced' && 'Advanced analytics & reports'}
+                                  {plan.features.analytics === 'comprehensive' && 'Comprehensive analytics dashboard'}
+                                </span>
+                              </li>
+                            )}
+                            {plan.features.support && plan.features.support !== 'basic' && (
+                              <li className="flex items-start mb-2">
+                                <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                                <span className="text-sm">
+                                  {plan.features.support === 'priority' && 'Prioritized customer support'}
+                                  {plan.features.support === 'premium' && 'Premium 24/7 dedicated support'}
+                                </span>
+                              </li>
+                            )}
+
+                            {/* Common features for all plans */}
+                            <li className="flex items-start mb-2">
+                              <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                              <span className="text-sm">Lifetime access to winning content</span>
+                            </li>
+                            <li className="flex items-start">
+                              <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                              <span className="text-sm">Organic content validation</span>
+                            </li>
+                          </div>
+                        </ul>
+                      </CardContent>
+                      <CardFooter className="pt-4">
+                        <Button
+                          className={`w-full text-sm ${isMostPopular
+                            ? "bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700"
+                            : ""
+                            }`}
+                          asChild
+                        >
+                          <Link href={`/signup?plan=${String(plan.id)}`}>
+                            {plan.name.toUpperCase() === "EXPLORER"
+                              ? "Start Free"
+                              : isMostPopular
+                                ? "Start Free Trial"
+                                : "Get Started"}
+                          </Link>
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
 

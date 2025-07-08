@@ -33,19 +33,19 @@ create table public.contests (
   constraint contests_approved_by_fkey foreign KEY (approved_by) references auth.users (id)
 ) TABLESPACE pg_default;
 
-create index IF not exists idx_contests_approved_by on public.contests using btree (approved_by) TABLESPACE pg_default
-where
-  (approved_by is not null);
+create index IF not exists idx_contests_moderation_status on public.contests using btree (moderation_status) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_post_contest_status on public.contests using btree (post_contest_status) TABLESPACE pg_default;
 
 create index IF not exists idx_contests_brief_html on public.contests using gin (to_tsvector('english'::regconfig, brief_html)) TABLESPACE pg_default;
 
 create index IF not exists idx_contests_last_metrics_updated on public.contests using btree (last_metrics_updated) TABLESPACE pg_default;
 
-create index IF not exists idx_contests_moderation_status on public.contests using btree (moderation_status) TABLESPACE pg_default;
-
-create index IF not exists idx_contests_post_contest_status on public.contests using btree (post_contest_status) TABLESPACE pg_default;
-
 create index IF not exists idx_contests_rules_html on public.contests using gin (to_tsvector('english'::regconfig, rules_html)) TABLESPACE pg_default;
+
+create index IF not exists idx_contests_approved_by on public.contests using btree (approved_by) TABLESPACE pg_default
+where
+  (approved_by is not null);
 
 create trigger on_contests_update BEFORE
 update on contests for EACH row

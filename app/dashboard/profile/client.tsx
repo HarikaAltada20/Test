@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
+import { subscriptionPlans } from "@/constants/subscriptionPlans";
 
 interface UserData {
   id: string;
@@ -54,12 +55,12 @@ interface AdvertiserProfile {
   total_contests_run: number;
   withdrawable_balance: number;
   available_deposit_balance: number;
-  subscription_plan: string;
-}
-
-interface SubscriptionPlan {
-  id: string;
-  name: string;
+  subscription_info: {
+    product_id: string;
+    price_id: string;
+    subscription_id: string;
+    last_synced: string;
+  } | null;
 }
 
 export default function ProfilePage({
@@ -73,9 +74,7 @@ export default function ProfilePage({
   );
   const [advertiserProfile, setAdvertiserProfile] =
     useState<AdvertiserProfile | null>(null);
-  const [subscriptionPlans, setSubscriptionPlans] = useState<
-    SubscriptionPlan[]
-  >([]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [referrer, setReferrer] = useState<string | null>(null);
@@ -164,15 +163,7 @@ export default function ProfilePage({
         }
       }
 
-      const { data: plans, error: plansError } = await supabase
-        .from("subscription_plans")
-        .select("id, name");
 
-      if (plansError) {
-        console.error("Error fetching subscription plans:", plansError);
-      } else {
-        setSubscriptionPlans(plans as SubscriptionPlan[]);
-      }
 
       setIsLoading(false);
     };
@@ -811,11 +802,11 @@ export default function ProfilePage({
                   Subscription Plan
                 </p>
                 <p className="font-medium mt-1">
-                  {advertiserProfile?.subscription_plan
+                  {advertiserProfile?.subscription_info?.product_id
                     ? subscriptionPlans.find(
                       (plan) =>
-                        plan.id === advertiserProfile.subscription_plan
-                    )?.name ?? "Unknown Plan"
+                        plan.id === advertiserProfile.subscription_info!.product_id
+                    )?.displayName ?? "Unknown Plan"
                     : "N/A"}
                 </p>
               </div>
