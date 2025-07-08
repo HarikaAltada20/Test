@@ -290,7 +290,7 @@ export async function createContestPaymentIntent(
     }
 
     const paymentIntent = await stripe().paymentIntents.create({
-      amount: formatAmountForStripe(amount),
+      amount: amount, // amount is already in cents, no conversion needed
       currency: 'usd',
       metadata,
       automatic_payment_methods: {
