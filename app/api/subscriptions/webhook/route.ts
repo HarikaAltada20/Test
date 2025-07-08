@@ -3,7 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
 
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -15,6 +15,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No signature' }, { status: 400 });
   }
 
+  if (!endpointSecret) {
+    console.error('No webhook secret configured');
+    return NextResponse.json({ error: 'No webhook secret configured' }, { status: 500 });
+  }
+
   let event;
 
   try {
@@ -24,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  console.log(`📥 Webhook received: ${event.type}`);
+  console.log(`📥 Subscription Webhook received: ${event.type}`);
 
   try {
     switch (event.type) {
@@ -53,12 +58,12 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        console.log(`🔔 Unhandled event type: ${event.type}`);
+        console.log(`🔔 Unhandled subscription event type: ${event.type}`);
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error(`Error processing webhook ${event.type}:`, error);
+    console.error(`Error processing subscription webhook ${event.type}:`, error);
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }

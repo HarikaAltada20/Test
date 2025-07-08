@@ -87,11 +87,18 @@ async function handlePaymentSuccess(paymentIntent: any) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
     
-    const { userId, type, amount } = paymentIntent.metadata;
-
     console.log('=== WEBHOOK DEBUG ===');
     console.log('Payment Intent ID:', paymentIntent.id);
     console.log('Metadata:', paymentIntent.metadata);
+    
+    // Check if this is a subscription-related payment intent
+    // Subscription payments are handled by the /api/subscriptions/webhook via invoice.payment_succeeded
+    if (isSubscriptionPaymentIntent(paymentIntent)) {
+      console.log('🔄 Ignoring subscription payment intent - will be handled by subscription webhook');
+      return;
+    }
+    
+    const { userId, type, amount } = paymentIntent.metadata;
     console.log('userId:', userId, 'type:', type, 'amount:', amount);
     
     if (!userId || !type || !amount) {
@@ -148,7 +155,7 @@ async function handlePaymentSuccess(paymentIntent: any) {
       console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
     }
 
-    if (type === 'contest_payment') {
+    if (type === 'contest_payment' || type === 'contest_payment_split') {
       // Update existing pending contest payment transaction
       const { contestId } = paymentIntent.metadata;
       const amountInDollars = parseFloat(amount);
@@ -202,135 +209,8 @@ async function handlePaymentSuccess(paymentIntent: any) {
       console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
     }
 
-    if (type === 'contest_payment_split') {
-      // Handle atomic split payment completion
-      const { contestId, walletAmount, totalAmount } = paymentIntent.metadata;
-      const stripeAmountInDollars = parseFloat(amount);
-      const walletAmountInDollars = parseFloat(walletAmount);
-      const totalAmountInDollars = parseFloat(totalAmount);
-      
-      console.log('🔄 Processing atomic split payment completion');
-      console.log(`💰 Wallet: $${walletAmountInDollars}, Stripe: $${stripeAmountInDollars}, Total: $${totalAmountInDollars}`);
-
-      try {
-        // Get contest payment details to find original wallet balance
-        const { data: contest, error: fetchError } = await supabase
-          .from('contests')
-          .select('payment_details')
-          .eq('id', contestId)
-          .single();
-
-        if (fetchError || !contest?.payment_details) {
-          console.error('❌ Failed to fetch contest payment details:', fetchError);
-          return;
-        }
-
-        const paymentDetails = typeof contest.payment_details === 'string' 
-          ? JSON.parse(contest.payment_details) 
-          : contest.payment_details;
-
-        const originalWalletBalance = paymentDetails.original_wallet_balance;
-        if (!originalWalletBalance) {
-          console.error('❌ No original wallet balance found for atomic rollback');
-          return;
-        }
-
-        // NOW perform atomic wallet deduction (Stripe has succeeded)
-        const walletAmountInCents = Math.round(walletAmountInDollars * 100);
-        const newBalance = originalWalletBalance - walletAmountInCents;
-        
-        console.log(`💳 Deducting ${walletAmountInCents} cents from wallet (${originalWalletBalance} → ${newBalance})`);
-
-        const { error: updateError } = await supabase
-          .from('advertiser_profiles')
-          .update({ available_deposit_balance: newBalance })
-          .eq('id', userId);
-
-        if (updateError) {
-          console.error('❌ CRITICAL: Failed to deduct wallet amount after Stripe success:', updateError);
-          // TODO: This requires manual intervention - Stripe succeeded but wallet deduction failed
-          return;
-        }
-
-        // Log successful wallet transaction now that both payments completed
-        console.log('🔄 Attempting to log wallet transaction...');
-        console.log(`💳 Wallet transaction details: ${walletAmountInCents} cents for user ${userId}`);
-        
-        try {
-          const walletLogResult = await logTransaction(
-            userId,
-            'contest_payment',
-            walletAmountInCents,
-            'success',
-            `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
-            undefined, // No payment intent for wallet portion
-            'Wallet portion of split payment completed successfully',
-            'split'
-          );
-          console.log(`📝 Wallet transaction logged: ${walletLogResult ? 'SUCCESS' : 'FAILED'}`);
-          
-          if (!walletLogResult) {
-            console.error('❌ CRITICAL: Failed to log wallet transaction in split payment webhook');
-          }
-        } catch (logError) {
-          console.error('❌ ERROR logging wallet transaction:', logError);
-        }
-
-        // Update Stripe transaction status
-        const updateSuccess = await updateTransactionStatus(
-          paymentIntent.id,
-          'success',
-          `Contest payment (Stripe portion) completed - Contest: ${contestId}, Payment Intent: ${paymentIntent.id}`,
-          'Stripe portion of split payment completed successfully'
-        );
-
-        // Update contest payment details to 'completed' status
-        // Update the wallet amount in the payment details since it was deferred
-        const updatedWalletAmounts = [...paymentDetails.wallet_amounts_used];
-        
-        // Find the entry that corresponds to this payment (should be 0 and have wallet_deduction_pending: true)
-        const lastIndex = updatedWalletAmounts.length - 1;
-        if (lastIndex >= 0 && paymentDetails.wallet_deduction_pending) {
-          // Update the last entry with the actual wallet amount deducted
-          updatedWalletAmounts[lastIndex] = walletAmountInCents;
-          console.log(`📝 Updated wallet_amounts_used[${lastIndex}] from ${paymentDetails.wallet_amounts_used[lastIndex]} to ${walletAmountInCents}`);
-        } else {
-          console.warn(`⚠️ Unexpected state: lastIndex=${lastIndex}, wallet_deduction_pending=${paymentDetails.wallet_deduction_pending}`);
-          console.warn(`⚠️ Current wallet_amounts_used:`, paymentDetails.wallet_amounts_used);
-          // Fallback: add the wallet amount as a new entry if we can't find the right place
-          updatedWalletAmounts.push(walletAmountInCents);
-        }
-
-        const updatedPaymentDetails = {
-          ...paymentDetails,
-          payment_status: 'completed',
-          paid_at: new Date().toISOString(),
-          total_amount_paid: Math.round(totalAmountInDollars * 100), // Store in cents
-          wallet_amounts_used: updatedWalletAmounts,
-          wallet_deduction_pending: false // Clear the pending flag
-        };
-
-        const { error: paymentUpdateError } = await supabase
-          .from('contests')
-          .update({ payment_details: updatedPaymentDetails })
-          .eq('id', contestId);
-
-        if (paymentUpdateError) {
-          console.error('❌ Error updating contest payment details:', paymentUpdateError);
-        } else {
-          console.log('✅ Split payment completed successfully - both wallet and Stripe portions processed');
-        }
-
-        console.log(`Split payment successful: $${walletAmountInDollars} (wallet) + $${stripeAmountInDollars} (Stripe) = $${totalAmountInDollars} for contest ${contestId}`);
-        console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
-
-      } catch (error) {
-        console.error('❌ Error processing split payment completion:', error);
-      }
-    }
-
   } catch (error) {
-    console.error('Error handling payment success:', error);
+    console.error('Error processing payment success:', error);
   }
 }
 
@@ -443,4 +323,28 @@ function generateWebhookFailureRemark(errorMessage?: string, errorCode?: string)
   }
   
   return 'Payment could not be processed';
+} 
+
+// Helper function to determine if a payment intent is subscription-related
+function isSubscriptionPaymentIntent(paymentIntent: any): boolean {
+  // Subscription payment intents typically have these characteristics:
+  // 1. They have an invoice associated with them
+  // 2. They don't have our custom metadata (userId, type, amount)
+  // 3. They're created automatically by Stripe for subscription billing
+  
+  const hasInvoice = paymentIntent.invoice;
+  const hasCustomMetadata = paymentIntent.metadata && 
+    (paymentIntent.metadata.userId || paymentIntent.metadata.type || paymentIntent.metadata.amount);
+  
+  // If it has an invoice but no custom metadata, it's likely a subscription payment
+  if (hasInvoice && !hasCustomMetadata) {
+    return true;
+  }
+  
+  // If it has no metadata at all, it's likely a subscription payment
+  if (!paymentIntent.metadata || Object.keys(paymentIntent.metadata).length === 0) {
+    return true;
+  }
+  
+  return false;
 } 

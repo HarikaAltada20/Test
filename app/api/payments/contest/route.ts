@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { stripe, formatAmountForStripe } from '@/lib/stripe';
 import { processContestPaymentV2, PaymentDetails } from '@/lib/payment-utils';
 import { canCreateNewContest } from '@/lib/contest-utils';
 
