@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
 
 async function handleCheckoutSessionCompleted(session: any) {
   console.log('✅ Checkout session completed:', session.id);
+  console.log('📋 Session metadata:', session.metadata);
   
   const { user_id, product_id } = session.metadata || {};
   
@@ -80,13 +81,20 @@ async function handleCheckoutSessionCompleted(session: any) {
 
   // Get the subscription from the session
   if (session.subscription) {
+    console.log(`🔗 Checkout session has subscription: ${session.subscription}`);
     const subscription = await stripe().subscriptions.retrieve(session.subscription);
+    console.log(`📊 Retrieved subscription status: ${subscription.status}`);
+    
     await createSubscriptionInDatabase(subscription, user_id, product_id);
+  } else {
+    console.log('⚠️ Checkout session completed but no subscription found - might be a one-time payment');
   }
 }
 
 async function handleSubscriptionCreated(subscription: any) {
   console.log('🆕 Subscription created:', subscription.id);
+  console.log('🔄 Note: This might be a duplicate of checkout.session.completed event');
+  console.log('📋 Subscription metadata:', subscription.metadata);
   
   const { user_id, product_id } = subscription.metadata || {};
   
@@ -95,6 +103,7 @@ async function handleSubscriptionCreated(subscription: any) {
     return;
   }
 
+  console.log(`👤 Processing subscription for user: ${user_id}, product: ${product_id}`);
   await createSubscriptionInDatabase(subscription, user_id, product_id);
 }
 
@@ -188,6 +197,46 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
   try {
     console.log(`Creating subscription in database for user ${userId}`);
     
+    // First, check if this subscription already exists by Stripe subscription ID
+    const { data: existingSubscription } = await supabase
+      .from('subscriptions')
+      .select('id, user_id')
+      .eq('id', subscription.id)
+      .single();
+
+    if (existingSubscription) {
+      console.log(`📝 Subscription ${subscription.id} already exists, updating instead of creating`);
+      // If subscription exists, update it instead of creating
+      await updateSubscriptionInDatabase(subscription, userId, productId);
+      return;
+    }
+
+    // Check if user has ANY active subscription (different subscription ID)
+    const { data: activeSubscription } = await supabase
+      .from('subscriptions')
+      .select('id, status')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .single();
+
+    if (activeSubscription && activeSubscription.id !== subscription.id) {
+      console.log(`🔄 User ${userId} has active subscription ${activeSubscription.id}, this looks like an upgrade/downgrade. Canceling old subscription first.`);
+      
+      // Cancel the old subscription first
+      const { error: cancelError } = await supabase.rpc('cancel_subscription', {
+        stripe_subscription_id: activeSubscription.id,
+        canceled_at_param: new Date().toISOString(),
+        ended_at_param: new Date().toISOString(),
+        cancel_at_param: null,
+        cancellation_reason: 'upgraded_to_new_plan'
+      });
+
+      if (cancelError) {
+        console.error('Error canceling old subscription:', cancelError);
+        // Continue with creation anyway - the create function will handle the error
+      }
+    }
+    
     // Use the database function to create subscription
     const { error: subscriptionError } = await supabase.rpc('create_subscription', {
       stripe_subscription_id: subscription.id,
@@ -210,6 +259,13 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     });
 
     if (subscriptionError) {
+      // If it still fails, it might be a legitimate duplicate - try updating instead
+      if (subscriptionError.message?.includes('already has an active subscription')) {
+        console.log(`⚠️ Subscription creation failed due to existing active subscription, attempting update instead`);
+        await updateSubscriptionInDatabase(subscription, userId, productId);
+        return;
+      }
+      
       console.error('Error creating subscription:', subscriptionError);
       return;
     }
