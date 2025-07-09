@@ -157,8 +157,68 @@ async function handlePaymentSuccess(paymentIntent: any) {
 
     if (type === 'contest_payment' || type === 'contest_payment_split') {
       // Update existing pending contest payment transaction
-      const { contestId } = paymentIntent.metadata;
+      const { contestId, walletAmount, totalAmount } = paymentIntent.metadata;
       const amountInDollars = parseFloat(amount);
+      
+      // For split payments, we need to process wallet deduction atomically
+      if (type === 'contest_payment_split') {
+        console.log('🔄 Processing split payment success - deducting wallet amount');
+        
+        const walletAmountInDollars = parseFloat(walletAmount || '0');
+        const walletAmountInCents = Math.round(walletAmountInDollars * 100);
+        
+        console.log(`💰 Split payment details: Stripe $${amountInDollars}, Wallet $${walletAmountInDollars}`);
+        
+        if (walletAmountInCents > 0) {
+          // Deduct wallet amount from user's balance
+          const { data: profile, error: balanceError } = await supabase
+            .from('advertiser_profiles')
+            .select('available_deposit_balance')
+            .eq('id', userId)
+            .single();
+
+          if (balanceError) {
+            console.error('❌ Error fetching user balance for wallet deduction:', balanceError);
+          } else {
+            const currentBalance = profile?.available_deposit_balance || 0;
+            const newBalance = currentBalance - walletAmountInCents;
+            
+            console.log(`💾 Deducting wallet: ${currentBalance} -> ${newBalance} cents (${walletAmountInCents} cents deducted)`);
+            
+            // CRITICAL: Prevent negative balances
+            if (newBalance < 0) {
+              console.error(`🚨 CRITICAL: Wallet deduction would create negative balance! Current: ${currentBalance}, Deducting: ${walletAmountInCents}`);
+            } else {
+              // Update balance
+              const { error: updateBalanceError } = await supabase
+                .from('advertiser_profiles')
+                .update({ available_deposit_balance: newBalance })
+                .eq('id', userId);
+
+              if (updateBalanceError) {
+                console.error('❌ CRITICAL: Error deducting wallet amount:', updateBalanceError);
+              } else {
+                console.log('✅ Wallet balance deducted successfully');
+                
+                // Log wallet transaction
+                const { logTransaction } = await import('@/lib/payment-utils');
+                const walletLogSuccess = await logTransaction(
+                  userId,
+                  'contest_payment',
+                  walletAmountInCents,
+                  'success',
+                  `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
+                  undefined, // No payment intent for wallet portion
+                  'Wallet portion of split payment completed successfully',
+                  'split'
+                );
+                
+                console.log(`Wallet transaction logged: ${walletLogSuccess ? 'SUCCESS' : 'FAILED'}`);
+              }
+            }
+          }
+        }
+      }
       
       const updateSuccess = await updateTransactionStatus(
         paymentIntent.id,
@@ -187,7 +247,8 @@ async function handlePaymentSuccess(paymentIntent: any) {
             ...paymentDetails,
             payment_status: 'completed',
             paid_at: new Date().toISOString(),
-            total_amount_paid: paymentDetails.total_amount_paid || Math.round(amountInDollars * 100) // Ensure total_amount_paid is set
+            total_amount_paid: paymentDetails.total_amount_paid || Math.round(amountInDollars * 100), // Ensure total_amount_paid is set
+            wallet_deduction_pending: false // Clear the pending flag for split payments
           };
 
           const { error: updateError } = await supabase
@@ -205,7 +266,11 @@ async function handlePaymentSuccess(paymentIntent: any) {
         console.error('Error updating contest payment details:', error);
       }
 
-      console.log(`Contest payment successful: $${amountInDollars} for contest ${contestId}`);
+      if (type === 'contest_payment_split') {
+        console.log(`Split payment successful: Stripe $${amountInDollars} + Wallet $${parseFloat(walletAmount || '0')} for contest ${contestId}`);
+      } else {
+        console.log(`Contest payment successful: $${amountInDollars} for contest ${contestId}`);
+      }
       console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
     }
 
