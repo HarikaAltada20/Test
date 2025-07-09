@@ -200,20 +200,29 @@ async function handlePaymentSuccess(paymentIntent: any) {
               } else {
                 console.log('✅ Wallet balance deducted successfully');
                 
-                // Log wallet transaction
-                const { logTransaction } = await import('@/lib/payment-utils');
-                const walletLogSuccess = await logTransaction(
-                  userId,
-                  'contest_payment',
-                  walletAmountInCents,
-                  'success',
-                  `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
-                  undefined, // No payment intent for wallet portion
-                  'Wallet portion of split payment completed successfully',
-                  'split'
-                );
-                
-                console.log(`Wallet transaction logged: ${walletLogSuccess ? 'SUCCESS' : 'FAILED'}`);
+                // Log wallet transaction with enhanced error handling
+                try {
+                  console.log(`📝 Attempting to log wallet transaction: User=${userId}, Amount=${walletAmountInCents} cents`);
+                  
+                  const walletLogSuccess = await logTransaction(
+                    userId,
+                    'contest_payment',
+                    walletAmountInCents,
+                    'success',
+                    `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
+                    undefined, // No payment intent for wallet portion
+                    'Wallet portion of split payment completed successfully',
+                    'split'
+                  );
+                  
+                  if (walletLogSuccess) {
+                    console.log(`✅ Wallet transaction logged successfully for ${walletAmountInCents} cents`);
+                  } else {
+                    console.error(`❌ CRITICAL: Wallet transaction logging FAILED for user ${userId}, amount ${walletAmountInCents} cents`);
+                  }
+                } catch (logError) {
+                  console.error(`❌ CRITICAL: Exception during wallet transaction logging:`, logError);
+                }
               }
             }
           }
