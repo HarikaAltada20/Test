@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { stripe } from '@/lib/stripe';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { updateTransactionStatus, logTransaction } from '@/lib/payment-utils';
+import { updateTransactionStatus } from '@/lib/payment-utils';
 
 export async function POST(request: NextRequest) {
   console.log('🔔 WEBHOOK RECEIVED!');
@@ -200,25 +200,47 @@ async function handlePaymentSuccess(paymentIntent: any) {
               } else {
                 console.log('✅ Wallet balance deducted successfully');
                 
-                // Log wallet transaction with enhanced error handling
+                // Log wallet transaction using service role client (bypasses RLS)
                 try {
                   console.log(`📝 Attempting to log wallet transaction: User=${userId}, Amount=${walletAmountInCents} cents`);
                   
-                  const walletLogSuccess = await logTransaction(
-                    userId,
-                    'contest_payment',
-                    walletAmountInCents,
-                    'success',
-                    `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
-                    undefined, // No payment intent for wallet portion
-                    'Wallet portion of split payment completed successfully',
-                    'split'
-                  );
+                  // Use service role client directly for wallet transaction logging
+                  const walletTransactionData = {
+                    user_id: userId,
+                    type: 'contest_payment',
+                    status: 'success',
+                    amount: walletAmountInCents,
+                    description: `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
+                    payment_intent_id: null, // No payment intent for wallet portion
+                    payment_method: 'split',
+                    remarks: 'Wallet portion of split payment completed successfully',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  };
+
+                  console.log('💾 Inserting wallet transaction with service role:', walletTransactionData);
+
+                  const { data: walletTransactionResult, error: walletLogError } = await supabase
+                    .from('money_transactions')
+                    .insert(walletTransactionData)
+                    .select()
+                    .single();
+
+                  const walletLogSuccess = !walletLogError;
                   
                   if (walletLogSuccess) {
-                    console.log(`✅ Wallet transaction logged successfully for ${walletAmountInCents} cents`);
+                    console.log(`✅ Wallet transaction logged successfully:`, {
+                      id: walletTransactionResult?.id,
+                      amount: walletAmountInCents,
+                      user_id: userId,
+                      payment_method: 'split'
+                    });
                   } else {
-                    console.error(`❌ CRITICAL: Wallet transaction logging FAILED for user ${userId}, amount ${walletAmountInCents} cents`);
+                    console.error(`❌ CRITICAL: Wallet transaction logging FAILED:`, {
+                      user: userId,
+                      amount: walletAmountInCents,
+                      error: walletLogError
+                    });
                   }
                 } catch (logError) {
                   console.error(`❌ CRITICAL: Exception during wallet transaction logging:`, logError);
