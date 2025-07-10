@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
 
   console.log(`📥 Subscription Webhook received: ${event.type}`);
 
+  // CRITICAL: Always return 200 for valid webhooks to prevent retries
+  // Even if processing fails, we acknowledge receipt to Stripe
   try {
     switch (event.type) {
       case 'checkout.session.completed':
@@ -72,12 +74,36 @@ export async function POST(request: NextRequest) {
       default:
         console.log(`🔔 Unhandled subscription event type: ${event.type}`);
     }
-
-    return NextResponse.json({ received: true });
   } catch (error) {
-    console.error(`Error processing subscription webhook ${event.type}:`, error);
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
+    console.error(`❌ Error processing subscription webhook ${event.type}:`, error);
+    console.error('📝 Event data:', JSON.stringify(event.data.object, null, 2));
+    
+    // Log error but still return 200 to prevent retries
+    // Add error to internal logging system if available
+    try {
+      const supabase = await createClient();
+      await supabase
+        .from('webhook_errors')
+        .insert({
+          event_type: event.type,
+          event_id: event.id,
+          error_message: error instanceof Error ? error.message : String(error),
+          event_data: event.data.object,
+          created_at: new Date().toISOString()
+        })
+        .single();
+    } catch (logError) {
+      console.error('❌ Failed to log webhook error:', logError);
+    }
   }
+
+  // ALWAYS return 200 to acknowledge receipt and prevent retries
+  return NextResponse.json({ 
+    received: true, 
+    event_type: event.type,
+    event_id: event.id,
+    processed_at: new Date().toISOString()
+  });
 }
 
 async function handleCheckoutSessionCompleted(session: any) {
@@ -87,17 +113,21 @@ async function handleCheckoutSessionCompleted(session: any) {
   const { user_id, product_id } = session.metadata || {};
   
   if (!user_id || !product_id) {
-    console.error('Missing metadata in checkout session:', { user_id, product_id });
+    console.error('❌ Missing metadata in checkout session:', { user_id, product_id });
     return;
   }
 
   // Get the subscription from the session
   if (session.subscription) {
     console.log(`🔗 Checkout session has subscription: ${session.subscription}`);
-    const subscription = await stripe().subscriptions.retrieve(session.subscription);
-    console.log(`📊 Retrieved subscription status: ${subscription.status}`);
-    
-    await createSubscriptionInDatabase(subscription, user_id, product_id);
+    try {
+      const subscription = await stripe().subscriptions.retrieve(session.subscription);
+      console.log(`📊 Retrieved subscription status: ${subscription.status}`);
+      
+      await createSubscriptionInDatabase(subscription, user_id, product_id);
+    } catch (error) {
+      console.error('❌ Error retrieving subscription from session:', error);
+    }
   } else {
     console.log('⚠️ Checkout session completed but no subscription found - might be a one-time payment');
   }
@@ -105,13 +135,29 @@ async function handleCheckoutSessionCompleted(session: any) {
 
 async function handleSubscriptionCreated(subscription: any) {
   console.log('🆕 Subscription created:', subscription.id);
-  console.log('🔄 Note: This might be a duplicate of checkout.session.completed event');
+  console.log(`📊 Subscription status: ${subscription.status}`);
   console.log('📋 Subscription metadata:', subscription.metadata);
   
   const { user_id, product_id } = subscription.metadata || {};
   
   if (!user_id || !product_id) {
-    console.error('Missing metadata in subscription:', { user_id, product_id });
+    console.error('❌ Missing metadata in subscription:', { user_id, product_id });
+    
+    // Try to get user_id from customer metadata
+    if (subscription.customer && typeof subscription.customer === 'string') {
+      try {
+        const customer = await stripe().customers.retrieve(subscription.customer);
+        if (customer && !customer.deleted && customer.metadata?.user_id) {
+          console.log('✅ Found user_id in customer metadata:', customer.metadata.user_id);
+          await createSubscriptionInDatabase(subscription, customer.metadata.user_id, product_id || 'unknown');
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Error retrieving customer metadata:', error);
+      }
+    }
+    
+    console.error('❌ Cannot process subscription without user_id');
     return;
   }
 
@@ -121,23 +167,35 @@ async function handleSubscriptionCreated(subscription: any) {
 
 async function handleSubscriptionUpdated(subscription: any) {
   console.log('🔄 Subscription updated:', subscription.id);
+  console.log(`📊 New status: ${subscription.status}`);
   
   const { user_id, product_id } = subscription.metadata || {};
   
   if (!user_id) {
-    console.error('Missing user_id in subscription metadata');
+    console.error('❌ Missing user_id in subscription metadata');
+    
+    // Try to get user_id from customer metadata as fallback
+    if (subscription.customer && typeof subscription.customer === 'string') {
+      try {
+        const customer = await stripe().customers.retrieve(subscription.customer);
+        if (customer && !customer.deleted && customer.metadata?.user_id) {
+          console.log('✅ Found user_id in customer metadata:', customer.metadata.user_id);
+          const actualProductId = await getProductIdFromSubscription(subscription, product_id);
+          await updateSubscriptionInDatabase(subscription, customer.metadata.user_id, actualProductId);
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Error retrieving customer metadata:', error);
+      }
+    }
+    
+    console.error('❌ Cannot process subscription update without user_id');
     return;
   }
 
   // Get the product ID from the subscription items if not in metadata
-  let actualProductId = product_id;
-  if (!actualProductId && subscription.items?.data?.length > 0) {
-    const priceId = subscription.items.data[0].price.id;
-    // Get product ID from price using Stripe API
-    const price = await stripe().prices.retrieve(priceId);
-    actualProductId = price.product as string;
-  }
-
+  const actualProductId = await getProductIdFromSubscription(subscription, product_id);
+  
   if (actualProductId) {
     await updateSubscriptionInDatabase(subscription, user_id, actualProductId);
   }
@@ -149,7 +207,7 @@ async function handleSubscriptionDeleted(subscription: any) {
   const { user_id } = subscription.metadata || {};
   
   if (!user_id) {
-    console.error('Missing user_id in subscription metadata');
+    console.error('❌ Missing user_id in subscription metadata');
     return;
   }
 
@@ -163,7 +221,7 @@ async function handleSubscriptionScheduleCreated(schedule: any) {
   const { user_id, product_id, scheduled_change_type } = schedule.metadata || {};
   
   if (!user_id || !product_id) {
-    console.error('Missing metadata in subscription schedule:', { user_id, product_id });
+    console.error('❌ Missing metadata in subscription schedule:', { user_id, product_id });
     return;
   }
 
@@ -178,7 +236,7 @@ async function handleSubscriptionScheduleReleased(schedule: any) {
   const { user_id, product_id, scheduled_change_type } = schedule.metadata || {};
   
   if (!user_id || !product_id) {
-    console.error('Missing metadata in released subscription schedule:', { user_id, product_id });
+    console.error('❌ Missing metadata in released subscription schedule:', { user_id, product_id });
     return;
   }
 
@@ -197,7 +255,7 @@ async function handleSubscriptionScheduleReleased(schedule: any) {
       await createSubscriptionInDatabase(subscription, user_id, product_id);
     }
   } catch (error) {
-    console.error('Error processing released subscription schedule:', error);
+    console.error('❌ Error processing released subscription schedule:', error);
   }
 }
 
@@ -208,7 +266,7 @@ async function handleSubscriptionScheduleCanceled(schedule: any) {
   const { user_id, scheduled_change_type } = schedule.metadata || {};
   
   if (!user_id) {
-    console.error('Missing user_id in canceled subscription schedule:', user_id);
+    console.error('❌ Missing user_id in canceled subscription schedule:', user_id);
     return;
   }
 
@@ -227,7 +285,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
   const { user_id, product_id } = subscription.metadata || {};
   
   if (!user_id) {
-    console.error('Missing user_id in subscription for invoice');
+    console.error('❌ Missing user_id in subscription for invoice');
     return;
   }
 
@@ -250,7 +308,7 @@ async function handleInvoicePaymentFailed(invoice: any) {
   const { user_id, product_id } = subscription.metadata || {};
   
   if (!user_id) {
-    console.error('Missing user_id in subscription for failed invoice');
+    console.error('❌ Missing user_id in subscription for failed invoice');
     return;
   }
 
@@ -260,6 +318,25 @@ async function handleInvoicePaymentFailed(invoice: any) {
   }
 
   console.log(`💸 Payment failed for user ${user_id}, subscription status updated`);
+}
+
+// Helper function to extract product ID from subscription
+async function getProductIdFromSubscription(subscription: any, fallbackProductId?: string): Promise<string> {
+  if (fallbackProductId) {
+    return fallbackProductId;
+  }
+  
+  if (subscription.items?.data?.length > 0) {
+    const priceId = subscription.items.data[0].price.id;
+    try {
+      const price = await stripe().prices.retrieve(priceId);
+      return price.product as string;
+    } catch (error) {
+      console.error('❌ Error retrieving product from price:', error);
+    }
+  }
+  
+  return 'unknown';
 }
 
 // Create new subscription using database function
@@ -277,7 +354,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       .maybeSingle(); // Use maybeSingle to avoid error when no rows found
 
     if (checkError) {
-      console.error('Error checking existing subscription:', checkError);
+      console.error('❌ Error checking existing subscription:', checkError);
       return;
     }
 
@@ -298,7 +375,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       .eq('status', 'active');
 
     if (activeError) {
-      console.error('Error checking user active subscriptions:', activeError);
+      console.error('❌ Error checking user active subscriptions:', activeError);
       // Continue with creation - let the database function handle the constraint
     } else if (userActiveSubscriptions && userActiveSubscriptions.length > 0) {
       // User has existing active subscriptions
@@ -315,7 +392,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
           });
 
           if (cancelError) {
-            console.error(`Error canceling subscription ${activeSub.id}:`, cancelError);
+            console.error(`❌ Error canceling subscription ${activeSub.id}:`, cancelError);
           }
         }
       }
@@ -392,7 +469,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
         .eq('id', userId);
 
       if (profileError) {
-        console.error('Error updating advertiser profile:', profileError);
+        console.error('❌ Error updating advertiser profile:', profileError);
       }
 
       console.log(`✅ Created subscription via fallback for user ${userId}: ${subscription.id}`);
@@ -401,7 +478,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     }
     
   } catch (error) {
-    console.error('Error in createSubscriptionInDatabase:', error);
+    console.error('❌ Error in createSubscriptionInDatabase:', error);
   }
 }
 
@@ -435,13 +512,13 @@ async function updateSubscriptionInDatabase(subscription: any, userId: string, p
     });
 
     if (subscriptionError) {
-      console.error('Error updating subscription:', subscriptionError);
+      console.error('❌ Error updating subscription:', subscriptionError);
       return;
     }
 
     console.log(`✅ Updated subscription for user ${userId}: ${subscription.id}`);
   } catch (error) {
-    console.error('Error in updateSubscriptionInDatabase:', error);
+    console.error('❌ Error in updateSubscriptionInDatabase:', error);
   }
 }
 
@@ -463,7 +540,7 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
     });
 
     if (subscriptionError) {
-      console.error('Error canceling subscription:', subscriptionError);
+      console.error('❌ Error canceling subscription:', subscriptionError);
       return;
     }
 
@@ -472,6 +549,6 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
 
     console.log(`✅ Canceled subscription for user ${userId}: ${subscription.id}`);
   } catch (error) {
-    console.error('Error in cancelSubscriptionInDatabase:', error);
+    console.error('❌ Error in cancelSubscriptionInDatabase:', error);
   }
 } 
