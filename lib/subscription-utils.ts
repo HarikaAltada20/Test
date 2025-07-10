@@ -69,7 +69,33 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
 
   const subscriptionInfo = profileData.subscription_info;
   
-  // Get full subscription details from subscriptions table
+  // Handle free plans (no Stripe subscription)
+  if (!subscriptionInfo.subscription_id || subscriptionInfo.subscription_id === 'free-plan') {
+    // For free plans, create a virtual subscription object
+    const freePlan = getSubscriptionPlanById(subscriptionInfo.product_id);
+    if (!freePlan || freePlan.price > 0) {
+      console.error('Invalid free plan configuration:', subscriptionInfo.product_id);
+      return null;
+    }
+
+    return {
+      id: 'free-plan',
+      user_id: userId,
+      product_id: subscriptionInfo.product_id,
+      price_id: subscriptionInfo.price_id,
+      status: 'active',
+      current_period_start: new Date(),
+      current_period_end: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+      cancel_at_period_end: false,
+      trial_start: undefined,
+      trial_end: undefined,
+      subscription_info: subscriptionInfo,
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+  }
+  
+  // Get full subscription details from subscriptions table for paid plans
   const { data: subscription, error: subError } = await supabase
     .from('subscriptions')
     .select('*')

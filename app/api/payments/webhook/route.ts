@@ -107,6 +107,29 @@ async function handlePaymentSuccess(paymentIntent: any) {
     }
 
     if (type === 'wallet_topup') {
+      // IDEMPOTENCY CHECK: Prevent duplicate processing of the same payment intent
+      console.log(`🔍 Checking if payment intent ${paymentIntent.id} has already been processed...`);
+      
+      const { data: existingTransaction, error: checkError } = await supabase
+        .from('money_transactions')
+        .select('id, status')
+        .eq('payment_intent_id', paymentIntent.id)
+        .eq('status', 'success')
+        .single();
+
+      if (!checkError && existingTransaction) {
+        console.log(`⚠️ DUPLICATE WEBHOOK: Payment intent ${paymentIntent.id} already processed successfully. Skipping.`);
+        console.log(`⚠️ Existing transaction ID: ${existingTransaction.id}`);
+        return; // Exit early to prevent duplicate processing
+      }
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned (expected for new transactions)
+        console.error('❌ Error checking for existing transaction:', checkError);
+        return;
+      }
+
+      console.log(`✅ Payment intent ${paymentIntent.id} is new, proceeding with processing...`);
+
       // The metadata amount is in DOLLARS, so convert to cents for database storage
       const amountInDollars = parseFloat(amount);
       const amountInCents = Math.round(amountInDollars * 100);
@@ -156,6 +179,29 @@ async function handlePaymentSuccess(paymentIntent: any) {
     }
 
     if (type === 'contest_payment' || type === 'contest_payment_split') {
+      // IDEMPOTENCY CHECK: Prevent duplicate processing of the same payment intent
+      console.log(`🔍 Checking if contest payment intent ${paymentIntent.id} has already been processed...`);
+      
+      const { data: existingTransaction, error: checkError } = await supabase
+        .from('money_transactions')
+        .select('id, status')
+        .eq('payment_intent_id', paymentIntent.id)
+        .eq('status', 'success')
+        .single();
+
+      if (!checkError && existingTransaction) {
+        console.log(`⚠️ DUPLICATE WEBHOOK: Contest payment intent ${paymentIntent.id} already processed successfully. Skipping.`);
+        console.log(`⚠️ Existing transaction ID: ${existingTransaction.id}`);
+        return; // Exit early to prevent duplicate processing
+      }
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned (expected for new transactions)
+        console.error('❌ Error checking for existing contest transaction:', checkError);
+        return;
+      }
+
+      console.log(`✅ Contest payment intent ${paymentIntent.id} is new, proceeding with processing...`);
+
       // Update existing pending contest payment transaction
       const { contestId, walletAmount, totalAmount } = paymentIntent.metadata;
       const amountInDollars = parseFloat(amount);

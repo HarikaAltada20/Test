@@ -29,7 +29,8 @@ import {
     Clock,
     DollarSign,
     Users,
-    Trophy
+    Trophy,
+    TrendingDown
 } from 'lucide-react';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { subscriptionPlans } from '@/constants/subscriptionPlans';
@@ -70,7 +71,7 @@ export function SubscriptionUpgradeModal({
         if (isOpen) {
             // Default scheduled date to next billing cycle
             setScheduledDate(nextBillingDate.toISOString().split('T')[0]);
-            setUpgradeType('scheduled'); // Default to scheduled upgrade
+            setUpgradeType('scheduled'); // Default to scheduled (recommended)
         }
     }, [isOpen]);
 
@@ -175,11 +176,19 @@ export function SubscriptionUpgradeModal({
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5 text-green-600" />
-                        {isUpgrade ? 'Upgrade' : 'Change'} Your Subscription
+                        {isUpgrade ? (
+                            <TrendingUp className="h-5 w-5 text-green-600" />
+                        ) : (
+                            <TrendingDown className="h-5 w-5 text-orange-600" />
+                        )}
+                        {isUpgrade ? 'Upgrade' : 'Downgrade'} Your Subscription
                     </DialogTitle>
                     <DialogDescription>
-                        Choose how you'd like to {isUpgrade ? 'upgrade' : 'change'} from {currentPlan.displayName || currentPlan.name} to {targetPlan.displayName || targetPlan.name}
+                        Choose how you'd like to {isUpgrade ? 'upgrade' : 'downgrade'} from {currentPlan.displayName || currentPlan.name} to {targetPlan.displayName || targetPlan.name}.
+                        {isUpgrade
+                            ? ' You\'ll get access to more features and higher limits.'
+                            : ' Your features and limits will be adjusted to the new plan.'
+                        }
                     </DialogDescription>
                 </DialogHeader>
 
@@ -258,48 +267,95 @@ export function SubscriptionUpgradeModal({
 
                     <Separator />
 
-                    {/* Upgrade Options */}
+                    {/* Change Options */}
                     <div>
-                        <h4 className="font-semibold mb-4">Choose your upgrade option:</h4>
+                        <h4 className="font-semibold mb-4">
+                            Choose your {isUpgrade ? 'upgrade' : 'downgrade'} option:
+                        </h4>
                         <RadioGroup value={upgradeType} onValueChange={(value) => setUpgradeType(value as UpgradeType)}>
 
-                            {/* Scheduled Upgrade Option */}
+                            {/* Scheduled Change Option */}
                             <div className="space-y-3">
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="scheduled" id="scheduled" />
                                     <Label htmlFor="scheduled" className="flex items-center gap-2 cursor-pointer">
                                         <Calendar className="h-4 w-4 text-blue-600" />
-                                        <span className="font-medium">Scheduled Upgrade (Recommended)</span>
-                                        <Badge className="bg-blue-100 text-blue-800">No immediate charge</Badge>
+                                        <span className="font-medium">
+                                            Scheduled {isUpgrade ? 'Upgrade' : 'Downgrade'} (Recommended)
+                                        </span>
+                                        <Badge className="bg-blue-100 text-blue-800">
+                                            {isUpgrade ? 'No time lost' : 'Keep current benefits'}
+                                        </Badge>
                                     </Label>
                                 </div>
                                 {upgradeType === 'scheduled' && (
                                     <Alert className="ml-6">
                                         <Clock className="h-4 w-4" />
                                         <AlertDescription>
-                                            Your new plan will be activated on <strong>{new Date(scheduledDate).toLocaleDateString()}</strong>.
-                                            You will not be charged now - billing will continue normally on your next cycle.
+                                            <strong>✅ Recommended:</strong>
+                                            <div className="space-y-2 mt-2">
+                                                <div>• Your current plan will <strong>continue until its natural end</strong></div>
+                                                <div>• You <strong>keep all current benefits</strong> until then</div>
+                                                <div>• Your new plan will <strong>start automatically</strong> after current period ends</div>
+                                                <div>• You will be charged <strong>{formatCurrencyFromCents(targetPlan.price)}</strong> for the new billing cycle</div>
+                                                <div className="text-green-600 font-medium mt-2">
+                                                    No loss of time or money - you get full value from your current plan.
+                                                </div>
+                                            </div>
                                         </AlertDescription>
                                     </Alert>
                                 )}
                             </div>
 
-                            {/* Immediate Upgrade Option */}
+                            {/* Immediate Change Option */}
                             <div className="space-y-3">
                                 <div className="flex items-center space-x-2">
                                     <RadioGroupItem value="immediate" id="immediate" />
                                     <Label htmlFor="immediate" className="flex items-center gap-2 cursor-pointer">
                                         <Zap className="h-4 w-4 text-orange-600" />
-                                        <span className="font-medium">Immediate Upgrade</span>
-                                        <Badge className="bg-orange-100 text-orange-800">Full charge now</Badge>
+                                        <span className="font-medium">
+                                            Immediate {isUpgrade ? 'Upgrade' : 'Downgrade'}
+                                        </span>
+                                        <Badge className="bg-orange-100 text-orange-800">
+                                            {isUpgrade ? 'Instant access - lose time' : 'Instant change - lose time'}
+                                        </Badge>
                                     </Label>
                                 </div>
                                 {upgradeType === 'immediate' && (
                                     <Alert className="ml-6">
                                         <AlertTriangle className="h-4 w-4" />
                                         <AlertDescription>
-                                            <strong>Warning:</strong> You will be charged <strong>{formatCurrencyFromCents(targetPlan.price)}</strong> immediately.
-                                            Your current plan will be canceled, and any remaining days will be forfeited.
+                                            <strong>⚠️ Important:</strong> {isUpgrade ? (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <div>• Your current subscription will be <strong>cancelled immediately</strong></div>
+                                                        <div>• You will <strong>lose any remaining time</strong> on your current plan</div>
+                                                        <div>• A new subscription for <strong>{formatCurrencyFromCents(targetPlan.price)}</strong> will be created immediately</div>
+                                                        <div>• You get <strong>instant access</strong> to new plan features</div>
+                                                        <div className="text-orange-600 font-medium mt-2">This means you lose money/time from your current plan but gain immediate benefits.</div>
+                                                    </div>
+                                                </>
+                                            ) : targetPlan.price === 0 ? (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <div>• Your paid subscription will be <strong>cancelled immediately</strong></div>
+                                                        <div>• You will <strong>lose any remaining time</strong> on your current plan</div>
+                                                        <div>• You will return to the <strong>free plan immediately</strong></div>
+                                                        <div>• No new charges will be made</div>
+                                                        <div className="text-orange-600 font-medium mt-2">This means you lose money/time from your current plan.</div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="space-y-2">
+                                                        <div>• Your current subscription will be <strong>cancelled immediately</strong></div>
+                                                        <div>• You will <strong>lose any remaining time</strong> on your current plan</div>
+                                                        <div>• A new subscription for <strong>{formatCurrencyFromCents(targetPlan.price)}</strong> will be created immediately</div>
+                                                        <div>• You get <strong>immediate access</strong> to new plan features</div>
+                                                        <div className="text-orange-600 font-medium mt-2">This means you lose money/time from your current plan.</div>
+                                                    </div>
+                                                </>
+                                            )}
                                         </AlertDescription>
                                     </Alert>
                                 )}
@@ -308,12 +364,12 @@ export function SubscriptionUpgradeModal({
                     </div>
 
                     {/* Success Info */}
-                    <Alert className="bg-green-50 border-green-200">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <AlertDescription className="text-green-800">
+                    <Alert className={`${isUpgrade ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
+                        <CheckCircle2 className={`h-4 w-4 ${isUpgrade ? 'text-green-600' : 'text-blue-600'}`} />
+                        <AlertDescription className={isUpgrade ? 'text-green-800' : 'text-blue-800'}>
                             {upgradeType === 'scheduled'
-                                ? `Your upgrade is scheduled for ${new Date(scheduledDate).toLocaleDateString()}. You can cancel this scheduled upgrade anytime before it takes effect.`
-                                : 'Your upgrade will take effect immediately after payment confirmation.'
+                                ? `Your ${isUpgrade ? 'upgrade' : 'downgrade'} is scheduled for ${new Date(scheduledDate).toLocaleDateString()}. You can cancel this scheduled change anytime before it takes effect.`
+                                : `Your ${isUpgrade ? 'upgrade' : 'downgrade'} will take effect immediately after confirmation.`
                             }
                         </AlertDescription>
                     </Alert>
@@ -326,7 +382,10 @@ export function SubscriptionUpgradeModal({
                     <Button
                         onClick={handleUpgrade}
                         disabled={isProcessing}
-                        className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
+                        className={`${isUpgrade
+                            ? 'bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700'
+                            : 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700'
+                            }`}
                     >
                         {isProcessing ? (
                             <>
@@ -338,12 +397,13 @@ export function SubscriptionUpgradeModal({
                                 {upgradeType === 'scheduled' ? (
                                     <>
                                         <Calendar className="h-4 w-4 mr-2" />
-                                        Schedule Upgrade
+                                        Schedule {isUpgrade ? 'Upgrade' : 'Downgrade'}
                                     </>
                                 ) : (
                                     <>
                                         <Zap className="h-4 w-4 mr-2" />
-                                        Upgrade Now - {formatCurrencyFromCents(targetPlan.price)}
+                                        {isUpgrade ? 'Upgrade' : 'Downgrade'} Now
+                                        {targetPlan.price > 0 && ` - ${formatCurrencyFromCents(targetPlan.price)}`}
                                     </>
                                 )}
                             </>

@@ -56,21 +56,21 @@ export async function POST(
         }, { status: 400 });
       }
       
-      try {
-        const paymentDetails = typeof contest.payment_details === 'string' 
-          ? JSON.parse(contest.payment_details) 
-          : contest.payment_details;
-        
-        console.log('💰 Payment details:', paymentDetails);
-        
-        if (!paymentDetails.payment_status || paymentDetails.payment_status !== 'completed') {
-          console.log('❌ Payment status not completed:', paymentDetails.payment_status);
+        try {
+          const paymentDetails = typeof contest.payment_details === 'string' 
+            ? JSON.parse(contest.payment_details) 
+            : contest.payment_details;
+          
+          console.log('💰 Payment details:', paymentDetails);
+          
+          if (!paymentDetails.payment_status || paymentDetails.payment_status !== 'completed') {
+            console.log('❌ Payment status not completed:', paymentDetails.payment_status);
           return NextResponse.json({ 
             error: 'Contest payment must be completed before submission for approval' 
           }, { status: 400 });
-        }
-      } catch (err) {
-        console.log('❌ Invalid payment details JSON:', err);
+          }
+        } catch (err) {
+          console.log('❌ Invalid payment details JSON:', err);
         return NextResponse.json({ 
           error: 'Invalid payment details' 
         }, { status: 400 });
