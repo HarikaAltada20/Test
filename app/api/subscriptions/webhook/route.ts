@@ -906,7 +906,7 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
       const freeSubscriptionInfo = {
         product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free plan)
         price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
-        subscription_id: 'cool',
+        subscription_id: null,
         last_synced: new Date().toISOString()
       };
 
