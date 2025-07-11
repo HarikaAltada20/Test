@@ -3,16 +3,18 @@ create table public.advertiser_profiles (
   company_name text null,
   website_url text null,
   total_contests_run integer null default 0,
-  subscription_plan text null default 'free'::text,
   created_at timestamp with time zone null default CURRENT_TIMESTAMP,
   updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
   total_money_spent bigint null default 0,
   available_deposit_balance bigint null default 0,
   withdrawable_balance bigint null default 0,
+  subscription_info jsonb null,
   constraint advertiser_profiles_pkey primary key (id),
   constraint advertiser_profiles_id_fkey foreign KEY (id) references users (id),
   constraint check_positive_balance check ((available_deposit_balance >= 0))
 ) TABLESPACE pg_default;
+
+create index IF not exists idx_advertiser_profiles_subscription_info on public.advertiser_profiles using gin (subscription_info) TABLESPACE pg_default;
 
 create trigger update_advertiser_profiles_updated_at BEFORE
 update on advertiser_profiles for EACH row

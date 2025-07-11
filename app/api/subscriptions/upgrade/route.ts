@@ -125,27 +125,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // For paid plans: INSTANT CHANGE = Cancel old + Create new subscription immediately
+      // For paid plans: SAFE UPGRADE = Create new subscription first, cancel old only after success
       try {
-        console.log(`🔄 Starting instant ${isUpgrade ? 'upgrade' : 'downgrade'} from ${currentPlan.name} to ${targetPlan.name}`);
+        console.log(`🔄 Starting safe ${isUpgrade ? 'upgrade' : 'downgrade'} from ${currentPlan.name} to ${targetPlan.name}`);
 
-        // Step 1: Cancel current subscription immediately (if not free plan)
-        if (currentSubscription.id !== 'free-plan' && currentSubscription.id) {
-          console.log(`❌ Canceling current subscription: ${currentSubscription.id}`);
-          await stripe().subscriptions.cancel(currentSubscription.id, {
-            invoice_now: false, // Don't create final invoice
-            prorate: false // Don't prorate - user loses remaining time
-          });
-          console.log(`✅ Successfully cancelled subscription ${currentSubscription.id}`);
-        }
-
-        // Step 2: Create new checkout session for immediate new subscription
+        // SAFE APPROACH: Create new checkout session with old subscription ID in metadata
+        // The webhook will handle canceling the old subscription ONLY after new subscription is successful
         const checkoutSession = await createSubscriptionCheckoutSession({
           userId: user.id,
           productId: targetProductId,
           priceId: targetPriceId,
           upgradeOptions: {
-            upgradeType: 'immediate'
+            upgradeType: 'immediate',
+            oldSubscriptionId: currentSubscription.id !== 'free-plan' ? currentSubscription.id : undefined
           }
         });
 
@@ -154,28 +146,28 @@ export async function POST(request: NextRequest) {
         }
 
         const changeType = isUpgrade ? 'upgrade' : 'downgrade';
-        const timeWarning = currentSubscription.id !== 'free-plan' 
-          ? 'Your current subscription has been cancelled immediately. You will lose any remaining time on your current plan.'
+        const safetyMessage = currentSubscription.id !== 'free-plan' 
+          ? 'Your current subscription will remain active until the new subscription is successfully created. This ensures no service interruption.'
           : 'You will be charged immediately for the new plan.';
 
         return NextResponse.json({
           success: true,
           checkoutUrl: checkoutSession.url,
           sessionId: checkoutSession.sessionId,
-          message: `Instant ${changeType} checkout created`,
+          message: `Safe ${changeType} checkout created`,
           [changeType]: {
             type: 'immediate',
             current_plan: currentPlan.displayName,
             target_plan: targetPlan.displayName,
             price_difference: priceDifference,
-            warning: `${timeWarning} You will be charged ${formatCurrencyFromCents(targetPlan.price)} immediately for your new subscription.`
+            warning: `${safetyMessage} You will be charged ${formatCurrencyFromCents(targetPlan.price)} for your new subscription.`
           }
         });
 
       } catch (error) {
-        console.error(`Error in instant ${isUpgrade ? 'upgrade' : 'downgrade'}:`, error);
+        console.error(`Error in safe ${isUpgrade ? 'upgrade' : 'downgrade'}:`, error);
         return NextResponse.json({ 
-          error: `Failed to process instant ${isUpgrade ? 'upgrade' : 'downgrade'}` 
+          error: `Failed to process safe ${isUpgrade ? 'upgrade' : 'downgrade'}` 
         }, { status: 500 });
       }
     }

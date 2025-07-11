@@ -12,26 +12,71 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Trophy, DollarSign, Plus, Video, User, Building } from "lucide-react";
 import { formatLocalDateTime } from "@/lib/utils";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
 function DashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const supabase = createClient();
+  const { user, isLoading: isAuthLoading, isAuthenticated } = useClientAuth({
+    redirectTo: "/auth/signin",
+  });
+  const isMobile = useIsMobile();
   const [profile, setProfile] = useState<any>(null);
   const [recentContests, setRecentContests] = useState<any[]>([]);
   const [isFetchingData, setIsFetchingData] = useState(true);
   const [userCoins, setUserCoins] = useState(0);
-  const {
-    user,
-    isLoading: isAuthLoading,
-    isAuthenticated,
-  } = useClientAuth({
-    redirectTo: "/auth/signin",
-  });
-  const router = useRouter();
-  const supabase = createClient();
+  const [isMounted, setIsMounted] = useState(false);
+  const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+
+  // Handle checkout success - with protection against infinite loops
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const sessionId = searchParams.get('session_id');
+
+    if (success === 'true' && sessionId && user && !hasProcessedSuccess) {
+      console.log('🎉 Payment successful in dashboard, refreshing profile data...');
+      setHasProcessedSuccess(true);
+
+      // Clear URL parameters to prevent refresh loops
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+
+      // Refresh profile data after a short delay to allow webhook processing
+      const refreshProfileData = async () => {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Refetch the profile data to get updated subscription info
+          if (user.user_type === "advertiser") {
+            const { data: advertiserProfile } = await supabase
+              .from("advertiser_profiles")
+              .select("*, subscription_info")
+              .eq("id", user.id)
+              .single();
+
+            if (advertiserProfile) {
+              setProfile(advertiserProfile);
+              console.log('✅ Profile data refreshed after checkout');
+            }
+          }
+        } catch (error) {
+          console.error('Error refreshing profile data:', error);
+        }
+      };
+
+      refreshProfileData();
+    }
+  }, [searchParams, user, supabase, hasProcessedSuccess]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

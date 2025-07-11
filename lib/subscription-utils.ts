@@ -232,6 +232,7 @@ export async function createSubscriptionCheckoutSession(
         user_id: userId,
         product_id: productId,
         upgrade_type: upgradeOptions?.upgradeType || 'immediate',
+        ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
       },
       subscription_data: {
         trial_period_days: trialDays > 0 ? trialDays : undefined,
@@ -240,6 +241,7 @@ export async function createSubscriptionCheckoutSession(
           user_id: userId,
           product_id: productId,
           upgrade_type: upgradeOptions?.upgradeType || 'immediate',
+          ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
         },
       },
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}&success=true`,

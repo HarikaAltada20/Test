@@ -4,8 +4,35 @@ import BillingClientPage from "./BillingClientPage";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { CashTransaction, CoinTransaction, AdvertiserProfileData, PayoutMethod, UserData, WithdrawalRequest } from "@/types/earnings";
 
-export default async function AdvertiserBillingServerPage() {
+// Helper function to retry database operations (for post-payment scenarios)
+async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 3, delay = 1000): Promise<T> {
+    let lastError;
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            lastError = error;
+            console.log(`Attempt ${i + 1} failed, retrying in ${delay}ms...`);
+
+            if (i < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Exponential backoff
+            }
+        }
+    }
+
+    throw lastError;
+}
+
+export default async function AdvertiserBillingServerPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ session_id?: string; success?: string }>;
+}) {
     const supabase = await createClient();
+    const resolvedSearchParams = await searchParams;
+    const isReturningFromCheckout = resolvedSearchParams.success === 'true' && resolvedSearchParams.session_id;
 
     const {
         data: { user: authUser },
@@ -17,16 +44,43 @@ export default async function AdvertiserBillingServerPage() {
         redirect("/login");
     }
 
-    // Fetch user role, coins, and referral data
-    const { data: roleAndCoinsData, error: roleAndCoinsError } = await supabase
-        .from("users")
-        .select("user_type, coins, advertisers_referred, creators_referred, total_lifetime_coins_earned")
-        .eq("id", authUser.id)
-        .single();
+    // For users returning from checkout, use retry logic to handle timing issues
+    const fetchUserData = async () => {
+        const { data: roleAndCoinsData, error: roleAndCoinsError } = await supabase
+            .from("users")
+            .select("user_type, coins, advertisers_referred, creators_referred, total_lifetime_coins_earned")
+            .eq("id", authUser.id)
+            .single();
 
-    if (roleAndCoinsError || !roleAndCoinsData || roleAndCoinsData.user_type !== "advertiser") {
-        console.error("Error fetching user role/coins or not an advertiser:", roleAndCoinsError);
-        redirect("/dashboard?error=profile_fetch_failed");
+        if (roleAndCoinsError) {
+            throw roleAndCoinsError;
+        }
+
+        if (!roleAndCoinsData || roleAndCoinsData.user_type !== "advertiser") {
+            throw new Error(`User is not an advertiser: ${roleAndCoinsData?.user_type}`);
+        }
+
+        return roleAndCoinsData;
+    };
+
+    let roleAndCoinsData;
+    try {
+        if (isReturningFromCheckout) {
+            console.log("🔄 User returning from checkout, using retry logic...");
+            roleAndCoinsData = await retryOperation(fetchUserData, 3, 1000);
+        } else {
+            roleAndCoinsData = await fetchUserData();
+        }
+    } catch (error) {
+        console.error("Error fetching user role/coins or not an advertiser:", error);
+
+        // For checkout returns, give a more specific error
+        if (isReturningFromCheckout) {
+            console.error("⚠️ User returning from checkout but access denied. This might indicate a timing issue.");
+            redirect("/dashboard?error=checkout_access_denied&message=Please try refreshing the page");
+        } else {
+            redirect("/dashboard?error=profile_fetch_failed");
+        }
     }
 
     const userData: UserData = {
@@ -36,16 +90,32 @@ export default async function AdvertiserBillingServerPage() {
         total_lifetime_coins_earned: roleAndCoinsData.total_lifetime_coins_earned || 0,
     };
 
-    // Fetch advertiser profile (money fields)
-    const { data: profileData, error: profileError } = await supabase
-        .from("advertiser_profiles")
-        .select("total_money_spent, total_contests_run, available_deposit_balance, withdrawable_balance, subscription_info")
-        .eq("id", authUser.id)
-        .single();
+    // Fetch advertiser profile (money fields) - also with retry for checkout returns
+    const fetchAdvertiserProfile = async () => {
+        const { data: profileData, error: profileError } = await supabase
+            .from("advertiser_profiles")
+            .select("total_money_spent, total_contests_run, available_deposit_balance, withdrawable_balance, subscription_info")
+            .eq("id", authUser.id)
+            .single();
 
-    if (profileError || !profileData) {
-        console.error("Error fetching advertiser profile:", profileError);
+        if (profileError) {
+            throw profileError;
+        }
+
+        return profileData;
+    };
+
+    let profileData;
+    try {
+        if (isReturningFromCheckout) {
+            profileData = await retryOperation(fetchAdvertiserProfile, 3, 1000);
+        } else {
+            profileData = await fetchAdvertiserProfile();
+        }
+    } catch (error) {
+        console.error("Error fetching advertiser profile:", error);
         // Allow page to load with possibly empty profile, client can show error or limited view
+        profileData = null;
     }
 
     const initialProfile: AdvertiserProfileData | null = profileData ? {

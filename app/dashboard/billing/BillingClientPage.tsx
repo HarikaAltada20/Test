@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +77,7 @@ export default function BillingClientPage({
 }: BillingClientPageProps) {
     const supabase = createClient();
     const router = useRouter();
+    const searchParams = useSearchParams();
 
     // States derived from props, allowing client-side updates
     const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
@@ -91,6 +92,7 @@ export default function BillingClientPage({
     const [isSubmittingWithdrawal, setIsSubmittingWithdrawal] = useState(false);
     const [isCancellingWithdrawal, setIsCancellingWithdrawal] = useState<string | null>(null);
     const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+    const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
 
     // Modal States
     const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
@@ -503,6 +505,37 @@ export default function BillingClientPage({
                 return <CreditCard className="h-5 w-5 mr-3 text-gray-500" />;
         }
     };
+
+    // Handle checkout success - with protection against infinite loops
+    useEffect(() => {
+        const success = searchParams.get('success');
+        const sessionId = searchParams.get('session_id');
+
+        if (success === 'true' && sessionId && !hasProcessedSuccess) {
+            console.log('🎉 Payment successful, refreshing subscription data...');
+            setHasProcessedSuccess(true);
+            toast.success('Payment successful! Your subscription has been updated.');
+
+            // Clear URL parameters to prevent refresh loops
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+
+            // Refresh the page data to get updated subscription info
+            const refreshData = async () => {
+                try {
+                    // Give the webhook a moment to process
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                    // Refresh the current page to get updated data
+                    window.location.reload();
+                } catch (error) {
+                    console.error('Error refreshing data:', error);
+                }
+            };
+
+            refreshData();
+        }
+    }, [searchParams, hasProcessedSuccess]);
 
     if (!authUser || !profile || !userData) {
         return (

@@ -81,6 +81,7 @@ export interface CreateSubscriptionParams {
   upgradeOptions?: {
     upgradeType: 'immediate' | 'scheduled';
     scheduledDate?: Date;
+    oldSubscriptionId?: string; // For safe upgrades - old subscription to cancel after new one is successful
   };
   trialDays?: number;
 } 

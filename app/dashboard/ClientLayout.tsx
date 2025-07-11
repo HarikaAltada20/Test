@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { LoadingPlaceholder } from "@/components/loading-placeholder";
 import type { UserResponse } from "@supabase/supabase-js";
 import { Suspense, useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Menu, X, Settings, User, LogOut, ChevronRight, Moon, Sun, Contrast, RotateCcw, Maximize2, CreditCard, Maximize, Minimize } from "lucide-react";
@@ -204,6 +204,22 @@ function DashboardContent({
   children: React.ReactNode;
   user: (UserResponse["data"]["user"] & { user_type?: string | null }) | null;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [profileData, setProfileData] = useState<{
+    fullName: string;
+    profilePictureUrl: string;
+    isActive: boolean;
+    subscriptionPlan: string | null;
+  }>({
+    fullName: '',
+    profilePictureUrl: '',
+    isActive: true,
+    subscriptionPlan: null,
+  });
+  const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+
   const userRole = user?.user_type as "advertiser" | "creator" | "admin" || null;
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -214,17 +230,6 @@ function DashboardContent({
   const [currentPreset, setCurrentPreset] = useState<PresetKey>('clean-professional');
   const { logout } = useClientAuth();
   const { isFullscreen, isSupported: isFullscreenSupported, isClient: isFullscreenClient, toggleFullscreen } = useFullscreen();
-  const [profileData, setProfileData] = useState<{
-    fullName: string | null;
-    profilePictureUrl: string | null;
-    isActive: boolean;
-    subscriptionPlan: string | null;
-  }>({
-    fullName: null,
-    profilePictureUrl: null,
-    isActive: true,
-    subscriptionPlan: null,
-  });
 
   const handleSignOut = async () => {
     try {
@@ -234,6 +239,47 @@ function DashboardContent({
       console.error("Sign out error:", error);
     }
   };
+
+  // Handle checkout success - refresh subscription data with protection against infinite loops
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const sessionId = searchParams.get('session_id');
+
+    if (success === 'true' && sessionId && user && !hasProcessedSuccess) {
+      console.log('🎉 Payment successful in dashboard, refreshing subscription data...');
+      setHasProcessedSuccess(true);
+
+      // Clear URL parameters to prevent refresh loops
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+
+      // Refresh subscription data after a short delay to allow webhook processing
+      const refreshSubscriptionData = async () => {
+        try {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          const supabase = createClient();
+          const { data: advertiserProfile } = await supabase
+            .from('advertiser_profiles')
+            .select('subscription_info')
+            .eq('id', user.id)
+            .single();
+
+          if (advertiserProfile?.subscription_info?.product_id) {
+            setProfileData(prev => ({
+              ...prev,
+              subscriptionPlan: advertiserProfile.subscription_info.product_id
+            }));
+            console.log('✅ Subscription data refreshed:', advertiserProfile.subscription_info.product_id);
+          }
+        } catch (error) {
+          console.error('Error refreshing subscription data:', error);
+        }
+      };
+
+      refreshSubscriptionData();
+    }
+  }, [searchParams, user, hasProcessedSuccess]);
 
   // Fetch user profile data
   useEffect(() => {

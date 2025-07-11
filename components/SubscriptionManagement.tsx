@@ -28,14 +28,47 @@ import {
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { subscriptionPlans } from '@/constants/subscriptionPlans';
 import type { UserSubscription, SubscriptionPlan } from '@/lib/subscription-types';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export function SubscriptionManagement() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const [currentSubscription, setCurrentSubscription] = useState<UserSubscription | null>(null);
     const [currentPlan, setCurrentPlan] = useState<SubscriptionPlan | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
     const [selectedTargetPlan, setSelectedTargetPlan] = useState<SubscriptionPlan | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+
+    // Handle checkout success - with protection against infinite loops
+    useEffect(() => {
+        const success = searchParams.get('success');
+        const sessionId = searchParams.get('session_id');
+
+        // Only process once per session and if we haven't already processed
+        if (success === 'true' && sessionId && !hasProcessedSuccess) {
+            console.log('🎉 Payment successful, refreshing subscription data...');
+            setHasProcessedSuccess(true);
+
+            // Clear URL parameters to prevent refresh loops
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+
+            // Refresh subscription data after a short delay to allow webhook processing
+            const refreshWithDelay = async () => {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    await fetchCurrentSubscription();
+                    toast.success('Subscription updated successfully!');
+                } catch (error) {
+                    console.error('Error refreshing subscription:', error);
+                }
+            };
+
+            refreshWithDelay();
+        }
+    }, [searchParams, hasProcessedSuccess]);
 
     useEffect(() => {
         fetchCurrentSubscription();
@@ -62,6 +95,14 @@ export function SubscriptionManagement() {
 
     const handleUpgradeClick = (targetPlan: SubscriptionPlan) => {
         if (!currentPlan) return;
+
+        // For free plan users going to paid plans, bypass the modal and subscribe directly
+        if (isOnFreePlan() && targetPlan.price > 0) {
+            handleSubscribe(targetPlan.id);
+            return;
+        }
+
+        // For all other cases, show the upgrade modal
         setSelectedTargetPlan(targetPlan);
         setUpgradeModalOpen(true);
     };
@@ -162,6 +203,17 @@ export function SubscriptionManagement() {
 
     const canDowngrade = (targetPlan: SubscriptionPlan) => {
         return currentPlan && targetPlan.price < currentPlan.price;
+    };
+
+    // Check if user is on free plan (price === 0)
+    const isOnFreePlan = () => {
+        return currentPlan && currentPlan.price === 0;
+    };
+
+    // For free plan users, we should show 'Subscribe' for paid plans, not 'Upgrade'
+    const shouldShowSubscribe = (targetPlan: SubscriptionPlan) => {
+        // Show subscribe if no current subscription OR user is on free plan going to paid plan
+        return !currentSubscription || (isOnFreePlan() && targetPlan.price > 0);
     };
 
     if (isLoading) {
@@ -306,6 +358,22 @@ export function SubscriptionManagement() {
                                             <Button className="w-full" disabled>
                                                 Current Plan
                                             </Button>
+                                        ) : shouldShowSubscribe(plan) ? (
+                                            <Button
+                                                className="w-full"
+                                                onClick={() => handleSubscribe(plan.id)}
+                                                disabled={isProcessing}
+                                                variant={plan.price === 0 ? "outline" : "default"}
+                                            >
+                                                {isProcessing ? (
+                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                ) : plan.price === 0 ? (
+                                                    <Gift className="h-4 w-4 mr-2" />
+                                                ) : (
+                                                    <CreditCard className="h-4 w-4 mr-2" />
+                                                )}
+                                                {plan.price === 0 ? 'Start Free' : 'Subscribe'}
+                                            </Button>
                                         ) : canUpgradeToThis ? (
                                             <Button
                                                 className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
@@ -327,22 +395,6 @@ export function SubscriptionManagement() {
                                                 disabled={isProcessing}
                                             >
                                                 Downgrade
-                                            </Button>
-                                        ) : !currentSubscription ? (
-                                            <Button
-                                                className="w-full"
-                                                onClick={() => handleSubscribe(plan.id)}
-                                                disabled={isProcessing}
-                                                variant={plan.price === 0 ? "outline" : "default"}
-                                            >
-                                                {isProcessing ? (
-                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                ) : plan.price === 0 ? (
-                                                    <Gift className="h-4 w-4 mr-2" />
-                                                ) : (
-                                                    <CreditCard className="h-4 w-4 mr-2" />
-                                                )}
-                                                {plan.price === 0 ? 'Start Free' : 'Subscribe'}
                                             </Button>
                                         ) : null}
                                     </div>

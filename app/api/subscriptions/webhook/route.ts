@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/utils/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
+
+// Service role client for webhooks - bypasses RLS for Stripe operations
+// Only used in webhook context where there's no user session
+function createServiceRoleClient() {
+    return createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+            auth: {
+                autoRefreshToken: false,
+                persistSession: false
+            }
+        }
+    );
+}
 
 const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -81,7 +96,7 @@ export async function POST(request: NextRequest) {
     // Log error but still return 200 to prevent retries
     // Add error to internal logging system if available
     try {
-      const supabase = await createClient();
+      const supabase = createServiceRoleClient();
       await supabase
         .from('webhook_errors')
         .insert({
@@ -181,7 +196,7 @@ async function handleSubscriptionUpdated(subscription: any) {
         if (customer && !customer.deleted && customer.metadata?.user_id) {
           console.log('✅ Found user_id in customer metadata:', customer.metadata.user_id);
           const actualProductId = await getProductIdFromSubscription(subscription, product_id);
-          await updateSubscriptionInDatabase(subscription, customer.metadata.user_id, actualProductId);
+          await updateSubscriptionInDatabaseCorrect(subscription, customer.metadata.user_id, actualProductId);
           return;
         }
       } catch (error) {
@@ -197,7 +212,9 @@ async function handleSubscriptionUpdated(subscription: any) {
   const actualProductId = await getProductIdFromSubscription(subscription, product_id);
   
   if (actualProductId) {
-    await updateSubscriptionInDatabase(subscription, user_id, actualProductId);
+    await updateSubscriptionInDatabaseCorrect(subscription, user_id, actualProductId);
+  } else {
+    console.error('❌ Could not determine product ID for subscription update');
   }
 }
 
@@ -247,7 +264,7 @@ async function handleSubscriptionScheduleReleased(schedule: any) {
   // We just need to update our advertiser_profiles to reflect the new subscription
   
   try {
-    const supabase = await createClient();
+    const supabase = createServiceRoleClient();
     
     // Get the subscription that was created from this schedule
     if (schedule.subscription) {
@@ -291,7 +308,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   // Update subscription with latest info (ensures data is fresh)
   if (product_id) {
-    await updateSubscriptionInDatabase(subscription, user_id, product_id);
+    await updateSubscriptionInDatabaseCorrect(subscription, user_id, product_id);
   }
 
   console.log(`✅ Payment processed for user ${user_id}, subscription updated`);
@@ -314,7 +331,7 @@ async function handleInvoicePaymentFailed(invoice: any) {
 
   // Update subscription status (Stripe will mark it as past_due, etc.)
   if (product_id) {
-    await updateSubscriptionInDatabase(subscription, user_id, product_id);
+    await updateSubscriptionInDatabaseCorrect(subscription, user_id, product_id);
   }
 
   console.log(`💸 Payment failed for user ${user_id}, subscription status updated`);
@@ -339,182 +356,279 @@ async function getProductIdFromSubscription(subscription: any, fallbackProductId
   return 'unknown';
 }
 
-// Create new subscription using database function
 async function createSubscriptionInDatabase(subscription: any, userId: string, productId: string) {
-  const supabase = await createClient();
+  const supabase = createServiceRoleClient();
   
   try {
-    console.log(`Processing subscription for user ${userId}: ${subscription.id}`);
+    console.log(`Creating subscription in database for user ${userId}: ${subscription.id}`);
     
-    // ATOMIC UPSERT: Check if subscription exists and handle accordingly
-    const { data: existingSubscription, error: checkError } = await supabase
+    // Helper function to safely convert Stripe timestamp to ISO string
+    const safeTimestamp = (timestamp: number | null | undefined, useCurrentTimeAsFallback: boolean = false): string | null => {
+      if (!timestamp || timestamp <= 0) {
+        if (useCurrentTimeAsFallback) {
+          console.warn(`⚠️ Using current time as fallback for undefined timestamp`);
+          return new Date().toISOString();
+        }
+        return null;
+      }
+      try {
+        return new Date(timestamp * 1000).toISOString();
+      } catch (error) {
+        console.error(`❌ Invalid timestamp: ${timestamp}`, error);
+        if (useCurrentTimeAsFallback) {
+          return new Date().toISOString();
+        }
+        return null;
+      }
+    };
+
+    // Check if subscription already exists
+    const { data: existingSubscription, error: existingError } = await supabase
       .from('subscriptions')
-      .select('id, user_id, status')
+      .select('*')
       .eq('id', subscription.id)
-      .maybeSingle(); // Use maybeSingle to avoid error when no rows found
+      .single();
 
-    if (checkError) {
-      console.error('❌ Error checking existing subscription:', checkError);
+    if (existingError && existingError.code !== 'PGRST116') {
+      console.error('❌ Error checking existing subscription:', existingError);
       return;
     }
 
-    if (existingSubscription) {
-      console.log(`📝 Subscription ${subscription.id} already exists, updating it`);
-      await updateSubscriptionInDatabase(subscription, userId, productId);
-      return;
-    }
-
-    // Subscription doesn't exist, let's create it
-    console.log(`🆕 Creating new subscription ${subscription.id}`);
-
-    // Handle upgrade/downgrade: Check if user has a DIFFERENT active subscription
-    const { data: userActiveSubscriptions, error: activeError } = await supabase
+    // Cancel ALL existing active subscriptions for this user BEFORE creating new one
+    const { data: activeSubscriptions, error: activeError } = await supabase
       .from('subscriptions')
-      .select('id, status, price_id')
+      .select('id, status')
       .eq('user_id', userId)
-      .eq('status', 'active');
+      .in('status', ['active', 'trialing', 'past_due']);
 
     if (activeError) {
-      console.error('❌ Error checking user active subscriptions:', activeError);
-      // Continue with creation - let the database function handle the constraint
-    } else if (userActiveSubscriptions && userActiveSubscriptions.length > 0) {
-      // User has existing active subscriptions
-      for (const activeSub of userActiveSubscriptions) {
+      console.error('❌ Error fetching active subscriptions:', activeError);
+    } else if (activeSubscriptions && activeSubscriptions.length > 0) {
+      console.log(`🔄 Found ${activeSubscriptions.length} active subscriptions for user ${userId}, canceling them...`);
+      
+      for (const activeSub of activeSubscriptions) {
         if (activeSub.id !== subscription.id) {
-          console.log(`🔄 Canceling existing subscription ${activeSub.id} for upgrade/downgrade`);
+          console.log(`🔄 Canceling old subscription: ${activeSub.id}`);
           
-          const { error: cancelError } = await supabase.rpc('cancel_subscription', {
-            stripe_subscription_id: activeSub.id,
-            canceled_at_param: new Date().toISOString(),
-            ended_at_param: new Date().toISOString(),
-            cancel_at_param: null,
-            cancellation_reason: 'replaced_by_new_subscription'
-          });
+          // Cancel in Stripe first
+          try {
+            await stripe().subscriptions.cancel(activeSub.id, {
+              invoice_now: false,
+              prorate: false
+            });
+            console.log(`✅ Successfully cancelled old Stripe subscription: ${activeSub.id}`);
+          } catch (stripeError) {
+            console.error(`❌ Error canceling old subscription ${activeSub.id} in Stripe:`, stripeError);
+          }
+
+          // Then update database
+          const { error: cancelError } = await supabase
+            .from('subscriptions')
+            .update({ 
+              status: 'canceled',
+              cancel_at_period_end: false,
+              updated: new Date().toISOString(),
+              canceled_at: new Date().toISOString(),
+              ended_at: new Date().toISOString()
+            })
+            .eq('id', activeSub.id);
 
           if (cancelError) {
-            console.error(`❌ Error canceling subscription ${activeSub.id}:`, cancelError);
+            console.error(`❌ Error canceling old subscription ${activeSub.id} in database:`, cancelError);
+          } else {
+            console.log(`✅ Successfully cancelled old subscription ${activeSub.id} in database`);
           }
         }
       }
     }
-    
-    // Now create the new subscription
-    const { error: createError } = await supabase.rpc('create_subscription', {
-      stripe_subscription_id: subscription.id,
-      user_uuid: userId,
-      subscription_status: subscription.status,
-      stripe_price_id: subscription.items.data[0].price.id,
-      period_start: subscription.current_period_start 
-        ? new Date(subscription.current_period_start * 1000).toISOString() 
-        : new Date().toISOString(),
-      period_end: subscription.current_period_end 
-        ? new Date(subscription.current_period_end * 1000).toISOString() 
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      cancel_at_period_end_param: subscription.cancel_at_period_end || false,
-      trial_start_param: subscription.trial_start ? new Date(subscription.trial_start * 1000).toISOString() : null,
-      trial_end_param: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
-      cancel_at_param: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
-      subscription_quantity: subscription.items.data[0].quantity || 1,
-      stripe_metadata_param: subscription.metadata || {},
-      internal_notes_param: `Created via webhook on ${new Date().toISOString()}`
-    });
 
-    if (createError) {
-      console.error('❌ Error creating subscription:', createError);
-      
-      // If creation still fails, try direct database insert as a last resort
-      console.log('🔄 Attempting direct database insert as fallback');
-      
-      const { error: insertError } = await supabase
+    // Handle period start/end with proper constraint logic
+    const currentTime = new Date();
+    const periodStart = safeTimestamp(subscription.current_period_start, true);
+    const periodEnd = safeTimestamp(subscription.current_period_end, false) || 
+                     (() => {
+                       const endTime = new Date(currentTime);
+                       endTime.setMonth(endTime.getMonth() + 1); // Add 1 month for fallback
+                       return endTime.toISOString();
+                     })();
+
+    const subscriptionData = {
+      id: subscription.id,
+      user_id: userId,
+      status: subscription.status,
+      price_id: subscription.items.data[0].price.id,
+      quantity: subscription.items.data[0].quantity || 1,
+      current_period_start: periodStart,
+      current_period_end: periodEnd,
+      cancel_at_period_end: subscription.cancel_at_period_end || false,
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+      trial_start: safeTimestamp(subscription.trial_start),
+      trial_end: safeTimestamp(subscription.trial_end),
+      cancel_at: safeTimestamp(subscription.cancel_at),
+      canceled_at: safeTimestamp(subscription.canceled_at),
+      ended_at: safeTimestamp(subscription.ended_at),
+      stripe_metadata: subscription.metadata || {},
+      internal_notes: `Created via webhook on ${new Date().toISOString()}`
+    };
+
+    if (existingSubscription) {
+      console.log(`📝 Subscription ${subscription.id} already exists, updating it`);
+      const { error: updateError } = await supabase
         .from('subscriptions')
-        .upsert({
-          id: subscription.id,
-          user_id: userId,
-          status: subscription.status,
-          price_id: subscription.items.data[0].price.id,
-          quantity: subscription.items.data[0].quantity || 1,
-          cancel_at_period_end: subscription.cancel_at_period_end || false,
-          current_period_start: subscription.current_period_start 
-            ? new Date(subscription.current_period_start * 1000).toISOString() 
-            : new Date().toISOString(),
-          current_period_end: subscription.current_period_end 
-            ? new Date(subscription.current_period_end * 1000).toISOString() 
-            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          trial_start: subscription.trial_start ? new Date(subscription.trial_start * 1000).toISOString() : null,
-          trial_end: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
-          cancel_at: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
-          stripe_metadata: subscription.metadata || {},
-          internal_notes: `Created via webhook fallback on ${new Date().toISOString()}`
-        }, {
-          onConflict: 'id'
-        });
+        .update(subscriptionData)
+        .eq('id', subscription.id);
 
-      if (insertError) {
-        console.error('❌ Direct insert also failed:', insertError);
+      if (updateError) {
+        console.error('❌ Error updating subscription:', updateError);
         return;
       }
-
-      // Update advertiser profile manually since we bypassed the function
-      console.log('📝 Updating advertiser profile manually');
-      const { error: profileError } = await supabase
-        .from('advertiser_profiles')
-        .update({ 
-          subscription_info: {
-            product_id: productId,
-            price_id: subscription.items.data[0].price.id,
-            subscription_id: subscription.id,
-            last_synced: new Date().toISOString()
-          }
-        })
-        .eq('id', userId);
-
-      if (profileError) {
-        console.error('❌ Error updating advertiser profile:', profileError);
-      }
-
-      console.log(`✅ Created subscription via fallback for user ${userId}: ${subscription.id}`);
     } else {
-      console.log(`✅ Created subscription for user ${userId}: ${subscription.id}`);
+      console.log(`📝 Creating new subscription: ${subscription.id}`);
+      const { error: insertError } = await supabase
+        .from('subscriptions')
+        .insert(subscriptionData);
+
+      if (insertError) {
+        console.error('❌ Error creating subscription:', insertError);
+        return;
+      }
     }
+
+    // Update advertiser profile
+    const stripePriceId = subscription.items.data[0].price.id;
+    await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
+
+    console.log(`✅ Created new subscription: ${subscription.id} for user ${userId}`);
+    
+    // No need to handle oldSubscriptionId from metadata anymore - we handle all active subscriptions above
     
   } catch (error) {
     console.error('❌ Error in createSubscriptionInDatabase:', error);
   }
 }
 
-// Update subscription using database function
-async function updateSubscriptionInDatabase(subscription: any, userId: string, productId: string) {
-  const supabase = await createClient();
+// Helper function to update advertiser profile with correct subscription info (JSONB)
+async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string, subscriptionId?: string) {
+  const supabase = createServiceRoleClient();
   
   try {
-    console.log(`Updating subscription in database for user ${userId}`);
+    console.log(`📋 Looking up product info for price ID: ${stripePriceId}`);
     
-    // Use the database function to update subscription
-    const { error: subscriptionError } = await supabase.rpc('update_subscription', {
-      stripe_subscription_id: subscription.id,
-      new_status: subscription.status,
-      new_price_id: subscription.items.data[0].price.id,
-      new_period_start: subscription.current_period_start
-        ? new Date(subscription.current_period_start * 1000).toISOString() 
-        : new Date().toISOString(),
-      new_period_end: subscription.current_period_end 
-        ? new Date(subscription.current_period_end * 1000).toISOString() 
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      new_quantity: subscription.items.data[0].quantity || 1,
-      cancel_at_period_end_param: subscription.cancel_at_period_end || false,
-      trial_start_param: subscription.trial_start ? new Date(subscription.trial_start * 1000).toISOString() : null,
-      trial_end_param: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
-      canceled_at_param: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null,
-      cancel_at_param: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
-      ended_at_param: subscription.ended_at ? new Date(subscription.ended_at * 1000).toISOString() : null,
-      stripe_metadata_param: subscription.metadata || {},
-      internal_notes_param: `Updated via webhook on ${new Date().toISOString()}`
+    // Look up product info from products table via prices
+    const { data: priceData, error: priceError } = await supabase
+      .from('prices')
+      .select(`
+        id,
+        product_id,
+        products!inner(id, name)
+      `)
+      .eq('id', stripePriceId)
+      .single();
+        
+    if (priceError || !priceData || !priceData.products) {
+      console.error(`❌ Could not find product for price ID ${stripePriceId}:`, priceError);
+      return;
+    }
+    
+    const productId = priceData.product_id;
+    const productName = (priceData.products as any).name;
+    console.log(`✅ Found product: ${productId} (${productName})`);
+    
+    // Update subscription_info JSONB field with correct structure
+    await updateAdvertiserProfileWithSubscriptionInfo(userId, {
+      product_id: productId,
+      price_id: stripePriceId,
+      subscription_id: subscriptionId || null,
+      last_synced: new Date().toISOString()
     });
+    
+  } catch (error) {
+    console.error('❌ Error updating advertiser profile plan:', error);
+  }
+}
+
+async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subscriptionInfo: any) {
+  const supabase = createServiceRoleClient();
+  
+  console.log(`📝 Updating advertiser profile with subscription_info:`, subscriptionInfo);
+  const { error: profileError } = await supabase
+    .from('advertiser_profiles')
+    .update({ subscription_info: subscriptionInfo })
+    .eq('id', userId);
+
+  if (profileError) {
+    console.error('❌ Error updating advertiser profile subscription_info:', profileError);
+  } else {
+    console.log(`✅ Updated advertiser profile subscription_info:`, subscriptionInfo);
+  }
+}
+
+// Update subscription using correct schema
+async function updateSubscriptionInDatabaseCorrect(subscription: any, userId: string, productId: string) {
+  const supabase = createServiceRoleClient();
+  
+  try {
+    console.log(`Updating subscription in database for user ${userId}: ${subscription.id}`);
+    
+    // Helper function to safely convert Stripe timestamp to ISO string
+    const safeTimestamp = (timestamp: number | null | undefined, useCurrentTimeAsFallback: boolean = false): string | null => {
+      if (!timestamp || timestamp <= 0) {
+        if (useCurrentTimeAsFallback) {
+          console.warn(`⚠️ Using current time as fallback for undefined timestamp`);
+          return new Date().toISOString();
+        }
+        return null;
+      }
+      try {
+        return new Date(timestamp * 1000).toISOString();
+      } catch (error) {
+        console.error(`❌ Invalid timestamp: ${timestamp}`, error);
+        if (useCurrentTimeAsFallback) {
+          return new Date().toISOString();
+        }
+        return null;
+      }
+    };
+
+    // Handle undefined period dates with fallbacks for updates
+    const updateData: any = {
+      status: subscription.status,
+      price_id: subscription.items.data[0].price.id,
+      quantity: subscription.items.data[0].quantity || 1,
+      cancel_at_period_end: subscription.cancel_at_period_end || false,
+      updated: new Date().toISOString(),
+      trial_start: safeTimestamp(subscription.trial_start),
+      trial_end: safeTimestamp(subscription.trial_end),
+      cancel_at: safeTimestamp(subscription.cancel_at),
+      canceled_at: safeTimestamp(subscription.canceled_at),
+      ended_at: safeTimestamp(subscription.ended_at),
+      stripe_metadata: subscription.metadata || {},
+      internal_notes: `Updated via webhook on ${new Date().toISOString()}`
+    };
+
+    // Only update period dates if they are valid (not undefined)
+    if (subscription.current_period_start) {
+      updateData.current_period_start = safeTimestamp(subscription.current_period_start);
+    }
+    if (subscription.current_period_end) {
+      updateData.current_period_end = safeTimestamp(subscription.current_period_end);
+    }
+
+    // Update the subscription using Stripe subscription ID as primary key
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions')
+      .update(updateData)
+      .eq('id', subscription.id);
 
     if (subscriptionError) {
       console.error('❌ Error updating subscription:', subscriptionError);
       return;
     }
+
+    // Update advertiser profile if plan changed
+    const stripePriceId = subscription.items.data[0].price.id;
+    await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
 
     console.log(`✅ Updated subscription for user ${userId}: ${subscription.id}`);
   } catch (error) {
@@ -522,30 +636,58 @@ async function updateSubscriptionInDatabase(subscription: any, userId: string, p
   }
 }
 
-// Cancel subscription using database function
+// Cancel subscription using correct schema
 async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
-  const supabase = await createClient();
+  const supabase = createServiceRoleClient();
   
   try {
     console.log(`Canceling subscription in database for user ${userId}`);
     
-    // Use the database function to cancel subscription
-    // (This function already handles setting user back to EXPLORER plan)
-    const { error: subscriptionError } = await supabase.rpc('cancel_subscription', {
-      stripe_subscription_id: subscription.id,
-      canceled_at_param: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : new Date().toISOString(),
-      ended_at_param: subscription.ended_at ? new Date(subscription.ended_at * 1000).toISOString() : null,
-      cancel_at_param: subscription.cancel_at ? new Date(subscription.cancel_at * 1000).toISOString() : null,
-      cancellation_reason: 'customer_request'
-    });
+    // Helper function to safely convert Stripe timestamp to ISO string
+    const safeTimestamp = (timestamp: number | null | undefined): string | null => {
+      if (!timestamp || timestamp <= 0) return null;
+      try {
+        return new Date(timestamp * 1000).toISOString();
+      } catch (error) {
+        console.error(`❌ Invalid timestamp: ${timestamp}`, error);
+        return null;
+      }
+    };
+
+    // Update subscription status to canceled using Stripe subscription ID
+    const { error: subscriptionError } = await supabase
+      .from('subscriptions')
+      .update({
+        status: 'canceled',
+        cancel_at_period_end: false,
+        updated: new Date().toISOString(),
+        canceled_at: safeTimestamp(subscription.canceled_at) || new Date().toISOString(),
+        ended_at: safeTimestamp(subscription.ended_at) || new Date().toISOString()
+      })
+      .eq('id', subscription.id);
 
     if (subscriptionError) {
       console.error('❌ Error canceling subscription:', subscriptionError);
       return;
     }
 
-    // Note: Database function already handles setting user back to EXPLORER plan
-    // No need to manually update advertiser_profiles here
+    // Set user back to free plan (EXPLORER) using subscription_info JSONB
+    const freeSubscriptionInfo = {
+      product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free plan)
+      price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+      subscription_id: null,
+      last_synced: new Date().toISOString()
+    };
+
+    const { error: profileError } = await supabase
+      .from('advertiser_profiles')
+      .update({ subscription_info: freeSubscriptionInfo })
+      .eq('id', userId);
+
+    if (profileError) {
+      console.error('❌ Error updating advertiser profile to free plan:', profileError);
+      return;
+    }
 
     console.log(`✅ Canceled subscription for user ${userId}: ${subscription.id}`);
   } catch (error) {
