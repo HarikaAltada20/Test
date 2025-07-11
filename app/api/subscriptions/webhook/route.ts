@@ -153,7 +153,7 @@ async function handleSubscriptionCreated(subscription: any) {
   console.log(`📊 Subscription status: ${subscription.status}`);
   console.log('📋 Subscription metadata:', subscription.metadata);
   
-  const { user_id, product_id } = subscription.metadata || {};
+  const { user_id, product_id, upgrade_type, old_subscription_id } = subscription.metadata || {};
   
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in subscription:', { user_id, product_id });
@@ -177,6 +177,7 @@ async function handleSubscriptionCreated(subscription: any) {
   }
 
   console.log(`👤 Processing subscription for user: ${user_id}, product: ${product_id}`);
+  console.log(`🔄 Upgrade type: ${upgrade_type}, Old subscription: ${old_subscription_id}`);
   await createSubscriptionInDatabase(subscription, user_id, product_id);
 }
 
@@ -397,7 +398,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     // Cancel ALL existing active subscriptions for this user BEFORE creating new one
     const { data: activeSubscriptions, error: activeError } = await supabase
       .from('subscriptions')
-      .select('id, status')
+      .select('id, status, price_id')
       .eq('user_id', userId)
       .in('status', ['active', 'trialing', 'past_due']);
 
@@ -406,11 +407,16 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     } else if (activeSubscriptions && activeSubscriptions.length > 0) {
       console.log(`🔄 Found ${activeSubscriptions.length} active subscriptions for user ${userId}, canceling them...`);
       
+      // Detect if this is a downgrade by comparing prices
+      const newPriceId = subscription.items.data[0].price.id;
+      const oldPriceId = activeSubscriptions[0]?.price_id;
+      console.log(`💰 Price change: ${oldPriceId} → ${newPriceId}`);
+      
       for (const activeSub of activeSubscriptions) {
         if (activeSub.id !== subscription.id) {
           console.log(`🔄 Canceling old subscription: ${activeSub.id}`);
           
-          // Cancel in Stripe first
+          // Cancel in Stripe first - be more aggressive for downgrades
           try {
             await stripe().subscriptions.cancel(activeSub.id, {
               invoice_now: false,
@@ -419,6 +425,16 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
             console.log(`✅ Successfully cancelled old Stripe subscription: ${activeSub.id}`);
           } catch (stripeError) {
             console.error(`❌ Error canceling old subscription ${activeSub.id} in Stripe:`, stripeError);
+            
+            // For downgrades, try to force cancel even if it fails
+            try {
+              await stripe().subscriptions.update(activeSub.id, {
+                cancel_at_period_end: true
+              });
+              console.log(`⚠️ Set subscription ${activeSub.id} to cancel at period end as fallback`);
+            } catch (fallbackError) {
+              console.error(`❌ Fallback cancellation also failed for ${activeSub.id}:`, fallbackError);
+            }
           }
 
           // Then update database
@@ -495,11 +511,30 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       }
     }
 
-    // Update advertiser profile
+    // Update advertiser profile - CRITICAL for all subscription changes
     const stripePriceId = subscription.items.data[0].price.id;
+    console.log(`🔄 Calling updateAdvertiserProfilePlan for user ${userId} with price ${stripePriceId}`);
     await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
 
     console.log(`✅ Created new subscription: ${subscription.id} for user ${userId}`);
+    
+    // Double-check: Ensure advertiser profile was updated correctly
+    try {
+      const supabase = createServiceRoleClient();
+      const { data: finalProfile, error: finalError } = await supabase
+        .from('advertiser_profiles')
+        .select('subscription_info')
+        .eq('id', userId)
+        .single();
+        
+      if (finalError) {
+        console.error('❌ Error checking final advertiser profile state:', finalError);
+      } else {
+        console.log(`✅ Final advertiser profile subscription_info:`, finalProfile.subscription_info);
+      }
+    } catch (verifyError) {
+      console.error('❌ Error verifying final profile state:', verifyError);
+    }
     
     // No need to handle oldSubscriptionId from metadata anymore - we handle all active subscriptions above
     
@@ -513,35 +548,87 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
   const supabase = createServiceRoleClient();
   
   try {
-    console.log(`📋 Looking up product info for price ID: ${stripePriceId}`);
+    console.log(`📋 Getting active subscription info for user: ${userId}`);
     
-    // Look up product info from products table via prices
+    // Get current subscription info for comparison
+    const { data: currentProfile, error: currentError } = await supabase
+      .from('advertiser_profiles')
+      .select('subscription_info')
+      .eq('id', userId)
+      .single();
+    
+    if (currentError) {
+      console.error('❌ Error fetching current advertiser profile:', currentError);
+    } else {
+      console.log(`📊 Current subscription_info:`, currentProfile?.subscription_info);
+    }
+    
+    // SIMPLIFIED APPROACH: Get subscription details directly from subscriptions table
+    // This is much more reliable than looking up via prices table
+    const { data: activeSubscription, error: subError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('created', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (subError || !activeSubscription) {
+      console.error(`❌ Could not find active subscription for user ${userId}:`, subError);
+      return;
+    }
+    
+    console.log(`✅ Found active subscription: ${activeSubscription.id} - Price: ${activeSubscription.price_id}`);
+    
+    // Get product info from prices table for display purposes
     const { data: priceData, error: priceError } = await supabase
       .from('prices')
       .select(`
         id,
         product_id,
+        unit_amount,
         products!inner(id, name)
       `)
-      .eq('id', stripePriceId)
+      .eq('id', activeSubscription.price_id)
       .single();
-        
+    
+    let productId, productName, priceAmount;
+    
     if (priceError || !priceData || !priceData.products) {
-      console.error(`❌ Could not find product for price ID ${stripePriceId}:`, priceError);
-      return;
+      console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription data`);
+      // Fallback to subscription data
+      productId = 'unknown';
+      productName = 'Unknown Product';
+      priceAmount = 0;
+    } else {
+      productId = priceData.product_id;
+      productName = (priceData.products as any).name;
+      priceAmount = priceData.unit_amount;
+      console.log(`✅ Found product: ${productId} (${productName}) - Amount: ${priceAmount} cents`);
     }
     
-    const productId = priceData.product_id;
-    const productName = (priceData.products as any).name;
-    console.log(`✅ Found product: ${productId} (${productName})`);
+    // Determine if this is a downgrade by comparing amounts
+    const currentAmount = currentProfile?.subscription_info?.price_amount || 0;
+    const isDowngrade = priceAmount < currentAmount;
+    console.log(`💰 Price comparison: ${currentAmount} → ${priceAmount} (${isDowngrade ? 'DOWNGRADE' : 'UPGRADE/SAME'})`);
     
-    // Update subscription_info JSONB field with correct structure
-    await updateAdvertiserProfileWithSubscriptionInfo(userId, {
+    // Update subscription_info JSONB field with correct structure using subscription table data
+    const newSubscriptionInfo = {
       product_id: productId,
-      price_id: stripePriceId,
-      subscription_id: subscriptionId || null,
+      price_id: activeSubscription.price_id,
+      subscription_id: activeSubscription.id,
+      price_amount: priceAmount,
+      status: activeSubscription.status,
+      current_period_start: activeSubscription.current_period_start,
+      current_period_end: activeSubscription.current_period_end,
+      cancel_at_period_end: activeSubscription.cancel_at_period_end,
       last_synced: new Date().toISOString()
-    });
+    };
+    
+    console.log(`📝 New subscription_info from subscription table:`, newSubscriptionInfo);
+    
+    await updateAdvertiserProfileWithSubscriptionInfo(userId, newSubscriptionInfo);
     
   } catch (error) {
     console.error('❌ Error updating advertiser profile plan:', error);
@@ -552,15 +639,136 @@ async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subsc
   const supabase = createServiceRoleClient();
   
   console.log(`📝 Updating advertiser profile with subscription_info:`, subscriptionInfo);
-  const { error: profileError } = await supabase
+  console.log(`👤 User ID: ${userId}`);
+  
+  // First check if the advertiser profile exists
+  const { data: existingProfile, error: checkError } = await supabase
     .from('advertiser_profiles')
-    .update({ subscription_info: subscriptionInfo })
-    .eq('id', userId);
+    .select('id, subscription_info')
+    .eq('id', userId)
+    .single();
+    
+  if (checkError) {
+    console.error('❌ Error checking advertiser profile existence:', checkError);
+    return;
+  }
+  
+  if (!existingProfile) {
+    console.error('❌ Advertiser profile not found for user:', userId);
+    return;
+  }
+  
+  console.log(`📊 Current profile subscription_info:`, existingProfile.subscription_info);
+  
+  // Force update with retry logic
+  let retryCount = 0;
+  const maxRetries = 3;
+  
+  while (retryCount < maxRetries) {
+    const { error: profileError } = await supabase
+      .from('advertiser_profiles')
+      .update({ subscription_info: subscriptionInfo })
+      .eq('id', userId);
 
-  if (profileError) {
-    console.error('❌ Error updating advertiser profile subscription_info:', profileError);
-  } else {
-    console.log(`✅ Updated advertiser profile subscription_info:`, subscriptionInfo);
+    if (profileError) {
+      retryCount++;
+      console.error(`❌ Error updating advertiser profile subscription_info (attempt ${retryCount}):`, profileError);
+      
+      if (retryCount < maxRetries) {
+        console.log(`🔄 Retrying in 1 second...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } else {
+      console.log(`✅ Updated advertiser profile subscription_info successfully:`, subscriptionInfo);
+      
+      // Verify the update
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('advertiser_profiles')
+        .select('subscription_info')
+        .eq('id', userId)
+        .single();
+        
+      if (verifyError) {
+        console.error('❌ Error verifying update:', verifyError);
+      } else {
+        console.log(`✅ Verified updated subscription_info:`, verifyData.subscription_info);
+      }
+      
+      break;
+    }
+  }
+  
+  if (retryCount >= maxRetries) {
+    console.error(`❌ Failed to update advertiser profile after ${maxRetries} attempts`);
+  }
+}
+
+// Update advertiser profile with current active subscription data from database
+async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
+  const supabase = createServiceRoleClient();
+  
+  try {
+    console.log(`🔄 Getting current active subscription for user ${userId} to update profile`);
+    
+    // Get current active subscription from database
+    const { data: activeSubscription, error: subError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('created', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (subError || !activeSubscription) {
+      console.error(`❌ Could not find active subscription for user ${userId}:`, subError);
+      return;
+    }
+    
+    console.log(`✅ Found current active subscription: ${activeSubscription.id}`);
+    
+    // Get product info from prices table
+    const { data: priceData, error: priceError } = await supabase
+      .from('prices')
+      .select(`
+        id,
+        product_id,
+        unit_amount,
+        products!inner(id, name)
+      `)
+      .eq('id', activeSubscription.price_id)
+      .single();
+    
+    let productId, priceAmount;
+    
+    if (priceError || !priceData || !priceData.products) {
+      console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using fallback`);
+      productId = 'unknown';
+      priceAmount = 0;
+    } else {
+      productId = priceData.product_id;
+      priceAmount = priceData.unit_amount;
+    }
+    
+    // Update subscription_info with current active subscription data
+    const currentSubscriptionInfo = {
+      product_id: productId,
+      price_id: activeSubscription.price_id,
+      subscription_id: activeSubscription.id,
+      price_amount: priceAmount,
+      status: activeSubscription.status,
+      current_period_start: activeSubscription.current_period_start,
+      current_period_end: activeSubscription.current_period_end,
+      cancel_at_period_end: activeSubscription.cancel_at_period_end,
+      last_synced: new Date().toISOString()
+    };
+    
+    console.log(`📝 Updating profile with current subscription info:`, currentSubscriptionInfo);
+    
+    await updateAdvertiserProfileWithSubscriptionInfo(userId, currentSubscriptionInfo);
+    
+  } catch (error) {
+    console.error('❌ Error updating advertiser profile with current subscription:', error);
   }
 }
 
@@ -641,7 +849,7 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
   
   try {
-    console.log(`Canceling subscription in database for user ${userId}`);
+    console.log(`Canceling subscription in database for user ${userId}: ${subscription.id}`);
     
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined): string | null => {
@@ -671,22 +879,48 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
       return;
     }
 
-    // Set user back to free plan (EXPLORER) using subscription_info JSONB
-    const freeSubscriptionInfo = {
-      product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free plan)
-      price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
-      subscription_id: null,
-      last_synced: new Date().toISOString()
-    };
+    // Check if user has any other ACTIVE subscriptions before setting to free plan
+    const { data: otherActiveSubscriptions, error: activeError } = await supabase
+      .from('subscriptions')
+      .select('id, status')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing'])
+      .neq('id', subscription.id); // Exclude the subscription we just canceled
 
-    const { error: profileError } = await supabase
-      .from('advertiser_profiles')
-      .update({ subscription_info: freeSubscriptionInfo })
-      .eq('id', userId);
-
-    if (profileError) {
-      console.error('❌ Error updating advertiser profile to free plan:', profileError);
+    if (activeError) {
+      console.error('❌ Error checking for other active subscriptions:', activeError);
       return;
+    }
+
+    if (otherActiveSubscriptions && otherActiveSubscriptions.length > 0) {
+      console.log(`✅ User has ${otherActiveSubscriptions.length} other active subscriptions, NOT setting to free plan`);
+      console.log(`🔄 Other active subscriptions:`, otherActiveSubscriptions.map(s => s.id));
+      
+      // Update profile with current active subscription data instead of leaving it unchanged
+      console.log(`🔄 Updating profile with current active subscription data`);
+      await updateAdvertiserProfileWithCurrentSubscription(userId);
+    } else {
+      console.log(`🆓 No other active subscriptions found, setting user to free plan`);
+      
+      // Only set to free plan if no other active subscriptions exist
+      const freeSubscriptionInfo = {
+        product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free plan)
+        price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+        subscription_id: 'cool',
+        last_synced: new Date().toISOString()
+      };
+
+      const { error: profileError } = await supabase
+        .from('advertiser_profiles')
+        .update({ subscription_info: freeSubscriptionInfo })
+        .eq('id', userId);
+
+      if (profileError) {
+        console.error('❌ Error updating advertiser profile to free plan:', profileError);
+        return;
+      }
+      
+      console.log(`✅ Updated advertiser profile to free plan`);
     }
 
     console.log(`✅ Canceled subscription for user ${userId}: ${subscription.id}`);
