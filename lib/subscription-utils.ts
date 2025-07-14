@@ -154,8 +154,22 @@ export async function createOrGetStripeCustomer(userId: string): Promise<string 
     return null;
   }
 
+  // If we have a customer ID, verify it exists in Stripe
   if (customer?.stripe_customer_id) {
-    return customer.stripe_customer_id;
+    try {
+      // Verify customer exists in Stripe
+      await stripe().customers.retrieve(customer.stripe_customer_id);
+      console.log('✅ Verified existing Stripe customer:', customer.stripe_customer_id);
+      return customer.stripe_customer_id;
+    } catch (stripeError: any) {
+      if (stripeError.code === 'resource_missing') {
+        console.log('⚠️ Customer exists in database but not in Stripe, recreating...');
+        // Customer doesn't exist in Stripe, we'll recreate it
+      } else {
+        console.error('Error verifying Stripe customer:', stripeError);
+        return null;
+      }
+    }
   }
 
   // Get user email from our users table
@@ -172,12 +186,15 @@ export async function createOrGetStripeCustomer(userId: string): Promise<string 
 
   try {
     // Create new Stripe customer
+    console.log('🔧 Creating new Stripe customer for:', userData.email);
     const stripeCustomer = await stripe().customers.create({
       email: userData.email,
       metadata: {
         user_id: userId
       }
     });
+
+    console.log('✅ Created new Stripe customer:', stripeCustomer.id);
 
     // Save customer ID to customers table (upsert in case record exists)
     const { error: upsertError } = await supabase
@@ -244,8 +261,8 @@ export async function createSubscriptionCheckoutSession(
           ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
         },
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}&success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing?canceled=true`,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/failed?error=payment_cancelled`,
       allow_promotion_codes: true,
     });
 
