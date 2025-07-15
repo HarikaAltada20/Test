@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
 import logo from "@/public/images/gold_logo_vertical.svg"
 import { createClient } from "@/utils/supabase/client"
+import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils"
+import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter"
 
 export default function ResetPasswordPage() {
     const [password, setPassword] = useState("")
@@ -71,16 +73,19 @@ export default function ResetPasswordPage() {
             return
         }
 
-        if (password.length < 6) {
-            setError("Password must be at least 6 characters")
+        // Validate password using comprehensive validation
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.isValid) {
+            const errorMessage = getPasswordErrorMessage(passwordValidation);
+            setError(errorMessage);
             toast({
                 variant: "destructive",
-                title: "Validation Error",
-                description: "Password must be at least 6 characters",
-                duration: 5000,
-            })
-            setIsLoading(false)
-            return
+                title: "Password Validation Error",
+                description: errorMessage,
+                duration: 6000,
+            });
+            setIsLoading(false);
+            return;
         }
 
         try {
@@ -250,7 +255,13 @@ export default function ResetPasswordPage() {
                                                 )}
                                             </button>
                                         </div>
-                                        <p className="text-xs text-slate-500">⚡ Must be at least 6 characters for maximum security</p>
+
+                                        {/* Real-time Password Strength Meter */}
+                                        <PasswordStrengthMeter
+                                            password={password}
+                                            className="mt-3"
+                                            showRequirements={true}
+                                        />
                                     </div>
 
                                     {/* Confirm Password Field */}

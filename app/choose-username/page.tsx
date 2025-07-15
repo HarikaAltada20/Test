@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast"
 import Image from "next/image";
 import logo from "@/public/images/gold_logo_vertical.svg";
 import { createClient } from "@/utils/supabase/client"
+import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils"
+import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter"
 
 interface UserProfileData {
     id: string;
@@ -242,9 +244,14 @@ export default function ChooseUsernamePage() {
             setError("Passwords do not match.")
             return
         }
-        if (userData?.needsPassword && password.length < 8) {
-            setError("Password must be at least 8 characters long.")
-            return
+
+        // Validate password using comprehensive validation
+        if (userData?.needsPassword && password) {
+            const passwordValidation = validatePassword(password);
+            if (!passwordValidation.isValid) {
+                setError(getPasswordErrorMessage(passwordValidation));
+                return;
+            }
         }
 
         setIsLoading(true)
@@ -697,9 +704,13 @@ export default function ChooseUsernamePage() {
                                                         {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                                     </button>
                                                 </div>
-                                                <p className="text-xs text-slate-500">
-                                                    Password must be at least 8 characters long.
-                                                </p>
+
+                                                {/* Real-time Password Strength Meter */}
+                                                <PasswordStrengthMeter
+                                                    password={password}
+                                                    className="mt-3"
+                                                    showRequirements={true}
+                                                />
                                             </div>
                                         </>
                                     )}

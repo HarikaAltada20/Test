@@ -20,6 +20,8 @@ import { useRouter } from "next/navigation";
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
+import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
+import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -215,8 +217,10 @@ export default function SettingsPage({
         throw new Error("Current password is required");
       }
 
-      if (!newPassword || newPassword.length < 6) {
-        throw new Error("New password must be at least 6 characters long");
+      // Validate new password using comprehensive validation
+      const passwordValidation = validatePassword(newPassword);
+      if (!passwordValidation.isValid) {
+        throw new Error(getPasswordErrorMessage(passwordValidation));
       }
 
       if (newPassword !== confirmPassword) {
@@ -893,7 +897,7 @@ export default function SettingsPage({
                     autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 6 characters"
+                    placeholder="Minimum 8 characters"
                     className="pr-10"
                     required
                   />
@@ -905,6 +909,13 @@ export default function SettingsPage({
                     {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+
+                {/* Real-time Password Strength Meter */}
+                <PasswordStrengthMeter
+                  password={newPassword}
+                  className="mt-3"
+                  showRequirements={true}
+                />
               </div>
 
               <div className="space-y-2">
