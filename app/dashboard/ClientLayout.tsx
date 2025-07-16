@@ -228,6 +228,7 @@ function DashboardContent({
   const [currentTheme, setCurrentTheme] = useState<ThemeKey>('clean');
   const [currentMode, setCurrentMode] = useState<ModeKey>('light');
   const [currentPreset, setCurrentPreset] = useState<PresetKey>('clean-professional');
+  const [isColorfulMode, setIsColorfulMode] = useState(false);
   const { logout } = useClientAuth();
   const { isFullscreen, isSupported: isFullscreenSupported, isClient: isFullscreenClient, toggleFullscreen } = useFullscreen();
 
@@ -347,6 +348,11 @@ function DashboardContent({
         setCurrentPreset('clean-professional');
       }
     }
+
+    const savedColorfulMode = localStorage.getItem('dashboard-colorful-mode');
+    if (savedColorfulMode) {
+      setIsColorfulMode(savedColorfulMode === 'true');
+    }
   }, []);
 
   // Preset switching function
@@ -372,6 +378,11 @@ function DashboardContent({
     setCurrentMode(modeKey);
     localStorage.setItem('dashboard-mode', modeKey);
     localStorage.removeItem('dashboard-preset'); // Clear preset when manually changing
+  };
+
+  const toggleColorfulMode = (enabled: boolean) => {
+    setIsColorfulMode(enabled);
+    localStorage.setItem('dashboard-colorful-mode', String(enabled));
   };
 
   // Reset to default function
@@ -613,7 +624,7 @@ function DashboardContent({
         /* Enhanced styling for both modes */
         
         /* Light mode specific improvements */
-        ${currentMode === 'light' ? `
+        ${currentMode === 'light' && !isColorfulMode ? `
           /* Enhanced card shadows and backgrounds for better depth */
           [data-theme="light"] .card,
           [data-theme="light"] [data-card],
@@ -1677,6 +1688,38 @@ function DashboardContent({
                                   onCheckedChange={(checked) => switchMode(checked ? 'dark' : 'light')}
                                 />
                               </div>
+
+                              {/* Colorful Mode Toggle - Only for Light Mode */}
+                              {currentMode === 'light' && (
+                                <div
+                                  className="flex items-center justify-between p-4 rounded-xl border"
+                                  style={{
+                                    backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                    borderColor: `rgba(${theme.primary}, 0.2)`,
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                      style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
+                                    >
+                                      <Contrast className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                    </div>
+                                    <div>
+                                      <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
+                                        Colorful Mode
+                                      </div>
+                                      <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
+                                        Enable vibrant theme colors
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Switch
+                                    checked={isColorfulMode}
+                                    onCheckedChange={toggleColorfulMode}
+                                  />
+                                </div>
+                              )}
 
                               {/* Full Screen Toggle */}
                               {isFullscreenClient && isFullscreenSupported && (
