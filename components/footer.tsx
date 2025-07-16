@@ -46,14 +46,16 @@ export function Footer() {
                             {/* Social links */}
                             <div className="flex gap-3">
                                 {[
-                                    { icon: Twitter, href: "#", color: "hover:text-blue-400 hover:shadow-blue-400/20" },
-                                    { icon: Instagram, href: "#", color: "hover:text-pink-400 hover:shadow-pink-400/20" },
-                                    { icon: Linkedin, href: "#", color: "hover:text-blue-500 hover:shadow-blue-500/20" },
-                                    { icon: Youtube, href: "#", color: "hover:text-red-400 hover:shadow-red-400/20" }
+                                    { icon: Twitter, href: "https://x.com/gameofcreators", color: "hover:text-blue-400 hover:shadow-blue-400/20" },
+                                    { icon: Instagram, href: "https://www.instagram.com/try_gameofcreators/", color: "hover:text-pink-400 hover:shadow-pink-400/20" },
+                                    { icon: Linkedin, href: "https://www.linkedin.com/company/game-of-creators/about/", color: "hover:text-blue-500 hover:shadow-blue-500/20" },
+                                    { icon: Youtube, href: "https://www.youtube.com/@gameofcreators", color: "hover:text-red-400 hover:shadow-red-400/20" }
                                 ].map(({ icon: Icon, href, color }, index) => (
                                     <Link
                                         key={index}
                                         href={href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
                                         className={`group p-3 rounded-xl bg-slate-800/50 border border-slate-600/30 text-slate-400 transition-all duration-300 hover:bg-slate-700/60 hover:border-slate-500/50 hover:scale-110 hover:shadow-lg ${color}`}
                                     >
                                         <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
