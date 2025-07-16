@@ -930,7 +930,7 @@ export default function CreateContestPage({
               const plan = subscriptionPlans.find(p => p.id === userPlan) || subscriptionPlans[0];
               return {
                 product_id: plan.id,
-                price_id: plan.prices?.monthly?.id || 'price_1RicueDCKN2LN0QeqyngXhRM', // Default to EXPLORER monthly
+                price_id: plan.prices?.monthly?.id || subscriptionPlans[0].prices?.monthly?.id, // Default to EXPLORER monthly
                 subscription_id: 'no-subscription', // Will be updated when user subscribes
                 last_synced: new Date().toISOString()
               };

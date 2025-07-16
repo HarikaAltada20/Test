@@ -1388,8 +1388,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     brief_json: briefJson,
                     rules_html: rulesHtml,
                     rules_json: rulesJson,
-                    start_date: `${startDate}T${startTime}:00.000Z`,
-                    end_date: `${endDate}T${endTime}:00.000Z`,
+                    start_date: toUTCISOString(startDate, startTime),
+                    end_date: toUTCISOString(endDate, endTime),
                     inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
                     resources: {
                         ...resources, ...Object.fromEntries(
@@ -1452,8 +1452,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     brief_json: briefJson,
                     rules_html: rulesHtml,
                     rules_json: rulesJson,
-                    start_date: `${startDate}T${startTime}:00.000Z`,
-                    end_date: `${endDate}T${endTime}:00.000Z`,
+                    start_date: toUTCISOString(startDate, startTime),
+                    end_date: toUTCISOString(endDate, endTime),
                     inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
                     resources: {
                         ...resources, ...Object.fromEntries(
