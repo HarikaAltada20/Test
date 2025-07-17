@@ -129,8 +129,10 @@ export default function CreateContestPage({
   const [externalResourceDescription, setExternalResourceDescription] =
     useState("");
 
-  const [inspirationLinks, setInspirationLinks] = useState<string[]>([]);
-  const [newInspirationLink, setNewInspirationLink] = useState("");
+  const [inspirationLinks, setInspirationLinks] = useState<{ url: string; description: string }[]>([]);
+  const [newInspirationUrl, setNewInspirationUrl] = useState("");
+  const [newInspirationDescription, setNewInspirationDescription] = useState("");
+  const [inspirationError, setInspirationError] = useState<string | null>(null);
 
   const [winnerCount, setWinnerCount] = useState<number>(3);
   const [winnerAmounts, setWinnerAmounts] = useState<number[]>([
@@ -1161,17 +1163,6 @@ export default function CreateContestPage({
     }
   };
 
-  const addInspirationLink = () => {
-    if (newInspirationLink && !inspirationLinks.includes(newInspirationLink)) {
-      setInspirationLinks([...inspirationLinks, newInspirationLink]);
-      setNewInspirationLink("");
-    }
-  };
-
-  const removeInspirationLink = (link: string) => {
-    setInspirationLinks(inspirationLinks.filter((l) => l !== link));
-  };
-
   const handleWinnerAmountChange = (index: number, value: string) => {
     // Don't validate empty inputs to allow users to delete and type new values
     if (value === "") {
@@ -1308,10 +1299,6 @@ export default function CreateContestPage({
         setError("Please provide rules for your contest");
         return;
       }
-      if (inspirationLinks.length === 0) {
-        setError("Please add at least one inspiration link to help creators understand your vision");
-        return;
-      }
       setStep("resources");
     } else if (step === "resources") {
       // Validate that at least one resource is provided (either uploaded asset or external link)
@@ -1321,9 +1308,12 @@ export default function CreateContestPage({
       const hasExternalLinks = Object.keys(resources).some(key =>
         resources[key] && !resources[key].startsWith('data:') && !resources[key].includes('supabase')
       );
-
       if (!hasUploadedAssets && !hasExternalLinks) {
         setError("Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements");
+        return;
+      }
+      if (inspirationLinks.length === 0) {
+        setError("Please add at least one inspiration link to help creators understand your vision");
         return;
       }
       setStep("prize");
@@ -2759,6 +2749,53 @@ export default function CreateContestPage({
     setIsDragActive(false);
   };
 
+  const addInspiration = () => {
+    setInspirationError(null);
+    if (!newInspirationUrl.trim()) {
+      setInspirationError("URL cannot be empty.");
+      return;
+    }
+    try {
+      const urlObj = new URL(newInspirationUrl);
+      if (urlObj.protocol !== "https:") {
+        setInspirationError("URL must start with https://");
+        return;
+      }
+    } catch {
+      setInspirationError("Invalid URL format.");
+      return;
+    }
+    if (!newInspirationDescription.trim()) {
+      setInspirationError("Description is required.");
+      return;
+    }
+    setInspirationLinks([...inspirationLinks, { url: newInspirationUrl, description: newInspirationDescription }]);
+    setNewInspirationUrl("");
+    setNewInspirationDescription("");
+  };
+
+  // Add this function near your other handlers:
+  const handleResourceDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      setResourceFile(file);
+      // For image files, create a preview
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            setResourceFilePreview(e.target.result as string);
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setResourceFilePreview(`file-type:${file.type}`);
+      }
+    }
+  };
+
   return (
     <div className="container mx-auto py-8">
       {/* Enhanced Header with Better Back Button */}
@@ -3222,57 +3259,6 @@ export default function CreateContestPage({
                 )}
               </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-medium">Inspiration Content:</h3>
-                  <span className="text-red-500 font-bold text-lg">*</span>
-                  <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">Required</span>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok, etc.)
-                </p>
-                <ul className="list-disc pl-5 space-y-2">
-                  {inspirationLinks.map((link, index) => (
-                    <li
-                      key={index}
-                      className="flex items-center justify-between"
-                    >
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-rose-600 underline"
-                      >
-                        {link}
-                      </a>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeInspirationLink(link)}
-                        className="text-red-500 h-6 w-6 p-0"
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add any video inspiration link (e.g., instagram, YouTube)"
-                    value={newInspirationLink}
-                    onChange={(e) => {
-                      setNewInspirationLink(e.target.value);
-                      clearToastError(); // Clear toast error when user starts typing
-                    }}
-                  />
-                  <Button
-                    onClick={addInspirationLink}
-                    disabled={!newInspirationLink}
-                  >
-                    Add
-                  </Button>
-                </div>
-              </div>
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -3387,461 +3373,165 @@ export default function CreateContestPage({
 
         {step === "resources" && (
           <>
-            <CardHeader>
-              <CardTitle>Assets</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* General Alerts for error/success/validation removed from top of CardContent */}
-
-              {/* Resources Section */}
-              <div className="mt-8">
-                <div className="flex items-center gap-2 mb-2">
-                  <h3 className="text-lg font-semibold">
-                    Resources for Participants
-                  </h3>
-                  <span className="text-red-500 font-bold text-lg">*</span>
-                  <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium">At least one required</span>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                  Provide at least one resource to help participants understand your brand and contest requirements. You can upload assets (logos, guidelines, examples) OR add external links (website, social media, portfolio).
-                </p>
-
-                <div className="space-y-6">
-                  {/* File Upload Container */}
-                  <div className="border rounded-lg p-4">
-                    {/* Section-specific feedback for Upload Asset */}
-                    {assetUploadError && (
-                      <Alert variant="destructive" className="mb-4">
-                        <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
-                        <AlertDescription>{assetUploadError}</AlertDescription>
-                      </Alert>
-                    )}
-                    <h4 className="text-md font-medium mb-2">Upload Asset</h4>
-
-                    {/* File Uploader - Placed before description */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 mb-4">
-                      {resourceFilePreview ? (
-                        <div className="relative">
-                          {resourceFilePreview.startsWith("data:image") ? (
-                            <img
-                              src={resourceFilePreview}
-                              alt="Resource preview"
-                              className="mx-auto max-h-64 object-contain"
-                            />
-                          ) : (
-                            // Display for non-image files (PDF, Video, Audio, etc.)
-                            <div className="mx-auto py-4 text-center">
-                              {resourceFilePreview.startsWith(
-                                "file-type:application/pdf"
-                              ) && (
-                                  <div className="flex flex-col items-center">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-16 w-16 text-red-500"
-                                      viewBox="0 0 24 24"
-                                      fill="currentColor"
-                                    >
-                                      <path d="M8.267 14.68c-.184 0-.308.018-.372.036v1.178c.076.018.171.023.302.023.479 0 .774-.242.774-.651 0-.366-.254-.586-.704-.586zm3.487.012c-.2 0-.33.018-.407.036v2.61c.077.018.201.018.313.018.817.006 1.349-.444 1.349-1.396.006-.83-.479-1.268-1.255-1.268z" />
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM9.498 16.19c-.309.29-.765.42-1.296.42a2.23 2.23 0 0 1-.308-.018v1.426H7v-3.936A7.558 7.558 0 0 1 8.219 14c.557 0 .953.106 1.22.319.254.202.426.533.426.923-.001.392-.131.723-.367.948zm3.807 1.355c-.42.349-1.059.515-1.84.515-.468 0-.799-.03-1.024-.06v-3.917A7.947 7.947 0 0 1 11.66 14c.757 0 1.249.136 1.633.426.415.308.675.799.675 1.504 0 .763-.279 1.29-.763 1.615zM17 14.77h-1.532v.911H16.9v.734h-1.432v1.604h-.906V14.03H17v.74zM14 9h-1V4l5 5h-4z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">
-                                      PDF Document
-                                    </span>
-                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
-                                  </div>
-                                )}
-                              {resourceFilePreview.startsWith(
-                                "file-type:video/"
-                              ) && (
-                                  <div className="flex flex-col items-center">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-16 w-16 text-blue-500"
-                                      viewBox="0 0 24 24"
-                                      fill="currentColor"
-                                    >
-                                      <path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z" />
-                                      <path d="m9 17 8-5-8-5z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">
-                                      Video File
-                                    </span>
-                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
-                                  </div>
-                                )}
-                              {resourceFilePreview.startsWith(
-                                "file-type:audio/"
-                              ) && (
-                                  <div className="flex flex-col items-center">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-16 w-16 text-purple-500"
-                                      viewBox="0 0 24 24"
-                                      fill="currentColor"
-                                    >
-                                      <path d="M19.952 1.651a.991.991 0 0 0-1.164.986v14.522c-.87-.703-2.354-1.062-4.137-1.062-1.636 0-3.52.33-4.7 1.505S9 20.147 9 21.428v.893C9 22.705 9.322 23 9.731 23c.4 0 .726-.286.735-.678v-.009l.007-.407c.001-.921.396-1.762 1.465-2.506.957-.662 2.492-1.046 4.313-1.046s3.356.384 4.313 1.046c1.069.744 1.464 1.585 1.465 2.506l.007.407v.009c.009.392.335.678.735.678.409 0 .731-.295.731-.679v-.893c0-1.281-.297-2.45-1.478-3.625S17.172 16.1 15.532 16.1c-.51 0-1.01.036-1.492.103V5.256l5.227-2.783a.996.996 0 0 0 .571-1.173 1.01 1.01 0 0 0-.876-.749zM8.364 6.4a.771.771 0 0 0-.388 0c-.612.13-1.21.332-1.781.6-1.307.619-2.398 1.525-3.182 2.643a1.773 1.773 0 0 0-.3.507c-.435.941-.671 1.969-.671 3.021 0 1.051.236 2.078.671 3.018.141.299.215.421.3.507.784 1.118 1.875 2.026 3.182 2.644.571.271 1.169.473 1.781.603a.771.771 0 0 0 .388 0c.612-.13 1.21-.332 1.781-.603 1.307-.618 2.398-1.526 3.182-2.644.084-.086.158-.208.3-.507.436-.94.671-1.967.671-3.018 0-1.052-.235-2.08-.671-3.021a1.772 1.772 0 0 0-.3-.507c-.784-1.118-1.875-2.024-3.182-2.643-.571-.268-1.169-.47-1.781-.6zm.134 1.728c.419.089.823.219 1.207.39a7.216 7.216 0 0 1 2.12 1.67c.823 1.003 1.305 2.159 1.347 3.35.055 1.522-.464 3.03-1.534 4.303a7.222 7.222 0 0 1-2.327 1.953 5.683 5.683 0 0 1-.813.329 5.686 5.686 0 0 1-.813-.329 7.222 7.222 0 0 1-2.327-1.953c-1.07-1.273-1.589-2.781-1.534-4.303.042-1.191.524-2.347 1.347-3.35a7.217 7.217 0 0 1 2.119-1.67c.384-.171.789-.301 1.208-.39z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">
-                                      Audio File
-                                    </span>
-                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
-                                  </div>
-                                )}
-                              {resourceFilePreview.startsWith(
-                                "file-type:application/vnd.openxmlformats-officedocument."
-                              ) && (
-                                  <div className="flex flex-col items-center">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-16 w-16 text-green-500"
-                                      viewBox="0 0 24 24"
-                                      fill="currentColor"
-                                    >
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
-                                      <path d="M14 14H8v-2h6v2zm0 3H8v-2h6v2z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">
-                                      Office Document
-                                    </span>
-                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
-                                  </div>
-                                )}
-                              {!resourceFilePreview.startsWith(
-                                "file-type:application/pdf"
-                              ) &&
-                                !resourceFilePreview.startsWith(
-                                  "file-type:video/"
-                                ) &&
-                                !resourceFilePreview.startsWith(
-                                  "file-type:audio/"
-                                ) &&
-                                !resourceFilePreview.startsWith(
-                                  "file-type:application/vnd.openxmlformats-officedocument."
-                                ) && (
-                                  <div className="flex flex-col items-center">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      className="h-16 w-16 text-gray-500"
-                                      viewBox="0 0 24 24"
-                                      fill="currentColor"
-                                    >
-                                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" />
-                                      <path d="M8 15h8v2H8zm0-4h8v2H8z" />
-                                    </svg>
-                                    <span className="mt-2 font-medium">
-                                      File ({resourceFile?.type || 'Unknown type'})
-                                    </span>
-                                    {resourceFile && <p className="text-xs text-gray-500 mt-1">{resourceFile.name}</p>}
-                                  </div>
-                                )}
-                            </div>
-                          )}
-                          <div className="mt-2 flex justify-between items-center">
-                            {resourceFile && (
-                              <p className="text-sm text-gray-500">
-                                {resourceFile.name} ·{" "}
-                                {resourceFile.size
-                                  ? (resourceFile.size / (1024 * 1024)).toFixed(2)
-                                  : "0"}
-                                MB
-                              </p>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={removeResourceFile}
-                              className="text-red-500"
-                            >
-                              <Trash className="h-4 w-4 mr-1" /> Remove
-                            </Button>
-                          </div>
+            {/* Resources for Participants Section */}
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle>Resources for Participants <span className="text-red-500">*</span></CardTitle>
+                <CardDescription>
+                  Provide at least one resource to help participants understand your brand and contest requirements. You can upload assets (logos, guidelines, examples) <b>or</b> add external links (website, social media, portfolio).
+                </CardDescription>
+                <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium mt-2">At least one required</span>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Asset Upload */}
+                <div className="flex flex-col gap-6">
+                  <div className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${isDragActive ? 'border-rose-500 bg-rose-50' : 'border-gray-300 bg-white'}`}
+                    onClick={() => resourceFileRef.current?.click()}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleResourceDrop}
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Upload asset">
+                    {resourceFilePreview ? (
+                      <div className="relative">
+                        <img src={resourceFilePreview} alt="Preview" className="mx-auto max-h-48 object-contain" />
+                        <div className="mt-2 flex justify-between items-center">
+                          <span className="text-sm text-gray-500">{resourceFile?.name}</span>
+                          <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); removeResourceFile(); }} className="text-red-500"><Trash className="h-4 w-4 mr-1" /> Remove</Button>
                         </div>
-                      ) : (
-                        <div className="text-center py-6">
-                          <Upload className="h-16 w-16 mx-auto text-gray-400 mb-2" />
-                          <p className="text-sm font-medium mb-1">
-                            Drag, drop or browse file
-                          </p>
-                          <p className="text-xs text-gray-500 mb-4">
-                            Max file size: 20MB
-                          </p>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => resourceFileRef.current?.click()}
-                          >
-                            <Upload className="h-4 w-4 mr-2" /> Upload
-                          </Button>
-                          <input
-                            type="file"
-                            ref={resourceFileRef}
-                            id="resourceFileInput"
-                            className="hidden"
-                            onChange={handleResourceFileChange}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Resource Description - Moved below file uploader */}
-                    <div className="mb-4">
-                      <Label htmlFor="resourceDescription">
-                        Asset Description <span className="text-red-500">*</span> (Required)
-                      </Label>
-                      <Textarea
-                        id="resourceDescription"
-                        placeholder="Enter a description for this asset"
-                        className="mt-1"
-                        value={resourceDescription}
-                        onChange={(e) => setResourceDescription(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Add Asset Button - Always visible, conditionally disabled */}
-                    <Button
-                      type="button"
-                      onClick={addFileResource}
-                      className="w-full mt-4"
-                      disabled={!resourceFile || !resourceDescription.trim()}
-                    >
-                      Add Asset
-                    </Button>
-                  </div>
-
-                  {/* External Resource Link */}
-                  <div className="border rounded-lg p-4 mt-6">
-                    <h4 className="text-md font-medium mb-2">
-                      Add External Resource Links
-                    </h4>
-                    <p className="text-sm text-gray-500 mb-4">
-                      You can add any number of external resource links.
-                    </p>
-                    {/* Section-specific feedback for External Link */}
-                    {externalLinkError && (
-                      <Alert variant="destructive" className="mb-4">
-                        <AlertTriangle className="h-4 w-4 mr-1 shrink-0" />
-                        <AlertDescription>{externalLinkError}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    {/* Resource Link Input - Moved above description */}
-                    <div className="mb-4">
-                      <Label htmlFor="resourceLinkInput">Resource Link</Label>
-                      <Input
-                        id="resourceLinkInput"
-                        type="url"
-                        placeholder="https://example.com/resource"
-                        value={newResourceUrl}
-                        onChange={(e) => setNewResourceUrl(e.target.value)}
-                      />
-                    </div>
-
-                    {/* External Resource Description - Moved below link input, marked as required */}
-                    <div className="mb-4">
-                      <Label htmlFor="externalResourceDescription">
-                        Resource Description <span className="text-red-500">*</span> (Required)
-                      </Label>
-                      <Textarea
-                        id="externalResourceDescription"
-                        placeholder="Enter a description for this external resource"
-                        className="mt-1"
-                        value={externalResourceDescription}
-                        onChange={(e) =>
-                          setExternalResourceDescription(e.target.value)
-                        }
-                      />
-                    </div>
-
-                    {/* Add External Resource Button - Always visible, conditionally disabled */}
-                    <Button
-                      type="button"
-                      disabled={!newResourceUrl.trim() || !externalResourceDescription.trim()}
-                      onClick={addResource}
-                      className="w-full"
-                    >
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      Add External Resource
-                    </Button>
-
-                    {/* Enhanced List of Added Resources */}
-                    {Object.entries(resources).length > 0 && (
-                      <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-4">
-                          <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                          <h5 className="font-semibold text-blue-900 dark:text-blue-100">Added Resources:</h5>
-                          <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-medium px-2 py-1 rounded-full">
-                            {Object.entries(resources).length} resource{Object.entries(resources).length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-
-                        <div className="space-y-3">
-                          {Object.entries(resources).map(([name, url]) => {
-                            const isUploadedFile = url.startsWith('data:') || url.includes('supabase');
-                            const isImage = url.startsWith('data:image') || (url.includes('supabase') && /\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url));
-
-                            return (
-                              <div
-                                key={name}
-                                className="group bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200"
-                              >
-                                <div className="flex items-start gap-3">
-                                  {/* Resource Icon/Preview */}
-                                  <div className="flex-shrink-0">
-                                    {isImage ? (
-                                      <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                                        <img
-                                          src={url}
-                                          alt={name}
-                                          className="w-full h-full object-cover"
-                                        />
-                                      </div>
-                                    ) : isUploadedFile ? (
-                                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-                                        <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                      </div>
-                                    ) : (
-                                      <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
-                                        <ExternalLink className="w-6 h-6 text-green-600 dark:text-green-400" />
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Resource Info */}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <h6 className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                                          {name}
-                                        </h6>
-                                        <div className="flex items-center gap-2 mt-1">
-                                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${isUploadedFile
-                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                                            : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                            }`}>
-                                            {isUploadedFile ? (
-                                              <>
-                                                <Upload className="w-3 h-3" />
-                                                Uploaded File
-                                              </>
-                                            ) : (
-                                              <>
-                                                <ExternalLink className="w-3 h-3" />
-                                                External Link
-                                              </>
-                                            )}
-                                          </span>
-                                        </div>
-                                        {!isUploadedFile && (
-                                          <div className="mt-2">
-                                            <a
-                                              href={url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline font-medium flex items-center gap-1 w-fit"
-                                            >
-                                              <span className="truncate max-w-[200px]">{url}</span>
-                                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                                            </a>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Remove Button */}
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => removeResource(name)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 h-8 w-8 p-0"
-                                      >
-                                        <Trash className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Resource Summary */}
-                        <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
-                          <div className="flex items-center justify-between px-2">
-                            <div className="text-sm text-blue-700 dark:text-blue-300 font-medium">
-                              <span>
-                                {Object.entries(resources).filter(([, url]) => url.startsWith('data:') || url.includes('supabase')).length} uploaded file{Object.entries(resources).filter(([, url]) => url.startsWith('data:') || url.includes('supabase')).length !== 1 ? 's' : ''}, {' '}
-                                {Object.entries(resources).filter(([, url]) => !url.startsWith('data:') && !url.includes('supabase')).length} external link{Object.entries(resources).filter(([, url]) => !url.startsWith('data:') && !url.includes('supabase')).length !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            <div className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                              Participants will see these resources
-                            </div>
-                          </div>
-                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-32">
+                        <Upload className="h-10 w-10 text-gray-400 mb-2" />
+                        <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
+                        <p className="text-xs text-gray-500 mb-2">Max file size: 20MB</p>
+                        <Button variant="outline" size="sm" onClick={e => { e.stopPropagation(); resourceFileRef.current?.click(); }}><Upload className="h-4 w-4 mr-2" /> Upload</Button>
+                        <input type="file" ref={resourceFileRef} className="hidden" onChange={handleResourceFileChange} />
                       </div>
                     )}
                   </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="flex justify-between items-center pt-6">
-              {/* Modern Error Display for Resources step */}
-              {formFeedback && formFeedbackType === 'error' && (
-                <div className="mr-auto">
-                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="h-3 w-3 text-white" />
+                  {/* File Description and Add Button */}
+                  {resourceFile && (
+                    <div className="mt-4 flex flex-col gap-4 items-end">
+                      <div className="flex-1 w-full">
+                        <Label htmlFor="fileDescription">Description <span className="text-red-500">*</span></Label>
+                        <Input id="fileDescription" placeholder="Describe this asset" value={resourceDescription} onChange={e => setResourceDescription(e.target.value)} />
                       </div>
-                      <p className="text-sm font-medium text-red-800 dark:text-red-200">{formFeedback}</p>
+                      <Button type="button" onClick={addFileResource} disabled={!resourceDescription} className="w-full">Add Asset</Button>
                     </div>
-                  </div>
-                </div>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={prevStep}
-                disabled={isLoading}
-                className={`${!(formFeedback && formFeedbackType === 'error') ? 'mr-auto' : ''}`}
-              >
-                Back
-              </Button>
-              <div className={`flex gap-2 ${formFeedback && formFeedbackType === 'error' ? 'ml-4' : 'ml-auto'}`}>
-                <Button
-                  variant="outline"
-                  onClick={handleSaveDraft}
-                  disabled={isLoading || !title.trim()}
-                >
-                  {isLoading &&
-                    uploadProgress &&
-                    uploadProgress.includes("draft") ? (
-                    <div className="flex items-center gap-2">
-                      <span>{uploadProgress}</span>
-                      <Progress
-                        value={uploadProgress ? 70 : 0}
-                        className="w-10 h-2"
-                      />
-                    </div>
-                  ) : (
-                    "Save Draft"
                   )}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={nextStep}
-                  disabled={isNextDisabled() || isLoading}
-                  className="bg-rose-600 hover:bg-rose-700 text-white"
-                >
-                  Next
-                </Button>
-              </div>
-            </CardFooter>
+                  {assetUploadError && <div className="text-red-500 text-sm mt-2">{assetUploadError}</div>}
+                </div>
+                {/* Or Separator */}
+                <div className="flex items-center my-4">
+                  <div className="flex-grow border-t border-gray-300"></div>
+                  <span className="mx-4 text-gray-500 font-semibold">Or</span>
+                  <div className="flex-grow border-t border-gray-300"></div>
+                </div>
+                {/* External Link Input */}
+                <div className="border rounded-lg p-6 bg-gray-50 dark:bg-gray-900">
+                  <Label htmlFor="resourceLinkUrl">External Link</Label>
+                  <Input id="resourceLinkUrl" type="url" placeholder="https://example.com/resource" value={newResourceUrl} onChange={e => setNewResourceUrl(e.target.value)} className="mb-2" />
+                  <Label htmlFor="resourceLinkDescription">Description <span className="text-red-500">*</span></Label>
+                  <Input id="resourceLinkDescription" placeholder="Describe this link" value={externalResourceDescription} onChange={e => setExternalResourceDescription(e.target.value)} className="mb-2" />
+                  <Button type="button" onClick={addResource} disabled={!newResourceUrl || !externalResourceDescription} className="w-full">Add Link</Button>
+                  {externalLinkError && <div className="text-red-500 text-sm mt-1">{externalLinkError}</div>}
+                </div>
+                {/* Resource List */}
+                <div className="mt-8">
+                  <h4 className="text-md font-medium mb-2">Assets & Resources</h4>
+                  {Object.keys(resources).length === 0 && <div className="text-gray-500">No assets or links added yet.</div>}
+                  <ul className="space-y-3">
+                    {Object.entries(resources).map(([name, url]) => {
+                      const isImage = url.startsWith('data:image');
+                      const isFile = url.startsWith('data:') && !isImage;
+                      const isLink = !url.startsWith('data:') && !url.includes('supabase');
+                      return (
+                        <li key={name} className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm">
+                          {isImage && (
+                            <img src={url} alt={name} className="w-12 h-12 object-cover rounded mr-3" />
+                          )}
+                          {isFile && <Upload className="w-8 h-8 text-blue-500 mr-3" />}
+                          {isLink && <ExternalLink className="w-8 h-8 text-green-500 mr-3" />}
+                          <div className="flex-1">
+                            <div className="font-medium">{name}</div>
+                            {isImage && (
+                              <div className="text-xs text-gray-500">
+                                {resourceFiles[name]?.name}
+                                {resourceFiles[name]?.size && (
+                                  <> · {(resourceFiles[name].size / (1024 * 1024)).toFixed(2)} MB</>
+                                )}
+                              </div>
+                            )}
+                            {isFile && (
+                              <div className="text-xs text-gray-500">
+                                {resourceFiles[name]?.name}
+                                {resourceFiles[name]?.size && (
+                                  <> · {(resourceFiles[name].size / (1024 * 1024)).toFixed(2)} MB</>
+                                )}
+                              </div>
+                            )}
+                            {isLink && (
+                              <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline break-all">{url}</a>
+                            )}
+                          </div>
+                          <Button variant="ghost" size="sm" onClick={() => removeResource(name)} className="text-red-500"><Trash className="h-4 w-4" /></Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Inspiration Content Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Inspiration Content <span className="text-red-500">*</span></CardTitle>
+                <CardDescription>
+                  Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok, etc.) with a description.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {inspirationError && <div className="text-red-500 text-sm mb-2">{inspirationError}</div>}
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="inspirationUrlInput">Inspiration Link</Label>
+                  <Input id="inspirationUrlInput" type="url" placeholder="https://instagram.com/example" value={newInspirationUrl} onChange={e => setNewInspirationUrl(e.target.value)} />
+                  <Label htmlFor="inspirationDescriptionInput">Inspiration Description <span className="text-red-500">*</span></Label>
+                  <Input id="inspirationDescriptionInput" placeholder="Add description here*" value={newInspirationDescription} onChange={e => setNewInspirationDescription(e.target.value)} />
+                  <Button type="button" onClick={addInspiration} className="w-full mt-2" disabled={!newInspirationUrl || !newInspirationDescription}>Add Inspiration</Button>
+                </div>
+                {/* Inspiration List */}
+                {inspirationLinks.length > 0 && (
+                  <ul className="space-y-3 mt-6">
+                    {inspirationLinks.map((item, index) => (
+                      <li key={index} className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm">
+                        <ExternalLink className="w-8 h-8 text-rose-500 mr-2" />
+                        <div className="flex-1">
+                          <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline break-all">{item.url}</a>
+                          <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setInspirationLinks(inspirationLinks.filter((_, i) => i !== index))} className="text-red-500"><Trash className="h-4 w-4" /></Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+              <CardFooter>
+                <Button type="button" variant="outline" onClick={prevStep} disabled={isLoading}>Back</Button>
+                <div className="flex gap-2 ml-auto">
+                  <Button variant="outline" onClick={handleSaveDraft} disabled={isLoading || !title.trim()}>Save Draft</Button>
+                  <Button
+                    type="button"
+                    onClick={nextStep}
+                    disabled={Object.keys(resources).length === 0 || isLoading || inspirationLinks.length === 0}
+                    className="bg-rose-600 hover:bg-rose-700 text-white"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
           </>
         )}
 
