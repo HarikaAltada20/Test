@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -118,8 +118,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const [startTime, setStartTime] = useState<string>("")
     const [endDate, setEndDate] = useState<string>("")
     const [endTime, setEndTime] = useState<string>("")
-    const [inspirationLinks, setInspirationLinks] = useState<string[]>([])
-    const [newInspirationLink, setNewInspirationLink] = useState("")
+    const [inspirationLinks, setInspirationLinks] = useState<{ url: string; description: string }[]>([]);
+    const [newInspirationUrl, setNewInspirationUrl] = useState("");
+    const [newInspirationDescription, setNewInspirationDescription] = useState("");
+    const [inspirationError, setInspirationError] = useState<string | null>(null);
     const [thumbnail, setThumbnail] = useState<File | null>(null)
     const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -164,6 +166,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const [originalBudget, setOriginalBudget] = useState<number>(0); // Store original budget in cents
     const [budgetChanged, setBudgetChanged] = useState(false);
     const [budgetDifference, setBudgetDifference] = useState<number>(0); // Positive = increase, Negative = decrease
+
+    // Add at the top with other useState hooks
+    const [isDragActive, setIsDragActive] = useState(false);
+    const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
+    const [externalLinkError, setExternalLinkError] = useState<string | null>(null);
 
     // Load subscription plans from constants (new system)
     const loadSubscriptionPlans = async () => {
@@ -351,14 +358,26 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         }
 
                         // Parse inspiration_links
-                        let parsedInspirationLinks: string[] = [];
+                        let parsedInspirationLinks: { url: string; description: string }[] = [];
                         if (Array.isArray(data.inspiration_links)) {
-                            parsedInspirationLinks = data.inspiration_links.filter((link: any) => typeof link === 'string');
+                            // Handle array of objects with url and description
+                            parsedInspirationLinks = data.inspiration_links.filter((link: any) =>
+                                typeof link === 'object' && link.url && link.description
+                            );
                         } else if (typeof data.inspiration_links === 'string') {
                             try {
                                 const parsed = JSON.parse(data.inspiration_links);
                                 if (Array.isArray(parsed)) {
-                                    parsedInspirationLinks = parsed.filter((link: any) => typeof link === 'string');
+                                    // Handle both old string format and new object format
+                                    parsedInspirationLinks = parsed.filter((link: any) => {
+                                        if (typeof link === 'string') {
+                                            // Convert old string format to object format
+                                            return { url: link, description: 'Inspiration Link' };
+                                        } else if (typeof link === 'object' && link.url && link.description) {
+                                            return link;
+                                        }
+                                        return false;
+                                    });
                                 }
                             } catch (e) {
                                 console.error("Failed to parse inspiration_links:", e);
@@ -617,7 +636,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 return;
             }
 
-            const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+            const validInspirationLinks = inspirationLinks.filter(link => link.url.trim() !== "");
             if (validInspirationLinks.length === 0) {
                 showError("At least one inspiration link is required.");
                 setIsSubmitting(false);
@@ -651,7 +670,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 brief_json: briefJson,
                 rules_html: rulesHtml,
                 rules_json: rulesJson,
-                inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+                inspiration_links: inspirationLinks.filter(link => link.url.trim() !== ""),
             };
         }
 
@@ -994,14 +1013,33 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         }
     }
 
-    const addInspirationLink = () => {
-        if (newInspirationLink && !inspirationLinks.includes(newInspirationLink)) {
-            setInspirationLinks([...inspirationLinks, newInspirationLink])
-            setNewInspirationLink("")
+    const addInspiration = () => {
+        setInspirationError(null);
+        if (!newInspirationUrl.trim()) {
+            setInspirationError("URL cannot be empty.");
+            return;
         }
-    }
+        try {
+            const urlObj = new URL(newInspirationUrl);
+            if (urlObj.protocol !== "https:") {
+                setInspirationError("URL must start with https://");
+                return;
+            }
+        } catch {
+            setInspirationError("Invalid URL format.");
+            return;
+        }
+        if (!newInspirationDescription.trim()) {
+            setInspirationError("Description is required.");
+            return;
+        }
 
-    const removeInspirationLink = (link: string) => {
+        setInspirationLinks([...inspirationLinks, { url: newInspirationUrl, description: newInspirationDescription }]);
+        setNewInspirationUrl("");
+        setNewInspirationDescription("");
+    };
+
+    const removeInspirationLink = (link: { url: string; description: string }) => {
         setInspirationLinks(inspirationLinks.filter(l => l !== link))
     }
 
@@ -1040,35 +1078,39 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     };
 
     const addFileResource = () => {
-        setResourceError(null);
+        setAssetUploadError(null);
         setResourceSuccess(null);
         if (!resourceFile) {
-            setResourceError("No file selected or file is too large.");
+            setAssetUploadError("No file selected or file is too large.");
             return;
         }
         if (!resourceDescription.trim()) {
-            setResourceError("Please provide a description for the asset.");
+            setAssetUploadError("Please provide a description for the asset.");
             return;
         }
         const resourceName = resourceDescription.trim();
         if (resources[resourceName] || resourceFiles[resourceName]) { // Check both current and staged
-            setResourceError(`A resource with the description "${resourceName}" already exists or is staged. Please use a unique description.`);
+            setAssetUploadError(`A resource with the description "${resourceName}" already exists or is staged. Please use a unique description.`);
             return;
         }
 
-        // Add to resourceFiles for actual upload on submit
-        setResourceFiles(prev => ({
-            ...prev,
-            [resourceName]: resourceFile
-        }));
-        // Add to resources for immediate UI update with a temporary preview URL or file info
-        setResources(prev => ({
-            ...prev,
-            [resourceName]: resourceFilePreview || URL.createObjectURL(resourceFile)
-        }));
+        try {
+            // Add to resourceFiles for actual upload on submit
+            setResourceFiles(prev => ({
+                ...prev,
+                [resourceName]: resourceFile
+            }));
+            // Add to resources for immediate UI update with a temporary preview URL or file info
+            setResources(prev => ({
+                ...prev,
+                [resourceName]: resourceFilePreview || URL.createObjectURL(resourceFile)
+            }));
 
-        setResourceSuccess(`Asset "${resourceName}" staged for upload. Save changes to complete.`);
-        removeResourceFile(); // Clear the input fields (description, file, preview)
+            setResourceSuccess(`Asset "${resourceName}" staged for upload. Save changes to complete.`);
+            removeResourceFile(); // Clear the input fields (description, file, preview)
+        } catch (error: any) {
+            setAssetUploadError(`Failed to add asset: ${error.message}`);
+        }
     };
 
     const addExternalResource = () => {
@@ -1207,7 +1249,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             return "Contest thumbnail is required.";
         }
 
-        const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+        const validInspirationLinks = inspirationLinks.filter(link => link.url && link.url.trim() !== "");
         if (validInspirationLinks.length === 0) {
             return "At least one inspiration link is required.";
         }
@@ -1390,7 +1432,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     rules_json: rulesJson,
                     start_date: toUTCISOString(startDate, startTime),
                     end_date: toUTCISOString(endDate, endTime),
-                    inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+                    inspiration_links: inspirationLinks.filter(link => link.url.trim() !== ""),
                     resources: {
                         ...resources, ...Object.fromEntries(
                             Object.entries(resourceFiles).map(([key, file]) => [key, file.name])
@@ -1454,7 +1496,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     rules_json: rulesJson,
                     start_date: toUTCISOString(startDate, startTime),
                     end_date: toUTCISOString(endDate, endTime),
-                    inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+                    inspiration_links: inspirationLinks.filter(link => link.url.trim() !== ""),
                     resources: {
                         ...resources, ...Object.fromEntries(
                             Object.entries(resourceFiles).map(([key, file]) => [key, file.name])
@@ -1895,7 +1937,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 return;
             }
 
-            const validInspirationLinks = inspirationLinks.filter(link => link.trim() !== "");
+            const validInspirationLinks = inspirationLinks.filter(link => link.url.trim() !== "");
             if (validInspirationLinks.length === 0) {
                 showError("At least one inspiration link is required.");
                 setIsSubmitting(false);
@@ -1929,7 +1971,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 brief_json: briefJson,
                 rules_html: rulesHtml,
                 rules_json: rulesJson,
-                inspiration_links: inspirationLinks.filter(link => link.trim() !== ""),
+                inspiration_links: inspirationLinks.filter(link => link.url.trim() !== ""),
             };
         }
 
@@ -2270,6 +2312,52 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         }
     };
 
+    // Add these handlers near the thumbnail logic
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragActive(true);
+    };
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragActive(false);
+    };
+    const handleThumbnailDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const file = e.dataTransfer.files[0];
+            setThumbnail(file);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                if (e.target?.result) {
+                    setThumbnailPreview(e.target.result as string);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleResourceDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            const file = e.dataTransfer.files[0];
+            setResourceFile(file);
+            // For image files, create a preview
+            if (file.type.startsWith("image/")) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (e.target?.result) {
+                        setResourceFilePreview(e.target.result as string);
+                    }
+                };
+                reader.readAsDataURL(file);
+            } else {
+                setResourceFilePreview(`file-type:${file.type}`);
+            }
+        }
+    };
+
     if (isLoading || isPlansLoading || isUserPlanLoading) { // Check all loading states
         return (
             <div className="flex items-center justify-center h-full">
@@ -2425,7 +2513,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
                             <div className="space-y-2">
                                 <Label>Thumbnail</Label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                                <div
+                                    className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive ? "border-rose-500 bg-rose-50" : "border-gray-300 bg-white"}`}
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleThumbnailDrop}
+                                    tabIndex={0}
+                                    role="button"
+                                    aria-label="Upload thumbnail"
+                                >
                                     {thumbnailPreview ? (
                                         <div className="relative">
                                             <img
@@ -2435,7 +2532,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                             />
                                             <div className="mt-2 flex justify-between items-center">
                                                 <p className="text-sm text-gray-500">
-                                                    {thumbnail?.name || "Current thumbnail"}
+                                                    {thumbnail?.name || "Saved thumbnail"}
+                                                    {thumbnail?.size ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(2)}MB` : ""}
                                                 </p>
                                                 <Button
                                                     variant="ghost"
@@ -2448,14 +2546,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="text-center py-8">
-                                            <Image className="h-16 w-16 mx-auto text-gray-400 mb-2" />
-                                            <p className="text-sm font-medium mb-1">Drag, drop or browse thumbnail</p>
+                                        <div className="flex flex-col items-center justify-center h-40">
+                                            <Image className="h-16 w-16 text-gray-400 mb-2" />
+                                            <p className="text-sm font-medium mb-1">
+                                                Drag, drop or browse <span className="text-rose-500">thumbnail</span>
+                                            </p>
                                             <p className="text-xs text-gray-500 mb-4">Max file size: 5MB</p>
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => fileInputRef.current?.click()}
+                                                onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
                                             >
                                                 <Upload className="h-4 w-4 mr-2" /> Upload
                                             </Button>
@@ -2491,53 +2591,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         clearBottomError();
                                     }}
                                 />
-                            </div>
-                        </div>
-                    )}
-
-                    {!datesOnly && (
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                <h3 className="text-lg font-medium">Inspiration Links <span className="text-red-500">*</span></h3>
-                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
-                            </div>
-                            <div className="border rounded-md p-4 bg-card">
-                                {inspirationLinks.length > 0 && (
-                                    <ul className="space-y-2 mb-4">
-                                        {inspirationLinks.map((link, index) => (
-                                            <li key={index} className="flex items-center justify-between text-sm">
-                                                <a
-                                                    href={link}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-blue-600 hover:underline flex items-center mr-2"
-                                                >
-                                                    <ExternalLink className="h-3 w-3 mr-1 flex-shrink-0" />
-                                                    <span className="truncate">{link}</span>
-                                                </a>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => removeInspirationLink(link)}
-                                                    className="text-red-500 h-6 w-6 p-0 flex-shrink-0"
-                                                >
-                                                    <Trash className="h-4 w-4" />
-                                                </Button>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                                <div className="flex gap-2">
-                                    <Input
-                                        placeholder="Add inspiration link (e.g., instagram, YouTube)"
-                                        value={newInspirationLink}
-                                        onChange={(e) => {
-                                            setNewInspirationLink(e.target.value);
-                                            clearBottomError();
-                                        }}
-                                    />
-                                    <Button onClick={addInspirationLink} disabled={!newInspirationLink}>Add</Button>
-                                </div>
                             </div>
                         </div>
                     )}
@@ -2595,151 +2648,156 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         </div>
                     )}
 
-                    <Separator />
-
-                    {/* Resources Section START */}
+                    {/* Resources for Participants Section */}
                     {!datesOnly && (
-                        <div className="space-y-6"> {/* Main container for entire resources section */}
-                            <div className="flex items-center gap-2">
-                                <h3 className="text-lg font-medium">Resources for Participants <span className="text-red-500">*</span></h3>
-                                <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-medium">At least one required</span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Add or remove resources that help participants understand your brand and contest requirements. You need at least one resource (either upload an asset OR add an external link).
-                            </p>
-
-                            {resourceSuccess && (
-                                <Alert variant="default" className="bg-green-50 border-green-200 text-green-700">
-                                    <Check className="h-4 w-4" />
-                                    <AlertDescription>{resourceSuccess}</AlertDescription>
-                                </Alert>
-                            )}
-                            {/* General resourceError Alert removed from here */}
-
-                            {/* File Upload Container */}
-                            <div className="border rounded-lg p-4 space-y-4">
-                                {/* Section-specific error for Upload Asset */}
-                                {resourceError &&
-                                    (resourceError.includes("No file selected") ||
-                                        resourceError.includes("File size") ||
-                                        resourceError.includes("description for the asset") ||
-                                        resourceError.includes("already exists")) && (
-                                        <Alert variant="destructive">
-                                            <AlertDescription>{resourceError}</AlertDescription>
-                                        </Alert>
-                                    )}
-                                <h4 className="text-md font-medium">Upload New Asset</h4>
-                                <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
-                                    {resourceFilePreview ? (
-                                        <div className="relative text-center">
-                                            {resourceFilePreview.startsWith("data:image") ? (
-                                                <img src={resourceFilePreview} alt="Asset preview" className="mx-auto max-h-40 object-contain mb-2" />
-                                            ) : resourceFilePreview.startsWith("file-type:") ? (
-                                                <div className="py-4">
-                                                    <p className="text-sm font-medium">File: {resourceFilePreview.split("::")[2]}</p>
-                                                    <p className="text-xs text-muted-foreground">Type: {resourceFilePreview.split("::")[1]}</p>
+                        <Card className="mb-8">
+                            <CardHeader>
+                                <CardTitle>Resources for Participants <span className="text-red-500">*</span></CardTitle>
+                                <CardDescription>
+                                    Provide at least one resource to help participants understand your brand and contest requirements. You can upload assets (logos, guidelines, examples) <b>or</b> add external links (website, social media, portfolio).
+                                </CardDescription>
+                                <span className="text-xs text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full font-medium mt-2">At least one required</span>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                {/* Asset Upload */}
+                                <div className="flex flex-col gap-6">
+                                    <div className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${isDragActive ? 'border-rose-500 bg-rose-50' : 'border-gray-300 bg-white'}`}
+                                        onClick={() => resourceFileRef.current?.click()}
+                                        onDragOver={handleDragOver}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={handleResourceDrop}
+                                        tabIndex={0}
+                                        role="button"
+                                        aria-label="Upload asset">
+                                        {resourceFilePreview ? (
+                                            <div className="relative">
+                                                <img src={resourceFilePreview} alt="Preview" className="mx-auto max-h-48 object-contain" />
+                                                <div className="mt-2 flex justify-between items-center">
+                                                    <span className="text-sm text-gray-500">{resourceFile?.name}</span>
+                                                    <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); removeResourceFile(); }} className="text-red-500"><Trash className="h-4 w-4 mr-1" /> Remove</Button>
                                                 </div>
-                                            ) : ( /* Fallback for other previews like Object URLs for non-images if needed */
-                                                <div className="py-4">
-                                                    <p className="text-sm font-medium">Preview not available</p>
-                                                    {resourceFile && <p className="text-xs text-muted-foreground">File: {resourceFile.name}</p>}
-                                                </div>
-                                            )}
-                                            <Button variant="ghost" size="sm" onClick={removeResourceFile} className="text-red-500">
-                                                <Trash className="h-4 w-4 mr-1" /> Clear Selection
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-4">
-                                            <Upload className="h-10 w-10 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-                                            <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Max file size: 20MB</p>
-                                            <Button variant="outline" size="sm" onClick={() => { if (resourceFileRef.current) { resourceFileRef.current.click(); } }}>
-                                                Browse File
-                                            </Button>
-                                            <input type="file" ref={resourceFileRef} id="resourceFileInputEdit" className="hidden" onChange={handleResourceFileChange} />
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-32">
+                                                <Upload className="h-10 w-10 text-gray-400 mb-2" />
+                                                <p className="text-sm font-medium mb-1">Drag, drop or browse file</p>
+                                                <p className="text-xs text-gray-500 mb-2">Max file size: 20MB</p>
+                                                <Button variant="outline" size="sm" onClick={e => { e.stopPropagation(); resourceFileRef.current?.click(); }}><Upload className="h-4 w-4 mr-2" /> Upload</Button>
+                                                <input type="file" ref={resourceFileRef} className="hidden" onChange={handleResourceFileChange} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* File Description and Add Button */}
+                                    {resourceFile && (
+                                        <div className="mt-4 flex flex-col gap-4 items-end">
+                                            <div className="flex-1 w-full">
+                                                <Label htmlFor="fileDescription">Description <span className="text-red-500">*</span></Label>
+                                                <Input id="fileDescription" placeholder="Describe this asset" value={resourceDescription} onChange={e => setResourceDescription(e.target.value)} />
+                                            </div>
+                                            <Button type="button" onClick={addFileResource} disabled={!resourceDescription} className="w-full">Add Asset</Button>
                                         </div>
                                     )}
+                                    {assetUploadError && <div className="text-red-500 text-sm mt-2">{assetUploadError}</div>}
                                 </div>
-                                <div>
-                                    <Label htmlFor="resourceDescriptionEdit">Asset Description (Required)</Label>
-                                    <Input
-                                        id="resourceDescriptionEdit"
-                                        placeholder="e.g., Brand Logo, Product Image"
-                                        value={resourceDescription}
-                                        onChange={(e) => setResourceDescription(e.target.value)}
-                                    />
+                                {/* Or Separator */}
+                                <div className="flex items-center my-4">
+                                    <div className="flex-grow border-t border-gray-300"></div>
+                                    <span className="mx-4 text-gray-500 font-semibold">Or</span>
+                                    <div className="flex-grow border-t border-gray-300"></div>
                                 </div>
-                                <Button type="button" onClick={addFileResource} disabled={!resourceFile || !resourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
-                                    Add Asset to List
-                                </Button>
-                            </div>
+                                {/* External Link Input */}
+                                <div className="border rounded-lg p-6 bg-gray-50 dark:bg-gray-900">
+                                    <Label htmlFor="resourceLinkUrl">External Link</Label>
+                                    <Input id="resourceLinkUrl" type="url" placeholder="https://example.com/resource" value={newResourceUrl} onChange={e => setNewResourceUrl(e.target.value)} className="mb-2" />
+                                    <Label htmlFor="resourceLinkDescription">Description <span className="text-red-500">*</span></Label>
+                                    <Input id="resourceLinkDescription" placeholder="Describe this link" value={externalResourceDescription} onChange={e => setExternalResourceDescription(e.target.value)} className="mb-2" />
+                                    <Button type="button" onClick={addExternalResource} disabled={!newResourceUrl || !externalResourceDescription} className="w-full">Add Link</Button>
+                                    {externalLinkError && <div className="text-red-500 text-sm mt-1">{externalLinkError}</div>}
+                                </div>
+                                {/* Resource List */}
+                                <div className="mt-8">
+                                    <h4 className="text-md font-medium mb-2">Assets & Resources</h4>
+                                    {Object.keys(resources).length === 0 && <div className="text-gray-500">No assets or links added yet.</div>}
+                                    <ul className="space-y-3">
+                                        {Object.entries(resources).map(([name, url]) => {
+                                            const isImage = url.startsWith('data:image');
+                                            const isFile = url.startsWith('data:') && !isImage;
+                                            const isLink = !url.startsWith('data:') && !url.includes('supabase');
+                                            return (
+                                                <li key={name} className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm">
+                                                    {isImage && (
+                                                        <img src={url} alt={name} className="w-12 h-12 object-cover rounded mr-3" />
+                                                    )}
+                                                    {isFile && <Upload className="w-8 h-8 text-blue-500 mr-3" />}
+                                                    {isLink && <ExternalLink className="w-8 h-8 text-green-500 mr-3" />}
+                                                    <div className="flex-1">
+                                                        <div className="font-medium">{name}</div>
+                                                        {isImage && (
+                                                            <div className="text-xs text-gray-500">
+                                                                {resourceFiles[name]?.name}
+                                                                {resourceFiles[name]?.size && (
+                                                                    <> · {(resourceFiles[name].size / (1024 * 1024)).toFixed(2)} MB</>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {isFile && (
+                                                            <div className="text-xs text-gray-500">
+                                                                {resourceFiles[name]?.name}
+                                                                {resourceFiles[name]?.size && (
+                                                                    <> · {(resourceFiles[name].size / (1024 * 1024)).toFixed(2)} MB</>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        {isLink && (
+                                                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline break-all">{url}</a>
+                                                        )}
+                                                    </div>
+                                                    <Button variant="ghost" size="sm" onClick={() => removeResource(name)} className="text-red-500"><Trash className="h-4 w-4" /></Button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
 
-                            {/* External Resource Link */}
-                            <div className="border rounded-lg p-4 space-y-4">
-                                {/* Section-specific error for External Link */}
-                                {resourceError &&
-                                    (resourceError.includes("Please enter a URL") ||
-                                        resourceError.includes("Invalid URL format") ||
-                                        resourceError.includes("description for the external resource") ||
-                                        resourceError.includes("already exists")) && (
-                                        <Alert variant="destructive">
-                                            <AlertDescription>{resourceError}</AlertDescription>
-                                        </Alert>
-                                    )}
-                                <h4 className="text-md font-medium">Add External Resource Link</h4>
-                                <div>
-                                    <Label htmlFor="newResourceUrlEdit">Resource URL (Required)</Label>
-                                    <Input
-                                        id="newResourceUrlEdit"
-                                        type="url"
-                                        placeholder="https://example.com/resource-link"
-                                        value={newResourceUrl}
-                                        onChange={(e) => setNewResourceUrl(e.target.value)}
-                                    />
+                    {/* Inspiration Content Section */}
+                    {!datesOnly && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Inspiration Content <span className="text-red-500">*</span></CardTitle>
+                                <CardDescription>
+                                    Help creators understand your vision by adding at least one inspiration link (Instagram, YouTube, TikTok, etc.) with a description.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {inspirationError && <div className="text-red-500 text-sm mb-2">{inspirationError}</div>}
+                                <div className="flex flex-col gap-2">
+                                    <Label htmlFor="inspirationUrlInput">Inspiration Link</Label>
+                                    <Input id="inspirationUrlInput" type="url" placeholder="https://instagram.com/example" value={newInspirationUrl} onChange={e => setNewInspirationUrl(e.target.value)} />
+                                    <Label htmlFor="inspirationDescriptionInput">Inspiration Description <span className="text-red-500">*</span></Label>
+                                    <Input id="inspirationDescriptionInput" placeholder="Add description here*" value={newInspirationDescription} onChange={e => setNewInspirationDescription(e.target.value)} />
+                                    <Button type="button" onClick={addInspiration} className="w-full mt-2" disabled={!newInspirationUrl || !newInspirationDescription}>Add Inspiration</Button>
                                 </div>
-                                <div>
-                                    <Label htmlFor="externalResourceDescriptionEdit">Link Description (Required)</Label>
-                                    <Input
-                                        id="externalResourceDescriptionEdit"
-                                        placeholder="e.g., Company Website, Style Guide PDF"
-                                        value={externalResourceDescription}
-                                        onChange={(e) => setExternalResourceDescription(e.target.value)}
-                                    />
-                                </div>
-                                <Button type="button" onClick={addExternalResource} disabled={!newResourceUrl.trim() || !externalResourceDescription.trim() || isSubmitting} className="w-full sm:w-auto">
-                                    Add Link to List
-                                </Button>
-                            </div>
-
-                            {/* List of current/staged resources */}
-                            {Object.keys(resources).length > 0 && (
-                                <div className="space-y-3 pt-4">
-                                    <h4 className="text-md font-medium">Current & Staged Resources:</h4>
-                                    <ul className="space-y-2">
-                                        {Object.entries(resources).map(([name, url]) => (
-                                            <li key={name} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-slate-800 rounded text-sm">
-                                                <div>
-                                                    <p className="font-medium text-slate-800 dark:text-slate-100">{name}</p>
-                                                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-xs md:max-w-md" title={url}>
-                                                        {url.startsWith("data:image") ? "Image Preview (Staged/Current)" :
-                                                            url.startsWith("file-type:") ? `File: ${url.split("::")[2]} (Staged)` :
-                                                                resourceFiles[name] ? `File: ${resourceFiles[name]!.name} (Staged)` :
-                                                                    url.startsWith("blob:") ? "Local File Preview (Staged)" :
-                                                                        url /* Assumed to be an external link or existing DB URL */}
-                                                    </p>
+                                {/* Inspiration List */}
+                                {inspirationLinks.length > 0 && (
+                                    <ul className="space-y-3 mt-6">
+                                        {inspirationLinks.map((item, index) => (
+                                            <li key={index} className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm">
+                                                <ExternalLink className="w-8 h-8 text-rose-500 mr-2" />
+                                                <div className="flex-1">
+                                                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline break-all">{item.url}</a>
+                                                    <div className="text-xs text-gray-500 mt-1">{item.description}</div>
                                                 </div>
-                                                <Button variant="ghost" size="sm" onClick={() => removeResource(name)} className="text-red-500 hover:text-red-700" disabled={isSubmitting}>
-                                                    <Trash className="h-4 w-4 mr-1" /> Remove
-                                                </Button>
+                                                <Button variant="ghost" size="sm" onClick={() => setInspirationLinks(inspirationLinks.filter((_, i) => i !== index))} className="text-red-500"><Trash className="h-4 w-4" /></Button>
                                             </li>
                                         ))}
                                     </ul>
-                                </div>
-                            )}
-                        </div>
+                                )}
+                            </CardContent>
+                        </Card>
                     )}
-                    {/* Resources Section END */}
 
                     <Separator />
 
