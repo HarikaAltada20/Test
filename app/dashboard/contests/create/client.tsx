@@ -2738,6 +2738,27 @@ export default function CreateContestPage({
     }
   };
 
+  // Add this state for drag feedback
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleThumbnailChange({ target: { files: e.dataTransfer.files } } as any);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragActive(false);
+  };
+
   return (
     <div className="container mx-auto py-8">
       {/* Enhanced Header with Better Back Button */}
@@ -3039,7 +3060,16 @@ export default function CreateContestPage({
 
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                <div
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive ? "border-rose-500 bg-rose-50" : "border-gray-300 bg-white"}`}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  tabIndex={0}
+                  role="button"
+                  aria-label="Upload thumbnail"
+                >
                   {thumbnailPreview ? (
                     <div className="relative">
                       <img
@@ -3067,18 +3097,16 @@ export default function CreateContestPage({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8">
-                      <Image className="h-16 w-16 mx-auto text-gray-400 mb-2" />
+                    <div className="flex flex-col items-center justify-center h-40">
+                      <Image className="h-16 w-16 text-gray-400 mb-2" />
                       <p className="text-sm font-medium mb-1">
-                        Drag, drop or browse thumbnail
+                        Drag, drop or browse <span className="text-rose-500">thumbnail</span>
                       </p>
-                      <p className="text-xs text-gray-500 mb-4">
-                        Max file size: 5MB
-                      </p>
+                      <p className="text-xs text-gray-500 mb-4">Max file size: 5MB</p>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
                       >
                         <Upload className="h-4 w-4 mr-2" /> Upload
                       </Button>
