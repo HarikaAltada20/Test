@@ -3128,7 +3128,7 @@ export default function CreateContestPage({
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
-                  disabled={isLoading}
+                  disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
                     uploadProgress &&
@@ -3356,7 +3356,7 @@ export default function CreateContestPage({
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
-                  disabled={isLoading}
+                  disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
                     uploadProgress &&
@@ -3816,7 +3816,7 @@ export default function CreateContestPage({
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
-                  disabled={isLoading}
+                  disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
                     uploadProgress &&
@@ -3881,7 +3881,7 @@ export default function CreateContestPage({
                 <Button
                   variant="outline"
                   onClick={handleSaveDraft}
-                  disabled={isLoading}
+                  disabled={isLoading || !title.trim()}
                 >
                   {isLoading &&
                     uploadProgress &&
