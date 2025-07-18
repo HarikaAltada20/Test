@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceRoleClient } from '@supabase/supabase-js';
 
+// Type definitions for better type safety
+interface ResourceItem {
+  url: string;
+  description: string;
+  type: 'internal' | 'external';
+}
+
+interface ContestData {
+  id: string;
+  advertiser_id: string;
+  moderation_status: string;
+  payment_details: any;
+  thumbnail_url: string | null;
+  resources: ResourceItem[] | null;
+}
+
+// Helper function to extract file path from Supabase storage URL
+function extractStoragePath(url: string): string | null {
+  if (!url || !url.includes('contest-assets/')) {
+    return null;
+  }
+  const path = url.split('contest-assets/')[1];
+  return path || null;
+}
+
 // This function will handle refunds and logging them.
 // We'll need a service role client to bypass RLS for updating balances.
 const supabaseService = createServiceRoleClient(
@@ -65,7 +90,7 @@ export async function DELETE(
       .from('contests')
       .select('id, advertiser_id, moderation_status, payment_details, thumbnail_url, resources')
       .eq('id', contestId)
-      .single();
+      .single() as { data: ContestData | null; error: any };
 
     if (contestError || !contest) {
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
@@ -89,24 +114,41 @@ export async function DELETE(
     }
 
     // 3. Clean up storage files (thumbnail and resources)
+    // This prevents orphaned files in Supabase storage and saves storage space
     const filesToDelete: string[] = [];
-    if (contest.thumbnail_url && contest.thumbnail_url.includes('contest-assets')) {
-        filesToDelete.push(contest.thumbnail_url.split('contest-assets/')[1]);
+    
+    // Delete thumbnail if it exists
+    if (contest.thumbnail_url) {
+        const thumbnailPath = extractStoragePath(contest.thumbnail_url);
+        if (thumbnailPath) {
+            filesToDelete.push(thumbnailPath);
+        }
     }
-    if (contest.resources) {
-        Object.values(contest.resources).forEach((url: any) => {
-            if (typeof url === 'string' && url.includes('contest-assets')) {
-                filesToDelete.push(url.split('contest-assets/')[1]);
+    
+    // Delete resources (new array structure)
+    // Only delete internal resources (uploaded files), not external links
+    if (contest.resources && Array.isArray(contest.resources)) {
+        contest.resources.forEach((resource: ResourceItem) => {
+            if (resource.type === 'internal' && resource.url) {
+                const resourcePath = extractStoragePath(resource.url);
+                if (resourcePath) {
+                    filesToDelete.push(resourcePath);
+                }
             }
         });
     }
 
     if (filesToDelete.length > 0) {
+        console.log(`Deleting ${filesToDelete.length} storage files for contest ${contestId}:`, filesToDelete);
         const { error: storageError } = await supabase.storage.from('contest-assets').remove(filesToDelete);
         if (storageError) {
             // Log error but don't block deletion
             console.error(`Failed to delete storage files for contest ${contestId}: ${storageError.message}`);
+        } else {
+            console.log(`Successfully deleted ${filesToDelete.length} storage files for contest ${contestId}`);
         }
+    } else {
+        console.log(`No storage files to delete for contest ${contestId}`);
     }
 
 

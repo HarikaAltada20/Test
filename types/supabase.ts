@@ -215,7 +215,7 @@ export interface Database {
           brief_json: Json | null
           rules_html: string | null
           rules_json: Json | null
-          resources: Json | null
+          resources: { url: string; description: string; type: "internal" | "external" }[] | null
           category: string | null
           inspiration_links: { url: string; description: string }[] | null
           created_at: string
@@ -245,7 +245,7 @@ export interface Database {
           brief_json?: Json | null
           rules_html?: string | null
           rules_json?: Json | null
-          resources?: Json | null
+          resources?: { url: string; description: string; type: "internal" | "external" }[] | null
           category?: string | null
           inspiration_links?: { url: string; description: string }[] | null
           created_at?: string
@@ -275,7 +275,7 @@ export interface Database {
           brief_json?: Json | null
           rules_html?: string | null
           rules_json?: Json | null
-          resources?: Json | null
+          resources?: { url: string; description: string; type: "internal" | "external" }[] | null
           category?: string | null
           inspiration_links?: { url: string; description: string }[] | null
           created_at?: string
@@ -489,7 +489,7 @@ export interface Database {
           brief_json: Json | null
           rules_html: string | null
           rules_json: Json | null
-          resources: Json | null
+          resources: { url: string; description: string; type: "internal" | "external" }[] | null
           category: string | null
           inspiration_links: { url: string; description: string }[] | null
           created_at: string | null
