@@ -112,7 +112,7 @@ interface Contest {
     start_date: string | null;
     end_date: string | null;
     rules_html?: string | null;
-    inspiration_links?: string[] | null;
+    inspiration_links?: { url: string; description: string }[] | null;
     resources?: any | null;
     contest_based_details?: any | null;
     last_metrics_updated?: string | null;
@@ -1159,6 +1159,7 @@ export default function ContestDetailClient({
                                     </div>
                                 )}
 
+                                {/* Render inspiration links if present */}
                                 {Array.isArray(currentContest.inspiration_links) &&
                                     currentContest.inspiration_links.length > 0 && (
                                         <div className="space-y-4">
@@ -1168,30 +1169,15 @@ export default function ContestDetailClient({
                                             </h3>
                                             <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
                                                 <div className="space-y-3">
-                                                    {currentContest.inspiration_links.map(
-                                                        (link: string, idx: number) => (
-                                                            <Card
-                                                                key={idx}
-                                                                className="bg-white dark:bg-slate-800/50 border border-purple-200 dark:border-purple-700/30 hover:shadow-md transition-all duration-300"
-                                                            >
-                                                                <CardContent className="p-4">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
-                                                                            <ExternalLink className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                                                                        </div>
-                                                                        <a
-                                                                            href={link}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:underline font-semibold text-sm truncate flex-1"
-                                                                        >
-                                                                            {link}
-                                                                        </a>
-                                                                    </div>
-                                                                </CardContent>
-                                                            </Card>
-                                                        )
-                                                    )}
+                                                    {currentContest.inspiration_links.map((item, idx) => (
+                                                        <div key={idx} className="flex items-center gap-3">
+                                                            <ExternalLink className="w-6 h-6 text-purple-500" />
+                                                            <div className="flex-1">
+                                                                <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline break-all">{item.url}</a>
+                                                                <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
                                         </div>

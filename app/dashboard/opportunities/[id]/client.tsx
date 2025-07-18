@@ -1371,17 +1371,9 @@ export function ContestClientPage({
 
                 {/* Inspiration Links Section */}
                 {(() => {
-                  let links = [];
-                  try {
-                    links =
-                      typeof contest.inspiration_links === "string"
-                        ? JSON.parse(contest.inspiration_links)
-                        : Array.isArray(contest.inspiration_links)
-                          ? contest.inspiration_links
-                          : [];
-                  } catch (e) {
-                    console.error("Error parsing inspiration_links:", e);
-                  }
+                  let links = Array.isArray(contest.inspiration_links)
+                    ? contest.inspiration_links
+                    : [];
                   return links.length > 0 ? (
                     <>
                       <Separator />
@@ -1392,7 +1384,7 @@ export function ContestClientPage({
                         </h3>
                         <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
                           <div className="space-y-3">
-                            {links.map((link: string, index: number) => (
+                            {links.map((item: { url: string; description: string }, index: number) => (
                               <Card
                                 key={index}
                                 className="bg-white dark:bg-slate-800/50 border border-purple-200 dark:border-purple-700/30 hover:shadow-md transition-all duration-300"
@@ -1403,14 +1395,15 @@ export function ContestClientPage({
                                       <ExternalLink className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                                     </div>
                                     <Link
-                                      href={link}
+                                      href={item.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:underline font-semibold text-sm truncate flex-1"
                                     >
-                                      {link}
+                                      {item.url}
                                     </Link>
                                   </div>
+                                  <div className="text-xs text-gray-500 mt-1 ml-12">{item.description}</div>
                                 </CardContent>
                               </Card>
                             ))}

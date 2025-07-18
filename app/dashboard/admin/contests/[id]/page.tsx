@@ -38,30 +38,10 @@ export default async function AdminContestDetailPage({
             redirect("/dashboard/admin/contests");
         }
 
-        let finalInspirationLinks: string[] | null = null;
-        const rawInspirationLinks = contestData.inspiration_links;
-
-        if (Array.isArray(rawInspirationLinks)) {
-            finalInspirationLinks = rawInspirationLinks.filter(link => typeof link === 'string');
-        } else if (typeof rawInspirationLinks === 'string') {
-            try {
-                const parsed = JSON.parse(rawInspirationLinks);
-                if (Array.isArray(parsed)) {
-                    finalInspirationLinks = parsed.filter(link => typeof link === 'string');
-                } else {
-                    finalInspirationLinks = null;
-                }
-            } catch (error) {
-                finalInspirationLinks = null;
-            }
-        } else if (rawInspirationLinks === null) {
-            finalInspirationLinks = null;
-        } else {
-            if (rawInspirationLinks !== undefined) {
-                // console.warn('Inspiration links is of unexpected type:', typeof rawInspirationLinks, rawInspirationLinks);
-            }
-            finalInspirationLinks = null;
-        }
+        // Remove all legacy parsing and filtering for inspiration_links
+        const finalInspirationLinks = Array.isArray(contestData.inspiration_links)
+            ? contestData.inspiration_links
+            : [];
 
         // Fetch submissions for this contest
         const { data: submissionsData, error: submissionsError } = await supabase

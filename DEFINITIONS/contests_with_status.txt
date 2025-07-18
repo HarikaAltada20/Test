@@ -1,5 +1,5 @@
-create view public.contests_with_status as
-select
+CREATE VIEW public.contests_with_status AS
+SELECT
   contests.id,
   contests.advertiser_id,
   contests.title,
@@ -11,7 +11,7 @@ select
   contests.category,
   contests.inspiration_links,
   contests.created_at,
-  contests.subscription_plan_of_user,
+  contests.subscription_info_of_user,
   contests.updated_at,
   contests.contest_type,
   contests.contest_based_details,
@@ -29,15 +29,15 @@ select
   contests.published_at,
   contests.rejection_reason,
   contests.payment_details,
-  case
-    when contests.moderation_status <> 'published'::contest_moderation_status_enum then null::text
-    when contests.start_date is null
-    or contests.end_date is null then 'incomplete'::text
-    when (now() AT TIME ZONE 'UTC'::text) < contests.start_date then 'upcoming'::text
-    when (now() AT TIME ZONE 'UTC'::text) >= contests.start_date
-    and (now() AT TIME ZONE 'UTC'::text) < contests.end_date then 'active'::text
-    when (now() AT TIME ZONE 'UTC'::text) >= contests.end_date then 'ended'::text
-    else 'unknown'::text
-  end as status
-from
+  CASE
+    WHEN contests.moderation_status <> 'published'::contest_moderation_status_enum THEN NULL::text
+    WHEN contests.start_date IS NULL
+      OR contests.end_date IS NULL THEN 'incomplete'::text
+    WHEN (now() AT TIME ZONE 'UTC'::text) < contests.start_date THEN 'upcoming'::text
+    WHEN (now() AT TIME ZONE 'UTC'::text) >= contests.start_date
+      AND (now() AT TIME ZONE 'UTC'::text) < contests.end_date THEN 'active'::text
+    WHEN (now() AT TIME ZONE 'UTC'::text) >= contests.end_date THEN 'ended'::text
+    ELSE 'unknown'::text
+  END AS status
+FROM
   contests;

@@ -217,7 +217,7 @@ export interface Database {
           rules_json: Json | null
           resources: Json | null
           category: string | null
-          inspiration_links: string[] | null
+          inspiration_links: { url: string; description: string }[] | null
           created_at: string
           updated_at: string
           subscription_plan_of_user: string | null
@@ -247,7 +247,7 @@ export interface Database {
           rules_json?: Json | null
           resources?: Json | null
           category?: string | null
-          inspiration_links?: string[] | null
+          inspiration_links?: { url: string; description: string }[] | null
           created_at?: string
           updated_at?: string
           subscription_plan_of_user?: string | null
@@ -277,7 +277,7 @@ export interface Database {
           rules_json?: Json | null
           resources?: Json | null
           category?: string | null
-          inspiration_links?: string[] | null
+          inspiration_links?: { url: string; description: string }[] | null
           created_at?: string
           updated_at?: string
           subscription_plan_of_user?: string | null
@@ -491,7 +491,7 @@ export interface Database {
           rules_json: Json | null
           resources: Json | null
           category: string | null
-          inspiration_links: string[] | null
+          inspiration_links: { url: string; description: string }[] | null
           created_at: string | null
           updated_at: string | null
           subscription_plan_of_user: string | null

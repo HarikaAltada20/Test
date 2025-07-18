@@ -69,21 +69,18 @@ type ContestData = {
     rules: { list: string[] } | null;
     start_date: string | null;
     end_date: string | null;
-    inspiration_links: string[] | string | null; // Allow for parsing
+    inspiration_links: { url: string; description: string }[];
     resources: Record<string, string> | null;
     status: string;
-    advertiser_id?: string; // Added, ensure it's selected if needed
+    advertiser_id?: string;
     contest_type: "leaderboard" | "cpm" | null;
     contest_based_details: {
         cpm_contest?: CpmContestDetails;
         leaderboard_contest?: LeaderboardContestDetails;
     } | null;
-    // Moderation fields
     moderation_status: string;
     rejection_reason: string | null;
-    // Payment information
     payment_details?: any | null;
-    // Old fields to be phased out or mapped from contest_based_details
     prizes?: { position: number; amount: number }[];
     total_prize?: number;
     winner_count?: number;
@@ -360,29 +357,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         // Parse inspiration_links
                         let parsedInspirationLinks: { url: string; description: string }[] = [];
                         if (Array.isArray(data.inspiration_links)) {
-                            // Handle array of objects with url and description
-                            parsedInspirationLinks = data.inspiration_links.filter((link: any) =>
-                                typeof link === 'object' && link.url && link.description
-                            );
-                        } else if (typeof data.inspiration_links === 'string') {
-                            try {
-                                const parsed = JSON.parse(data.inspiration_links);
-                                if (Array.isArray(parsed)) {
-                                    // Handle both old string format and new object format
-                                    parsedInspirationLinks = parsed.filter((link: any) => {
-                                        if (typeof link === 'string') {
-                                            // Convert old string format to object format
-                                            return { url: link, description: 'Inspiration Link' };
-                                        } else if (typeof link === 'object' && link.url && link.description) {
-                                            return link;
-                                        }
-                                        return false;
-                                    });
-                                }
-                            } catch (e) {
-                                console.error("Failed to parse inspiration_links:", e);
-                                // Keep parsedInspirationLinks as empty array
-                            }
+                            parsedInspirationLinks = data.inspiration_links;
+                        } else {
+                            parsedInspirationLinks = [];
                         }
                         setInspirationLinks(parsedInspirationLinks);
 
@@ -1249,7 +1226,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             return "Contest thumbnail is required.";
         }
 
-        const validInspirationLinks = inspirationLinks.filter(link => link.url && link.url.trim() !== "");
+        const validInspirationLinks = inspirationLinks.filter(link => link.url.trim() !== "");
         if (validInspirationLinks.length === 0) {
             return "At least one inspiration link is required.";
         }
