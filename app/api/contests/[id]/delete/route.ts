@@ -173,4 +173,4 @@ export async function DELETE(
     console.error('Error deleting contest:', error);
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
-} 
+}

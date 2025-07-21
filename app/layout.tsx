@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   title: "Game Of Creators",
   description: "Connect brands with content creators for viral marketing campaigns",
   metadataBase: new URL('https://www.gameofcreators.com'),
+  icons: {
+    icon: "/images/goc_square.png",
+  },
   openGraph: {
     title: "Game Of Creators",
     description: "Connect brands with content creators for viral marketing campaigns",
@@ -20,7 +23,7 @@ export const metadata: Metadata = {
     siteName: "Game Of Creators",
     images: [
       {
-        url: "https://www.gameofcreators.com/images/square_goc.png",
+        url: "https://www.gameofcreators.com/images/goc_square.png",
         width: 1200,
         height: 630,
         alt: "Game Of Creators Logo - Platform connecting brands with content creators",
@@ -37,7 +40,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Game Of Creators",
     description: "Connect brands with content creators for viral marketing campaigns",
-    images: ["https://www.gameofcreators.com/images/square_goc.png"],
+    images: ["https://www.gameofcreators.com/images/goc_square.png"],
     creator: "@gameofcreators",
   },
   robots: {

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     siteName: "Game Of Creators",
     images: [
       {
-        url: "https://www.gameofcreators.com/images/square_goc.png",
+        url: "https://www.gameofcreators.com/images/goc_square.png",
         width: 1200,
         height: 630,
         alt: "Game Of Creators Logo - Platform connecting brands with content creators",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Game Of Creators - Connect Brands with Content Creators",
     description: "Join the premier platform connecting brands with talented content creators for viral marketing campaigns.",
-    images: ["https://www.gameofcreators.com/images/square_goc.png"],
+    images: ["https://www.gameofcreators.com/images/goc_square.png"],
     creator: "@gameofcreators",
   },
 }

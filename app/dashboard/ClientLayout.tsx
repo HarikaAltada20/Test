@@ -34,11 +34,7 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import Link from "next/link";
 import Image from "next/image";
 import logo from "@/public/images/gold_logo_horizontal.svg";
-import squareLogo from "@/public/images/square_goc.png";
-
-interface DashboardLayoutProps {
-  children: React.ReactNode;
-}
+import squareLogo from "@/public/images/goc_square.png";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -2275,51 +2271,6 @@ function DashboardContent({
                                     }}
                                   />
                                 </Link>
-
-                                <Link
-                                  href="/dashboard/billing"
-                                  onClick={() => setProfileSidebarOpen(false)}
-                                  className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 group"
-                                  style={{
-                                    backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                    borderColor: `rgba(${theme.primary}, 0.2)`,
-                                    color: `rgba(${mode.text.secondary}, 1)`
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                                    e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                                    e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                                    e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.3)`;
-                                    e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
-                                  }}
-                                >
-                                  <div
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
-                                    style={{
-                                      backgroundColor: `rgba(${theme.primary}, 0.2)`
-                                    }}
-                                  >
-                                    <CreditCard
-                                      className="h-4 w-4"
-                                      style={{
-                                        color: `rgba(${theme.primary}, 1)`
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="font-medium text-sm">Billing & Wallet</div>
-                                  </div>
-                                  <ChevronRight
-                                    className="h-3 w-3 transition-all group-hover:translate-x-0.5"
-                                    style={{
-                                      color: `rgba(${mode.text.muted}, 1)`
-                                    }}
-                                  />
-                                </Link>
-
                                 <button
                                   onClick={() => {
                                     setProfileSidebarOpen(false);
