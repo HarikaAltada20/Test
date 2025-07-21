@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Check, Info, Trophy, Star, Zap, Users, Crown } from "lucide-react";
+import { Check, Info, Trophy, Star, Zap, Users, Crown, Calendar } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -242,6 +242,26 @@ export default function PricingPage() {
     "/logos/logo6.svg",
   ];
 
+  // Add getPlanIcon and getPlanColor helpers
+  const getPlanIcon = (planName: string) => {
+    if (!planName) return <Trophy className="h-5 w-5" />;
+    const name = planName.toUpperCase();
+    if (name === 'CHAMPION' || name === 'CHAMPION PLAN') return <Crown className="h-5 w-5" />;
+    if (name === 'BUILDER' || name === 'BUILDER PLAN') return <Star className="h-5 w-5" />;
+    if (name === 'STARTER' || name === 'STARTER PLAN') return <Zap className="h-5 w-5" />;
+    if (name === 'EXPLORER' || name === 'EXPLORER PLAN' || name === 'FREE') return <Trophy className="h-5 w-5" />;
+    return <Trophy className="h-5 w-5" />;
+  };
+  const getPlanColor = (planName: string) => {
+    if (!planName) return 'from-gray-500 to-gray-600';
+    const name = planName.toUpperCase();
+    if (name === 'CHAMPION' || name === 'CHAMPION PLAN') return 'from-yellow-500 to-orange-600';
+    if (name === 'BUILDER' || name === 'BUILDER PLAN') return 'from-purple-500 to-blue-600';
+    if (name === 'STARTER' || name === 'STARTER PLAN') return 'from-orange-500 to-red-600';
+    if (name === 'EXPLORER' || name === 'EXPLORER PLAN' || name === 'FREE') return 'from-green-500 to-teal-600';
+    return 'from-gray-500 to-gray-600';
+  };
+
   return (
     <div className="container mx-auto py-8 px-4">
       {/* Hero Section */}
@@ -253,80 +273,12 @@ export default function PricingPage() {
           <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4">
             Game Of Creators Pricing
           </h1>
-          <RotatingTagline />
+          {/* <RotatingTagline /> */}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-              Launch Creator Contests That Drive Results
-            </h2>
-            <p className="text-lg text-gray-600 mb-6">
-              Launch creator contests, get authentic content that performs, and
-              own all rights to winning submissions.
-            </p>
 
-            <div className="bg-gradient-to-br from-purple-50 to-rose-50 border border-purple-100 p-6 rounded-xl mb-6">
-              <div className="flex items-center mb-4">
-                <Crown className="h-5 w-5 text-purple-600 mr-2" />
-                <h3 className="text-xl font-bold text-purple-700">
-                  Starting at {formatCurrencyFromCents(50000)}/month
-                </h3>
-              </div>
-              <ul className="space-y-2">
-                {coreFeatures.map((feature, i) => (
-                  <li key={i} className="flex items-start">
-                    <Check className="h-4 w-4 text-purple-600 mr-2 shrink-0 mt-0.5" />
-                    <span className="text-sm">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <Button
-                size="lg"
-                className="w-full mt-6 bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700 text-white"
-                asChild
-              >
-                <Link href="/signup">Start Your Free Trial</Link>
-              </Button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button variant="outline" className="flex-1" asChild>
-                <Link href="#pricing">See All Plans</Link>
-              </Button>
-              <Button variant="ghost" className="flex-1" asChild>
-                <Link href="#demo">Book a Demo</Link>
-              </Button>
-            </div>
-          </div>
-          <div className="hidden md:block relative">
-            <div className="bg-gradient-to-br from-purple-100 to-rose-100 rounded-xl h-80 w-full relative overflow-hidden">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <Zap className="h-16 w-16 text-purple-600 mx-auto mb-4" />
-                  <p className="text-gray-600 font-medium">Dashboard Preview</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Trusted By Section */}
-      <div className="my-16 text-center">
-        <h2 className="text-xl font-semibold mb-6 text-gray-700">
-          Trusted by over 100 companies
-        </h2>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-6 items-center grayscale opacity-70">
-          {companyLogos.map((logo, index) => (
-            <div key={index} className="flex items-center justify-center h-8">
-              <div className="bg-gray-200 w-full h-6 rounded"></div>
-              {/* Replace with actual logos */}
-              {/* <Image src={logo} alt="Company logo" width={120} height={40} /> */}
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* All Pricing Plans */}
       <div id="pricing" className="scroll-mt-20 px-4">
@@ -396,185 +348,92 @@ export default function PricingPage() {
             {!isLoading && !error && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
                 {dbSubscriptionPlans.map((plan) => {
-                  // Determine if this plan is the 'most popular' (e.g., by name or a specific ID)
-                  const isMostPopular = plan.name.toUpperCase() === "BUILDER"; // Builder plan is most popular
-
-                  // Determine background color based on plan name/id
-                  const getPlanBgColor = (planName: string) => {
-                    const nameUpper = planName.toUpperCase();
-                    if (nameUpper === "EXPLORER") return "bg-gray-500";
-                    if (nameUpper === "STARTER") return "bg-orange-500";
-                    if (nameUpper === "BUILDER") return "bg-purple-600";
-                    if (nameUpper === "CHAMPION") return "bg-yellow-500";
-                    return "bg-gray-500"; // Default
-                  };
-
-                  const getPlanIcon = (planName: string) => {
-                    const nameUpper = planName.toUpperCase();
-                    if (nameUpper === "CHAMPION") return <Crown className="h-5 w-5 text-white" />;
-                    return <Trophy className="h-5 w-5 text-white" />;
-                  };
-
+                  const isMostPopular = plan.name.toUpperCase() === "BUILDER";
+                  const isFree = plan.price === 0;
                   return (
                     <Card
                       key={plan.id}
-                      className={`flex flex-col border-2 relative w-full max-w-sm mx-auto ${isMostPopular
-                        ? "border-purple-500 shadow-lg scale-105"
-                        : "border-gray-200"
-                        }`}
+                      className={`relative flex flex-col w-full max-w-sm mx-auto hover:shadow-lg hover:scale-105 transition ${isMostPopular ? 'border-purple-500 shadow-lg' : 'border-gray-200'}`}
                     >
                       {isMostPopular && (
-                        <div className="absolute -top-3 left-0 right-0 mx-auto w-fit px-3 py-1 bg-gradient-to-r from-purple-600 to-rose-600 text-white text-xs font-medium rounded-full">
-                          Most Popular
+                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                          <Badge className="bg-purple-600 text-white">Most Popular</Badge>
                         </div>
                       )}
-                      <CardHeader className="pb-4">
-                        <div className="flex justify-center mb-3">
-                          <div
-                            className={`w-12 h-12 rounded-full flex items-center justify-center ${getPlanBgColor(
-                              plan.name
-                            )}`}
-                          >
-                            {getPlanIcon(plan.name)}
-                          </div>
+                      <CardHeader className="text-center">
+                        <div className={`mx-auto p-3 rounded-xl bg-gradient-to-r ${getPlanColor(plan.name)} text-white w-fit`}>
+                          {getPlanIcon(plan.name)}
                         </div>
-                        <CardTitle className="text-center text-lg">
-                          {plan.displayName || `${plan.name} Plan`}
-                        </CardTitle>
-                        <div className="mt-3 text-center">
-                          <span className="text-2xl font-bold">
-                            {formatCurrencyFromCents(
-                              billingCycle === "monthly"
-                                ? plan.price
-                                : getDiscountedPrice(plan.price)
-                            )}
-                          </span>
-                          <span className="text-gray-600 text-sm ml-1">
+                        <CardTitle className="text-xl">{plan.displayName || plan.name}</CardTitle>
+                        <div className="text-3xl font-bold">
+                          {formatCurrencyFromCents(billingCycle === "monthly" ? plan.price : getDiscountedPrice(plan.price))}
+                          <span className="text-sm font-normal text-gray-600">
                             /{billingCycle === "monthly" ? "month" : "year"}
                           </span>
                         </div>
-                        <CardDescription className="text-center mt-2 text-sm h-8">
-                          {plan.name.toUpperCase() === "EXPLORER" &&
-                            "Perfect for testing the platform"}
-                          {plan.name.toUpperCase() === "STARTER" &&
-                            "Great for small businesses"}
-                          {plan.name.toUpperCase() === "BUILDER" &&
-                            "Best for scaling brands"}
-                          {plan.name.toUpperCase() === "CHAMPION" &&
-                            "Enterprise-grade solution"}
-                          {![
-                            "EXPLORER",
-                            "STARTER",
-                            "BUILDER",
-                            "CHAMPION",
-                          ].includes(plan.name.toUpperCase()) &&
-                            "Custom plan features"}
-                        </CardDescription>
+                        <p className="text-sm text-gray-600">{plan.features.description}</p>
                       </CardHeader>
-                      <CardContent className="flex-grow pt-0">
-                        <ul className="space-y-2.5">
-                          <li className="flex items-start">
-                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                            <span className="text-sm font-medium">
-                              {plan.features.maxActiveContests} active contest
-                              {plan.features.maxActiveContests !== 1 ? "s" : ""}
-                            </span>
-                          </li>
-                          <li className="flex items-start">
-                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
+                      <CardContent className="space-y-3 flex-grow">
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          <span className="text-sm">{plan.features.maxActiveContests} active contests</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          <span className="text-sm">Min. budget {formatCurrencyFromCents(plan.features.minContestBudget)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          <span className="text-sm">Up to {plan.features.maxWinnersPerContest} winners</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          <span className="text-sm">{plan.features.commissionPercentage}% commission</span>
+                        </div>
+                        {plan.features.contestTypes && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
                             <span className="text-sm">
-                              Min. budget{" "}
-                              <span className="font-medium">
-                                {formatCurrencyFromCents(plan.features.minContestBudget)}
-                              </span>
+                              {plan.features.contestTypes.includes('cpm') ? (
+                                <>
+                                  Leaderboard & CPM-based contests
+                                  <span className="text-xs text-green-600 block mt-0.5 font-medium">✓ Both contest types available</span>
+                                </>
+                              ) : (
+                                <>
+                                  Leaderboard-based contests only
+                                  {plan.name.toUpperCase() === "EXPLORER" && (
+                                    <span className="text-xs text-gray-500 block mt-0.5">CPM contests available in paid plans</span>
+                                  )}
+                                </>
+                              )}
                             </span>
-                          </li>
-                          <li className="flex items-start">
-                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                            <span className="text-sm">
-                              Up to <span className="font-medium">{plan.features.maxWinnersPerContest}</span> winner
-                              {plan.features.maxWinnersPerContest !== 1 ? "s" : ""} (Leaderboard contests)
-                            </span>
-                          </li>
-                          <li className="flex items-start">
-                            <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                            <span className="text-sm">
-                              <span className="font-medium">{plan.features.commissionPercentage}%</span> commission
-                            </span>
-                          </li>
-
-                          <div className="border-t pt-2 mt-3">
-                            <li className="flex items-start mb-2">
-                              <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                              <span className="text-sm">
-                                {plan.features.contestTypes && plan.features.contestTypes.includes('cpm') ? (
-                                  <>
-                                    Leaderboard & CPM-based contests
-                                    <span className="text-xs text-green-600 block mt-0.5 font-medium">
-                                      ✓ Both contest types available
-                                    </span>
-                                  </>
-                                ) : (
-                                  <>
-                                    Leaderboard-based contests only
-                                    {plan.name.toUpperCase() === "EXPLORER" && (
-                                      <span className="text-xs text-gray-500 block mt-0.5">
-                                        CPM contests available in paid plans
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                              </span>
-                            </li>
-                            {plan.features.analytics && (
-                              <li className="flex items-start mb-2">
-                                <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                <span className="text-sm">
-                                  {plan.features.analytics === 'basic' && 'Basic analytics & insights'}
-                                  {plan.features.analytics === 'advanced' && 'Advanced analytics & reports'}
-                                  {plan.features.analytics === 'comprehensive' && 'Comprehensive analytics dashboard'}
-                                </span>
-                              </li>
-                            )}
-                            {plan.features.support && plan.features.support !== 'basic' && (
-                              <li className="flex items-start mb-2">
-                                <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                                <span className="text-sm">
-                                  {plan.features.support === 'priority' && 'Prioritized customer support'}
-                                  {plan.features.support === 'premium' && 'Premium 24/7 dedicated support'}
-                                </span>
-                              </li>
-                            )}
-
-                            {/* Common features for all plans */}
-                            <li className="flex items-start mb-2">
-                              <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                              <span className="text-sm">Lifetime access to winning content</span>
-                            </li>
-                            <li className="flex items-start">
-                              <Check className="h-4 w-4 text-green-500 mr-2 shrink-0 mt-0.5" />
-                              <span className="text-sm">Organic content validation</span>
-                            </li>
                           </div>
-                        </ul>
+                        )}
+                        {plan.features.analytics && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
+                            <span className="text-sm">{plan.features.analytics === 'basic' ? 'Basic analytics & insights' : plan.features.analytics === 'advanced' ? 'Advanced analytics & reports' : plan.features.analytics === 'comprehensive' ? 'Comprehensive analytics dashboard' : plan.features.analytics}</span>
+                          </div>
+                        )}
+                        {plan.features.support && plan.features.support !== 'basic' && (
+                          <div className="flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-500" />
+                            <span className="text-sm">{plan.features.support === 'priority' ? 'Prioritized customer support' : plan.features.support === 'premium' ? 'Premium 24/7 dedicated support' : plan.features.support}</span>
+                          </div>
+                        )}
+                        <Separator />
                       </CardContent>
-                      <CardFooter className="pt-4">
+                      <div className="flex items-end justify-center flex-grow">
                         <Button
-                          className={`w-full text-sm ${isMostPopular
-                            ? "bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700"
-                            : ""
-                            }`}
+                          className={`w-full text-sm mt-6 ${isFree ? '' : isMostPopular ? 'bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700' : ''}`}
                           asChild
                         >
                           <Link href={`/signup?plan=${String(plan.id)}`}>
-                            {plan.name.toUpperCase() === "EXPLORER"
-                              ? "Start Free"
-                              : isMostPopular
-                                ? "Start Free Trial"
-                                : "Get Started"}
+                            {isFree ? 'Start Free' : 'Subscribe'}
                           </Link>
                         </Button>
-                      </CardFooter>
+                      </div>
                     </Card>
                   );
                 })}
@@ -631,32 +490,29 @@ export default function PricingPage() {
 
       {/* Book a Demo Section */}
       <div id="demo" className="my-16 scroll-mt-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center bg-gradient-to-br from-purple-50 to-rose-50 p-6 rounded-xl border border-purple-100">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold mb-3">
-              Not sure which plan is right for you?
-            </h2>
-            <h3 className="text-xl font-medium mb-4 text-purple-700">
-              Book a demo with Vishesh, Founder of Game Of Creators
-            </h3>
-            <p className="text-gray-600 mb-4 text-sm">
-              Join hundreds of businesses driving success with Game Of Creators!
-              Book your free consultation today to get all your questions
-              answered and start launching impactful campaigns.
-            </p>
-            <p className="text-gray-600 mb-6 text-sm">
-              Discover how Vishesh scaled his mobile app to over 800,000 users
-              using the same winning strategies that Game Of Creators delivers.
-            </p>
-            <Button size="lg" className="bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700">
+        <div className="flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-rose-50 p-8 rounded-xl border border-purple-100 max-w-2xl mx-auto text-center">
+          <h2 className="text-2xl md:text-3xl font-bold mb-3">
+            Not sure which plan is right for you?
+          </h2>
+          <h3 className="text-xl font-medium mb-4 text-purple-700">
+            Book a demo with Vishesh, Founder of Game Of Creators
+          </h3>
+          <p className="text-gray-600 mb-4 text-sm">
+            Join hundreds of businesses driving success with Game Of Creators!
+            Book your free consultation today to get all your questions
+            answered and start launching impactful campaigns.
+          </p>
+          <Button size="lg" className="bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700" asChild>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 justify-center"
+            >
+              <Calendar className="w-5 h-5" />
               Book a Demo
-            </Button>
-          </div>
-          <div className="flex justify-center">
-            <div className="bg-white rounded-full h-48 w-48 flex items-center justify-center border-4 border-white shadow-lg">
-              <Users className="h-16 w-16 text-purple-600" />
-            </div>
-          </div>
+            </a>
+          </Button>
         </div>
       </div>
 
@@ -677,19 +533,7 @@ export default function PricingPage() {
         </div>
       </div>
 
-      <Separator className="my-12" />
 
-      {/* CTA Section */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl md:text-3xl font-bold mb-3">Ready to Game Of Creators?</h2>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-6">
-          Join thousands of brands leveraging creator contests to generate
-          authentic, high-performing content
-        </p>
-        <Button size="lg" className="bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700" asChild>
-          <Link href="/signup">Start Your Free Trial</Link>
-        </Button>
-      </div>
     </div>
   );
 }

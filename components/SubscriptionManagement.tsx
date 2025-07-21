@@ -296,20 +296,14 @@ export function SubscriptionManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {subscriptionPlans.map((plan) => {
                         const isCurrentPlan = currentPlan?.id === plan.id;
-                        const isMostPopular = plan.name === 'BUILDER';
                         const canUpgradeToThis = canUpgrade(plan);
                         const canDowngradeToThis = canDowngrade(plan);
 
                         return (
                             <Card
                                 key={plan.id}
-                                className={`relative ${isCurrentPlan ? 'ring-2 ring-green-500' : ''} ${isMostPopular ? 'border-purple-200 shadow-lg' : ''}`}
+                                className={`relative ${isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
                             >
-                                {isMostPopular && (
-                                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                                        <Badge className="bg-purple-600 text-white">Most Popular</Badge>
-                                    </div>
-                                )}
 
                                 {isCurrentPlan && (
                                     <div className="absolute -top-3 right-4">

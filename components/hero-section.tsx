@@ -199,7 +199,7 @@ export function HeroSection() {
         </div>
 
         {/* Premium Creator Showcase */}
-        <div className="mt-16 flex flex-col items-center space-y-6">
+        {/* <div className="mt-16 flex flex-col items-center space-y-6">
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <span className="text-slate-300 text-lg font-semibold">Join 50,000+ Active Creators</span>
             <div className="flex items-center">
@@ -223,11 +223,11 @@ export function HeroSection() {
               <span className="text-sm font-medium">100M+ views generated</span>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* Animated Gallery Section */}
-      <section className="relative w-full pb-16 md:pb-24 lg:pb-32 bg-gradient-to-t from-slate-900/90 to-transparent">
+      {/* <section className="relative w-full pb-16 md:pb-24 lg:pb-32 bg-gradient-to-t from-slate-900/90 to-transparent">
         <div className="container px-4 md:px-6 mx-auto">
           <div className="text-center mb-12">
             <h3 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
@@ -274,7 +274,7 @@ export function HeroSection() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* How It Works - Gaming Style */}
       <section className="relative w-full py-16 md:py-24 bg-gradient-to-br from-slate-900 via-purple-900/10 to-slate-900">
@@ -492,7 +492,7 @@ export function HeroSection() {
       </section>
 
       {/* Enhanced Stats Section */}
-      <section className="relative w-full py-16 md:py-24 bg-gradient-to-br from-purple-900/20 via-slate-900 to-pink-900/20">
+      {/* <section className="relative w-full py-16 md:py-24 bg-gradient-to-br from-purple-900/20 via-slate-900 to-pink-900/20">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(147,51,234,0.1),transparent)]"></div>
         <div className="container px-4 md:px-6 mx-auto relative">
           <div className="text-center mb-12">
@@ -527,7 +527,7 @@ export function HeroSection() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Enhanced FAQ Section */}
       <section className="relative w-full py-16 md:py-24 bg-gradient-to-t from-slate-900 via-slate-800/50 to-slate-900">
@@ -582,7 +582,7 @@ export function HeroSection() {
       </section>
 
       {/* Epic CTA Section */}
-      <section className="relative w-full py-20 md:py-32 overflow-hidden">
+      {/* <section className="relative w-full py-20 md:py-32 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-purple-900 via-pink-900 to-cyan-900"></div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(120,119,198,0.4),transparent)]"></div>
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,119,198,0.4),transparent)]"></div>
@@ -626,7 +626,7 @@ export function HeroSection() {
               </Link>
             </div>
 
-            {/* Trust Indicators */}
+
             <div className="flex flex-wrap justify-center items-center gap-8 text-slate-300 text-sm">
               <div className="flex items-center gap-2">
                 <Shield className="h-5 w-5 text-green-400" />
@@ -647,7 +647,7 @@ export function HeroSection() {
             </div>
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Custom CSS for animations */}
       <style jsx>{`

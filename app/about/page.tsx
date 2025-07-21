@@ -79,18 +79,6 @@ export default function AboutPage() {
               both brands and creators can grow together.
             </li>
           </ul>
-
-          <div className="text-center mt-12">
-            <h2 className="text-2xl font-bold mb-4">Ready to Get Started?</h2>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mt-6">
-              <Button asChild>
-                <Link href="/auth/login">Login</Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/contact">Contact Us</Link>
-              </Button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

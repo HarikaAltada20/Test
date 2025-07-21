@@ -146,14 +146,14 @@ export function Footer() {
                                     <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-600/30">
                                         <Mail className="h-3 w-3" />
                                     </div>
-                                    <span>hello@gameofcreators.com</span>
+                                    <span>support@gameofcreators.com</span>
                                 </div>
-                                <div className="flex items-center gap-3 text-sm text-slate-400">
+                                {/* <div className="flex items-center gap-3 text-sm text-slate-400">
                                     <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-600/30">
                                         <Phone className="h-3 w-3" />
                                     </div>
                                     <span>+1 (555) 123-4567</span>
-                                </div>
+                                </div> */}
                                 <div className="flex items-center gap-3 text-sm text-slate-400">
                                     <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-600/30">
                                         <MapPin className="h-3 w-3" />
