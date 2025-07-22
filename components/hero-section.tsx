@@ -6,6 +6,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import socialPairIcon from "@/public/images/social_pair.png";
+import vContentCreatorsImg from "@/public/images/v_content_creators.png";
+import contentCreatorsImg from "@/public/images/content_creators.png";
 import { HERO_TAGLINES, TAGLINE_ROTATION_INTERVAL } from "@/lib/constants";
 import {
   ArrowRight,
@@ -86,6 +88,17 @@ const RotatingTagline = () => {
     </p>
   );
 };
+
+// Feature Card component for consistent styling
+const FeatureCard = ({ icon, title, description, className }: { icon: React.ReactNode, title: string, description: string, className?: string }) => (
+  <div className={`group relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-6 rounded-2xl border border-purple-500/20 hover:border-purple-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm flex flex-col justify-between h-full ${className}`}>
+    <div className="flex items-center mb-4">
+      {icon}
+    </div>
+    <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+    <p className="text-slate-300 text-sm">{description}</p>
+  </div>
+);
 
 export function HeroSection() {
   return (
@@ -291,25 +304,43 @@ export function HeroSection() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
             {[
               {
-                title: "CREATE A CONTEST",
-                description: "Set up your epic campaign with budget, requirements, and creative challenges for creators to conquer.",
+                title: "Brands Create a Contest",
+                description: (
+                  <>
+                    <span className="font-semibold">Share your vision.</span>
+                    <br />
+                    Describe your product, set the rules, and offer a prize. Decide how you want creators to promote your brand or product.
+                  </>
+                ),
                 icon: Trophy,
                 color: "from-yellow-400 to-orange-500",
                 step: "01"
               },
               {
-                title: "REVIEW APPLICATIONS",
-                description: "Creators compete for your contest! Review their profiles and select the champions that match your brand.",
+                title: "Open to Everyone",
+                description: (
+                  <>
+                    <span className="font-semibold">Creators of all follower counts can join any contest that inspires them.</span>
+                    <br />
+                    Pick a challenge, show your creativity, and stand out!
+                  </>
+                ),
                 icon: Users,
                 color: "from-purple-400 to-pink-500",
                 step: "02"
               },
               {
-                title: "TRACK RESULTS",
-                description: "Watch your campaign go viral! Monitor real-time performance metrics and celebrate your success.",
+                title: "Win, Track, and Own Results",
+                description: (
+                  <>
+                    <span className="font-semibold">Creators get paid. Brands get results.</span>
+                    <br />
+                    Creators win prize money. Brands track results and own the winning content.
+                  </>
+                ),
                 icon: TrendingUp,
                 color: "from-cyan-400 to-blue-500",
                 step: "03"
@@ -327,23 +358,26 @@ export function HeroSection() {
                 <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-8 rounded-3xl border border-purple-500/20 hover:border-purple-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm group-hover:shadow-2xl group-hover:shadow-purple-500/25">
                   <div className="absolute inset-0 bg-gradient-to-br from-purple-600/5 to-pink-600/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
-                  <div className="relative z-10">
-                    <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-r ${step.color} mb-6 group-hover:scale-110 transition-transform duration-300`}>
-                      <step.icon className="h-8 w-8 text-black" />
+                  <div className="relative z-10 min-h-[260px] flex flex-col justify-between">
+                    <div>
+                      <div className={`inline-flex p-4 rounded-2xl bg-gradient-to-r ${step.color} mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                        <step.icon className="h-8 w-8 text-black" />
+                      </div>
+
+                      <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 group-hover:bg-clip-text transition-all duration-300">
+                        {step.title}
+                      </h3>
+
+                      <p className="text-slate-300 leading-relaxed mb-6">
+                        {step.description}
+                      </p>
                     </div>
-
-                    <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 group-hover:bg-clip-text transition-all duration-300">
-                      {step.title}
-                    </h3>
-
-                    <p className="text-slate-300 leading-relaxed mb-6">
-                      {step.description}
-                    </p>
-
-                    <div className="flex items-center text-purple-400 font-semibold group-hover:text-pink-400 transition-colors duration-300">
-                      <span>Start now</span>
-                      <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-2" />
-                    </div>
+                    <Link href="/dashboard" passHref>
+                      <div className="flex items-center text-purple-400 font-semibold group-hover:text-pink-400 transition-colors duration-300 cursor-pointer">
+                        <span>Start now</span>
+                        <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-2" />
+                      </div>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -363,130 +397,74 @@ export function HeroSection() {
               Why Choose Game Of Creators
             </h2>
             <p className="max-w-3xl text-slate-300 text-lg md:text-xl mx-auto leading-relaxed">
-              We're not just a platform - we're your competitive advantage in the creator economy
+              The smarter way to scale creator content and results—without the hassle.
             </p>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-12 items-stretch mb-16">
-            {/* Enhanced Main Feature */}
-            <div className="lg:col-span-5 relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-3xl blur-xl"></div>
-              <div className="relative bg-gradient-to-br from-slate-800/90 to-slate-700/90 p-8 rounded-3xl border border-purple-500/30 backdrop-blur-sm hover:border-purple-500/60 transition-all duration-500">
-                <div className="absolute top-4 right-4">
-                  <Crown className="h-8 w-8 text-yellow-400" />
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Main Card: spans 2 rows and 2 columns */}
+            <div className="lg:row-span-2 lg:col-span-2 flex flex-col justify-end relative overflow-hidden {`group relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-6 rounded-2xl border border-purple-500/20 hover:border-purple-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm flex flex-col justify-between h-full">
+              <div className="absolute top-4 right-4 z-10">
+                <Crown className="h-8 w-8 text-yellow-400" />
+              </div>
+              {/* Responsive image: horizontal (desktop) uses v_content_creators, vertical (mobile) uses content_creators */}
+              <div className="">
                 <Image
-                  src="/placeholder-feature-main.jpg"
-                  alt="Diverse creators collaborating"
-                  width={450}
-                  height={600}
-                  className="rounded-2xl object-cover max-h-[400px] w-full"
+                  src={vContentCreatorsImg}
+                  alt="Diverse creators collaborating (horizontal)"
+                  width={600}
+                  height={300}
+                  className="rounded-2xl object-cover max-h-[400px] w-full hidden lg:block"
+                  priority
                 />
-                <div className="mt-6 text-center">
-                  <h3 className="text-2xl font-bold text-white mb-2">50,000+ Active Creators</h3>
-                  <p className="text-slate-300">From gaming to lifestyle - every niche covered</p>
-                </div>
+                <Image
+                  src={contentCreatorsImg}
+                  alt="Diverse creators collaborating (vertical)"
+                  width={400}
+                  height={400}
+                  className="rounded-2xl object-cover max-h-[400px] w-full block lg:hidden"
+                  priority
+                />
+              </div>
+              <div className="mt-6 text-center">
+                <h3 className="text-2xl font-bold text-white mb-2">Organic Content at Scale</h3>
+                <p className="text-slate-300">
+                  With Game Of Creators, you generate a high volume of diverse, high-quality content—without the hassle of sourcing, negotiating, or managing creators manually.
+                </p>
               </div>
             </div>
-
-            {/* Enhanced Features Grid */}
-            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {[
-                {
-                  title: "Authentic Content",
-                  description: "Generate genuine, viral-worthy content that your audience will love and share.",
-                  icon: Heart,
-                  color: "from-red-400 to-pink-500",
-                  metric: "95% authentic rate"
-                },
-                {
-                  title: "Real-Time Analytics",
-                  description: "Track every view, like, and conversion with our advanced analytics dashboard.",
-                  icon: BarChart3,
-                  color: "from-blue-400 to-cyan-500",
-                  metric: "Live tracking"
-                },
-                {
-                  title: "Easy Management",
-                  description: "Manage all your campaigns from one intuitive, game-like dashboard interface.",
-                  icon: Gamepad2,
-                  color: "from-purple-400 to-purple-600",
-                  metric: "5-min setup"
-                },
-                {
-                  title: "Targeted Reach",
-                  description: "Connect with creators whose audiences perfectly match your ideal customers.",
-                  icon: Target,
-                  color: "from-green-400 to-emerald-500",
-                  metric: "98% match rate"
-                },
-              ].map((item, index) => (
-                <div key={item.title} className="group relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-6 rounded-2xl border border-purple-500/20 hover:border-purple-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-600/5 to-pink-600/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-
-                  {/* Metric Badge */}
-                  <div className="absolute top-4 right-4">
-                    <Badge className={`bg-gradient-to-r ${item.color} text-white text-xs px-2 py-1 border-0`}>
-                      {item.metric}
-                    </Badge>
-                  </div>
-
-                  <div className="relative z-10">
-                    <div className={`inline-flex p-3 rounded-xl bg-gradient-to-r ${item.color} mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                      <item.icon className="h-6 w-6 text-white" />
-                    </div>
-
-                    <h3 className="text-xl font-bold text-white mb-3 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 group-hover:bg-clip-text transition-all duration-300">
-                      {item.title}
-                    </h3>
-
-                    <p className="text-slate-300 text-sm leading-relaxed">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Enhanced Bottom Row */}
-          <div className="grid md:grid-cols-3 gap-8 items-stretch">
-            <div className="group bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-8 rounded-3xl border border-green-500/20 hover:border-green-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm text-center">
-              <div className="inline-flex p-4 rounded-2xl bg-gradient-to-r from-green-400 to-emerald-500 mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Rocket className="h-8 w-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-4">Cost Effective</h3>
-              <p className="text-slate-300 leading-relaxed mb-4">Get 10x better ROI compared to traditional advertising. Every dollar counts!</p>
-              <Badge className="bg-gradient-to-r from-green-400 to-emerald-500 text-white px-3 py-1 text-sm border-0">
-                Average 400% ROI
-              </Badge>
-            </div>
-
-            <div className="group relative bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-8 rounded-3xl border border-cyan-500/20 hover:border-cyan-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm">
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-600/5 to-blue-600/5 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <Image
-                src="/placeholder-laptop-dashboard.jpg"
-                alt="Gaming-style dashboard"
-                width={300}
-                height={200}
-                className="rounded-2xl object-cover w-full mb-4"
-              />
-              <div className="text-center">
-                <h3 className="text-xl font-bold text-white mb-2">Gaming Dashboard</h3>
-                <p className="text-slate-300 text-sm">Level up your campaigns with our intuitive interface</p>
-              </div>
-            </div>
-
-            <div className="group bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-8 rounded-3xl border border-purple-500/20 hover:border-purple-500/60 transition-all duration-500 hover:scale-105 backdrop-blur-sm text-center">
-              <div className="inline-flex p-4 rounded-2xl bg-gradient-to-r from-purple-400 to-purple-600 mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Award className="h-8 w-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-4">24/7 Support</h3>
-              <p className="text-slate-300 leading-relaxed mb-4">Our gaming experts are always ready to help you win big!</p>
-              <Badge className="bg-gradient-to-r from-purple-400 to-purple-600 text-white px-3 py-1 text-sm border-0">
-                Always Online
-              </Badge>
-            </div>
+            {/* Top row, right of main card */}
+            <FeatureCard
+              icon={<Award className="h-6 w-6 text-yellow-400" />}
+              title="Only Pay for Top Performing Content"
+              description="Stop wasting money on content that doesn’t convert. Pay only for videos that perform."
+            />
+            <FeatureCard
+              icon={<Users className="h-6 w-6 text-pink-400" />}
+              title="Skip the Creator Outreach Hassle"
+              description="No more hours spent negotiating, coordinating, and following up. With Game Of Creators, the creators come to you."
+            />
+            <FeatureCard
+              icon={<Heart className="h-6 w-6 text-red-400" />}
+              title="Find Content-Market Fit"
+              description="Validate creative concepts with real audience engagement."
+            />
+            {/* Second row, right of main card */}
+            <FeatureCard
+              icon={<BarChart3 className="h-6 w-6 text-cyan-400" />}
+              title="Supply and Demand Based Platform"
+              description="Game Of Creators operates on a supply and demand model. Creators compete, allowing the best ideas to surface organically and driving higher engagement and reach."
+            />
+            <FeatureCard
+              icon={<Rocket className="h-6 w-6 text-green-400" />}
+              title="Scale Winners on Paid Ads"
+              description="Identify the best-performing content and seamlessly scale it into paid campaigns. With proven, audience-validated content, your ads drive higher engagement, lower costs, and better conversions."
+            />
+            <FeatureCard
+              icon={<Award className="h-6 w-6 text-purple-400" />}
+              title="24/7 Support"
+              description="Our team is always ready to help you win big with Game Of Creators!"
+            />
           </div>
         </div>
       </section>
