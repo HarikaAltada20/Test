@@ -1,9 +1,9 @@
-import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { ArrowRight, Award, BarChart3, Layers, PenTool, Lightbulb, Gauge, CheckCircle, Plus, X, Star, Crown, Sparkles, Target, TrendingUp, Zap, Trophy, Rocket, Shield, Users } from "lucide-react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import BrandGetStartedButton from '@/components/BrandGetStartedButton'
+import BrandLaunchContestButton from '@/components/BrandLaunchContestButton'
 
 // Placeholder for social icons image - reuse from creators page
 import SocialPairPng from "@/public/images/social_pair.png"
@@ -103,18 +103,7 @@ export default function BrandsPage() {
 
             {/* Epic CTA Button */}
             <div className="flex justify-center items-center mb-12">
-              <Button
-                size="lg"
-                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-12 py-4 rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 text-lg overflow-hidden"
-                asChild
-              >
-                <Link href="/auth/signup">
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Crown className="mr-3 h-5 w-5" />
-                  <span className="relative z-10">Get Started</span>
-                  <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </Button>
+              <BrandGetStartedButton />
             </div>
           </div>
         </section>
@@ -249,32 +238,32 @@ export default function BrandsPage() {
         </section>
 
         {/* Epic Stats Section */}
-        <section className="py-20 md:py-32 relative">
-          <div className="container mx-auto px-4">
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                { number: "3000+", label: "Creators on Platform", icon: <Users className="h-8 w-8" />, gradient: "from-violet-600 to-purple-600" },
-                { number: "100+", label: "Campaigns Delivered", icon: <Rocket className="h-8 w-8" />, gradient: "from-blue-600 to-indigo-600" },
-                { number: "80M+", label: "Views Generated", icon: <TrendingUp className="h-8 w-8" />, gradient: "from-amber-600 to-orange-600" },
-              ].map((stat, index) => (
-                <div key={index} className="group text-center">
-                  <div className="relative">
-                    <div className={`absolute inset-0 bg-gradient-to-r ${stat.gradient} rounded-3xl blur-2xl opacity-20 transition-opacity duration-500 group-hover:opacity-40`}></div>
-                    <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/60 backdrop-blur-md p-8 rounded-3xl border border-slate-600/50 group-hover:border-violet-400/50 shadow-2xl transition-all duration-300 hover:scale-105">
-                      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-r ${stat.gradient} bg-opacity-20 border border-violet-400/30 flex items-center justify-center text-violet-400 mx-auto mb-6`}>
-                        {stat.icon}
-                      </div>
-                      <p className={`text-6xl md:text-7xl font-black mb-4 bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent`}>
-                        {stat.number}
-                      </p>
-                      <p className="text-xl text-slate-300 font-semibold">{stat.label}</p>
+        {/* <section className="py-20 md:py-32 relative">
+        <div className="container mx-auto px-4">
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { number: "3000+", label: "Creators on Platform", icon: <Users className="h-8 w-8" />, gradient: "from-violet-600 to-purple-600" },
+              { number: "100+", label: "Campaigns Delivered", icon: <Rocket className="h-8 w-8" />, gradient: "from-blue-600 to-indigo-600" },
+              { number: "80M+", label: "Views Generated", icon: <TrendingUp className="h-8 w-8" />, gradient: "from-amber-600 to-orange-600" },
+            ].map((stat, index) => (
+              <div key={index} className="group text-center">
+                <div className="relative">
+                  <div className={`absolute inset-0 bg-gradient-to-r ${stat.gradient} rounded-3xl blur-2xl opacity-20 transition-opacity duration-500 group-hover:opacity-40`}></div>
+                  <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/60 backdrop-blur-md p-8 rounded-3xl border border-slate-600/50 group-hover:border-violet-400/50 shadow-2xl transition-all duration-300 hover:scale-105">
+                    <div className={`w-16 h-16 rounded-2xl bg-gradient-to-r ${stat.gradient} bg-opacity-20 border border-violet-400/30 flex items-center justify-center text-violet-400 mx-auto mb-6`}>
+                      {stat.icon}
                     </div>
+                    <p className={`text-6xl md:text-7xl font-black mb-4 bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent`}>
+                      {stat.number}
+                    </p>
+                    <p className="text-xl text-slate-300 font-semibold">{stat.label}</p>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section> */}
 
         {/* Gaming Brand Testimonials Section */}
         <section className="py-20 md:py-32 relative">
@@ -407,18 +396,7 @@ export default function BrandsPage() {
                 Launch your first contest today and witness the power of creator-generated content.
               </p>
 
-              <Button
-                size="lg"
-                className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-10 py-5 rounded-2xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-110 border border-violet-400/30 text-lg overflow-hidden"
-                asChild
-              >
-                <Link href="/auth/signup">
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                  <Rocket className="mr-3 h-5 w-5" />
-                  <span className="relative z-10">Launch a Contest</span>
-                  <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-2" />
-                </Link>
-              </Button>
+              <BrandLaunchContestButton />
             </div>
           </div>
         </section>

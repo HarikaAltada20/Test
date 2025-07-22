@@ -27,9 +27,20 @@ interface UserProfileData {
     isGoogleUser: boolean;
 }
 
+// Helper to get initial userType from localStorage
+function getInitialUserType() {
+    if (typeof window !== 'undefined') {
+        const storedRole = localStorage.getItem('signupRole');
+        if (storedRole === 'brand') {
+            return 'advertiser';
+        }
+    }
+    return 'creator';
+}
+
 export default function ChooseUsernamePage() {
     const [username, setUsername] = useState("")
-    const [userType, setUserType] = useState<'creator' | 'advertiser'>('creator')
+    const [userType, setUserType] = useState<'creator' | 'advertiser'>(getInitialUserType);
     const [referralCode, setReferralCode] = useState("")
     const [userData, setUserData] = useState<UserProfileData | null>(null)
     const [error, setError] = useState<string | null>(null)
@@ -102,7 +113,7 @@ export default function ChooseUsernamePage() {
                 setUserData({
                     id: profileData.id,
                     email: profileData.email,
-                    userType: 'creator',
+                    userType: userType,
                     referred_by_code: null,
                     needsUserTypeSelection,
                     needsReferralCodeInput,
@@ -117,7 +128,7 @@ export default function ChooseUsernamePage() {
                 setLastName(fullNameParts.slice(1).join(" ") || "");
 
                 // Set other initial form values
-                setUserType('creator');
+                setUserType(userType);
                 setReferralCode("");
 
                 setIsLoadingProfile(false)
@@ -142,7 +153,7 @@ export default function ChooseUsernamePage() {
             const needsFullName = !profileData.full_name && !isAuthGoogleUser; // Email users need first/last name
             const needsPassword = !isAuthGoogleUser; // Email users need password, Google users can optionally add
 
-            const finalUserType = profileData.user_type || 'creator';
+            const finalUserType = profileData.user_type || userType;
 
             setUserData({
                 id: profileData.id,
@@ -170,6 +181,16 @@ export default function ChooseUsernamePage() {
 
         fetchProfileAndRedirect()
     }, [router, supabase, toast])
+
+    useEffect(() => {
+        // Only clear signupRole from localStorage (no need to set userType here)
+        if (typeof window !== 'undefined') {
+            const storedRole = localStorage.getItem('signupRole');
+            if (storedRole === 'brand') {
+                localStorage.removeItem('signupRole');
+            }
+        }
+    }, []);
 
     useEffect(() => {
         if (!username || username.length < 3) {

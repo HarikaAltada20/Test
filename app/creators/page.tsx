@@ -301,7 +301,7 @@ export default function CreatorsPage() {
         </section>
 
         {/* Epic Stats Section */}
-        <section className="py-20 md:py-32 relative">
+        {/* <section className="py-20 md:py-32 relative">
           <div className="container mx-auto px-4">
             <div className="grid md:grid-cols-3 gap-8">
               {[
@@ -326,7 +326,7 @@ export default function CreatorsPage() {
               ))}
             </div>
           </div>
-        </section>
+        </section> */}
 
         {/* Gaming Testimonials Section */}
         <section className="py-20 md:py-32 relative">
