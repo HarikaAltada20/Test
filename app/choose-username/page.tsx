@@ -62,7 +62,7 @@ export default function ChooseUsernamePage() {
 
     useEffect(() => {
         const fetchProfileAndRedirect = async () => {
-            setIsLoadingProfile(true)
+            setIsLoadingProfile(true);
             const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
 
             if (authError || !authUser) {
@@ -128,7 +128,6 @@ export default function ChooseUsernamePage() {
                 setLastName(fullNameParts.slice(1).join(" ") || "");
 
                 // Set other initial form values
-                setUserType(userType);
                 setReferralCode("");
 
                 setIsLoadingProfile(false)
@@ -153,12 +152,11 @@ export default function ChooseUsernamePage() {
             const needsFullName = !profileData.full_name && !isAuthGoogleUser; // Email users need first/last name
             const needsPassword = !isAuthGoogleUser; // Email users need password, Google users can optionally add
 
-            const finalUserType = profileData.user_type || userType;
 
             setUserData({
                 id: profileData.id,
                 email: profileData.email,
-                userType: finalUserType,
+                userType: userType,
                 referred_by_code: profileData.referred_by || null,
                 needsUserTypeSelection,
                 needsReferralCodeInput,
@@ -173,7 +171,6 @@ export default function ChooseUsernamePage() {
             setLastName(fullNameParts.slice(1).join(" ") || "");
 
             // Set other initial form values
-            setUserType(finalUserType);
             setReferralCode(profileData.referred_by || "");
 
             setIsLoadingProfile(false)
