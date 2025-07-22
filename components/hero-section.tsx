@@ -465,6 +465,18 @@ export function HeroSection() {
               title="24/7 Support"
               description="Our team is always ready to help you win big with Game Of Creators!"
             />
+            {/* New: Democratized Brand Deals */}
+            <FeatureCard
+              icon={<Globe className="h-6 w-6 text-blue-400" />}
+              title="Democratized Brand Deals"
+              description="Every creator, no matter their follower count, can join and win. Success is based on creativity and performance—not just popularity."
+            />
+            {/* New: Creator Freedom of Choice */}
+            <FeatureCard
+              icon={<Palette className="h-6 w-6 text-orange-400" />}
+              title="Creator Freedom of Choice"
+              description="Creators choose which brands and campaigns to promote, empowering them to work with what they love and get paid for it."
+            />
           </div>
         </div>
       </section>
