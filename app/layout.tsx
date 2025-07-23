@@ -6,6 +6,7 @@ import { Nav } from "@/components/nav";
 import { Toaster } from "@/components/ui/toaster";
 import { createClient } from "@/utils/supabase/server";
 import { ConditionalFooter } from "./conditional-footer";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -122,6 +123,7 @@ export default async function RootLayout({
           <ConditionalFooter />
         </div>
         <Toaster />
+        <Analytics />
       </body>
     </html>
   );
