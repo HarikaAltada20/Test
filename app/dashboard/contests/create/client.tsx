@@ -190,6 +190,10 @@ export default function CreateContestPage({
   const richTextEditorRef = useRef<any>(null);
   const rulesRichTextEditorRef = useRef<any>(null);
 
+  // Add at top-level state
+  const [showBackModal, setShowBackModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Add this function for handling resource file uploads
 
   useEffect(() => {
@@ -311,7 +315,7 @@ export default function CreateContestPage({
         .from("contests")
         .insert({
           advertiser_id: user.id,
-          title: "Draft Contest",
+          title: title || "No Title - Draft",
           category: "technology",
           brief_html: "",
           brief_json: null,
@@ -394,67 +398,28 @@ export default function CreateContestPage({
   const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-
-      // Check file size limit (5MB)
-      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      const maxSize = 5 * 1024 * 1024; // 5MB
       if (file.size > maxSize) {
         toast({
           title: "File Too Large",
           description: "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
           variant: "destructive"
         });
-        // Reset file input
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
         return;
       }
-
       try {
-        // Check if storage is available
         const isStorageAvailable = await checkStorageAvailability();
         if (!isStorageAvailable) {
           toast({ title: "Storage Error", description: "Storage is not available. Please try again later.", variant: "destructive" });
           return;
         }
-
         if (!user?.id) {
           toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
           return;
         }
-
-        // If there's an existing thumbnail, delete it first
-        if (thumbnailPreview && thumbnailPreview.includes('supabase.co/storage')) {
-          await deleteFromStorage(thumbnailPreview);
-        }
-
-        // Upload new thumbnail immediately
-        const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-
-        // Show uploading state
-        setThumbnail(file);
-        setThumbnailPreview("uploading");
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("contest-assets")
-          .upload(fileName, file);
-
-        if (uploadError) {
-          throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
-        }
-
-        // Get the public URL for the uploaded file
-        const { data: publicUrlData } = supabase.storage
-          .from("contest-assets")
-          .getPublicUrl(fileName);
-
-        const publicUrl = publicUrlData?.publicUrl || "";
-
-        if (!publicUrl) {
-          throw new Error("Failed to get public URL for uploaded thumbnail");
-        }
-
-        // Create draft contest if it doesn't exist yet
         let currentContestId = contestId;
         if (!currentContestId) {
           const newContestId = await createDraftContest();
@@ -463,24 +428,47 @@ export default function CreateContestPage({
             currentContestId = newContestId;
           }
         }
-
-        // Update state with Supabase URL
-        setThumbnail(null); // Clear the File object since it's now uploaded
+        // Remove any existing thumbnail for this contest (all extensions)
+        const { data: existingFiles } = await supabase.storage
+          .from("contest-assets")
+          .list("contest_thumbnails");
+        if (existingFiles) {
+          const matching = existingFiles.filter(f => f.name.startsWith(`${currentContestId}_`));
+          if (matching.length > 0) {
+            const paths = matching.map(f => `contest_thumbnails/${f.name}`);
+            await supabase.storage.from("contest-assets").remove(paths);
+          }
+        }
+        // Get extension and timestamp
+        const ext = file.name.split('.').pop() || 'jpg';
+        const timestamp = Date.now();
+        const fileName = `contest_thumbnails/${currentContestId}_${timestamp}.${ext}`;
+        setThumbnail(file);
+        setThumbnailPreview("uploading");
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("contest-assets")
+          .upload(fileName, file);
+        if (uploadError) {
+          throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
+        }
+        const { data: publicUrlData } = supabase.storage
+          .from("contest-assets")
+          .getPublicUrl(fileName);
+        const publicUrl = publicUrlData?.publicUrl || "";
+        if (!publicUrl) {
+          throw new Error("Failed to get public URL for uploaded thumbnail");
+        }
+        setThumbnail(null);
         setThumbnailPreview(publicUrl);
-
-        // Instantly update DB with thumbnail URL
         if (currentContestId) {
           await updateContestInDB({ thumbnail_url: publicUrl });
         }
-
         toast({ title: "Success", description: "Thumbnail uploaded successfully!" });
       } catch (error: any) {
         console.error("Error uploading thumbnail:", error);
         setThumbnail(null);
         setThumbnailPreview(null);
         toast({ title: "Upload Error", description: `Failed to upload thumbnail: ${error.message}`, variant: "destructive" });
-
-        // Reset file input
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
@@ -554,53 +542,22 @@ export default function CreateContestPage({
       setAssetUploadError("Asset description is required for the uploaded file.");
       return;
     }
-
-    // Check file size limit (20MB)
-    const maxSize = 20 * 1024 * 1024; // 20MB in bytes
+    const maxSize = 20 * 1024 * 1024; // 20MB
     if (resourceFile.size > maxSize) {
       setAssetUploadError("File must be 20MB or smaller. Please choose a smaller file.");
       return;
     }
-
     try {
-      // Check if storage is available
       const isStorageAvailable = await checkStorageAvailability();
       if (!isStorageAvailable) {
         setAssetUploadError("Storage is not available. Please try again later.");
         return;
       }
-
       if (!user?.id) {
         setAssetUploadError("User not authenticated. Please sign in again.");
         return;
       }
-
-      // Set loading state
       setIsUploadingAsset(true);
-
-      // Upload file to Supabase immediately
-      const fileName = `contest_resources/${user.id}_${Date.now()}_${resourceFile.name.replace(/\s+/g, '_')}`;
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("contest-assets")
-        .upload(fileName, resourceFile);
-
-      if (uploadError) {
-        throw new Error(`Failed to upload file: ${uploadError.message}`);
-      }
-
-      // Get the public URL for the uploaded file
-      const { data: publicUrlData } = supabase.storage
-        .from("contest-assets")
-        .getPublicUrl(fileName);
-
-      const publicUrl = publicUrlData?.publicUrl || "";
-
-      if (!publicUrl) {
-        throw new Error("Failed to get public URL for uploaded file");
-      }
-
-      // Create draft contest if it doesn't exist yet
       let currentContestId = contestId;
       if (!currentContestId) {
         const newContestId = await createDraftContest();
@@ -609,8 +566,21 @@ export default function CreateContestPage({
           currentContestId = newContestId;
         }
       }
-
-      // Add to resources array with actual Supabase URL
+      // Use per-contest folder
+      const fileName = `contest_resources/${currentContestId}/${resourceFile.name.replace(/\s+/g, '_')}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("contest-assets")
+        .upload(fileName, resourceFile);
+      if (uploadError) {
+        throw new Error(`Failed to upload file: ${uploadError.message}`);
+      }
+      const { data: publicUrlData } = supabase.storage
+        .from("contest-assets")
+        .getPublicUrl(fileName);
+      const publicUrl = publicUrlData?.publicUrl || "";
+      if (!publicUrl) {
+        throw new Error("Failed to get public URL for uploaded file");
+      }
       const newResources: ResourceItem[] = [
         ...resources,
         {
@@ -619,14 +589,10 @@ export default function CreateContestPage({
           type: "internal",
         },
       ];
-
       setResources(newResources);
-
-      // Instantly update DB with new resources array
       if (currentContestId) {
         await updateContestInDB({ resources: newResources });
       }
-
       removeResourceFile();
       setAssetUploadError(null);
       toast({ title: "Success", description: "Asset uploaded successfully!" });
@@ -634,7 +600,6 @@ export default function CreateContestPage({
       console.error("Error uploading resource:", error);
       setAssetUploadError(`Failed to upload asset: ${error.message}`);
     } finally {
-      // Clear loading state
       setIsUploadingAsset(false);
     }
   };
@@ -644,9 +609,9 @@ export default function CreateContestPage({
   const handleSaveDraft = async () => {
     try {
       // Reset global form feedback
+      setIsLoading(true);
       setFormFeedback(null);
       setFormFeedbackType(null);
-      setIsLoading(true);
       setUploadProgress("Saving draft...");
 
       // Capture brief content if we're on the brief step and not showing preview
@@ -828,9 +793,9 @@ export default function CreateContestPage({
 
   const handleSubmit = async (isDraft: boolean = false) => {
     // Reset global form feedback
+    setIsLoading(true);
     setFormFeedback(null);
     setFormFeedbackType(null);
-    setIsLoading(true);
 
     let prepTimeoutId: ReturnType<typeof setTimeout> | undefined = undefined;
 
@@ -1213,25 +1178,14 @@ export default function CreateContestPage({
       }
 
       if (!isDraft) {
-        // Get the contest fee amount based on type
-        const contestFeeAmount = contestType === "leaderboard"
-          ? totalPrizePool / 100  // Convert cents to dollars
-          : (parseFloat(totalBudget.toString()) || 0); // Budget is already in dollars
-
-        const contestId = responseData?.[0]?.id;
-
         // Show payment interface before final submission
         setShowPayment(true);
         setIsLoading(false);
         setUploadProgress(null);
-
-        // Don't proceed to final submission until payment is completed
-        // This will be handled by the payment component
         return;
       } else {
         // This 'else' block is for draft saving if handleSubmit is directly called with isDraft=true.
         if (prepTimeoutId !== undefined) clearTimeout(prepTimeoutId);
-        setIsLoading(false);
         setUploadProgress(null);
         toast({ title: "Draft Saved", description: "Your contest draft has been saved successfully!" });
         // Redirect to contests list page to see the draft among all contests
@@ -1252,6 +1206,7 @@ export default function CreateContestPage({
   };
 
   const handlePaymentSuccess = async (paymentDetails: any) => {
+    setIsLoading(true);
     setPaymentCompleted(true);
     setShowPayment(false);
 
@@ -1314,6 +1269,7 @@ export default function CreateContestPage({
         });
         // Still redirect to contest page so user can retry submission manually
         router.push(`/dashboard/contests/${contestId}`);
+        setIsLoading(false);
       }
     };
 
@@ -1346,7 +1302,26 @@ export default function CreateContestPage({
       setExternalLinkError("Resource description cannot be empty for external link.");
       return;
     }
-
+    // Check if both URL and description are the same as an existing external link (most specific)
+    if (resources.some(r => r.type === "external" && r.url === newResourceUrl && r.description === externalResourceDescription)) {
+      setExternalLinkError("This external link and description have already been added. Please use a different link or description.");
+      toast({
+        title: "Duplicate Link & Description",
+        description: "This external link and description have already been added. Please use a different link or description.",
+        variant: "destructive"
+      });
+      return;
+    }
+    // Check if external link with same URL already exists
+    if (resources.some(r => r.type === "external" && r.url === newResourceUrl)) {
+      setExternalLinkError("This external link has already been added. Please use a different link.");
+      toast({
+        title: "Duplicate Link",
+        description: "This external link has already been added. Please use a different link.",
+        variant: "destructive"
+      });
+      return;
+    }
     // Create draft contest if it doesn't exist yet
     let currentContestId = contestId;
     if (!currentContestId) {
@@ -1356,7 +1331,6 @@ export default function CreateContestPage({
         currentContestId = newContestId;
       }
     }
-
     const newResources: ResourceItem[] = [
       ...resources,
       {
@@ -1365,14 +1339,11 @@ export default function CreateContestPage({
         type: "external",
       },
     ];
-
     setResources(newResources);
-
     // Instantly update DB with new resources array
     if (currentContestId) {
       await updateContestInDB({ resources: newResources });
     }
-
     setNewResourceUrl("");
     setExternalResourceDescription("");
     toast({ title: "Success", description: "External resource added!" });
@@ -1480,6 +1451,53 @@ export default function CreateContestPage({
     }
   };
 
+  // Add this function to save basics as draft
+  const saveBasicsAsDraft = async () => {
+    if (!title.trim()) return; // Don't save empty titles
+    let currentContestId = contestId;
+    try {
+      // Prepare basics data
+      const basicsData = {
+        advertiser_id: user?.id,
+        title,
+        category,
+        platform,
+        contest_type: contestType,
+        thumbnail_url: thumbnailPreview || null,
+        moderation_status: 'draft',
+      };
+      if (!currentContestId) {
+        // Create new draft contest
+        const { data, error } = await supabase
+          .from("contests")
+          .insert(basicsData)
+          .select()
+          .single();
+        if (error) {
+          console.error('Error creating basics draft:', error);
+          return;
+        }
+        setContestId(data.id);
+        setDraftId(data.id);
+        return data.id;
+      } else {
+        // Update existing draft contest
+        const { error } = await supabase
+          .from("contests")
+          .update(basicsData)
+          .eq("id", currentContestId)
+          .eq("advertiser_id", user?.id);
+        if (error) {
+          console.error('Error updating basics draft:', error);
+        }
+        return currentContestId;
+      }
+    } catch (error) {
+      console.error('Error in saveBasicsAsDraft:', error);
+    }
+  };
+
+  // Update nextStep to auto-save basics as draft before moving to brief
   const nextStep = async () => {
     setFormFeedback(null); // Clear previous global form feedback
     setFormFeedbackType(null);
@@ -1490,6 +1508,7 @@ export default function CreateContestPage({
       setFormFeedback(message);
       setFormFeedbackType("error");
       setToastErrorMessage(message);
+      toast({ title: "Error", description: message, variant: "destructive" });
     };
 
     // Validate only what's needed for the current step
@@ -1514,6 +1533,8 @@ export default function CreateContestPage({
         }
       }
 
+      // Auto-save basics as draft before moving to next step
+      await saveBasicsAsDraft();
       setStep("brief");
     } else if (step === "brief") {
       // Small delay to ensure state is updated from editor
@@ -2851,35 +2872,20 @@ export default function CreateContestPage({
     );
   };
   // Modify the clearResources function
-  const clearResources = async () => {
-    setResources([]);
-  };
+
 
   // Create a utility function to clean up all contest assets
   const cleanupContestAssets = async (contestId: string) => {
     try {
-      // Get prefix for files related to this contest
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData?.user) return;
-
-      const userId = authData.user.id;
-
-      // For contest resources
       try {
-        // List files in the contest_resources folder
-        const { data: resourceFiles, error: resourceError } =
-          await supabase.storage
-            .from("contest-assets")
-            .list(`contest_resources`, {
-              search: `${userId}_${contestId}`,
-            });
-
+        const { data: resourceFiles, error: resourceError } = await supabase.storage
+          .from("contest-assets")
+          .list(`contest_resources/${contestId}`);
         if (resourceError) {
           console.error("Error listing resource files:", resourceError);
         } else if (resourceFiles && resourceFiles.length > 0) {
-          // Delete all found resource files
           const resourceFilePaths = resourceFiles.map(
-            (file) => `contest_resources/${file.name}`
+            (file) => `contest_resources/${contestId}/${file.name}`
           );
           await supabase.storage
             .from("contest-assets")
@@ -2888,27 +2894,21 @@ export default function CreateContestPage({
       } catch (err) {
         console.error("Error deleting resource files:", err);
       }
-
-      // For thumbnails
+      // Delete all thumbnails for this contest (all extensions)
       try {
-        // List files in the contest_thumbnails folder
-        const { data: thumbnailFiles, error: thumbnailError } =
-          await supabase.storage
-            .from("contest-assets")
-            .list(`contest_thumbnails`, {
-              search: `${userId}_${contestId}`,
-            });
-
+        const { data: thumbnailFiles, error: thumbnailError } = await supabase.storage
+          .from("contest-assets")
+          .list("contest_thumbnails");
         if (thumbnailError) {
           console.error("Error listing thumbnail files:", thumbnailError);
         } else if (thumbnailFiles && thumbnailFiles.length > 0) {
-          // Delete all found thumbnail files
-          const thumbnailFilePaths = thumbnailFiles.map(
-            (file) => `contest_thumbnails/${file.name}`
-          );
-          await supabase.storage
-            .from("contest-assets")
-            .remove(thumbnailFilePaths);
+          const matching = thumbnailFiles.filter(f => f.name.startsWith(`${contestId}_`));
+          if (matching.length > 0) {
+            const thumbnailFilePaths = matching.map(f => `contest_thumbnails/${f.name}`);
+            await supabase.storage
+              .from("contest-assets")
+              .remove(thumbnailFilePaths);
+          }
         }
       } catch (err) {
         console.error("Error deleting thumbnail files:", err);
@@ -2959,6 +2959,26 @@ export default function CreateContestPage({
       setInspirationError("Description is required.");
       return;
     }
+    // Duplicate check: same URL and description
+    if (inspirationLinks.some(link => link.url === newInspirationUrl && link.description === newInspirationDescription)) {
+      setInspirationError("This inspiration link and description have already been added. Please use a different link or description.");
+      toast({
+        title: "Duplicate Inspiration Link & Description",
+        description: "This inspiration link and description have already been added. Please use a different link or description.",
+        variant: "destructive"
+      });
+      return;
+    }
+    // Duplicate check: same URL
+    if (inspirationLinks.some(link => link.url === newInspirationUrl)) {
+      setInspirationError("This inspiration link has already been added. Please use a different link.");
+      toast({
+        title: "Duplicate Inspiration Link",
+        description: "This inspiration link has already been added. Please use a different link.",
+        variant: "destructive"
+      });
+      return;
+    }
     setInspirationLinks([...inspirationLinks, { url: newInspirationUrl, description: newInspirationDescription }]);
     setNewInspirationUrl("");
     setNewInspirationDescription("");
@@ -2970,58 +2990,26 @@ export default function CreateContestPage({
     setIsDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-
-      // Check file size limit (20MB)
-      const maxSize = 20 * 1024 * 1024; // 20MB in bytes
+      const maxSize = 20 * 1024 * 1024; // 20MB
       if (file.size > maxSize) {
         setAssetUploadError("File must be 20MB or smaller. Please choose a smaller file.");
         return;
       }
-
-      // Prompt for description
       const description = prompt("Enter a description for this asset:");
       if (!description || !description.trim()) {
         setAssetUploadError("Asset description is required.");
         return;
       }
-
-      // Check if resource with same description already exists
       if (resources.some(r => r.description === description.trim())) {
-        setAssetUploadError(`A resource with the description "${description.trim()}" already exists. Please use a unique description.`);
+        setAssetUploadError(`A resource with the description \"${description.trim()}\" already exists. Please use a unique description.`);
         return;
       }
-
       if (!user?.id) {
         setAssetUploadError("User not authenticated. Please sign in again.");
         return;
       }
-
       try {
-        // Set loading state
         setIsUploadingAsset(true);
-
-        // Upload file to Supabase immediately
-        const fileName = `contest_resources/${user.id}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-        const { error: uploadError } = await supabase.storage
-          .from("contest-assets")
-          .upload(fileName, file);
-
-        if (uploadError) {
-          throw new Error(`Failed to upload file: ${uploadError.message}`);
-        }
-
-        // Get the public URL for the uploaded file
-        const { data: publicUrlData } = supabase.storage
-          .from("contest-assets")
-          .getPublicUrl(fileName);
-
-        const publicUrl = publicUrlData?.publicUrl || "";
-
-        if (!publicUrl) {
-          throw new Error("Failed to get public URL for uploaded file");
-        }
-
-        // Create draft contest if it doesn't exist yet
         let currentContestId = contestId;
         if (!currentContestId) {
           const newContestId = await createDraftContest();
@@ -3030,35 +3018,89 @@ export default function CreateContestPage({
             currentContestId = newContestId;
           }
         }
-
-        // Add to resources array with actual Supabase URL
+        // Use per-contest folder
+        const fileName = `contest_resources/${currentContestId}/${file.name.replace(/\s+/g, '_')}`;
+        const { error: uploadError } = await supabase.storage
+          .from("contest-assets")
+          .upload(fileName, file);
+        if (uploadError) {
+          throw new Error(`Failed to upload file: ${uploadError.message}`);
+        }
+        const { data: publicUrlData } = supabase.storage
+          .from("contest-assets")
+          .getPublicUrl(fileName);
+        const publicUrl = publicUrlData?.publicUrl || "";
+        if (!publicUrl) {
+          throw new Error("Failed to get public URL for uploaded file");
+        }
         const newResources: ResourceItem[] = [
           ...resources,
           {
             url: publicUrl,
             description: description.trim(),
             type: "internal",
-          }
+          },
         ];
-
         setResources(newResources);
-
-        // Instantly update DB with new resources array
         if (currentContestId) {
           await updateContestInDB({ resources: newResources });
         }
-
         setAssetUploadError(null);
         toast({ title: "Success", description: "Asset uploaded successfully!" });
       } catch (error: any) {
         console.error("Error uploading resource:", error);
         setAssetUploadError(`Failed to upload asset: ${error.message}`);
       } finally {
-        // Clear loading state
         setIsUploadingAsset(false);
       }
     }
   };
+
+  // Handler for Back to Contests button
+  const handleBackToContests = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    setShowBackModal(true);
+  };
+
+  // Handler for Save as Draft in modal
+  const handleSaveDraftAndBack = async () => {
+    await handleSaveDraft();
+    router.push('/dashboard/contests');
+  };
+
+  // Handler for Delete in modal
+  const handleDeleteAndBack = async () => {
+    if (!contestId) {
+      router.push('/dashboard/contests');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await cleanupContestAssets(contestId);
+      // Delete contest from DB
+      await supabase.from('contests').delete().eq('id', contestId);
+    } catch (err) {
+      console.error('Error deleting contest and assets:', err);
+    } finally {
+      setIsDeleting(false);
+      router.push('/dashboard/contests');
+    }
+  };
+
+  // Custom Back Modal component
+  const BackModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+        <h2 className="text-xl font-bold mb-4">Leave Contest Creation?</h2>
+        <p className="mb-6">Do you want to save this contest as a draft or delete it? All progress will be lost if you delete.</p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setShowBackModal(false)} disabled={isDeleting}>Cancel</Button>
+          <Button variant="destructive" onClick={handleDeleteAndBack} disabled={isDeleting}>{isDeleting ? 'Deleting...' : 'Delete'}</Button>
+          <Button onClick={handleSaveDraftAndBack} disabled={isDeleting}>Save as Draft</Button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="container mx-auto py-8">
@@ -3067,13 +3109,12 @@ export default function CreateContestPage({
         <div className="flex items-center gap-4 mb-6">
           <Button
             variant="outline"
-            asChild
+            asChild={false}
             className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+            onClick={handleBackToContests}
           >
-            <Link href="/dashboard/contests">
-              <ArrowLeft className="h-4 w-4" />
-              <span className="font-medium">Back to Contests</span>
-            </Link>
+            <ArrowLeft className="h-4 w-4" />
+            <span className="font-medium">Back to Contests</span>
           </Button>
         </div>
         <div className="text-center">
@@ -4029,6 +4070,8 @@ export default function CreateContestPage({
       {toastErrorMessage && (
         <ErrorAlert key={toastErrorMessage} message={toastErrorMessage} />
       )}
+      {/* Render BackModal if needed */}
+      {showBackModal && <BackModal />}
     </div>
   );
 }

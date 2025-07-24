@@ -20,6 +20,7 @@ import { UserResponse } from "@supabase/supabase-js"
 import { useToast } from "@/hooks/use-toast"
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection"
 import dynamic from 'next/dynamic'
+import { canCreateNewContest } from '@/lib/contest-utils-client'
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(
@@ -699,7 +700,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 return;
             }
 
-            const hasUploadedFiles = false; // not used
             const hasExistingResources = resources && resources.length > 0;
             const totalResources =
                 (hasExistingResources ? resources.length : 0);
@@ -950,47 +950,39 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 description: err.message || "Failed to update contest",
                 variant: "destructive",
             });
-        } finally {
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            setIsSubmitting(false);
         }
     };
-    /*************  ✨ Windsurf Command ⭐  *************/
-    /**
-     * Handles the change event for the thumbnail file input.
-     * 
-     * This function is responsible for uploading a new thumbnail image to Supabase storage
-     * when a user selects a file. It performs validation, such as file size checks and user
-     * authentication, deletes any existing thumbnail if necessary, and updates the contest's
-     * thumbnail URL in the database.
-     * 
-    /*******  e3ba20e1-b8ad-45a2-9eb0-02bfb0a8017c  *******/
+
     const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             setThumbnail(file);
-
             if (!user?.id) {
                 setAssetUploadError("User not authenticated. Please sign in again.");
                 return;
             }
-
-            // Optional: 5MB size limit
             const maxSize = 5 * 1024 * 1024;
             if (file.size > maxSize) {
                 setAssetUploadError("Thumbnail must be 5MB or smaller. Please choose a smaller file.");
                 if (fileInputRef.current) fileInputRef.current.value = "";
                 return;
             }
-
             try {
-                // Delete previous thumbnail if it exists and is a Supabase URL
-                if (thumbnailPreview && thumbnailPreview.includes('supabase.co/storage')) {
-                    await deleteFromStorage(thumbnailPreview);
+                // Remove any existing thumbnail for this contest (all extensions)
+                const { data: existingFiles } = await supabase.storage
+                    .from("contest-assets")
+                    .list("contest_thumbnails");
+                if (existingFiles) {
+                    const matching = existingFiles.filter(f => f.name.startsWith(`${contestId}_`));
+                    if (matching.length > 0) {
+                        const paths = matching.map(f => `contest_thumbnails/${f.name}`);
+                        await supabase.storage.from("contest-assets").remove(paths);
+                    }
                 }
-
-                // Upload to Supabase
-                const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+                // Get extension and timestamp
+                const ext = file.name.split('.').pop() || 'jpg';
+                const timestamp = Date.now();
+                const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
                 const { error: uploadError } = await supabase.storage
                     .from('contest-assets')
                     .upload(fileName, file);
@@ -1015,15 +1007,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     };
 
     const removeThumbnail = async () => {
-        // Delete from storage if it's a Supabase URL
-        if (thumbnailPreview && thumbnailPreview.includes('supabase.co/storage')) {
-            try {
-                await deleteFromStorage(thumbnailPreview);
-            } catch (error) {
-                console.error('Error deleting thumbnail from storage:', error);
+        // Delete all thumbnails for this contest (all extensions)
+        try {
+            const { data: thumbnailFiles } = await supabase.storage
+                .from("contest-assets")
+                .list("contest_thumbnails");
+            if (thumbnailFiles && thumbnailFiles.length > 0) {
+                const matching = thumbnailFiles.filter(f => f.name.startsWith(`${contestId}_`));
+                if (matching.length > 0) {
+                    const thumbnailFilePaths = matching.map(f => `contest_thumbnails/${f.name}`);
+                    await supabase.storage
+                        .from("contest-assets")
+                        .remove(thumbnailFilePaths);
+                }
             }
+        } catch (error) {
+            console.error('Error deleting thumbnail from storage:', error);
         }
-
         // Update DB to remove thumbnail URL
         if (user?.id && contestId) {
             try {
@@ -1036,7 +1036,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 console.error('Error updating thumbnail in DB:', error);
             }
         }
-
         setThumbnail(null)
         setThumbnailPreview(null)
         if (fileInputRef.current) {
@@ -1064,7 +1063,26 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             setInspirationError("Description is required.");
             return;
         }
-
+        // Duplicate check: same URL and description
+        if (inspirationLinks.some(link => link.url === newInspirationUrl && link.description === newInspirationDescription)) {
+            setInspirationError("This inspiration link and description have already been added. Please use a different link or description.");
+            toast({
+                title: "Duplicate Inspiration Link & Description",
+                description: "This inspiration link and description have already been added. Please use a different link or description.",
+                variant: "destructive"
+            });
+            return;
+        }
+        // Duplicate check: same URL
+        if (inspirationLinks.some(link => link.url === newInspirationUrl)) {
+            setInspirationError("This inspiration link has already been added. Please use a different link.");
+            toast({
+                title: "Duplicate Inspiration Link",
+                description: "This inspiration link has already been added. Please use a different link.",
+                variant: "destructive"
+            });
+            return;
+        }
         setInspirationLinks([...inspirationLinks, { url: newInspirationUrl, description: newInspirationDescription }]);
         setNewInspirationUrl("");
         setNewInspirationDescription("");
@@ -1119,72 +1137,65 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             setAssetUploadError("Please provide a description for the asset.");
             return;
         }
-
-        // Check file size limit (20MB)
-        const maxSize = 20 * 1024 * 1024; // 20MB in bytes
+        const maxSize = 20 * 1024 * 1024; // 20MB
         if (resourceFile.size > maxSize) {
             setAssetUploadError("File must be 20MB or smaller. Please choose a smaller file.");
             return;
         }
-
         const resourceName = resourceDescription.trim();
-        // Check if resource with same description already exists
         if (resources.some(r => r.description === resourceName)) {
-            setAssetUploadError(`A resource with the description "${resourceName}" already exists. Please use a unique description.`);
+            setAssetUploadError(`A resource with the description \"${resourceName}\" already exists. Please use a unique description.`);
             return;
         }
-
         try {
             if (!user?.id) {
                 setAssetUploadError("User not authenticated. Please sign in again.");
                 return;
             }
-
-            // Set loading state
             setIsUploadingAsset(true);
-
-            // Upload file to Supabase immediately
-            const fileName = `contest_resources/${user.id}_${Date.now()}_${resourceFile.name.replace(/\s+/g, '_')}`;
-
+            // Use per-contest folder
+            const fileName = `contest_resources/${contestId}/${resourceFile.name.replace(/\s+/g, '_')}`;
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from("contest-assets")
                 .upload(fileName, resourceFile);
-
             if (uploadError) {
-                throw new Error(`Failed to upload file: ${uploadError.message}`);
+                let userMessage = `Failed to upload asset: ${uploadError.message}`;
+                if (uploadError.message && uploadError.message.toLowerCase().includes('resource already exists')) {
+                    userMessage = 'A file with this name already exists for this contest. Please rename your file or remove the existing one before uploading.';
+                }
+                setAssetUploadError(userMessage);
+                toast({
+                    title: "Upload Error",
+                    description: userMessage,
+                    variant: "destructive"
+                });
+                return;
             }
-
-            // Get the public URL for the uploaded file
             const { data: publicUrlData } = supabase.storage
                 .from("contest-assets")
                 .getPublicUrl(fileName);
-
             const publicUrl = publicUrlData?.publicUrl || "";
-
             if (!publicUrl) {
                 throw new Error("Failed to get public URL for uploaded file");
             }
-
-            // Add to resources array with actual Supabase URL
             const newResources: ResourceItem[] = [...resources, {
                 url: publicUrl,
                 description: resourceName,
                 type: "internal",
             }];
-
             setResources(newResources);
-
-            // Instantly update DB with new resources array
             await updateContestResourcesInDB(newResources);
-
-            setResourceSuccess(`Asset "${resourceName}" uploaded successfully!`);
+            setResourceSuccess(`Asset \"${resourceName}\" uploaded successfully!`);
             removeResourceFile();
             setAssetUploadError(null);
         } catch (error: any) {
-            console.error("Error uploading resource:", error);
             setAssetUploadError(`Failed to upload asset: ${error.message}`);
+            toast({
+                title: "Upload Error",
+                description: `Failed to upload asset: ${error.message}`,
+                variant: "destructive"
+            });
         } finally {
-            // Clear loading state
             setIsUploadingAsset(false);
         }
     };
@@ -1197,12 +1208,26 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             return;
         }
         const resourceName = externalResourceDescription.trim();
-        // Check if resource with same description already exists
-        if (resources.some(r => r.description === resourceName)) {
-            setResourceError(`A resource with the description "${resourceName}" already exists. Please use a unique description.`);
+        // Check if both URL and description are the same as an existing external link (most specific)
+        if (resources.some(r => r.type === "external" && r.url === newInspirationUrl && r.description === resourceName)) {
+            setResourceError("This external link and description have already been added. Please use a different link or description.");
+            toast({
+                title: "Duplicate Link & Description",
+                description: "This external link and description have already been added. Please use a different link or description.",
+                variant: "destructive"
+            });
             return;
         }
-
+        // Check if external link with same URL already exists
+        if (resources.some(r => r.type === "external" && r.url === newInspirationUrl)) {
+            setResourceError("This external link has already been added. Please use a different link.");
+            toast({
+                title: "Duplicate Link",
+                description: "This external link has already been added. Please use a different link.",
+                variant: "destructive"
+            });
+            return;
+        }
         try {
             const urlObj = new URL(newInspirationUrl);
             if (urlObj.protocol !== "https:") {
@@ -1213,19 +1238,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             setResourceError("Invalid URL format.");
             return;
         }
-
         const newResources: ResourceItem[] = [...resources, {
             url: newInspirationUrl,
             description: resourceName,
             type: "external"
         }];
-
         setResources(newResources);
-
-        // Instantly update DB with new resources array
         await updateContestResourcesInDB(newResources);
-
-        setResourceSuccess(`External resource "${resourceName}" added successfully!`);
+        setResourceSuccess(`External resource \"${resourceName}\" added successfully!`);
         setNewInspirationUrl("");
         setExternalResourceDescription("");
     };
@@ -1233,14 +1253,21 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const removeResource = async (description: string) => {
         setResourceError(null);
         setResourceSuccess(null);
-
         const resourceToRemove = resources.find(r => r.description === description);
         if (!resourceToRemove) return;
-
         try {
             // If it's an internal resource with a Supabase URL, delete it from storage
             if (resourceToRemove.type === "internal" && resourceToRemove.url.includes('supabase.co/storage')) {
-                await deleteFromStorage(resourceToRemove.url); // Reuse the same deletion logic
+                // Extract file path from Supabase URL
+                const url = new URL(resourceToRemove.url);
+                const pathSegments = url.pathname.split('/');
+                const bucketIndex = pathSegments.findIndex(segment => segment === 'contest-assets');
+                if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
+                    const filePath = pathSegments.slice(bucketIndex + 1).join('/');
+                    await supabase.storage
+                        .from('contest-assets')
+                        .remove([filePath]);
+                }
                 setResourceSuccess(`Resource "${description}" deleted successfully!`);
             }
         } catch (error: any) {
@@ -1250,8 +1277,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             // Always remove from UI regardless of storage deletion success
             const newResources = resources.filter(r => r.description !== description);
             setResources(newResources);
-
-            // Instantly update DB with new resources array
             await updateContestResourcesInDB(newResources);
         }
     };
@@ -1343,7 +1368,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             return "At least one inspiration link is required.";
         }
 
-        const hasUploadedFiles = false; // not used
         const hasExistingResources = resources && resources.length > 0;
         const totalResources =
             (hasExistingResources ? resources.length : 0);
@@ -1431,8 +1455,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     // Payment success handler
     const handlePaymentSuccess = async (paymentDetails: any) => {
         console.log("Payment successful:", paymentDetails);
+        setIsSubmitting(true);
         setShowPayment(false);
-
         try {
             // Handle budget changes - both increases and decreases
             if (budgetChanged && Math.abs(budgetDifference) > 0) {
@@ -1696,6 +1720,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 description: `Payment succeeded but failed to update contest: ${error.message}`,
                 variant: "destructive",
             });
+            setIsSubmitting(false);
         }
     };
 
@@ -1753,193 +1778,97 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         await refreshContestData();
     };
 
-    // Handle resubmit for approval for rejected contests  
+    // Add async comprehensive validation for edit contest (mirrors creation)
+    const validateContestForEdit = async (userId: string, planFeatures: any): Promise<{ isValid: boolean; error?: string }> => {
+        // 1. Field validation (reuse existing logic)
+        const error = validateFormForSubmission();
+        if (error) {
+            return { isValid: false, error };
+        }
+        // 2. Plan and contest type checks
+        if (contestType === 'cpm') {
+            const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
+            if (!hasCpmAccess) {
+                return { isValid: false, error: 'CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.' };
+            }
+        }
+        // 3. Active contest limit (only if submitting for approval, not draft)
+        try {
+            const activeCheck = await canCreateNewContest(userId, planFeatures.maxActiveContests);
+            if (!activeCheck.canCreate) {
+                return { isValid: false, error: activeCheck.error || `You have reached your plan limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.` };
+            }
+        } catch (err) {
+            return { isValid: false, error: 'Unable to validate contest limits. Please try again.' };
+        }
+        return { isValid: true };
+    };
+
+    // In handleResubmitForApproval, replace validation logic with async comprehensive validation
     const handleResubmitForApproval = async () => {
-        // First validate the form
-        const validationError = validateFormForSubmission();
-        if (validationError) {
-            toast({
-                title: "Validation Error",
-                description: validationError,
-                variant: "destructive",
-            });
-            setFormFeedback(validationError);
-            setFormFeedbackType("error");
+        if (!user) {
+            toast({ title: 'Authentication Error', description: 'You must be logged in to update a contest', variant: 'destructive' });
             return;
         }
-
-        // Check if payment has been completed
-        if (!contest) {
-            toast({
-                title: "Error",
-                description: "Contest data not loaded. Please refresh the page.",
-                variant: "destructive",
-            });
+        setIsSubmitting(true);
+        const planFeatures = getPlanFeatures(userPlan);
+        const validationResult = await validateContestForEdit(user.id, planFeatures);
+        if (!validationResult.isValid) {
+            toast({ title: 'Validation Error', description: validationResult.error, variant: 'destructive' });
+            setFormFeedback(validationResult.error!);
+            setFormFeedbackType('error');
             return;
         }
-
         // Check if payment/refund processing is required 
         // - New contest (no payment) OR budget increased (need payment) OR budget decreased (need refund)
-        const paymentProcessingRequired = !isContestPaid() || (budgetChanged && budgetDifference !== 0);
-
-        console.log("🔍 Payment validation:", {
-            isContestPaid: isContestPaid(),
-            budgetChanged,
-            budgetDifference,
-            originalBudget,
-            currentPrizePool: contestType === 'leaderboard'
-                ? winnerAmounts.reduce((sum: number, amount: number) => sum + amount, 0)
-                : Math.round(parseFloat(totalBudget.toString()) * 100),
-            paymentProcessingRequired
-        });
-
+        const paid = isContestPaid();
+        const paymentProcessingRequired = !paid || (budgetChanged && budgetDifference !== 0);
         if (paymentProcessingRequired) {
-            const reason = !isContestPaid()
-                ? "No payment"
-                : budgetDifference > 0
-                    ? "Budget increased"
-                    : "Budget decreased";
-            console.log("Payment processing required for contest submission:", reason);
-
-            // Handle budget decrease (refund) immediately without payment modal
-            if (budgetChanged && budgetDifference < 0) {
-                try {
-                    setIsSubmitting(true);
-
-                    // Calculate total refund amount: prize pool decrease + commission on that decrease
-                    const prizePoolDecrease = Math.abs(budgetDifference);
-                    const commissionPercentage = getPlanFeatures(userPlan).commissionPercentage;
-                    const commissionRefund = Math.round(prizePoolDecrease * (commissionPercentage / 100));
-                    const totalRefundAmount = prizePoolDecrease + commissionRefund;
-
-                    console.log(`💰 Processing refund: ${prizePoolDecrease} cents prize pool + ${commissionRefund} cents commission = ${totalRefundAmount} cents total`);
-
-                    // Call refund API endpoint
-                    const response = await fetch('/api/payments/refund', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            contestId,
-                            refundAmount: totalRefundAmount,
-                            reason: 'Contest budget decreased'
-                        }),
-                    });
-
-                    const refundResult = await response.json();
-
-                    if (!response.ok || !refundResult.success) {
-                        throw new Error(refundResult.error || 'Failed to process refund');
-                    }
-
-                    console.log("✅ Refund processed successfully");
-
-                    // Show detailed refund breakdown if available
-                    const refundMessage = refundResult.breakdown
-                        ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(2)}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(2)} + $${refundResult.breakdown.commissionRefund.toFixed(2)} commission = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
-                        : `$${(totalRefundAmount / 100).toFixed(2)} has been refunded to your wallet`;
-
-                    toast({
-                        title: "Refund Processed",
-                        description: refundMessage,
-                        variant: "default",
-                    });
-
-                    // Now call handlePaymentSuccess to update contest structure
-                    await handlePaymentSuccess({
-                        paymentMethod: 'refund',
-                        refundAmount: totalRefundAmount
-                    });
-
-                } catch (error) {
-                    console.error("Error processing refund:", error);
-                    toast({
-                        title: "Error",
-                        description: "Failed to process refund. Please try again.",
-                        variant: "destructive",
-                    });
-                } finally {
-                    setIsSubmitting(false);
-                }
-                return;
-            }
-
-            // For budget increases or new payments, show payment modal
             try {
-                setIsSubmitting(true);
-
-                // CRITICAL: Run comprehensive validation BEFORE processing payment
-                const validationError = validateFormForSubmission();
-                if (validationError) {
-                    toast({
-                        title: "Validation Error",
-                        description: validationError,
-                        variant: "destructive",
-                    });
-                    setFormFeedback(validationError);
-                    setFormFeedbackType("error");
-                    setIsSubmitting(false);
-                    return;
-                }
-
                 await handleSubmitWithStatus('draft', true); // Skip redirect since we're showing payment modal
-
-                // After successful save, show payment modal
                 setShowPayment(true);
                 setIsPaymentRequired(true);
             } catch (error) {
-                console.error("Error saving contest before payment:", error);
-                toast({
-                    title: "Error",
-                    description: "Failed to save contest data before payment. Please try again.",
-                    variant: "destructive",
-                });
-            } finally {
-                setIsSubmitting(false);
+                console.error('Error saving contest before payment:', error);
+                toast({ title: 'Error', description: 'Failed to save contest data before payment. Please try again.', variant: 'destructive' });
             }
-        } else {
-            // Payment already completed, save any pending edits and submit for approval
-            try {
-                setIsSubmitting(true);
+            setIsSubmitting(false);
+            return;
+        }
 
-                // First save any pending edits to the contest data
-                console.log("💾 Saving any pending edits before submitting for approval...");
-                await handleSubmitWithStatus('draft', true); // Save as draft first
+        // --- FIX: Handle the case where no payment/refund is required ---
+        try {
 
-                // Then submit for approval using moderation API
-                const response = await fetch(`/api/contests/${contestId}/moderation`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        action: 'submit_for_approval'
-                    }),
-                });
+            // Save any pending edits as draft
+            await handleSubmitWithStatus('draft', true);
 
-                const result = await response.json();
+            // Submit for approval
+            const response = await fetch(`/api/contests/${contestId}/moderation`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'submit_for_approval' }),
+            });
 
-                if (response.ok && result.success) {
-                    toast({
-                        title: "Success",
-                        description: "Contest updated and submitted for approval successfully!",
-                        variant: "default",
-                    });
-                    router.push(`/dashboard/contests/${contestId}`);
-                } else {
-                    throw new Error(result.error || 'Failed to submit for approval');
-                }
-            } catch (error: any) {
-                console.error("Error submitting for approval:", error);
+            const result = await response.json();
+
+            if (response.ok && result.success) {
                 toast({
-                    title: "Submission Failed",
-                    description: error.message || "Failed to submit contest for approval. Please try again.",
-                    variant: "destructive",
+                    title: "Success",
+                    description: "Contest updated and submitted for approval successfully!",
+                    variant: "default",
                 });
-            } finally {
-                setIsSubmitting(false);
+                router.push(`/dashboard/contests/${contestId}`);
+            } else {
+                throw new Error(result.error || 'Failed to submit for approval');
             }
+        } catch (error: any) {
+            console.error("Error submitting for approval:", error);
+            toast({
+                title: "Submission Failed",
+                description: error.message || "Failed to submit contest for approval. Please try again.",
+                variant: "destructive",
+            });
+            setIsSubmitting(false);
         }
     };
 
@@ -2026,7 +1955,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 return;
             }
 
-            const hasUploadedFiles = false; // not used
             const hasExistingResources = resources && resources.length > 0;
             const totalResources =
                 (hasExistingResources ? resources.length : 0);
@@ -2334,9 +2262,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 description: err.message || "Failed to update contest",
                 variant: "destructive",
             });
+            setIsSubmitting(false);
         } finally {
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            setIsSubmitting(false);
         }
     };
 
@@ -2359,9 +2287,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 setAssetUploadError("User not authenticated. Please sign in again.");
                 return;
             }
-            // Immed;iately upload to Supabase
+            // Immediately upload to Supabase with new naming and cleanup
             try {
-                const fileName = `contest_thumbnails/${user.id}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+                // Remove any existing thumbnail for this contest (all extensions)
+                const { data: existingFiles } = await supabase.storage
+                    .from("contest-assets")
+                    .list("contest_thumbnails");
+                if (existingFiles) {
+                    const matching = existingFiles.filter(f => f.name.startsWith(`${contestId}_`));
+                    if (matching.length > 0) {
+                        const paths = matching.map(f => `contest_thumbnails/${f.name}`);
+                        await supabase.storage.from("contest-assets").remove(paths);
+                    }
+                }
+                // Get extension and timestamp
+                const ext = file.name.split('.').pop() || 'jpg';
+                const timestamp = Date.now();
+                const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
                 const { error: uploadError } = await supabase.storage
                     .from('contest-assets')
                     .upload(fileName, file);
@@ -2397,52 +2339,36 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         setIsDragActive(false);
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             const file = e.dataTransfer.files[0];
-
-            // Optional: 20MB size limit (or use 5MB if you prefer)
-            const maxSize = 20 * 1024 * 1024; // 20MB
-            if (file.size > maxSize) {
-                setAssetUploadError("File must be 20MB or smaller. Please choose a smaller file.");
+            if (file.size > 20 * 1024 * 1024) {
+                setResourceError("File size should not exceed 20MB.");
                 return;
             }
-
-            // Prompt for description (replace with your own UI if desired)
             const description = prompt("Enter a description for this asset:");
             if (!description || !description.trim()) {
-                setAssetUploadError("Asset description is required.");
+                setResourceError("Asset description is required.");
                 return;
             }
-
-            if (!user?.id) {
-                setAssetUploadError("User not authenticated. Please sign in again.");
+            if (resources.some(r => r.description === description.trim())) {
+                setResourceError(`A resource with the description \"${description.trim()}\" already exists. Please use a unique description.`);
                 return;
             }
-
             try {
-                // Set loading state
                 setIsUploadingAsset(true);
-
-                // Upload file to Supabase immediately
-                const fileName = `contest_resources/${user.id}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+                // Use per-contest folder
+                const fileName = `contest_resources/${contestId}/${file.name.replace(/\s+/g, '_')}`;
                 const { error: uploadError } = await supabase.storage
                     .from("contest-assets")
                     .upload(fileName, file);
-
                 if (uploadError) {
                     throw new Error(`Failed to upload file: ${uploadError.message}`);
                 }
-
-                // Get the public URL for the uploaded file
                 const { data: publicUrlData } = supabase.storage
                     .from("contest-assets")
                     .getPublicUrl(fileName);
-
                 const publicUrl = publicUrlData?.publicUrl || "";
-
                 if (!publicUrl) {
                     throw new Error("Failed to get public URL for uploaded file");
                 }
-
-                // Add to resources array with actual Supabase URL
                 const newResources: ResourceItem[] = [
                     ...resources,
                     {
@@ -2451,20 +2377,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         type: "internal",
                     }
                 ];
-
                 setResources(newResources);
-
-                // Instantly update DB with new resources array
                 await updateContestResourcesInDB(newResources);
-
-                setAssetUploadError(null);
-                setResourceFile(null);
-                setResourceFilePreview(null);
+                setResourceSuccess(`Asset \"${description.trim()}\" uploaded successfully!`);
             } catch (error: any) {
                 console.error("Error uploading resource:", error);
-                setAssetUploadError(`Failed to upload asset: ${error.message}`);
+                setResourceError(`Failed to upload asset: ${error.message}`);
             } finally {
-                // Clear loading state
                 setIsUploadingAsset(false);
             }
         }
@@ -3423,10 +3342,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                     className="bg-orange-600 hover:bg-orange-700 text-white"
                                 >
                                     {isSubmitting ? "Processing..." :
-                                        (contest && isContestPaid() && !budgetChanged) ? "Submit for Approval" :
-                                            (contest && isContestPaid() && budgetChanged && budgetDifference > 0) ? "Update & Pay" :
-                                                (contest && isContestPaid() && budgetChanged && budgetDifference < 0) ? "Update Contest" :
-                                                    "Submit & Pay"}
+                                        (contest?.moderation_status === "pending_approval") ? "Update & Resubmit for Approval" :
+                                            (contest && isContestPaid() && !budgetChanged) ? "Submit for Approval" :
+                                                (contest && isContestPaid() && budgetChanged && budgetDifference > 0) ? "Update & Pay" :
+                                                    (contest && isContestPaid() && budgetChanged && budgetDifference < 0) ? "Update Contest" :
+                                                        "Submit & Pay"}
                                 </Button>
                             </>
                         ) : (
