@@ -94,13 +94,29 @@ export default function ResetPasswordPage() {
 
             // Patch app_metadata.providers to include 'email' if missing
             const { data: user } = await supabase.auth.getUser();
+            console.log('Current user providers:', user?.user?.app_metadata?.providers);
+
             if (user && user.user && user.user.app_metadata && !user.user.app_metadata.providers?.includes('email')) {
+                console.log('Attempting to patch providers to include email...');
                 // Call a backend API route to patch providers (requires service role key)
-                await fetch('/api/patch-providers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: user.user.id, providers: [...(user.user.app_metadata.providers || []), 'email'] })
-                });
+                try {
+                    const response = await fetch('/api/patch-providers', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: user.user.id, providers: [...(user.user.app_metadata.providers || []), 'email'] })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.text();
+                        console.error('Failed to patch providers:', errorData);
+                    } else {
+                        console.log('Successfully patched providers to include email');
+                    }
+                } catch (patchError) {
+                    console.error('Error patching providers:', patchError);
+                }
+            } else {
+                console.log('Email provider already exists or user metadata not available');
             }
 
             setIsSuccess(true)
