@@ -79,6 +79,58 @@ export async function GET(request: NextRequest) {
         console.log('Google OAuth: Existing user found, will redirect to dashboard')
       }
 
+      // After userProfile is set (either found or created), update login_history
+      const xff = request.headers.get('x-forwarded-for');
+      let ip = xff ? xff.split(',')[0].trim() : null;
+      if (!ip) {
+        // @ts-ignore
+        ip = request.ip || request.socket?.remoteAddress || null;
+      }
+      const userAgent = request.headers.get('user-agent') || '';
+
+      // Simple user agent parser for browser and OS
+      function parseUserAgent(ua: string) {
+        let browser_name = 'Unknown', browser_version = '', os_name = 'Unknown', os_version = '';
+        // Browser
+        if (/Chrome\/(\d+\.\d+)/.test(ua)) {
+          browser_name = 'Chrome';
+          browser_version = ua.match(/Chrome\/(\d+\.\d+)/)![1];
+        } else if (/Firefox\/(\d+\.\d+)/.test(ua)) {
+          browser_name = 'Firefox';
+          browser_version = ua.match(/Firefox\/(\d+\.\d+)/)![1];
+        } else if (/Safari\/(\d+\.\d+)/.test(ua) && /Version\/(\d+\.\d+)/.test(ua)) {
+          browser_name = 'Safari';
+          browser_version = ua.match(/Version\/(\d+\.\d+)/)![1];
+        } else if (/Edg\/(\d+\.\d+)/.test(ua)) {
+          browser_name = 'Edge';
+          browser_version = ua.match(/Edg\/(\d+\.\d+)/)![1];
+        }
+        // OS
+        if (/Windows NT ([\d\.]+)/.test(ua)) {
+          os_name = 'Windows';
+          os_version = ua.match(/Windows NT ([\d\.]+)/)![1];
+        } else if (/Mac OS X ([\d_]+)/.test(ua)) {
+          os_name = 'Mac OS X';
+          os_version = ua.match(/Mac OS X ([\d_]+)/)![1].replace(/_/g, '.');
+        } else if (/Android ([\d\.]+)/.test(ua)) {
+          os_name = 'Android';
+          os_version = ua.match(/Android ([\d\.]+)/)![1];
+        } else if (/iPhone OS ([\d_]+)/.test(ua)) {
+          os_name = 'iOS';
+          os_version = ua.match(/iPhone OS ([\d_]+)/)![1].replace(/_/g, '.');
+        }
+        return { browser_name, browser_version, os_name, os_version, user_agent: ua };
+      }
+      const uaInfo = parseUserAgent(userAgent);
+      // Fetch current login_history
+      let history = userProfile?.login_history || [];
+      history.unshift({ ip_address: ip, timestamp: new Date().toISOString(), ...uaInfo });
+      if (history.length > 10) history = history.slice(0, 10);
+      await supabase
+        .from('users')
+        .update({ login_history: history })
+        .eq('id', user.id);
+
       // Determine where to redirect based on profile completeness
       let redirectPath = '/dashboard'
 

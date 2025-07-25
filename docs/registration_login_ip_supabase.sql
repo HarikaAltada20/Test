@@ -1,8 +1,8 @@
--- Add registration_ip and login_history columns to users table
+-- Remove registration_ip and ip_address columns if they exist
 ALTER TABLE public.users
-ADD COLUMN IF NOT EXISTS registration_ip TEXT,
-ADD COLUMN IF NOT EXISTS login_history JSONB DEFAULT '[]';
+DROP COLUMN IF EXISTS registration_ip,
+DROP COLUMN IF EXISTS ip_address;
 
--- Remove old ip_address column if it exists
+-- Add registration_info JSONB column for detailed registration metadata
 ALTER TABLE public.users
-DROP COLUMN IF EXISTS ip_address; 
+ADD COLUMN IF NOT EXISTS registration_info JSONB DEFAULT '{}'; 

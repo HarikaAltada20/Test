@@ -38,6 +38,40 @@ function getInitialUserType() {
     return 'creator';
 }
 
+// Helper to parse user agent
+function parseUserAgent(ua: string) {
+    let browser_name = 'Unknown', browser_version = '', os_name = 'Unknown', os_version = '';
+    // Browser
+    if (/Chrome\/(\d+\.\d+)/.test(ua)) {
+        browser_name = 'Chrome';
+        browser_version = ua.match(/Chrome\/(\d+\.\d+)/)![1];
+    } else if (/Firefox\/(\d+\.\d+)/.test(ua)) {
+        browser_name = 'Firefox';
+        browser_version = ua.match(/Firefox\/(\d+\.\d+)/)![1];
+    } else if (/Safari\/(\d+\.\d+)/.test(ua) && /Version\/(\d+\.\d+)/.test(ua)) {
+        browser_name = 'Safari';
+        browser_version = ua.match(/Version\/(\d+\.\d+)/)![1];
+    } else if (/Edg\/(\d+\.\d+)/.test(ua)) {
+        browser_name = 'Edge';
+        browser_version = ua.match(/Edg\/(\d+\.\d+)/)![1];
+    }
+    // OS
+    if (/Windows NT ([\d\.]+)/.test(ua)) {
+        os_name = 'Windows';
+        os_version = ua.match(/Windows NT ([\d\.]+)/)![1];
+    } else if (/Mac OS X ([\d_]+)/.test(ua)) {
+        os_name = 'Mac OS X';
+        os_version = ua.match(/Mac OS X ([\d_]+)/)![1].replace(/_/g, '.');
+    } else if (/Android ([\d\.]+)/.test(ua)) {
+        os_name = 'Android';
+        os_version = ua.match(/Android ([\d\.]+)/)![1];
+    } else if (/iPhone OS ([\d_]+)/.test(ua)) {
+        os_name = 'iOS';
+        os_version = ua.match(/iPhone OS ([\d_]+)/)![1].replace(/_/g, '.');
+    }
+    return { browser_name, browser_version, os_name, os_version, user_agent: ua };
+}
+
 export default function ChooseUsernamePage() {
     const [username, setUsername] = useState("")
     const [userType, setUserType] = useState<'creator' | 'advertiser'>(getInitialUserType);
@@ -343,6 +377,13 @@ export default function ChooseUsernamePage() {
                 }
             }
 
+            // Prepare registration_info
+            const userAgent = typeof window !== 'undefined' ? navigator.userAgent : '';
+            const registration_info = {
+                ip_address: clientIp,
+                timestamp: new Date().toISOString(),
+                ...parseUserAgent(userAgent)
+            };
             // Prepare complete profile data
             const profileData: any = {
                 id: userData.id,
@@ -352,7 +393,7 @@ export default function ChooseUsernamePage() {
                 user_type: userType,
                 is_active: true,
                 email_confirmed_at: new Date().toISOString(),
-                registration_ip: clientIp,
+                registration_info,
             };
 
             // Add full name if provided
