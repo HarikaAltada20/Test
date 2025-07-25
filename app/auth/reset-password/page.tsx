@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
 import logo from "@/public/images/gold_logo_vertical.svg"
 import { createClient } from "@/utils/supabase/client"
-import { createAdminClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils"
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter"
 
