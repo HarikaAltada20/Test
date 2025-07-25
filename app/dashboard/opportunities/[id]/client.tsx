@@ -40,6 +40,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/utils/supabase/client";
 import { getMetricsRefreshCooldownInfo, formatRemainingTime } from "@/lib/constants";
 import type { UserResponse } from "@supabase/supabase-js";
+import { useToast } from "@/components/ui/use-toast";
 
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
@@ -157,6 +158,8 @@ export function ContestClientPage({
 
   // Post-contest status state for creator transparency
   const [postContestStatus, setPostContestStatus] = useState<string | null>(null);
+
+  const { toast } = useToast();
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -582,21 +585,44 @@ export function ContestClientPage({
   }
 
   const handleShare = async () => {
+    if (contest.status === 'ended') {
+      toast({
+        title: 'Opportunity Ended',
+        description: 'This opportunity has ended. Creators can no longer submit entries.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (contest.status === 'upcoming') {
+      toast({
+        title: 'Not Live Yet',
+        description: "This opportunity is not live yet. You can share it, but creators won't be able to participate until the start date.",
+        variant: 'default',
+      });
+      // Allow sharing to proceed
+    }
     try {
       if (navigator.share) {
         await navigator.share({
           title: contest.title,
-          text: `Check out this amazing contest: ${contest.title}`,
+          text: `Check out this opportunity: ${contest.title}`,
           url: window.location.href,
         });
       } else {
-        // Fallback to copying to clipboard
         await navigator.clipboard.writeText(window.location.href);
-        // You could add a toast notification here
-        alert('Contest link copied to clipboard!');
+        toast({
+          title: 'Link Copied',
+          description: 'Opportunity link copied to clipboard!',
+          variant: 'default',
+        });
       }
     } catch (error) {
       console.error('Error sharing:', error);
+      toast({
+        title: 'Share Failed',
+        description: 'There was an error trying to share this opportunity.',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -778,8 +804,8 @@ export function ContestClientPage({
                       {contest.status === "active"
                         ? "The stage is yours! Submit your content and let your creativity shine."
                         : contest.status === "upcoming"
-                          ? "Get ready! This contest hasn't started yet, but you can prepare."
-                          : "This contest has ended or is no longer active."
+                          ? "Get ready! This opportunity hasn't started yet, but you can prepare."
+                          : "This opportunity has ended or is no longer active."
                       }
                     </p>
                   </div>
@@ -1313,24 +1339,69 @@ export function ContestClientPage({
                   </h3>
                   <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
                     {contest.resources &&
-                      typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0 ? (
+                      ((Array.isArray(contest.resources) && contest.resources.length > 0) ||
+                        (typeof contest.resources === 'object' && Object.keys(contest.resources).length > 0)) ? (
                       <div className="space-y-3">
-                        {Object.entries(contest.resources).map(
-                          ([key, value]) => (
+                        {(Array.isArray(contest.resources)
+                          ? contest.resources
+                          : Object.entries(contest.resources).map(([description, url]) => ({ url, description, type: 'external' }))
+                        ).map((resource: any, idx: number) => {
+                          const isImage = resource.url && (resource.url.startsWith('data:image') || /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(resource.url));
+                          const isPdf = resource.url && /\.pdf$/i.test(resource.url);
+                          const isVideo = resource.url && /\.(mp4|mov|avi|webm)$/i.test(resource.url);
+                          const isInternal = resource.type === "internal";
+                          return (
                             <Card
-                              key={key}
+                              key={idx}
                               className="bg-white dark:bg-slate-800/50 border border-green-200 dark:border-green-700/30 hover:shadow-md transition-all duration-300"
                             >
                               <CardContent className="p-4">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
-                                      <Lightbulb className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    {isInternal && isImage && !isPdf ? (
+                                      <img src={resource.url} alt={resource.description} className="w-10 h-10 object-cover rounded" />
+                                    ) : isInternal && isPdf ? (
+                                      <span className="inline-block">
+                                        <svg width="32" height="32" fill="none" viewBox="0 0 40 40">
+                                          <rect width="40" height="40" rx="8" fill="#F87171" />
+                                          <path d="M12 8h16v24H12V8z" fill="#fff" />
+                                          <path d="M14 12h12M14 16h12M14 20h8" stroke="#F87171" strokeWidth="1" />
+                                          <text x="20" y="28" textAnchor="middle" fill="#F87171" fontSize="8" fontWeight="bold">PDF</text>
+                                        </svg>
+                                      </span>
+                                    ) : isInternal && isVideo ? (
+                                      <span className="inline-block">
+                                        <svg width="32" height="32" fill="none" viewBox="0 0 40 40">
+                                          <rect width="40" height="40" rx="8" fill="#38BDF8" />
+                                          <rect x="10" y="12" width="20" height="16" rx="2" fill="#fff" />
+                                          <path d="M16 16l6 4-6 4V16z" fill="#38BDF8" />
+                                          <circle cx="32" cy="14" r="3" fill="#FF4444" />
+                                        </svg>
+                                      </span>
+                                    ) : isInternal && !isImage && !isPdf && !isVideo ? (
+                                      <span className="inline-block">
+                                        <svg width="32" height="32" fill="none" viewBox="0 0 40 40">
+                                          <rect width="40" height="40" rx="8" fill="#10B981" />
+                                          <rect x="10" y="8" width="18" height="24" rx="1" fill="#fff" />
+                                          <rect x="12" y="10" width="14" height="2" fill="#10B981" />
+                                          <rect x="12" y="14" width="14" height="1" fill="#10B981" />
+                                          <rect x="12" y="17" width="14" height="1" fill="#10B981" />
+                                          <rect x="12" y="20" width="10" height="1" fill="#10B981" />
+                                          <rect x="12" y="23" width="12" height="1" fill="#10B981" />
+                                          <rect x="12" y="26" width="8" height="1" fill="#10B981" />
+                                        </svg>
+                                      </span>
+                                    ) : (
+                                      <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                                        <ExternalLink className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                      </div>
+                                    )}
+                                    <div>
+                                      <span className="font-semibold text-green-900 dark:text-green-100">{resource.description}</span>
+                                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        {resource.type === "external" ? "External Link" : "Uploaded File"}
+                                      </div>
                                     </div>
-                                    <span className="font-semibold text-green-900 dark:text-green-100">
-                                      {key}
-                                    </span>
                                   </div>
                                   <Button
                                     variant="ghost"
@@ -1338,20 +1409,20 @@ export function ContestClientPage({
                                     asChild
                                     className="text-green-600 hover:text-green-800 hover:bg-green-100 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-800/20 flex-shrink-0 font-medium"
                                   >
-                                    <Link
-                                      href={value as string}
+                                    <a
+                                      href={resource.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                     >
                                       <ExternalLink className="h-4 w-4 mr-1" />
-                                      View Resource
-                                    </Link>
+                                      {isPdf ? "Open PDF" : isVideo ? "Play Video" : isImage ? "View Image" : "View Resource"}
+                                    </a>
                                   </Button>
                                 </div>
                               </CardContent>
                             </Card>
-                          )
-                        )}
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -1391,19 +1462,25 @@ export function ContestClientPage({
                               >
                                 <CardContent className="p-4">
                                   <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
+                                    <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg flex items-center justify-center">
                                       <ExternalLink className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                                     </div>
-                                    <Link
-                                      href={item.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:underline font-semibold text-sm truncate flex-1"
-                                    >
-                                      {item.url}
-                                    </Link>
+                                    <div className="flex-1 min-w-0">
+                                      <a
+                                        href={item.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="font-medium text-blue-600 hover:underline break-all block"
+                                      >
+                                        {item.url}
+                                      </a>
+                                      {item.description && (
+                                        <div className="text-xs text-gray-500 mt-1 truncate">
+                                          {item.description}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="text-xs text-gray-500 mt-1 ml-12">{item.description}</div>
                                 </CardContent>
                               </Card>
                             ))}

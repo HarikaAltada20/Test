@@ -1318,7 +1318,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const isRichTextEditorEmpty = (editorRef: React.RefObject<any>): boolean => {
         if (editorRef.current) {
             const content = editorRef.current.getContent();
-            return content === null || content.html === "" || content.html === "<p><br></p>";
+            const html = content?.html?.replace(/&nbsp;|\s|<br\s*\/?>/gi, "") || "";
+            return (
+                content === null ||
+                html === "" ||
+                html === "<p></p>"
+            );
         }
         return true;
     };
@@ -1353,6 +1358,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
             return "Brief description is required.";
         }
+        console.log("Rules", rulesHtml)
 
         if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
             return "Contest rules are required.";
@@ -1783,22 +1789,26 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         // 1. Field validation (reuse existing logic)
         const error = validateFormForSubmission();
         if (error) {
+            setIsSubmitting(false);
             return { isValid: false, error };
         }
         // 2. Plan and contest type checks
         if (contestType === 'cpm') {
             const hasCpmAccess = planFeatures.contestTypes && planFeatures.contestTypes.includes('cpm');
             if (!hasCpmAccess) {
+                setIsSubmitting(false);
                 return { isValid: false, error: 'CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.' };
             }
         }
         // 3. Active contest limit (only if submitting for approval, not draft)
         try {
-            const activeCheck = await canCreateNewContest(userId, planFeatures.maxActiveContests);
+            const activeCheck = await canCreateNewContest(userId, planFeatures.maxActiveContests, contestId);
             if (!activeCheck.canCreate) {
+                setIsSubmitting(false);
                 return { isValid: false, error: activeCheck.error || `You have reached your plan limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.` };
             }
         } catch (err) {
+            setIsSubmitting(false);
             return { isValid: false, error: 'Unable to validate contest limits. Please try again.' };
         }
         return { isValid: true };
@@ -2168,7 +2178,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             try {
                 // Import getActiveContestCount for custom validation
                 const { getActiveContestCount } = await import('@/lib/contest-utils-client');
-                const countResult = await getActiveContestCount(user.id);
+                const countResult = await getActiveContestCount(user.id, contestId);
 
                 if (!countResult.success) {
                     toast({

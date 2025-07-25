@@ -12,7 +12,7 @@ export interface ActiveContestCountResult {
  * - approved: Approved and ready to publish  
  * - published with status 'upcoming' or 'active': Live contests
  */
-export async function getActiveContestCount(userId: string): Promise<ActiveContestCountResult> {
+export async function getActiveContestCount(userId: string, excludeContestId?: string): Promise<ActiveContestCountResult> {
   try {
     const supabase = createClient();
     
@@ -37,23 +37,26 @@ export async function getActiveContestCount(userId: string): Promise<ActiveConte
         activeCount: 0
       };
     }
-
+      console.log("excludeContestId", excludeContestId)
     // Count active contests based on business rules using the view's computed status
     const activeContests = contests.filter(contest => {
+      console.log("contest.id", contest.id)
+      console.log("excludeContestId", excludeContestId)
+      if (excludeContestId && contest.id === excludeContestId) return false;
       // Rule 1: Contests in approval workflow are considered active
       if (contest.moderation_status === 'pending_approval' || 
           contest.moderation_status === 'approved') {
         return true;
       }
-
       // Rule 2: Published contests that are upcoming or active (live) are active
-      // The view already computes the correct status, so we can use it directly
       if (contest.moderation_status === 'published') {
         return contest.status === 'upcoming' || contest.status === 'active';
       }
-
       return false;
     });
+
+    // DEBUG: Log which contests are being counted as active
+    console.log('Active contests (after exclude):', activeContests.map(c => ({id: c.id, moderation_status: c.moderation_status, status: c.status})));
 
     return {
       success: true,
@@ -75,10 +78,11 @@ export async function getActiveContestCount(userId: string): Promise<ActiveConte
  */
 export async function canCreateNewContest(
   userId: string, 
-  maxActiveContests: number
+  maxActiveContests: number,
+  contestId?: string
 ): Promise<{ canCreate: boolean; currentCount: number; error?: string }> {
   
-  const result = await getActiveContestCount(userId);
+  const result = await getActiveContestCount(userId, contestId);
   
   if (!result.success) {
     return {
