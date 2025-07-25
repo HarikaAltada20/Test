@@ -579,24 +579,6 @@ export default function ProfilePage({
               </p>
               <p className="capitalize mt-1">{userData.user_type}</p>
             </div>
-            {userData.registration_ip && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Registration IP
-                </p>
-                <p className="mt-1">Registration IP: {userData.registration_ip}</p>
-              </div>
-            )}
-            {userData.login_history && userData.login_history.length > 0 && (
-              <div>
-                <h4>Recent Login IPs:</h4>
-                <ul>
-                  {userData.login_history.map((entry, idx) => (
-                    <li key={idx}>{entry.ip_address} ({entry.timestamp})</li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
