@@ -91,6 +91,18 @@ export default function ResetPasswordPage() {
         try {
             const { error: updateError } = await supabase.auth.updateUser({ password })
             if (updateError) throw updateError
+
+            // Patch app_metadata.providers to include 'email' if missing
+            const { data: user } = await supabase.auth.getUser();
+            if (user && user.user && user.user.app_metadata && !user.user.app_metadata.providers?.includes('email')) {
+                // Call a backend API route to patch providers (requires service role key)
+                await fetch('/api/patch-providers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: user.user.id, providers: [...(user.user.app_metadata.providers || []), 'email'] })
+                });
+            }
+
             setIsSuccess(true)
             toast({
                 title: "Access Restored! 🚀",
