@@ -17,10 +17,15 @@ export interface Database {
           creators_referred: number
           username: string | null
           is_active: boolean
-          ip_address: string | null
           email_confirmed_at: string | null
           created_at: string
           updated_at: string
+          registration_ip?: string | null;
+          login_history?: Array<{
+            ip_address: string;
+            timestamp: string;
+            user_agent?: string;
+          }>;
         }
         Insert: {
           id?: string
@@ -35,10 +40,15 @@ export interface Database {
           creators_referred?: number
           username?: string | null
           is_active?: boolean
-          ip_address?: string | null
           email_confirmed_at?: string | null
           created_at?: string
           updated_at?: string
+          registration_ip?: string | null;
+          login_history?: Array<{
+            ip_address: string;
+            timestamp: string;
+            user_agent?: string;
+          }>;
         }
         Update: {
           id?: string
@@ -53,10 +63,15 @@ export interface Database {
           creators_referred?: number
           username?: string | null
           is_active?: boolean
-          ip_address?: string | null
           email_confirmed_at?: string | null
           created_at?: string
           updated_at?: string
+          registration_ip?: string | null;
+          login_history?: Array<{
+            ip_address: string;
+            timestamp: string;
+            user_agent?: string;
+          }>;
         }
       }
       advertiser_profiles: {

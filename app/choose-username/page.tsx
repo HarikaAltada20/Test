@@ -60,9 +60,24 @@ export default function ChooseUsernamePage() {
     const { toast } = useToast()
     const supabase = createClient()
 
+    // Add state for clientIp
+    const [clientIp, setClientIp] = useState<string | null>(null);
+
     useEffect(() => {
         const fetchProfileAndRedirect = async () => {
             setIsLoadingProfile(true);
+            // Fetch client IP
+            let clientIp = null;
+            try {
+                const res = await fetch('/api/get-ip');
+                if (res.ok) {
+                    const data = await res.json();
+                    clientIp = data.ip;
+                    setClientIp(clientIp);
+                }
+            } catch (err) {
+                console.warn('Could not fetch client IP:', err);
+            }
             const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
 
             if (authError || !authUser) {
@@ -337,6 +352,7 @@ export default function ChooseUsernamePage() {
                 user_type: userType,
                 is_active: true,
                 email_confirmed_at: new Date().toISOString(),
+                registration_ip: clientIp,
             };
 
             // Add full name if provided

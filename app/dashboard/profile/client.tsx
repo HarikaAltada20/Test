@@ -37,8 +37,9 @@ interface UserData {
   coins: number;
   advertisers_referred: number;
   creators_referred: number;
-  ip_address: string | null;
   profile_picture_url?: string | null;
+  registration_ip?: string | null;
+  login_history?: { ip_address: string; timestamp: string }[];
 }
 
 interface CreatorProfile {
@@ -112,7 +113,7 @@ export default function ProfilePage({
 
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select("*, profile_picture_url")
+        .select("*, profile_picture_url, registration_ip, login_history")
         .eq("id", user.id)
         .single();
 
@@ -578,12 +579,22 @@ export default function ProfilePage({
               </p>
               <p className="capitalize mt-1">{userData.user_type}</p>
             </div>
-            {userData.ip_address && (
+            {userData.registration_ip && (
               <div>
                 <p className="text-sm font-medium text-muted-foreground">
-                  IP Address
+                  Registration IP
                 </p>
-                <p className="mt-1">{userData.ip_address}</p>
+                <p className="mt-1">Registration IP: {userData.registration_ip}</p>
+              </div>
+            )}
+            {userData.login_history && userData.login_history.length > 0 && (
+              <div>
+                <h4>Recent Login IPs:</h4>
+                <ul>
+                  {userData.login_history.map((entry, idx) => (
+                    <li key={idx}>{entry.ip_address} ({entry.timestamp})</li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>

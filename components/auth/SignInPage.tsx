@@ -51,6 +51,18 @@ export default function SignInPage() {
         throw new Error('Sign in failed - no user data returned')
       }
 
+      // Record login IP
+      try {
+        const userAgent = typeof window !== 'undefined' ? navigator.userAgent : '';
+        await fetch('/api/login-ip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: data.user.id, user_agent: userAgent }),
+        });
+      } catch (err) {
+        console.warn('Failed to record login IP:', err);
+      }
+
       toast({
         title: "Welcome back, Champion!",
         description: "You have successfully entered the arena.",
