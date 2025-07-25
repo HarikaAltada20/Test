@@ -48,13 +48,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Input } from "@/components/ui/input";
+
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
@@ -486,6 +480,53 @@ export default function ContestDetailClient({
         return String(value);
     };
 
+    const handleShare = async () => {
+        if (contest.status === 'ended') {
+            toast({
+                title: 'Opportunity Ended',
+                description: 'This opportunity has ended. Creators can no longer submit entries.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        if (contest.status === 'upcoming') {
+            toast({
+                title: 'Not Live Yet',
+                description: "This opportunity is not live yet. You can share it, but creators won't be able to participate until the start date.",
+                variant: 'default',
+            });
+            // Allow sharing to proceed
+        }
+
+        const shareUrl = `${window.location.origin}/dashboard/opportunities/${contest.id}`;
+
+        try {
+            if (navigator.share) {
+                await navigator.share({
+                    title: contest.title,
+                    text: `Check out this opportunity: ${contest.title}`,
+                    url: shareUrl,
+                });
+            } else {
+                await navigator.clipboard.writeText(shareUrl);
+                toast({
+                    title: 'Link Copied',
+                    description: 'Opportunity link copied to clipboard!',
+                    variant: 'default',
+                });
+            }
+        } catch (error) {
+            console.error('Error sharing:', error);
+            toast({
+                title: 'Share Failed',
+                description: 'There was an error trying to share this opportunity.',
+                variant: 'destructive',
+            });
+        }
+    };
+
+
     const isContestEditable = currentContest.moderation_status === 'draft' || currentContest.moderation_status === 'rejected' ||
         (currentContest.moderation_status === 'approved' && currentContest.status === 'upcoming');
     const isContestDeletable = currentContest.moderation_status === 'draft' || currentContest.moderation_status === 'rejected';
@@ -615,10 +656,14 @@ export default function ContestDetailClient({
                         </Dialog>
                     )}
 
-                    <Button size="sm" variant="outline" className="shadow-sm" asChild>
-                        <Link href={isAdminView ? `/dashboard/admin/contests/${contestId}/share` : `/dashboard/contests/${contestId}/share`}>
-                            <Share2 className="mr-2 h-4 w-4" /> Share
-                        </Link>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 transition-all duration-200 hover:scale-105"
+                        onClick={handleShare}
+                    >
+                        <Share2 className="h-4 w-4" />
+                        <span className="hidden sm:inline font-medium">Share</span>
                     </Button>
 
                     {isContestEditable && (
