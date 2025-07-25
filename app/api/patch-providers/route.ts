@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 
 export async function GET() {
   return NextResponse.json({ message: 'Patch providers API is working' });
@@ -9,31 +10,17 @@ export async function POST(request: NextRequest) {
     const { user_id, providers } = await request.json();
     console.log('Patching providers for user:', user_id, 'with providers:', providers);
     
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAdmin = createAdminClient();
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+      user_id,
+      {
+        app_metadata: { providers }
+      }
+    );
 
-    if (!serviceRoleKey || !supabaseUrl) {
-      console.error('Missing environment variables:', { serviceRoleKey: !!serviceRoleKey, supabaseUrl: !!supabaseUrl });
-      return NextResponse.json({ error: 'Missing Supabase service role key or URL' }, { status: 500 });
-    }
-
-    console.log('Making request to Supabase admin API...');
-    const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${user_id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
-      },
-      body: JSON.stringify({ app_metadata: { providers } }),
-    });
-
-    console.log('Supabase response status:', res.status);
-    
-    if (!res.ok) {
-      const error = await res.text();
-      console.error('Supabase API error:', error);
-      return NextResponse.json({ error }, { status: res.status });
+    if (updateError) {
+      console.error('Supabase admin API error:', updateError);
+      return NextResponse.json({ error: updateError.message }, { status: 400 });
     }
 
     console.log('Successfully patched providers');
