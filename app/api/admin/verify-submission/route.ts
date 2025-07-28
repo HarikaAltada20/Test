@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 import { NextResponse } from 'next/server';
 import { verifyAdminAccess } from '@/utils/admin-auth';
 
@@ -81,27 +82,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
     }
 
-    // Only allow verification for CPM contests
-    if (contest.contest_type !== 'cpm') {
+    // Allow status updates for both leaderboard and CPM contests
+    if (!contest.contest_type || !['leaderboard', 'cpm'].includes(contest.contest_type)) {
       return NextResponse.json({ 
-        error: 'Verification is only applicable to CPM-based contests' 
+        error: 'Invalid contest type. Only leaderboard and CPM contests are supported' 
       }, { status: 400 });
     }
 
     // Update the submission status
     const updateData: any = {
       status: action,
-      verified_at: action === 'verified' ? new Date().toISOString() : null,
     };
 
-    // Add rejection reason if rejecting
+    // Use the description column to store rejection reason if rejecting
     if (action === 'rejected' && reason) {
-      updateData.rejection_reason = reason;
+      updateData.description = reason;
     } else if (action !== 'rejected') {
-      updateData.rejection_reason = null; // Clear rejection reason if not rejecting
+      updateData.description = null; // Clear description if not rejecting
     }
 
-    const { data: updatedSubmission, error: updateError } = await supabase
+    // Use admin client to bypass RLS for the update operation
+    const supabaseAdmin = createAdminClient();
+    const { data: updatedSubmission, error: updateError } = await supabaseAdmin
       .from('submissions')
       .update(updateData)
       .eq('id', submissionId)
@@ -137,7 +139,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true, 
       submission: updatedSubmission,
-      message: `Submission ${action} successfully${action === 'rejected' ? ' and will be hidden from leaderboard' : ''}`
+      message: `Submission ${action} successfully${action === 'rejected' ? ` with reason: ${reason}` : ''}`
     });
 
   } catch (error: any) {
@@ -177,7 +179,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    // Fetch submissions for verification from CPM contests only
+    // Fetch submissions for verification from both leaderboard and CPM contests
     const { data: submissions, error: submissionsError } = await supabase
       .from('submissions')
       .select(`
@@ -191,9 +193,8 @@ export async function GET(request: Request) {
         views,
         earnings,
         status,
+        description,
         created_at,
-        verified_at,
-        rejection_reason,
         contests!inner(
           title,
           contest_type
@@ -204,7 +205,7 @@ export async function GET(request: Request) {
         )
       `)
       .eq('status', status)
-      .eq('contests.contest_type', 'cpm')
+      .in('contests.contest_type', ['leaderboard', 'cpm'])
       .order('created_at', { ascending: false });
 
     if (submissionsError) {

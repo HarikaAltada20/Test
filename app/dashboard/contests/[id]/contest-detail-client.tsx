@@ -53,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import RejectionReasonModal from "@/components/RejectionReasonModal";
 import {
     ArrowLeft,
     Calendar,
@@ -165,6 +166,10 @@ export default function ContestDetailClient({
     // Refresh metrics state
     const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
+    // Rejection modal state
+    const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
+    const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<string | null>(null);
+
     const cooldownInfo = getMetricsRefreshCooldownInfo(currentContest.last_metrics_updated);
 
     useEffect(() => {
@@ -228,17 +233,26 @@ export default function ContestDetailClient({
         }
     };
 
-    const handleUpdateSubmissionStatus = async (submissionId: string, newStatus: Submission['status']) => {
+    const handleUpdateSubmissionStatus = async (submissionId: string, newStatus: Submission['status'], reason?: string) => {
         setIsLoadingSubmission(prev => ({ ...prev, [submissionId]: true }));
         try {
-            const { data, error } = await supabase
-                .from('submissions')
-                .update({ status: newStatus })
-                .eq('id', submissionId)
-                .select()
-                .single();
+            const response = await fetch('/api/admin/verify-submission', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    submissionId,
+                    action: newStatus,
+                    reason: reason || null,
+                }),
+            });
 
-            if (error) throw error;
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to update submission status');
+            }
 
             // Update the local submissions state
             setCurrentSubmissions(prev =>
@@ -251,17 +265,30 @@ export default function ContestDetailClient({
 
             toast({
                 title: "Status Updated",
-                description: `Submission status updated to ${newStatus}`,
+                description: result.message || `Submission status updated to ${newStatus}`,
             });
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error updating submission status:', error);
             toast({
                 title: "Error",
-                description: "Failed to update submission status",
+                description: error.message || "Failed to update submission status",
                 variant: "destructive",
             });
         } finally {
             setIsLoadingSubmission(prev => ({ ...prev, [submissionId]: false }));
+        }
+    };
+
+    const handleRejectSubmission = (submissionId: string) => {
+        setPendingRejectionSubmission(submissionId);
+        setRejectionModalOpen(true);
+    };
+
+    const handleRejectionConfirm = (reason: string) => {
+        if (pendingRejectionSubmission) {
+            handleUpdateSubmissionStatus(pendingRejectionSubmission, 'rejected', reason);
+            setRejectionModalOpen(false);
+            setPendingRejectionSubmission(null);
         }
     };
 
@@ -1461,7 +1488,7 @@ export default function ContestDetailClient({
                                                                                     Mark as Verified
                                                                                 </DropdownMenuItem>}
                                                                             {submission.status !== 'rejected' &&
-                                                                                <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'rejected')} className="text-red-600">
+                                                                                <DropdownMenuItem disabled={isLoading} onClick={() => handleRejectSubmission(submission.id)} className="text-red-600">
                                                                                     Mark as Rejected
                                                                                 </DropdownMenuItem>}
                                                                             {submission.status !== 'pending' &&
@@ -1555,6 +1582,17 @@ export default function ContestDetailClient({
                     </TabsContent>
                 </Tabs>
             </div>
+
+            {/* Rejection Reason Modal */}
+            <RejectionReasonModal
+                isOpen={rejectionModalOpen}
+                onClose={() => {
+                    setRejectionModalOpen(false);
+                    setPendingRejectionSubmission(null);
+                }}
+                onConfirm={handleRejectionConfirm}
+                isLoading={isLoadingSubmission[pendingRejectionSubmission || ''] || false}
+            />
         </div>
     );
 } 
