@@ -18,7 +18,6 @@ import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from 'dayjs';
 import { useRouter } from "next/navigation";
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
-import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
@@ -85,10 +84,11 @@ export default function SettingsPage({
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
-  const router = useRouter();
   const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
   const [instagramAccount, setInstagramAccount] = useState<SocialAccount | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingYouTube, setIsLoadingYouTube] = useState(false);
+  const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
 
@@ -425,6 +425,30 @@ export default function SettingsPage({
     }
   };
 
+  const handleYouTubeConnect = () => {
+    setIsLoadingYouTube(true);
+    try {
+      // Set a timeout to reset loading state if redirect doesn't happen
+      const timeoutId = setTimeout(() => {
+        setIsLoadingYouTube(false);
+        toast({
+          title: "Error",
+          description: "Connection timed out. Please try again.",
+          variant: "destructive",
+        });
+      }, 10000);
+
+      window.location.href = '/api/youtube/auth';
+    } catch (err: any) {
+      setIsLoadingYouTube(false);
+      toast({
+        title: "Error",
+        description: err.message || "Failed to initiate YouTube connection",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleInstagramConnect = () => {
     const instagramClientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
     const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -464,7 +488,7 @@ export default function SettingsPage({
           description: "Connection timed out. Please try again.",
           variant: "destructive",
         });
-      }, 5000);
+      }, 20000);
 
       window.location.href = authUrl;
     } catch (err: any) {
@@ -515,6 +539,47 @@ export default function SettingsPage({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleYouTubeDisconnect = async () => {
+    if (!user) return;
+    setIsLoadingYouTubeDisconnect(true);
+    try {
+      // Set a timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        setIsLoadingYouTubeDisconnect(false);
+        toast({
+          title: "Error",
+          description: "Disconnection timed out. Please try again.",
+          variant: "destructive",
+        });
+      }, 5000);
+
+      const { error: updateError } = await supabase
+        .from('creator_profiles')
+        .update({ youtube_account: null, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+
+      clearTimeout(timeoutId);
+
+      if (updateError) throw updateError;
+
+      setYoutubeAccount(null);
+      setProfile(prev => prev ? { ...prev, youtube_account: null } : null);
+      toast({
+        title: "Success",
+        description: "YouTube account disconnected successfully.",
+        variant: "default",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to disconnect YouTube account.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingYouTubeDisconnect(false);
     }
   };
 
@@ -685,14 +750,13 @@ export default function SettingsPage({
                 </div>
               </div>
               {youtubeConnected ? (
-                <Button variant="outline" onClick={() => disconnectAccount('youtube')}>
-                  Disconnect
+                <Button variant="outline" onClick={handleYouTubeDisconnect} disabled={isLoadingYouTubeDisconnect}>
+                  {isLoadingYouTubeDisconnect && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}Disconnect
                 </Button>
               ) : (
-                <Button asChild>
-                  <Link href="/api/youtube/auth" prefetch={false}>
-                    Connect YouTube
-                  </Link>
+                <Button onClick={handleYouTubeConnect} disabled={isLoadingYouTube}>
+                  {isLoadingYouTube && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                  Connect YouTube
                 </Button>
               )}
             </div>
