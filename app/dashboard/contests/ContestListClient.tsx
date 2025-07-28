@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import {
     Select,
     SelectContent,
@@ -73,6 +73,8 @@ type Contest = {
 interface ContestListClientProps {
     initialContests: Contest[];
     isAdminView?: boolean;
+    selectedTab?: string;
+    onTabChange?: (tab: string) => void;
 }
 
 type SortOptionType =
@@ -124,10 +126,14 @@ const contestStatusConfig = {
     ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
 };
 
-export function ContestListClient({ initialContests, isAdminView = false }: ContestListClientProps) {
+export function ContestListClient({ initialContests, isAdminView = false, selectedTab: externalSelectedTab, onTabChange }: ContestListClientProps) {
     const router = useRouter();
     const [sortOption, setSortOption] = useState<SortOptionType>("created_at_desc");
-    const [selectedTab, setSelectedTab] = useState("all");
+    const [internalSelectedTab, setInternalSelectedTab] = useState("all");
+
+    // Use external tab if provided, otherwise use internal state
+    const selectedTab = externalSelectedTab !== undefined ? externalSelectedTab : internalSelectedTab;
+    const setSelectedTab = onTabChange || setInternalSelectedTab;
     const [platformFilter, setPlatformFilter] = useState<string>("all");
     const [contestStatusFilter, setContestStatusFilter] = useState<string>("all"); // New contest status filter
     const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
@@ -665,7 +671,7 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
         });
 
         return sortedContests;
-    }, [currentContests, sortOption, filteredAndSortedContests, contestStatusFilter, platformFilter, contestTypeFilter]);
+    }, [currentContests, sortOption, filteredAndSortedContests, contestStatusFilter, platformFilter, contestTypeFilter, selectedTab]);
 
     const displayContests = sortedCurrentContests;
 
@@ -737,75 +743,49 @@ export function ContestListClient({ initialContests, isAdminView = false }: Cont
             </div>
 
             {/* Enhanced Status Filter Tabs - More Responsive */}
-            <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-                <div className="overflow-x-auto">
-                    <TabsList className="inline-flex w-auto min-w-full h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm mb-8 rounded-lg">
-                        <TabsTrigger
-                            value="all"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.all.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="draft"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Draft <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.draft.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="pending_approval"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Pending Approval <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.pending_approval.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="ready"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Ready <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.ready.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="active"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Active <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.active.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="pending_verification"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Pending Verification <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.pending_verification.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="done"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Done <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.done.length}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="rejected"
-                            className="px-4 py-2 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground transition-all duration-300"
-                        >
-                            Rejected <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestsByStatus.rejected.length}
-                            </Badge>
-                        </TabsTrigger>
-                    </TabsList>
-                </div>
+            <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full mb-8">
+                <TabsList>
+                    <TabsTrigger value="all">
+                        All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.all.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="draft">
+                        Draft <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.draft.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="pending_approval">
+                        Pending Approval <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.pending_approval.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="ready">
+                        Ready <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.ready.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="active">
+                        Active <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.active.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="pending_verification">
+                        Pending Verification <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.pending_verification.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="done">
+                        Done <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.done.length}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="rejected">
+                        Rejected <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestsByStatus.rejected.length}
+                        </Badge>
+                    </TabsTrigger>
+                </TabsList>
 
                 {Object.keys(contestsByStatus).map((tabValue) => (
                     <TabsContent key={tabValue} value={tabValue} className="mt-4">

@@ -1293,8 +1293,9 @@ export default function BillingClientPage({
                         </DialogClose>
                         <Button
                             onClick={handleWithdraw}
+                            loading={isSubmittingWithdrawal}
+                            loadingText="Processing..."
                             disabled={
-                                isSubmittingWithdrawal ||
                                 !selectedWithdrawMethodId ||
                                 (activeTab === 'cash' && withdrawAmountDollars < (MIN_WITHDRAWAL_AMOUNT / 100)) ||
                                 (activeTab === 'cash' && (!profile || (withdrawAmountDollars * 100) > (profile.withdrawable_balance || 0))) ||
@@ -1303,14 +1304,7 @@ export default function BillingClientPage({
                                 (activeTab === 'cash' && payoutMethods.length === 0)
                             }
                         >
-                            {isSubmittingWithdrawal ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Processing...
-                                </>
-                            ) : (
-                                "Request Withdrawal"
-                            )}
+                            Request Withdrawal
                         </Button>
                     </DialogFooter>
                 </DialogContent>

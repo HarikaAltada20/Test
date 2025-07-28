@@ -98,6 +98,10 @@ export default function CreateContestPage({
 }: {
   user: UserResponse["data"]["user"];
 }) {
+  // Add debugging logs at component initialization
+  console.log("=== CreateContestPage Component Initialized ===");
+  console.log("User:", user?.id);
+
   const [step, setStep] = useState<Step>("basics");
   const [showPayment, setShowPayment] = useState(false);
   const [paymentCompleted, setPaymentCompleted] = useState(false);
@@ -373,13 +377,14 @@ export default function CreateContestPage({
     contest_type?: "leaderboard" | "cpm";
     contest_based_details?: any;
   }>) => {
-    if (!user?.id || !contestId) return;
+    const currentContestId = contestId || draftId;
+    if (!user?.id || !currentContestId) return;
 
     try {
       const { error } = await supabase
         .from("contests")
         .update(updateObj)
-        .eq("id", contestId)
+        .eq("id", currentContestId)
         .eq("advertiser_id", user.id);
 
       if (error) {
@@ -420,11 +425,12 @@ export default function CreateContestPage({
           toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
           return;
         }
-        let currentContestId = contestId;
+        let currentContestId = contestId || draftId;
         if (!currentContestId) {
           const newContestId = await createDraftContest();
           if (newContestId) {
             setContestId(newContestId);
+            setDraftId(newContestId);
             currentContestId = newContestId;
           }
         }
@@ -483,7 +489,7 @@ export default function CreateContestPage({
         await deleteFromStorage(thumbnailPreview);
 
         // Update DB to remove thumbnail URL
-        if (contestId) {
+        if (contestId || draftId) {
           await updateContestInDB({ thumbnail_url: null });
         }
 
@@ -558,11 +564,12 @@ export default function CreateContestPage({
         return;
       }
       setIsUploadingAsset(true);
-      let currentContestId = contestId;
+      let currentContestId = contestId || draftId;
       if (!currentContestId) {
         const newContestId = await createDraftContest();
         if (newContestId) {
           setContestId(newContestId);
+          setDraftId(newContestId);
           currentContestId = newContestId;
         }
       }
@@ -792,6 +799,12 @@ export default function CreateContestPage({
   };
 
   const handleSubmit = async (isDraft: boolean = false) => {
+    console.log("=== handleSubmit called ===");
+    console.log("isDraft:", isDraft);
+    console.log("contestId:", contestId);
+    console.log("draftId:", draftId);
+    console.log("title:", title);
+
     // Reset global form feedback
     setIsLoading(true);
     setFormFeedback(null);
@@ -1150,6 +1163,11 @@ export default function CreateContestPage({
       };
 
       let responseData, responseError;
+      console.log("=== Database operation decision ===");
+      console.log("contestId:", contestId);
+      console.log("draftId:", draftId);
+      console.log("contestId || draftId:", contestId || draftId);
+
       if (contestId || draftId) {
         // Use contestId from instant DB sync if available, otherwise fall back to draftId
         const existingContestId = contestId || draftId;
@@ -1157,11 +1175,13 @@ export default function CreateContestPage({
         const response = await supabase.from("contests").update(contestData).eq("id", existingContestId).select();
         responseData = response.data;
         responseError = response.error;
+        console.log("Update response:", responseData);
       } else {
         console.log('Creating new contest (no existing contestId or draftId found)');
         const response = await supabase.from("contests").insert([contestData]).select(); // insert expects an array
         responseData = response.data;
         responseError = response.error;
+        console.log("Insert response:", responseData);
       }
 
       if (responseError) throw responseError;
@@ -1169,10 +1189,17 @@ export default function CreateContestPage({
       // Set contestId and draftId for both draft and non-draft contests to ensure we have the contest ID
       if (responseData && responseData.length > 0) {
         const newContestId = responseData[0].id;
+        console.log("=== Setting state after database operation ===");
+        console.log("newContestId:", newContestId);
+        console.log("current contestId:", contestId);
+        console.log("current draftId:", draftId);
+
         if (!contestId) {
+          console.log("Setting contestId to:", newContestId);
           setContestId(newContestId);
         }
         if (!draftId) {
+          console.log("Setting draftId to:", newContestId);
           setDraftId(newContestId);
         }
       }
@@ -1323,11 +1350,12 @@ export default function CreateContestPage({
       return;
     }
     // Create draft contest if it doesn't exist yet
-    let currentContestId = contestId;
+    let currentContestId = contestId || draftId;
     if (!currentContestId) {
       const newContestId = await createDraftContest();
       if (newContestId) {
         setContestId(newContestId);
+        setDraftId(newContestId);
         currentContestId = newContestId;
       }
     }
@@ -1367,7 +1395,7 @@ export default function CreateContestPage({
       setResources(newResources);
 
       // Instantly update DB with new resources array
-      if (contestId) {
+      if (contestId || draftId) {
         await updateContestInDB({ resources: newResources });
       }
     }
@@ -1792,6 +1820,10 @@ export default function CreateContestPage({
 
   // Helper function to populate form with draft data
   const populateDraftData = (draft: any) => {
+    console.log("=== populateDraftData called ===");
+    console.log("Draft ID:", draft.id);
+    console.log("Draft title:", draft.title);
+
     setTitle(draft.title || "");
     setCategory(draft.category || "technology");
     setPlatform(draft.platform || "youtube"); // Load platform, default if not present
@@ -1800,6 +1832,8 @@ export default function CreateContestPage({
       setThumbnailPreview(draft.thumbnail_url);
     }
     setDraftId(draft.id);
+    // CRITICAL FIX: Also set contestId when loading a draft
+    setContestId(draft.id);
 
     console.log("Loading draft data:", draft); // For debugging
 
@@ -3010,11 +3044,12 @@ export default function CreateContestPage({
       }
       try {
         setIsUploadingAsset(true);
-        let currentContestId = contestId;
+        let currentContestId = contestId || draftId;
         if (!currentContestId) {
           const newContestId = await createDraftContest();
           if (newContestId) {
             setContestId(newContestId);
+            setDraftId(newContestId);
             currentContestId = newContestId;
           }
         }
@@ -3914,7 +3949,20 @@ export default function CreateContestPage({
               <CardFooter>
                 <Button type="button" variant="outline" onClick={prevStep} disabled={isLoading}>Back</Button>
                 <div className="flex gap-2 ml-auto">
-                  <Button variant="outline" onClick={handleSaveDraft} disabled={isLoading || !title.trim()}>Save Draft</Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleSaveDraft}
+                    disabled={isLoading || !title.trim()}
+                  >
+                    {isLoading && uploadProgress && uploadProgress.includes("draft") ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                        <span>Saving...</span>
+                      </div>
+                    ) : (
+                      "Save Draft"
+                    )}
+                  </Button>
                   <Button
                     type="button"
                     onClick={nextStep}
@@ -3967,10 +4015,9 @@ export default function CreateContestPage({
                   onClick={handleSaveDraft}
                   disabled={isLoading || !title.trim()}
                 >
-                  {isLoading &&
-                    uploadProgress &&
-                    uploadProgress.includes("draft") ? (
+                  {isLoading && uploadProgress && uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                       <span>{uploadProgress}</span>
                       <Progress
                         value={uploadProgress ? 70 : 0}
@@ -3993,10 +4040,9 @@ export default function CreateContestPage({
                   }
                   className="bg-rose-600 hover:bg-rose-700 text-white"
                 >
-                  {isLoading &&
-                    uploadProgress &&
-                    !uploadProgress.includes("draft") ? (
+                  {isLoading && uploadProgress && !uploadProgress.includes("draft") ? (
                     <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       <span>{uploadProgress}</span>
                       <Progress
                         value={

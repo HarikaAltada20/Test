@@ -3,9 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { ContestListClient } from "./ContestListClient";
 import { RouteGuard } from "@/components/guards/RouteGuard";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Plus } from "lucide-react";
+import { ContestsPageClient } from "./ContestsPageClient";
 
 export default async function ContestsPage() {
   const supabase = await createClient();
@@ -52,27 +50,12 @@ export default async function ContestsPage() {
     status: contest.status || 'unknown'
   })) as any[];
 
-
   return (
     <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Contests</h1>
-          </div>
-          <Button variant="white" className="w-full sm:w-auto" asChild>
-            <Link href="/dashboard/contests/create">
-              <Plus className="mr-2 h-4 w-4" /> Create Contest
-            </Link>
-          </Button>
-        </div>
-        <Suspense fallback={<div>Loading contests...</div>}>
-          <ContestListClient
-            initialContests={typedContests}
-            isAdminView={false}
-          />
-        </Suspense>
-      </div>
+      <ContestsPageClient
+        initialContests={typedContests}
+        userId={data.user.id}
+      />
     </RouteGuard>
   );
 }

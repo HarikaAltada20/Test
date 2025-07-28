@@ -117,9 +117,10 @@ export function DeleteContestButton({
             <Button
               variant="destructive"
               onClick={handleDelete}
-              disabled={isDeleting}
+              loading={isDeleting}
+              loadingText="Deleting..."
             >
-              {isDeleting ? "Deleting..." : "Delete Contest"}
+              Delete Contest
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

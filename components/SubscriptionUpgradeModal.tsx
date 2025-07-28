@@ -173,9 +173,9 @@ export function SubscriptionUpgradeModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
+                    <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
                         {isUpgrade ? (
                             <TrendingUp className="h-5 w-5 text-green-600" />
                         ) : (
@@ -183,7 +183,7 @@ export function SubscriptionUpgradeModal({
                         )}
                         {isUpgrade ? 'Upgrade' : 'Downgrade'} Your Subscription
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="text-sm sm:text-base">
                         Choose how you'd like to {isUpgrade ? 'upgrade' : 'downgrade'} from {currentPlan.displayName || currentPlan.name} to {targetPlan.displayName || targetPlan.name}.
                         {isUpgrade
                             ? ' You\'ll get access to more features and higher limits.'
@@ -192,9 +192,9 @@ export function SubscriptionUpgradeModal({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                     {/* Plan Comparison */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         {/* Current Plan */}
                         <Card>
                             <CardHeader className="pb-3">
@@ -202,14 +202,14 @@ export function SubscriptionUpgradeModal({
                                     <div className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(currentPlan.name)} text-white`}>
                                         {getPlanIcon(currentPlan.name)}
                                     </div>
-                                    <div>
+                                    <div className="min-w-0 flex-1">
                                         <CardTitle className="text-sm text-gray-600">Current Plan</CardTitle>
-                                        <p className="font-semibold">{currentPlan.displayName || currentPlan.name}</p>
+                                        <p className="font-semibold truncate">{currentPlan.displayName || currentPlan.name}</p>
                                     </div>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold">
+                                <div className="text-xl sm:text-2xl font-bold">
                                     {formatCurrencyFromCents(currentPlan.price)}
                                     <span className="text-sm font-normal text-gray-600">/month</span>
                                 </div>
@@ -223,14 +223,14 @@ export function SubscriptionUpgradeModal({
                                     <div className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(targetPlan.name)} text-white`}>
                                         {getPlanIcon(targetPlan.name)}
                                     </div>
-                                    <div>
+                                    <div className="min-w-0 flex-1">
                                         <CardTitle className="text-sm text-green-600">New Plan</CardTitle>
-                                        <p className="font-semibold">{targetPlan.displayName || targetPlan.name}</p>
+                                        <p className="font-semibold truncate">{targetPlan.displayName || targetPlan.name}</p>
                                     </div>
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-600">
+                                <div className="text-xl sm:text-2xl font-bold text-green-600">
                                     {formatCurrencyFromCents(targetPlan.price)}
                                     <span className="text-sm font-normal text-gray-600">/month</span>
                                 </div>
@@ -249,12 +249,12 @@ export function SubscriptionUpgradeModal({
                             <h4 className="font-semibold mb-3">What's changing:</h4>
                             <div className="space-y-2">
                                 {getFeatureDifferences().map((diff, index) => (
-                                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                        <div className="flex items-center gap-2">
+                                    <div key={index} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg gap-2">
+                                        <div className="flex items-center gap-2 min-w-0">
                                             {diff.icon}
-                                            <span className="font-medium">{diff.label}</span>
+                                            <span className="font-medium truncate">{diff.label}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm">
+                                        <div className="flex items-center gap-2 text-sm flex-shrink-0">
                                             <Badge variant="outline">{diff.current}</Badge>
                                             <span>→</span>
                                             <Badge className="bg-green-100 text-green-800">{diff.target}</Badge>
@@ -276,14 +276,16 @@ export function SubscriptionUpgradeModal({
 
                             {/* Scheduled Change Option */}
                             <div className="space-y-3">
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="scheduled" id="scheduled" />
-                                    <Label htmlFor="scheduled" className="flex items-center gap-2 cursor-pointer">
-                                        <Calendar className="h-4 w-4 text-blue-600" />
-                                        <span className="font-medium">
-                                            Scheduled {isUpgrade ? 'Upgrade' : 'Downgrade'} (Recommended)
-                                        </span>
-                                        <Badge className="bg-blue-100 text-blue-800">
+                                <div className="flex items-start space-x-2">
+                                    <RadioGroupItem value="scheduled" id="scheduled" className="mt-1" />
+                                    <Label htmlFor="scheduled" className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <Calendar className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                                            <span className="font-medium">
+                                                Scheduled {isUpgrade ? 'Upgrade' : 'Downgrade'} (Recommended)
+                                            </span>
+                                        </div>
+                                        <Badge className="bg-blue-100 text-blue-800 w-fit">
                                             {isUpgrade ? 'No time lost' : 'Keep current benefits'}
                                         </Badge>
                                     </Label>
@@ -309,14 +311,16 @@ export function SubscriptionUpgradeModal({
 
                             {/* Immediate Change Option */}
                             <div className="space-y-3">
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="immediate" id="immediate" />
-                                    <Label htmlFor="immediate" className="flex items-center gap-2 cursor-pointer">
-                                        <Zap className="h-4 w-4 text-orange-600" />
-                                        <span className="font-medium">
-                                            Immediate {isUpgrade ? 'Upgrade' : 'Downgrade'}
-                                        </span>
-                                        <Badge className="bg-orange-100 text-orange-800">
+                                <div className="flex items-start space-x-2">
+                                    <RadioGroupItem value="immediate" id="immediate" className="mt-1" />
+                                    <Label htmlFor="immediate" className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <Zap className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                                            <span className="font-medium">
+                                                Immediate {isUpgrade ? 'Upgrade' : 'Downgrade'}
+                                            </span>
+                                        </div>
+                                        <Badge className="bg-orange-100 text-orange-800 w-fit">
                                             {isUpgrade ? 'Instant access - lose time' : 'Instant change - lose time'}
                                         </Badge>
                                     </Label>
@@ -375,37 +379,29 @@ export function SubscriptionUpgradeModal({
                     </Alert>
                 </div>
 
-                <DialogFooter className="flex items-center justify-between">
-                    <Button variant="outline" onClick={onClose} disabled={isProcessing}>
+                <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3">
+                    <Button variant="outline" onClick={onClose} disabled={isProcessing} className="w-full sm:w-auto">
                         Cancel
                     </Button>
                     <Button
                         onClick={handleUpgrade}
-                        disabled={isProcessing}
-                        className={`${isUpgrade
+                        loading={isProcessing}
+                        loadingText="Processing..."
+                        className={`w-full sm:w-auto ${isUpgrade
                             ? 'bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700'
                             : 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700'
                             }`}
                     >
-                        {isProcessing ? (
+                        {upgradeType === 'scheduled' ? (
                             <>
-                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                Processing...
+                                <Calendar className="h-4 w-4 mr-2" />
+                                Schedule {isUpgrade ? 'Upgrade' : 'Downgrade'}
                             </>
                         ) : (
                             <>
-                                {upgradeType === 'scheduled' ? (
-                                    <>
-                                        <Calendar className="h-4 w-4 mr-2" />
-                                        Schedule {isUpgrade ? 'Upgrade' : 'Downgrade'}
-                                    </>
-                                ) : (
-                                    <>
-                                        <Zap className="h-4 w-4 mr-2" />
-                                        {isUpgrade ? 'Upgrade' : 'Downgrade'} Now
-                                        {targetPlan.price > 0 && ` - ${formatCurrencyFromCents(targetPlan.price)}`}
-                                    </>
-                                )}
+                                <Zap className="h-4 w-4 mr-2" />
+                                {isUpgrade ? 'Upgrade' : 'Downgrade'} Now
+                                {targetPlan.price > 0 && ` - ${formatCurrencyFromCents(targetPlan.price)}`}
                             </>
                         )}
                     </Button>

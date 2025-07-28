@@ -18,6 +18,8 @@ import { createClient } from "@/utils/supabase/client";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
+import { ContestCreationModal } from "@/components/ContestCreationModal";
+import { useContestCreation } from "@/hooks/use-contest-creation";
 
 
 function DashboardPage() {
@@ -35,6 +37,8 @@ function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const { handleCreateContest } = useContestCreation(user?.id);
 
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
@@ -270,6 +274,13 @@ function DashboardPage() {
     );
   }
 
+  const handleCreateContestClick = async () => {
+    const shouldShowModal = await handleCreateContest();
+    if (shouldShowModal) {
+      setShowModal(true);
+    }
+  };
+
   const isAdvertiser = profile && "company_name" in profile;
 
   return (
@@ -277,10 +288,8 @@ function DashboardPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         {isAdvertiser && (
-          <Button variant="white" asChild>
-            <Link href="/dashboard/contests/create">
-              <Plus className="mr-2 h-4 w-4" /> Create Contest
-            </Link>
+          <Button variant="white" onClick={handleCreateContestClick}>
+            <Plus className="mr-2 h-4 w-4" /> Create Contest
           </Button>
         )}
       </div>
@@ -488,6 +497,11 @@ function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <ContestCreationModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        userId={user?.id || ""}
+      />
     </div>
   );
 }

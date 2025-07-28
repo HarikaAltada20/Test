@@ -3315,7 +3315,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 disabled={isSubmitting || !!validationError}
                                 className="bg-rose-600 hover:bg-rose-700 text-white"
                             >
-                                {isSubmitting ? "Saving..." : "Save Changes"}
+                                {isSubmitting ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                        <span>Saving...</span>
+                                    </div>
+                                ) : (
+                                    "Save Changes"
+                                )}
                             </Button>
                         ) : contest?.moderation_status !== 'published' ? (
                             // Full edit mode for non-published contests: Draft/Save and Submit buttons
@@ -3344,19 +3351,32 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                     disabled={isSubmitting || !!validationError}
                                     className="bg-gray-600 hover:bg-gray-700 text-white"
                                 >
-                                    {isSubmitting ? "Saving..." : "Save as Draft"}
+                                    {isSubmitting ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            <span>Saving...</span>
+                                        </div>
+                                    ) : (
+                                        "Save as Draft"
+                                    )}
                                 </Button>
                                 <Button
                                     onClick={handleResubmitForApproval}
                                     disabled={isSubmitting || !!validationError}
                                     className="bg-orange-600 hover:bg-orange-700 text-white"
                                 >
-                                    {isSubmitting ? "Processing..." :
+                                    {isSubmitting ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                            <span>Processing...</span>
+                                        </div>
+                                    ) : (
                                         (contest?.moderation_status === "pending_approval") ? "Update & Resubmit for Approval" :
                                             (contest && isContestPaid() && !budgetChanged) ? "Submit for Approval" :
                                                 (contest && isContestPaid() && budgetChanged && budgetDifference > 0) ? "Update & Pay" :
                                                     (contest && isContestPaid() && budgetChanged && budgetDifference < 0) ? "Update Contest" :
-                                                        "Submit & Pay"}
+                                                        "Submit & Pay"
+                                    )}
                                 </Button>
                             </>
                         ) : (
@@ -3366,7 +3386,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 disabled={isSubmitting || !!validationError}
                                 className="bg-rose-600 hover:bg-rose-700 text-white"
                             >
-                                {isSubmitting ? "Saving..." : "Save Changes"}
+                                {isSubmitting ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                        <span>Saving...</span>
+                                    </div>
+                                ) : (
+                                    "Save Changes"
+                                )}
                             </Button>
                         )}
                     </div>

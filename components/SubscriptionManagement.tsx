@@ -356,12 +356,11 @@ export function SubscriptionManagement() {
                                             <Button
                                                 className="w-full"
                                                 onClick={() => handleSubscribe(plan.id)}
-                                                disabled={isProcessing}
+                                                loading={isProcessing}
+                                                loadingText="Processing..."
                                                 variant={plan.price === 0 ? "outline" : "default"}
                                             >
-                                                {isProcessing ? (
-                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                ) : plan.price === 0 ? (
+                                                {plan.price === 0 ? (
                                                     <Gift className="h-4 w-4 mr-2" />
                                                 ) : (
                                                     <CreditCard className="h-4 w-4 mr-2" />
@@ -372,13 +371,10 @@ export function SubscriptionManagement() {
                                             <Button
                                                 className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
                                                 onClick={() => handleUpgradeClick(plan)}
-                                                disabled={isProcessing}
+                                                loading={isProcessing}
+                                                loadingText="Processing..."
                                             >
-                                                {isProcessing ? (
-                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                                ) : (
-                                                    <TrendingUp className="h-4 w-4 mr-2" />
-                                                )}
+                                                <TrendingUp className="h-4 w-4 mr-2" />
                                                 Upgrade
                                             </Button>
                                         ) : canDowngradeToThis ? (
@@ -386,7 +382,8 @@ export function SubscriptionManagement() {
                                                 variant="outline"
                                                 className="w-full"
                                                 onClick={() => handleUpgradeClick(plan)}
-                                                disabled={isProcessing}
+                                                loading={isProcessing}
+                                                loadingText="Processing..."
                                             >
                                                 Downgrade
                                             </Button>

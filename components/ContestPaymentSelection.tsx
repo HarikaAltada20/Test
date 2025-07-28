@@ -164,21 +164,14 @@ const StripeCheckoutForm = ({
 
             <Button
                 type="submit"
-                disabled={!stripe || isProcessing}
+                disabled={!stripe}
+                loading={isProcessing}
+                loadingText="Processing Payment..."
                 className="w-full"
                 size="lg"
             >
-                {isProcessing ? (
-                    <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing Payment...
-                    </>
-                ) : (
-                    <>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Charge Card {formatCurrencyFromCents(cardAmountInCents)}
-                    </>
-                )}
+                <CreditCard className="mr-2 h-4 w-4" />
+                Charge Card {formatCurrencyFromCents(cardAmountInCents)}
             </Button>
         </form>
     );
@@ -251,21 +244,13 @@ const WalletOnlyPayment = ({
 
             <Button
                 onClick={handleWalletPayment}
-                disabled={isProcessing}
+                loading={isProcessing}
+                loadingText="Processing Payment..."
                 className="w-full"
                 size="lg"
             >
-                {isProcessing ? (
-                    <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Processing Payment...
-                    </>
-                ) : (
-                    <>
-                        <Wallet className="mr-2 h-4 w-4" />
-                        Pay from Wallet {formatCurrencyFromCents(Math.round(amount * 100))}
-                    </>
-                )}
+                <Wallet className="mr-2 h-4 w-4" />
+                Pay from Wallet {formatCurrencyFromCents(Math.round(amount * 100))}
             </Button>
         </div>
     );

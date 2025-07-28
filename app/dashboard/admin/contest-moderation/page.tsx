@@ -66,7 +66,7 @@ export default async function ContestModerationPage() {
                 </div>
 
                 <Suspense fallback={<div>Loading contests...</div>}>
-                    <ContestModerationClient initialContests={formattedContests} />
+                    <ContestModerationClient />
                 </Suspense>
             </div>
         );

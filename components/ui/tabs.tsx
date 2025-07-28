@@ -14,7 +14,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-12 items-center justify-center rounded-lg bg-muted/50 p-1.5 text-muted-foreground border border-border/40 shadow-sm",
+      "inline-flex h-14 items-center justify-center rounded-lg bg-muted/50 p-2 text-muted-foreground border-2 border-border/60 shadow-md",
       className
     )}
     {...props}
@@ -29,11 +29,11 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2.5 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 relative overflow-hidden",
+      "inline-flex items-center justify-center whitespace-nowrap rounded-md px-6 py-3 text-sm font-medium transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 relative overflow-hidden",
       // Unselected state - subtle styling with good contrast
       "text-muted-foreground/80 hover:text-foreground hover:bg-background/60",
-      // Selected state - strong visual distinction with theme color
-      "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-semibold data-[state=active]:shadow-md data-[state=active]:border data-[state=active]:border-primary/20",
+      // Selected state - MUCH stronger visual distinction
+      "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-xl data-[state=active]:border-2 data-[state=active]:border-primary data-[state=active]:scale-105 data-[state=active]:ring-2 data-[state=active]:ring-primary/30",
       // Hover effects
       "hover:scale-[1.02] active:scale-[0.98]",
       className

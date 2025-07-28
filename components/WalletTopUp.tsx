@@ -206,24 +206,19 @@ const CheckoutForm = ({
 
             <Button
                 type="submit"
-                disabled={!stripe || isProcessing}
+                disabled={!stripe}
+                loading={isProcessing}
+                loadingText={
+                    processingStep === 'creating' ? 'Creating payment...' :
+                        processingStep === 'confirming' ? 'Confirming payment...' :
+                            processingStep === 'polling' ? 'Verifying payment...' :
+                                'Processing...'
+                }
                 className="w-full"
                 size="lg"
             >
-                {isProcessing ? (
-                    <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {processingStep === 'creating' && 'Creating payment...'}
-                        {processingStep === 'confirming' && 'Confirming payment...'}
-                        {processingStep === 'polling' && 'Verifying payment...'}
-                        {processingStep === 'idle' && 'Processing...'}
-                    </>
-                ) : (
-                    <>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Add {formatDollarAmount(amount)} to Wallet
-                    </>
-                )}
+                <CreditCard className="mr-2 h-4 w-4" />
+                Add {formatDollarAmount(amount)} to Wallet
             </Button>
         </form>
     );

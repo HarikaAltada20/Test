@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalDateTime } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
@@ -92,7 +92,7 @@ const contestStatusConfig = {
 export default function ContestModerationClient() {
     const [contests, setContests] = useState<Contest[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedStatus, setSelectedStatus] = useState("pending_approval");
+    const [selectedStatus, setSelectedStatus] = useState("all");
     const [selectedContest, setSelectedContest] = useState<Contest | null>(null);
     const [showApprovalDialog, setShowApprovalDialog] = useState(false);
     const [showRejectionDialog, setShowRejectionDialog] = useState(false);
@@ -103,7 +103,10 @@ export default function ContestModerationClient() {
     const fetchContests = async (status: string) => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/admin/contest-moderation?status=${status}`);
+            const url = status === 'all'
+                ? '/api/admin/contest-moderation'
+                : `/api/admin/contest-moderation?status=${status}`;
+            const response = await fetch(url);
 
             if (!response.ok) {
                 throw new Error("Failed to fetch contests");
@@ -396,6 +399,7 @@ export default function ContestModerationClient() {
 
     // Group contests by status for tab counts
     const contestCounts = {
+        all: contests.length,
         pending_approval: contests.filter(c => c.moderation_status === 'pending_approval').length,
         approved: contests.filter(c => c.moderation_status === 'approved').length,
         published: contests.filter(c => c.moderation_status === 'published').length,
@@ -405,60 +409,39 @@ export default function ContestModerationClient() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Contest Moderation</h1>
-                    <p className="text-muted-foreground">
-                        Review and approve contests before they go live
-                    </p>
-                </div>
-            </div>
-
-            <Tabs value={selectedStatus} onValueChange={setSelectedStatus}>
-                <div className="overflow-x-auto">
-                    <TabsList className="grid w-full grid-cols-5 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm mb-8 min-w-[600px]">
-                        <TabsTrigger
-                            value="pending_approval"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                        >
-                            Pending <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestCounts.pending_approval}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="approved"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                        >
-                            Approved <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestCounts.approved}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="published"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                        >
-                            Published <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestCounts.published}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="rejected"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                        >
-                            Rejected <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestCounts.rejected}
-                            </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                            value="draft"
-                            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                        >
-                            Drafts <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                                {contestCounts.draft}
-                            </Badge>
-                        </TabsTrigger>
-                    </TabsList>
-                </div>
+            <Tabs value={selectedStatus} onValueChange={setSelectedStatus} className="mb-8">
+                <TabsList>
+                    <TabsTrigger value="all">
+                        All <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.all}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="pending_approval">
+                        Pending <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.pending_approval}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="approved">
+                        Approved <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.approved}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="published">
+                        Published <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.published}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="rejected">
+                        Rejected <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.rejected}
+                        </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="draft">
+                        Drafts <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.draft}
+                        </Badge>
+                    </TabsTrigger>
+                </TabsList>
 
                 <TabsContent value={selectedStatus} className="mt-4">
                     {loading ? (

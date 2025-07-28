@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Filter, Video, AlertCircle, Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import Image from 'next/image';
 import React from 'react';
 
@@ -158,49 +158,28 @@ export default function SubmissionsClient({
                 </div>
             </div>
 
-            {/* Enhanced Tabs with better visual distinction */}
+            {/* Enhanced Tabs with better visual distinction and responsive design */}
             <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="mb-8">
-                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-7 h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
-                    <TabsTrigger
-                        value="all"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                <TabsList>
+                    <TabsTrigger value="all">
                         All
                     </TabsTrigger>
-                    <TabsTrigger
-                        value="active"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                    <TabsTrigger value="active">
                         Active
                     </TabsTrigger>
-                    <TabsTrigger
-                        value="pending"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                    <TabsTrigger value="pending">
                         Pending
                     </TabsTrigger>
-                    <TabsTrigger
-                        value="verified"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                    <TabsTrigger value="verified">
                         Verified
                     </TabsTrigger>
-                    <TabsTrigger
-                        value="rejected"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                    <TabsTrigger value="rejected">
                         Rejected
                     </TabsTrigger>
-                    <TabsTrigger
-                        value="ended"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                    <TabsTrigger value="ended">
                         Ended
                     </TabsTrigger>
-                    <TabsTrigger
-                        value="paid"
-                        className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300"
-                    >
+                    <TabsTrigger value="paid">
                         Paid
                     </TabsTrigger>
                 </TabsList>
