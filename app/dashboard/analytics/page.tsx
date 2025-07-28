@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, DollarSign, EyeIcon, TrendingUp, Users } from "lucide-react"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { EnhancedTabs as Tabs, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger, EnhancedTabsContent as TabsContent } from "@/components/ui/enhanced-tabs"
 import { formatCurrencyFromCents } from "@/lib/currency-utils"
 
 
