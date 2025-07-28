@@ -788,7 +788,7 @@ export default function ContestDetailClient({
                             Overview
                         </TabsTrigger>
                         <TabsTrigger value="submissions">
-                            Submissions <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">({currentSubmissions.length})</Badge>
+                            Submissions <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">({currentSubmissions.length})</Badge>
                         </TabsTrigger>
                         <TabsTrigger value="analytics">
                             Analytics
