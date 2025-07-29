@@ -3,6 +3,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
 import { subscriptionPlans, PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
+import { ensureDefaultPaymentMethod } from '@/lib/payment-utils';
 
 // Service role client for webhooks - bypasses RLS for Stripe operations
 // Only used in webhook context where there's no user session
@@ -157,7 +158,7 @@ async function handleCheckoutSessionCompleted(session: any) {
             ? paymentIntent.payment_method 
             : paymentIntent.payment_method?.id;
           if (paymentMethodId) {
-            await setDefaultPaymentMethodForSubscription(session.customer, paymentMethodId);
+            await ensureDefaultPaymentMethod(session.customer, paymentMethodId);
           }
         } catch (error) {
           console.error('❌ Error setting default payment method for new subscription:', error);
@@ -360,7 +361,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
         ? paymentIntent.payment_method 
         : paymentIntent.payment_method?.id;
       if (paymentMethodId) {
-        await setDefaultPaymentMethodForSubscription(invoice.customer, paymentMethodId);
+        await ensureDefaultPaymentMethod(invoice.customer, paymentMethodId);
       }
     } catch (error) {
       console.error('❌ Error setting default payment method for subscription:', error);
@@ -1403,31 +1404,5 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
     
   } catch (error) {
     console.error('❌ Error in logSubscriptionRefundToTransactions:', error);
-  }
-}
-
-// 🆕 AUTO-SET DEFAULT PAYMENT METHOD FOR SUBSCRIPTIONS
-// Automatically sets the payment method used in a successful subscription payment as the default for the customer
-async function setDefaultPaymentMethodForSubscription(customerId: string, paymentMethodId: string) {
-  try {
-    console.log(`🔧 Setting payment method ${paymentMethodId} as default for subscription customer ${customerId}`);
-    
-    // Set the payment method as default for the customer
-    const customer = await stripe().customers.update(customerId, {
-      invoice_settings: {
-        default_payment_method: paymentMethodId,
-      },
-    });
-    
-    console.log(`✅ Successfully set payment method ${paymentMethodId} as default for subscription customer ${customerId}`);
-    console.log(`📋 Customer default payment method: ${customer.invoice_settings.default_payment_method}`);
-    
-    return true;
-  } catch (error) {
-    console.error(`❌ Error setting default payment method for subscription customer ${customerId}:`, error);
-    
-    // Don't fail the entire webhook if this fails - it's a nice-to-have feature
-    // The subscription payment was successful, this is just for UX improvement
-    return false;
   }
 }

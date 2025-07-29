@@ -1014,12 +1014,12 @@ export async function getCustomerInfo(userId: string): Promise<{ customerId?: st
       .eq('id', userId)
       .single();
 
-    if (customerError && customerError.code !== 'PGRST116') {
+    if (customerError) {
       console.error('Error fetching customer data:', customerError);
       return null;
     }
 
-    // Get user email
+    // Get user email from users table
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('email')
@@ -1038,5 +1038,44 @@ export async function getCustomerInfo(userId: string): Promise<{ customerId?: st
   } catch (error) {
     console.error('Error in getCustomerInfo:', error);
     return null;
+  }
+}
+
+// 🆕 UTILITY FUNCTION TO CHECK AND SET DEFAULT PAYMENT METHOD
+// This function checks if a customer has a default payment method and sets one if they don't
+export async function ensureDefaultPaymentMethod(customerId: string, paymentMethodId: string): Promise<boolean> {
+  try {
+    console.log(`🔧 Ensuring default payment method for customer ${customerId}`);
+    
+    // First, check if customer already has a default payment method
+    const customer = await stripe().customers.retrieve(customerId);
+    
+    // Check if customer is deleted or doesn't exist
+    if (customer.deleted) {
+      console.log(`❌ Customer ${customerId} is deleted, cannot set default payment method`);
+      return false;
+    }
+    
+    if (customer.invoice_settings?.default_payment_method) {
+      console.log(`✅ Customer ${customerId} already has default payment method: ${customer.invoice_settings.default_payment_method}`);
+      return true; // Already has a default, no need to change
+    }
+    
+    console.log(`🆕 Customer ${customerId} has no default payment method, setting ${paymentMethodId} as default`);
+    
+    // Set the payment method as default for the customer
+    const updatedCustomer = await stripe().customers.update(customerId, {
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+    
+    console.log(`✅ Successfully set payment method ${paymentMethodId} as default for customer ${customerId}`);
+    console.log(`📋 Customer default payment method: ${updatedCustomer.invoice_settings.default_payment_method}`);
+    
+    return true;
+  } catch (error) {
+    console.error(`❌ Error ensuring default payment method for customer ${customerId}:`, error);
+    return false;
   }
 } 
