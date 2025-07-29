@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
           productId: targetProductId,
           priceId: targetPriceId,
           upgradeOptions: {
-            upgradeType: 'immediate',
+            upgradeType: isUpgrade ? 'upgrade' : 'downgrade', // Set correct upgrade type based on price comparison
             oldSubscriptionId: currentSubscription.id !== 'free-plan' ? currentSubscription.id : undefined
           }
         });

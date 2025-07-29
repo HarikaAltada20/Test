@@ -1,258 +1,231 @@
 # Local Webhook Debugging Guide
 
-## 🚨 **Issue: Double Wallet Top-up in Local Environment**
+## **Issue: Subscription payments not appearing in money_transactions during local development**
 
-### **Problem Description**
-- **Deployed version**: Wallet top-up works correctly (correct amount added)
-- **Local environment**: Double the amount gets added to wallet
+When testing locally, Stripe webhooks can't reach your `localhost:3000` server, so subscription payment events aren't being processed.
 
-### **Root Cause**
-Multiple Stripe CLI webhook listeners running simultaneously, causing the same `payment_intent.succeeded` event to be processed twice.
+## **Solution: Use Stripe CLI for Local Webhook Forwarding**
 
----
+### **Step 1: Install Stripe CLI**
 
-## 🔍 **Diagnosis Steps**
-
-### **Step 1: Check Running Stripe CLI Processes**
-
-On Windows PowerShell:
-```powershell
-# List all running stripe processes
-Get-Process | Where-Object {$_.ProcessName -like "*stripe*"}
-
-# Or check for CLI listeners specifically
-netstat -an | findstr :3000
-```
-
-On Mac/Linux:
+#### **Windows (using Chocolatey):**
 ```bash
-# Check for running stripe CLI processes
-ps aux | grep "stripe listen"
-
-# Kill all stripe processes
-pkill -f "stripe listen"
+choco install stripe-cli
 ```
 
-### **Step 2: Check Your Current Webhook Setup**
+#### **Windows (using Scoop):**
+```bash
+scoop install stripe
+```
 
-Look for these files in your project:
-- `webhook-configuration-guide.md` - Shows dual webhook setup
-- Check if you have both webhook endpoints running
+#### **macOS (using Homebrew):**
+```bash
+brew install stripe/stripe-cli/stripe
+```
 
----
+#### **Linux:**
+```bash
+# Download from https://github.com/stripe/stripe-cli/releases
+# Or use package manager
+```
 
-## ✅ **Solution 1: Proper Local Webhook Setup**
-
-### **For Wallet Testing (Recommended)**
-
-Run **ONLY** the payment webhook:
+### **Step 2: Login to Stripe CLI**
 
 ```bash
-# Kill any existing stripe processes first
-pkill -f "stripe listen"
-
-# Run ONLY payment webhook for wallet testing
-stripe listen --forward-to localhost:3000/api/payments/webhook --events payment_intent.succeeded,payment_intent.payment_failed
-
-# You should see output like:
-# Ready! Your webhook signing secret is whsec_1234...
-# Listening for events matching: payment_intent.succeeded, payment_intent.payment_failed
+stripe login
 ```
 
-### **For Subscription Testing**
+This will open your browser to authenticate with your Stripe account.
 
-Run **ONLY** the subscription webhook:
+### **Step 3: Start Webhook Forwarding**
 
 ```bash
-# Kill any existing stripe processes first  
-pkill -f "stripe listen"
-
-# Run ONLY subscription webhook
-stripe listen --forward-to localhost:3000/api/subscriptions/webhook --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_succeeded,invoice.payment_failed
+stripe listen --forward-to localhost:3000/api/subscriptions/webhook
 ```
 
-### **❌ Never Run Both Simultaneously**
-
-This causes the duplicate issue:
-```bash
-# DON'T DO THIS - causes duplicates
-stripe listen --forward-to localhost:3000/api/payments/webhook &
-stripe listen --forward-to localhost:3000/api/subscriptions/webhook &
+**Expected output:**
+```
+> Ready! Your webhook signing secret is whsec_xxxxxxxxxxxxxxxxxxxxx
 ```
 
----
+### **Step 4: Update Environment Variables**
 
-## ✅ **Solution 2: Idempotency Protection (Applied)**
+Add the webhook secret from the CLI output to your `.env.local`:
 
-I've added idempotency checks to prevent duplicate processing:
-
-**For Wallet Top-ups:**
-- Checks if `payment_intent_id` already exists in `money_transactions` with `status = 'success'`
-- Skips processing if already done
-- Logs warning about duplicate webhook
-
-**For Contest Payments:**
-- Same idempotency protection
-- Prevents double charging or double wallet deductions
-
----
-
-## 🧪 **Testing the Fix**
-
-### **Step 1: Clean Up Local Environment**
-
-```bash
-# 1. Kill all stripe processes
-pkill -f "stripe listen"
-
-# 2. Restart your development server
-npm run dev
-
-# 3. Check your wallet balance before testing
+```env
+STRIPE_SUBSCRIPTION_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxx
 ```
 
-### **Step 2: Test Wallet Top-up**
+### **Step 5: Test Subscription Payment**
 
-```bash
-# Start ONLY payment webhook
-stripe listen --forward-to localhost:3000/api/payments/webhook --events payment_intent.succeeded
+1. **Make a subscription payment** in your local app
+2. **Watch the CLI output** for webhook events
+3. **Check your application logs** for processing
 
-# In another terminal, test wallet top-up:
-# 1. Go to Dashboard → Billing
-# 2. Click "Top Up Wallet"  
-# 3. Enter $25.00
-# 4. Use test card: 4242424242424242
-# 5. Complete payment
-
-# Check logs for:
-# ✅ "Payment intent xyz is new, proceeding with processing..."
-# ❌ Should NOT see "DUPLICATE WEBHOOK" message
+**Expected CLI output:**
+```
+2024-01-15 10:30:15   --> invoice.payment_succeeded [evt_1234567890]
+2024-01-15 10:30:15  <--  [200] POST http://localhost:3000/api/subscriptions/webhook [evt_1234567890]
 ```
 
-### **Step 3: Verify Single Processing**
-
-Check your browser console and terminal logs:
-- Should see exactly ONE "✅ Balance update successful" message
-- Should see exactly ONE "Deposit successful" message  
-- Wallet balance should increase by exactly $25.00, not $50.00
-
----
-
-## 🔧 **Advanced Debugging**
-
-### **Check Database Transactions**
-
-```sql
--- Check recent money transactions
-SELECT 
-    payment_intent_id,
-    type,
-    status,
-    amount,
-    created_at,
-    description
-FROM money_transactions 
-WHERE user_id = 'your_user_id'
-ORDER BY created_at DESC 
-LIMIT 10;
+**Expected application logs:**
+```
+📥 Subscription Webhook received: invoice.payment_succeeded
+💰 Invoice payment succeeded: inv_...
+💰 Logging subscription payment to money_transactions for user ...
+✅ Successfully logged subscription payment transaction: ...
 ```
 
-### **Enable Extra Logging**
+## **Alternative: Manual Webhook Testing**
 
-Add to your local `.env.local`:
-```bash
-# Enable detailed webhook logging
-DEBUG_WEBHOOKS=true
-STRIPE_CLI_LOGGING=verbose
-```
+If you can't use Stripe CLI, you can manually test webhooks:
 
-### **Monitor Real-time Logs**
+### **Step 1: Get Test Event Data**
 
-In separate terminals:
-```bash
-# Terminal 1: Stripe CLI with verbose logging
-stripe listen --forward-to localhost:3000/api/payments/webhook --log-level debug
+1. Go to **Stripe Dashboard** → **Developers** → **Webhooks**
+2. Click on your webhook endpoint
+3. Click **"Send test webhook"**
+4. Select **"invoice.payment_succeeded"**
+5. Copy the event data
 
-# Terminal 2: Your Next.js app logs
-npm run dev
+### **Step 2: Create Test Endpoint**
 
-# Terminal 3: Database logs (if using local DB)
-tail -f /path/to/your/db/logs
-```
+Create a temporary test endpoint to simulate webhook:
 
----
+```typescript
+// app/api/test-webhook/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 
-## 📋 **Environment Comparison**
-
-### **Deployed Version (Working)**
-- Uses Stripe Dashboard webhook endpoints
-- Single webhook per event type
-- Proper event filtering
-- No CLI forwarding
-
-### **Local Version (Fixed)**
-- Uses Stripe CLI forwarding
-- Must run ONE listener at a time
-- Now has idempotency protection
-- Proper event filtering required
-
----
-
-## 🚀 **Best Practices for Local Development**
-
-### **1. Use Specific Event Filtering**
-```bash
-# Good: Specific events only
-stripe listen --forward-to localhost:3000/api/payments/webhook --events payment_intent.succeeded
-
-# Bad: All events (can cause conflicts)
-stripe listen --forward-to localhost:3000/api/payments/webhook
-```
-
-### **2. Use Separate Scripts**
-Create these npm scripts in `package.json`:
-
-```json
-{
-  "scripts": {
-    "webhook:payments": "stripe listen --forward-to localhost:3000/api/payments/webhook --events payment_intent.succeeded,payment_intent.payment_failed",
-    "webhook:subscriptions": "stripe listen --forward-to localhost:3000/api/subscriptions/webhook --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_succeeded,invoice.payment_failed",
-    "webhook:stop": "pkill -f 'stripe listen'"
-  }
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  
+  // Forward to your actual webhook
+  const response = await fetch('http://localhost:3000/api/subscriptions/webhook', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'stripe-signature': 'test_signature'
+    },
+    body: JSON.stringify(body)
+  });
+  
+  return NextResponse.json({ success: true });
 }
 ```
 
-Then use:
-```bash
-# For wallet testing
-npm run webhook:stop && npm run webhook:payments
+### **Step 3: Send Test Request**
 
-# For subscription testing  
-npm run webhook:stop && npm run webhook:subscriptions
+```bash
+curl -X POST http://localhost:3000/api/test-webhook \
+  -H "Content-Type: application/json" \
+  -d @test-webhook-event.json
 ```
 
-### **3. Always Check Running Processes**
-Before testing, always check:
-```bash
-# Should show ONLY ONE stripe listen process
-ps aux | grep "stripe listen"
+## **Debugging Steps**
+
+### **1. Check if Webhook is Receiving Events**
+
+Look for these log messages:
+```
+📥 Subscription Webhook received: invoice.payment_succeeded
 ```
 
----
+### **2. Check if Payment Processing is Working**
 
-## 🎯 **Summary**
-
-**The issue was**: Multiple Stripe CLI listeners causing duplicate webhook processing
-
-**The solution**:
-1. ✅ **Immediate**: Added idempotency protection (prevents duplicates)
-2. ✅ **Process**: Run only ONE webhook listener at a time
-3. ✅ **Monitoring**: Check for running processes before testing
-
-**To test wallet top-ups locally**:
-```bash
-pkill -f "stripe listen"
-stripe listen --forward-to localhost:3000/api/payments/webhook --events payment_intent.succeeded
+Look for these log messages:
+```
+💰 Invoice payment succeeded: inv_...
+💰 Logging subscription payment to money_transactions for user ...
+✅ Successfully logged subscription payment transaction: ...
 ```
 
-Your deployed version works correctly because it uses proper Stripe Dashboard webhooks without CLI forwarding conflicts. 
+### **3. Check Database for Transactions**
+
+Run the debug script:
+```bash
+node scripts/debug-subscription-payments.js
+```
+
+### **4. Common Issues and Solutions**
+
+#### **Issue: "No Stripe signature found"**
+- **Solution**: Ensure webhook secret is set correctly
+- **Check**: Verify `STRIPE_SUBSCRIPTION_WEBHOOK_SECRET` in `.env.local`
+
+#### **Issue: "Webhook signature verification failed"**
+- **Solution**: Use the correct webhook secret from Stripe CLI
+- **Check**: Make sure you're using the secret from `stripe listen` output
+
+#### **Issue: "Error logging subscription payment"**
+- **Solution**: Check database schema and permissions
+- **Check**: Ensure `money_transactions` table exists with correct columns
+
+#### **Issue: No webhook events received**
+- **Solution**: Verify Stripe CLI is running and forwarding
+- **Check**: Ensure your app is running on `localhost:3000`
+
+## **Production vs Development**
+
+### **Development (Local):**
+- Use Stripe CLI to forward webhooks
+- Webhook secret: `whsec_xxxxxxxxxxxxxxxxxxxxx` (from CLI)
+- Endpoint: `localhost:3000/api/subscriptions/webhook`
+
+### **Production:**
+- Stripe sends webhooks directly to your domain
+- Webhook secret: `whsec_xxxxxxxxxxxxxxxxxxxxx` (from Stripe Dashboard)
+- Endpoint: `https://yourdomain.com/api/subscriptions/webhook`
+
+## **Quick Setup Checklist**
+
+- [ ] Install Stripe CLI
+- [ ] Run `stripe login`
+- [ ] Start webhook forwarding: `stripe listen --forward-to localhost:3000/api/subscriptions/webhook`
+- [ ] Add webhook secret to `.env.local`
+- [ ] Restart your development server
+- [ ] Make a test subscription payment
+- [ ] Check logs for webhook processing
+- [ ] Verify transaction appears in database
+
+## **Monitoring Local Webhooks**
+
+### **Stripe CLI Commands:**
+
+```bash
+# View all events
+stripe events list
+
+# View specific event
+stripe events retrieve evt_1234567890
+
+# View webhook attempts
+stripe webhook_endpoints list
+```
+
+### **Application Logs:**
+
+Look for these patterns:
+```
+📥 Subscription Webhook received: [event_type]
+💰 Invoice payment succeeded: [invoice_id]
+✅ Successfully logged subscription payment transaction: [transaction_id]
+```
+
+## **Troubleshooting**
+
+### **If Stripe CLI isn't working:**
+1. Check if you're logged in: `stripe config --list`
+2. Re-login: `stripe login`
+3. Check webhook forwarding: `stripe listen --help`
+
+### **If webhooks aren't being processed:**
+1. Check application logs for errors
+2. Verify webhook secret is correct
+3. Ensure your app is running on the correct port
+4. Check database connectivity
+
+### **If transactions still aren't appearing:**
+1. Run the debug script: `node scripts/debug-subscription-payments.js`
+2. Check database schema
+3. Verify environment variables
+4. Test with a simple webhook event 

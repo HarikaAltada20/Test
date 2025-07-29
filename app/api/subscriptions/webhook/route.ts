@@ -87,7 +87,12 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        console.log(`🔔 Unhandled subscription event type: ${event.type}`);
+        // Handle invoice.refunded and other events generically
+        if ((event as any).type === 'invoice.refunded') {
+          await handleInvoiceRefunded((event as any).data.object);
+        } else {
+          console.log(`🔔 Unhandled subscription event type: ${event.type}`);
+        }
     }
   } catch (error) {
     console.error(`❌ Error processing subscription webhook ${event.type}:`, error);
@@ -294,12 +299,21 @@ async function handleSubscriptionScheduleCanceled(schedule: any) {
 
 async function handleInvoicePaymentSucceeded(invoice: any) {
   console.log('💰 Invoice payment succeeded:', invoice.id);
+  console.log("Invoice", invoice);
   
-  if (!invoice.subscription) {
+  // Handle new Stripe invoice structure where subscription is nested
+  let subscriptionId = invoice.subscription;
+  if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
+    subscriptionId = invoice.parent.subscription_details.subscription;
+    console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
+  }
+  
+  if (!subscriptionId) {
+    console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
   }
 
-  const subscription = await stripe().subscriptions.retrieve(invoice.subscription);
+  const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
   
   if (!user_id) {
@@ -312,17 +326,30 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
     await updateSubscriptionInDatabaseCorrect(subscription, user_id, product_id);
   }
 
+  console.log("Reached here - Invoice, subscription, user_id", invoice, subscription, user_id);
+
+  // Log subscription payment to money_transactions table
+  await logSubscriptionPaymentToTransactions(invoice, subscription, user_id);
+
   console.log(`✅ Payment processed for user ${user_id}, subscription updated`);
 }
 
 async function handleInvoicePaymentFailed(invoice: any) {
   console.log('❌ Invoice payment failed:', invoice.id);
   
-  if (!invoice.subscription) {
+  // Handle new Stripe invoice structure where subscription is nested
+  let subscriptionId = invoice.subscription;
+  if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
+    subscriptionId = invoice.parent.subscription_details.subscription;
+    console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
+  }
+  
+  if (!subscriptionId) {
+    console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
   }
 
-  const subscription = await stripe().subscriptions.retrieve(invoice.subscription);
+  const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
   
   if (!user_id) {
@@ -335,7 +362,39 @@ async function handleInvoicePaymentFailed(invoice: any) {
     await updateSubscriptionInDatabaseCorrect(subscription, user_id, product_id);
   }
 
+  // Log failed subscription payment to money_transactions table
+  await logFailedSubscriptionPaymentToTransactions(invoice, subscription, user_id);
+
   console.log(`💸 Payment failed for user ${user_id}, subscription status updated`);
+}
+
+async function handleInvoiceRefunded(invoice: any) {
+  console.log('💰 Invoice refunded:', invoice.id);
+  
+  // Handle new Stripe invoice structure where subscription is nested
+  let subscriptionId = invoice.subscription;
+  if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
+    subscriptionId = invoice.parent.subscription_details.subscription;
+    console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
+  }
+  
+  if (!subscriptionId) {
+    console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
+    return; // Not a subscription invoice
+  }
+
+  const subscription = await stripe().subscriptions.retrieve(subscriptionId);
+  const { user_id, product_id } = subscription.metadata || {};
+  
+  if (!user_id) {
+    console.error('❌ Missing user_id in subscription for refunded invoice');
+    return;
+  }
+
+  // Log refunded subscription payment to money_transactions table
+  await logSubscriptionRefundToTransactions(invoice, subscription, user_id);
+
+  console.log(`💰 Payment refunded for user ${user_id}, subscription status updated`);
 }
 
 // Helper function to extract product ID from subscription
@@ -927,4 +986,385 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
   } catch (error) {
     console.error('❌ Error in cancelSubscriptionInDatabase:', error);
   }
+}
+
+// Log subscription payment to money_transactions table
+async function logSubscriptionPaymentToTransactions(invoice: any, subscription: any, userId: string) {
+  const supabase = createServiceRoleClient();
+  
+  try {
+    console.log(`💰 Logging subscription payment to money_transactions for user ${userId}`);
+    
+    // Get product details for better transaction description
+    const priceId = subscription.items.data[0].price.id;
+    const { data: priceData, error: priceError } = await supabase
+      .from('prices')
+      .select(`
+        id,
+        unit_amount,
+        products!inner(id, name, description)
+      `)
+      .eq('id', priceId)
+      .single();
+    
+    let productName = 'Unknown Subscription';
+    let productDescription = 'Subscription payment';
+    
+    if (!priceError && priceData && priceData.products) {
+      productName = (priceData.products as any).name;
+      productDescription = (priceData.products as any).description || `Subscription payment for ${productName}`;
+    }
+    
+    // Calculate amount in cents (Stripe stores amounts in cents)
+    const amountInCents = invoice.amount_paid || 0;
+    
+    // Create comprehensive metadata for subscription payment
+    const metadata = {
+      stripe_invoice_id: invoice.id,
+      stripe_subscription_id: subscription.id,
+      product_name: productName,
+      subscription_status: subscription.status,
+      billing_period_start: subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null,
+      billing_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+      invoice_number: invoice.number,
+      invoice_pdf: invoice.invoice_pdf,
+      hosted_invoice_url: invoice.hosted_invoice_url,
+      subscription_plan: productName,
+      webhook_source: 'subscription_webhook',
+      stripe_price_id: priceId,
+      subscription_metadata: subscription.metadata,
+      invoice_metadata: invoice.metadata,
+      collection_method: invoice.collection_method,
+      billing_reason: invoice.billing_reason,
+      currency: invoice.currency,
+      subtotal: invoice.subtotal,
+      total: invoice.total,
+      amount_due: invoice.amount_due,
+      amount_paid: invoice.amount_paid,
+      amount_remaining: invoice.amount_remaining,
+      status_transitions: invoice.status_transitions,
+      created_at: new Date().toISOString()
+    };
+    
+    // Determine if this is a new subscription, upgrade, or downgrade
+    const subscriptionMetadata = subscription.metadata || {};
+    const upgradeType = subscriptionMetadata.upgrade_type;
+    const oldSubscriptionId = subscriptionMetadata.old_subscription_id;
+    
+    console.log(`🔍 Subscription metadata analysis:`, {
+      subscription_id: subscription.id,
+      upgrade_type: upgradeType,
+      old_subscription_id: oldSubscriptionId,
+      full_metadata: subscriptionMetadata
+    });
+    
+    let description = '';
+    if (oldSubscriptionId) {
+      // This is an upgrade or downgrade - check the upgrade_type from metadata
+      if (upgradeType === 'upgrade') {
+        description = `Upgrade to ${productName} Plan`;
+      } else if (upgradeType === 'downgrade') {
+        description = `Downgrade to ${productName} Plan`;
+      } else if (upgradeType === 'immediate') {
+        // Fallback for legacy immediate upgrades - assume upgrade
+        description = `Upgrade to ${productName} Plan`;
+      } else {
+        // Default to upgrade if we can't determine
+        description = `Plan changed to ${productName} Plan`;
+      }
+    } else {
+      // This is a new subscription
+      description = `Subscribed to ${productName} Plan`;
+    }
+    
+    console.log(`📝 Final description: "${description}" for subscription ${subscription.id}`);
+    
+    // Format the plan start date properly
+    const planStartDate = subscription.current_period_start 
+      ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
+      : (() => {
+          // Fallback: try to get from created timestamp or use current date
+          console.log(`⚠️ No current_period_start found for subscription ${subscription.id}, using fallback`);
+          if (subscription.created) {
+            return new Date(subscription.created * 1000).toLocaleDateString();
+          }
+          return new Date().toLocaleDateString();
+        })();
+    
+    // Create transaction record using the new subscription_payment type
+    const transactionData = {
+      user_id: userId,
+      type: 'subscription_payment', // Use dedicated subscription_payment type
+      amount: amountInCents, // Store in cents as per your system
+      currency: invoice.currency?.toUpperCase() || 'USD',
+      status: 'success', // Use 'success' for subscription payments
+      payment_intent_id: invoice.payment_intent,
+      description: description, // Dynamic description based on subscription type
+      remarks: `Subscription payment for ${productName} plan. Plan starts from ${planStartDate}. Price ID: ${priceId}`, // Include start date and price ID
+      payment_method: 'stripe', // Indicate this was paid via Stripe
+      metadata: metadata, // Store comprehensive metadata
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log(`📝 Inserting subscription payment transaction:`, {
+      user_id: userId,
+      amount: amountInCents,
+      product_name: productName,
+      subscription_id: subscription.id,
+      type: 'subscription_payment'
+    });
+    
+    const { data: transaction, error: insertError } = await supabase
+      .from('money_transactions')
+      .insert(transactionData)
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('❌ Error logging subscription payment to money_transactions:', insertError);
+      return;
+    }
+    
+    console.log(`✅ Successfully logged subscription payment transaction: ${transaction.id}`);
+    console.log(`💰 Amount: ${amountInCents} cents (${(amountInCents / 100).toFixed(2)} USD)`);
+    console.log(`📦 Product: ${productName}`);
+    console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
+    
+  } catch (error) {
+    console.error('❌ Error in logSubscriptionPaymentToTransactions:', error);
+  }
 } 
+
+// Log failed subscription payment to money_transactions table
+async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscription: any, userId: string) {
+  const supabase = createServiceRoleClient();
+  
+  try {
+    console.log(`💰 Logging failed subscription payment to money_transactions for user ${userId}`);
+    
+    // Get product details for better transaction description
+    const priceId = subscription.items.data[0].price.id;
+    const { data: priceData, error: priceError } = await supabase
+      .from('prices')
+      .select(`
+        id,
+        unit_amount,
+        products!inner(id, name, description)
+      `)
+      .eq('id', priceId)
+      .single();
+    
+    let productName = 'Unknown Subscription';
+    let productDescription = 'Subscription payment';
+    
+    if (!priceError && priceData && priceData.products) {
+      productName = (priceData.products as any).name;
+      productDescription = (priceData.products as any).description || `Subscription payment for ${productName}`;
+    }
+    
+    // Calculate amount in cents (Stripe stores amounts in cents)
+    const amountInCents = invoice.amount_paid || 0;
+    
+    // Format the plan start date properly
+    const planStartDate = subscription.current_period_start 
+      ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
+      : (() => {
+          // Fallback: try to get from created timestamp or use current date
+          console.log(`⚠️ No current_period_start found for failed payment subscription ${subscription.id}, using fallback`);
+          if (subscription.created) {
+            return new Date(subscription.created * 1000).toLocaleDateString();
+          }
+          return new Date().toLocaleDateString();
+        })();
+    
+    // Create comprehensive metadata for failed subscription payment
+    const metadata = {
+      stripe_invoice_id: invoice.id,
+      stripe_subscription_id: subscription.id,
+      product_name: productName,
+      subscription_status: subscription.status,
+      billing_period_start: subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null,
+      billing_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+      invoice_number: invoice.number,
+      invoice_pdf: invoice.invoice_pdf,
+      hosted_invoice_url: invoice.hosted_invoice_url,
+      subscription_plan: productName,
+      webhook_source: 'subscription_webhook',
+      stripe_price_id: priceId,
+      subscription_metadata: subscription.metadata,
+      invoice_metadata: invoice.metadata,
+      collection_method: invoice.collection_method,
+      billing_reason: invoice.billing_reason,
+      currency: invoice.currency,
+      subtotal: invoice.subtotal,
+      total: invoice.total,
+      amount_due: invoice.amount_due,
+      amount_paid: invoice.amount_paid,
+      amount_remaining: invoice.amount_remaining,
+      status_transitions: invoice.status_transitions,
+      failure_reason: 'Payment failed',
+      created_at: new Date().toISOString()
+    };
+    
+    // Create transaction record using the new subscription_payment type
+    const transactionData = {
+      user_id: userId,
+      type: 'subscription_payment', // Use dedicated subscription_payment type
+      amount: amountInCents, // Store in cents as per your system
+      currency: invoice.currency?.toUpperCase() || 'USD',
+      status: 'failed',
+      payment_intent_id: invoice.payment_intent,
+      description: `Payment Failed for ${productName} Plan`, // Updated description
+      remarks: `Payment failed for ${productName} plan. Plan starts from ${planStartDate}. Price ID: ${priceId}`, // Include start date and price ID
+      payment_method: 'stripe', // Indicate this was attempted via Stripe
+      metadata: metadata, // Store comprehensive metadata
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log(`📝 Inserting failed subscription payment transaction:`, {
+      user_id: userId,
+      amount: amountInCents,
+      product_name: productName,
+      subscription_id: subscription.id,
+      type: 'subscription_payment'
+    });
+    
+    const { data: transaction, error: insertError } = await supabase
+      .from('money_transactions')
+      .insert(transactionData)
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('❌ Error logging failed subscription payment to money_transactions:', insertError);
+      return;
+    }
+    
+    console.log(`✅ Successfully logged failed subscription payment transaction: ${transaction.id}`);
+    console.log(`💰 Amount: ${amountInCents} cents (${(amountInCents / 100).toFixed(2)} USD)`);
+    console.log(`📦 Product: ${productName}`);
+    console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
+    
+  } catch (error) {
+    console.error('❌ Error in logFailedSubscriptionPaymentToTransactions:', error);
+  }
+} 
+
+// Log subscription refund to money_transactions table
+async function logSubscriptionRefundToTransactions(invoice: any, subscription: any, userId: string) {
+  const supabase = createServiceRoleClient();
+  
+  try {
+    console.log(`💰 Logging subscription refund to money_transactions for user ${userId}`);
+    
+    // Get product details for better transaction description
+    const priceId = subscription.items.data[0].price.id;
+    const { data: priceData, error: priceError } = await supabase
+      .from('prices')
+      .select(`
+        id,
+        unit_amount,
+        products!inner(id, name, description)
+      `)
+      .eq('id', priceId)
+      .single();
+    
+    let productName = 'Unknown Subscription';
+    let productDescription = 'Subscription refund';
+    
+    if (!priceError && priceData && priceData.products) {
+      productName = (priceData.products as any).name;
+      productDescription = `Subscription refund for ${productName}`;
+    }
+    
+    // Calculate refund amount in cents (negative amount for refunds)
+    const refundAmountInCents = -(invoice.amount_refunded || 0);
+    
+    // Format the plan start date properly
+    const planStartDate = subscription.current_period_start 
+      ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
+      : (() => {
+          // Fallback: try to get from created timestamp or use current date
+          console.log(`⚠️ No current_period_start found for refund subscription ${subscription.id}, using fallback`);
+          if (subscription.created) {
+            return new Date(subscription.created * 1000).toLocaleDateString();
+          }
+          return new Date().toLocaleDateString();
+        })();
+    
+    // Create comprehensive metadata for subscription refund
+    const metadata = {
+      stripe_invoice_id: invoice.id,
+      stripe_subscription_id: subscription.id,
+      product_name: productName,
+      subscription_status: subscription.status,
+      billing_period_start: subscription.current_period_start ? new Date(subscription.current_period_start * 1000).toISOString() : null,
+      billing_period_end: subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null,
+      invoice_number: invoice.number,
+      invoice_pdf: invoice.invoice_pdf,
+      hosted_invoice_url: invoice.hosted_invoice_url,
+      subscription_plan: productName,
+      webhook_source: 'subscription_webhook',
+      stripe_price_id: priceId,
+      subscription_metadata: subscription.metadata,
+      invoice_metadata: invoice.metadata,
+      collection_method: invoice.collection_method,
+      billing_reason: invoice.billing_reason,
+      currency: invoice.currency,
+      subtotal: invoice.subtotal,
+      total: invoice.total,
+      amount_due: invoice.amount_due,
+      amount_paid: invoice.amount_paid,
+      amount_remaining: invoice.amount_remaining,
+      amount_refunded: invoice.amount_refunded,
+      status_transitions: invoice.status_transitions,
+      refund_reason: 'Subscription refund',
+      created_at: new Date().toISOString()
+    };
+    
+    // Create transaction record using the new subscription_refund type
+    const transactionData = {
+      user_id: userId,
+      type: 'subscription_refund', // Use subscription_refund type for refunds
+      amount: refundAmountInCents, // Store as negative amount for refunds
+      currency: invoice.currency?.toUpperCase() || 'USD',
+      status: 'success', // Use 'success' for successful refunds
+      payment_intent_id: invoice.payment_intent,
+      description: `${productName} Plan Refund`, // Keep refund description simple
+      remarks: `Refund for ${productName} plan. Plan started from ${planStartDate}. Price ID: ${priceId}`, // Include start date and price ID
+      payment_method: 'refund', // Indicate this is a refund
+      metadata: metadata, // Store comprehensive metadata
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log(`📝 Inserting subscription refund transaction:`, {
+      user_id: userId,
+      amount: refundAmountInCents,
+      product_name: productName,
+      subscription_id: subscription.id,
+      type: 'subscription_refund'
+    });
+    
+    const { data: transaction, error: insertError } = await supabase
+      .from('money_transactions')
+      .insert(transactionData)
+      .select()
+      .single();
+    
+    if (insertError) {
+      console.error('❌ Error logging subscription refund to money_transactions:', insertError);
+      return;
+    }
+    
+    console.log(`✅ Successfully logged subscription refund transaction: ${transaction.id}`);
+    console.log(`💰 Refund Amount: ${refundAmountInCents} cents (${(refundAmountInCents / 100).toFixed(2)} USD)`);
+    console.log(`📦 Product: ${productName}`);
+    console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
+    
+  } catch (error) {
+    console.error('❌ Error in logSubscriptionRefundToTransactions:', error);
+  }
+}

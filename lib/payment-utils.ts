@@ -494,13 +494,16 @@ export async function refundContestPayment(
 // Enhanced transaction logging with payment method and meaningful descriptions
 export async function logTransaction(
   userId: string,
-  type: 'deposit' | 'contest_payment' | 'refund' | 'withdrawal',
+  type: 'deposit' | 'contest_payment' | 'refund' | 'withdrawal' | 'subscription_payment',
   amountInCents: number,
-  status: 'pending' | 'success' | 'failed',
+  status: 'pending' | 'success' | 'failed' | 'cancelled' | 'completed',
   description: string,
   paymentIntentId?: string, // Optional payment intent ID for fast lookups
   remarks?: string, // User-friendly status message
-  paymentMethod?: 'wallet' | 'stripe' | 'split' | 'refund' // NEW: Payment method for clarity
+  paymentMethod?: 'wallet' | 'stripe' | 'split' | 'refund', // NEW: Payment method for clarity
+  metadata?: any, // NEW: Flexible metadata for subscription payments
+  stripeInvoiceId?: string, // NEW: Stripe invoice ID for subscription payments
+  stripeSubscriptionId?: string // NEW: Stripe subscription ID for subscription payments
 ): Promise<boolean> {
   try {
     console.log('📝 Logging transaction:', {
@@ -525,6 +528,9 @@ export async function logTransaction(
       payment_intent_id: paymentIntentId, // Store for lightning-fast lookups
       payment_method: paymentMethod, // NEW: Store payment method for clarity
       remarks, // User-friendly message
+      metadata, // NEW: Store flexible metadata
+      stripe_invoice_id: stripeInvoiceId, // NEW: Store Stripe invoice ID
+      stripe_subscription_id: stripeSubscriptionId, // NEW: Store Stripe subscription ID
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };

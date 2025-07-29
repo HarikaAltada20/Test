@@ -366,7 +366,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          type: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund"
+          type: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund" | "subscription_payment" | "subscription_refund"
           status: "pending" | "success" | "failed" | "cancelled"
           amount: number
           description: string | null
@@ -375,11 +375,14 @@ export interface Database {
           currency: string | null
           withdrawal_request_id: string | null
           remarks: string | null
+          payment_intent_id: string | null
+          payment_method: string | null
+          metadata: any | null
         }
         Insert: {
           id?: string
           user_id: string
-          type: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund"
+          type: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund" | "subscription_payment" | "subscription_refund"
           status?: "pending" | "success" | "failed" | "cancelled"
           amount: number
           description?: string | null
@@ -388,11 +391,14 @@ export interface Database {
           currency?: string | null
           withdrawal_request_id?: string | null
           remarks?: string | null
+          payment_intent_id?: string | null
+          payment_method?: string | null
+          metadata?: any | null
         }
         Update: {
           id?: string
           user_id?: string
-          type?: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund"
+          type?: "withdrawal" | "reward" | "deposit" | "contest_payment" | "refund" | "subscription_payment" | "subscription_refund"
           status?: "pending" | "success" | "failed" | "cancelled"
           amount?: number
           description?: string | null
@@ -401,6 +407,9 @@ export interface Database {
           currency?: string | null
           withdrawal_request_id?: string | null
           remarks?: string | null
+          payment_intent_id?: string | null
+          payment_method?: string | null
+          metadata?: any | null
         }
       }
       coin_transactions: {
