@@ -30,16 +30,17 @@ import type { UserSubscription, SubscriptionPlan } from '@/lib/subscription-type
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export const SubscriptionManagement = memo(function SubscriptionManagement() {
-    const router = useRouter();
+
     const searchParams = useSearchParams();
     const [currentSubscription, setCurrentSubscription] = useState<UserSubscription | null>(null);
     const [currentPlan, setCurrentPlan] = useState<SubscriptionPlan | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
     const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
     const [selectedTargetPlan, setSelectedTargetPlan] = useState<SubscriptionPlan | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
     const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+    const [hasInitialFetch, setHasInitialFetch] = useState(false);
 
     // Handle checkout success - with protection against infinite loops
     useEffect(() => {
@@ -71,8 +72,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     }, [searchParams, hasProcessedSuccess]);
 
     useEffect(() => {
-        fetchCurrentSubscription();
-    }, []); // Empty dependency array - only run once on mount
+        if (!hasInitialFetch) {
+            fetchCurrentSubscription();
+        }
+    }, [hasInitialFetch]); // Only run once on mount
 
     const fetchCurrentSubscription = async () => {
         try {
@@ -83,6 +86,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             }
 
             setIsLoading(true);
+            setHasInitialFetch(true);
             console.log('Fetching current subscription...');
 
             const response = await fetch('/api/subscriptions/current');
