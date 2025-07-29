@@ -63,6 +63,8 @@ import {
   MAX_PRIZE_PER_WINNER,
   DEFAULT_PRIZE_ALLOCATIONS,
   HIGH_BUDGET_THRESHOLD,
+  PRODUCT_IDS,
+  PRICE_IDS,
 } from "@/constants/subscriptionPlans";
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
@@ -1137,8 +1139,8 @@ export default function CreateContestPage({
               const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
               const plan = subscriptionPlans.find(p => p.id === userPlan) || subscriptionPlans[0];
               return {
-                product_id: plan.id,
-                price_id: plan.prices?.monthly?.id || subscriptionPlans[0].prices?.monthly?.id, // Default to EXPLORER monthly
+                product_id: PRODUCT_IDS.EXPLORER, // EXPLORER
+                price_id: PRICE_IDS.EXPLORER_MONTHLY, // EXPLORER monthly
                 subscription_id: 'no-subscription', // Will be updated when user subscribes
                 last_synced: new Date().toISOString()
               };
@@ -1147,8 +1149,8 @@ export default function CreateContestPage({
             console.error('Error getting subscription info:', error);
             // Fallback to EXPLORER plan
             return {
-              product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER
-              price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // EXPLORER monthly
+              product_id: PRODUCT_IDS.EXPLORER, // EXPLORER
+              price_id: PRICE_IDS.EXPLORER_MONTHLY, // EXPLORER monthly
               subscription_id: 'no-subscription',
               last_synced: new Date().toISOString()
             };

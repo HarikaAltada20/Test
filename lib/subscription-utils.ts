@@ -59,11 +59,15 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
     // PGRST116 just means no subscription found - this is normal for new users
     if (profileError.code !== 'PGRST116') {
       console.error('Error fetching subscription info:', profileError);
+    } else {
+      // This is expected - user has no subscription yet
+      console.log('User has no subscription yet (PGRST116) - this is normal');
     }
     return null;
   }
 
   if (!profileData?.subscription_info) {
+    console.log('User has no subscription_info in profile - this is normal for new users');
     return null;
   }
 
@@ -103,8 +107,19 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
     .eq('user_id', userId)
     .single();
 
-  if (subError || !subscription) {
-    console.error('Error fetching subscription details:', subError);
+  if (subError) {
+    // PGRST116 means subscription not found in subscriptions table
+    if (subError.code === 'PGRST116') {
+      console.log('Subscription not found in subscriptions table - this might be a data inconsistency');
+      return null;
+    } else {
+      console.error('Error fetching subscription details:', subError);
+      return null;
+    }
+  }
+
+  if (!subscription) {
+    console.log('No subscription data returned');
     return null;
   }
 

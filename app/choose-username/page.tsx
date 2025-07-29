@@ -14,6 +14,7 @@ import logo from "@/public/images/gold_logo_vertical.svg";
 import { createClient } from "@/utils/supabase/client"
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils"
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter"
+import { subscriptionPlans, PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
 
 interface UserProfileData {
     id: string;
@@ -445,8 +446,8 @@ export default function ChooseUsernamePage() {
                 ? {
                     id: userData.id,
                     subscription_info: {
-                        product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free) plan
-                        price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+                        product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free) plan
+                        price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
                         subscription_id: null,
                         last_synced: new Date().toISOString()
                     }

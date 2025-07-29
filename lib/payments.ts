@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server';
 import { stripe, formatAmountForStripe, formatAmountFromStripe } from './stripe';
+import { createOrGetStripeCustomer } from './subscription-utils';
 
 // Types for payment operations
 export interface PaymentIntent {
@@ -55,9 +56,17 @@ export async function createTopUpPaymentIntent(
   amount: number
 ): Promise<PaymentIntent | null> {
   try {
+    // Get or create Stripe customer for this user
+    const customerId = await createOrGetStripeCustomer(userId);
+    if (!customerId) {
+      console.error('❌ Failed to create or get Stripe customer for user:', userId);
+      return null;
+    }
+    
     const paymentIntent = await stripe().paymentIntents.create({
       amount: formatAmountForStripe(amount),
       currency: 'usd',
+      customer: customerId, // Link to customer
       metadata: {
         userId,
         type: 'wallet_topup',
@@ -66,6 +75,12 @@ export async function createTopUpPaymentIntent(
       automatic_payment_methods: {
         enabled: true,
       },
+    });
+
+    console.log('✅ Payment intent created with customer:', { 
+      paymentIntentId: paymentIntent.id, 
+      customerId: customerId,
+      metadata: paymentIntent.metadata 
     });
 
     return {

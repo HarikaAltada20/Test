@@ -9,6 +9,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
+import { subscriptionPlans, PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
 
 export function VerifyOtpForm() {
   const [otp, setOtp] = useState(Array(6).fill(""));
@@ -231,8 +232,8 @@ export function VerifyOtpForm() {
           {
             id: authUser.id,
             subscription_info: {
-              product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free) plan
-              price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+              product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free) plan
+              price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
               subscription_id: null,
               last_synced: new Date().toISOString()
             }

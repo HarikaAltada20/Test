@@ -74,6 +74,26 @@ export interface Database {
           }>;
         }
       }
+      customers: {
+        Row: {
+          id: string
+          stripe_customer_id: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          stripe_customer_id: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          stripe_customer_id?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
       advertiser_profiles: {
         Row: {
           id: string
@@ -83,7 +103,6 @@ export interface Database {
           total_contests_run: number
           available_deposit_balance: number
           withdrawable_balance: number
-          subscription_plan: string
         }
         Insert: {
           id: string
@@ -93,7 +112,6 @@ export interface Database {
           total_contests_run?: number
           available_deposit_balance?: number
           withdrawable_balance?: number
-          subscription_plan?: string
         }
         Update: {
           id?: string
@@ -103,7 +121,6 @@ export interface Database {
           total_contests_run?: number
           available_deposit_balance?: number
           withdrawable_balance?: number
-          subscription_plan?: string
         }
       }
       creator_profiles: {
@@ -139,35 +156,6 @@ export interface Database {
           total_money_won?: number
           withdrawable_balance?: number
           total_views?: number
-        }
-      }
-      subscription_plans: {
-        Row: {
-          id: string
-          name: string
-          price: number
-          json_features: Json
-          stripe_price_id: string | null
-          razorpay_plan_id: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          price: number
-          json_features: Json
-          stripe_price_id?: string | null
-          razorpay_plan_id?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          price?: number
-          json_features?: Json
-          stripe_price_id?: string | null
-          razorpay_plan_id?: string | null
-          created_at?: string
         }
       }
       subscriptions: {
@@ -235,7 +223,6 @@ export interface Database {
           inspiration_links: { url: string; description: string }[] | null
           created_at: string
           updated_at: string
-          subscription_plan_of_user: string | null
           contest_type: 'leaderboard' | 'cpm'
           contest_based_details: Json | null
           post_contest_status: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
@@ -265,7 +252,6 @@ export interface Database {
           inspiration_links?: { url: string; description: string }[] | null
           created_at?: string
           updated_at?: string
-          subscription_plan_of_user?: string | null
           contest_type?: 'leaderboard' | 'cpm'
           contest_based_details?: Json | null
           post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
@@ -295,7 +281,6 @@ export interface Database {
           inspiration_links?: { url: string; description: string }[] | null
           created_at?: string
           updated_at?: string
-          subscription_plan_of_user?: string | null
           contest_type?: 'leaderboard' | 'cpm'
           contest_based_details?: Json | null
           post_contest_status?: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null
@@ -518,7 +503,6 @@ export interface Database {
           inspiration_links: { url: string; description: string }[] | null
           created_at: string | null
           updated_at: string | null
-          subscription_plan_of_user: string | null
           contest_type: 'leaderboard' | 'cpm' | null
           contest_based_details: Json | null
           post_contest_status: 'pending_review' | 'in_review' | 'verification_complete' | 'payouts_processed' | null

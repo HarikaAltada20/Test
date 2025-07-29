@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { stripe } from '@/lib/stripe';
 import { headers } from 'next/headers';
+import { subscriptionPlans, PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
 
 // Service role client for webhooks - bypasses RLS for Stripe operations
 // Only used in webhook context where there's no user session
@@ -963,8 +964,8 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
       
       // Only set to free plan if no other active subscriptions exist
       const freeSubscriptionInfo = {
-        product_id: 'prod_Sduka9mKXu35Ii', // EXPLORER (free plan)
-        price_id: 'price_1RicueDCKN2LN0QeqyngXhRM', // Free price
+        product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free plan)
+        price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
         subscription_id: null,
         last_synced: new Date().toISOString()
       };

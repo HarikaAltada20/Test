@@ -1,14 +1,33 @@
+// Product IDs
+export const PRODUCT_IDS = {
+  EXPLORER: 'prod_Slij7SgNUxACLp',
+  STARTER: 'prod_SlilUeFqolEC7W',
+  BUILDER: 'prod_Slinc7mb1e30Ef',
+  CHAMPION: 'prod_SlioxThbvGeLga',
+} as const;
+
+// Price IDs
+export const PRICE_IDS = {
+  EXPLORER_MONTHLY: 'price_1RqBIUDCKN2LN0Qe2c097HHM',
+  STARTER_MONTHLY: 'price_1RqBK8DCKN2LN0QeVe68F0Ec',
+  STARTER_YEARLY: 'price_1RqBKXDCKN2LN0Qe81Nq90bP',
+  BUILDER_MONTHLY: 'price_1RqBLcDCKN2LN0QendahSoUJ',
+  BUILDER_YEARLY: 'price_1RqBLcDCKN2LN0QeoHdipPyN',
+  CHAMPION_MONTHLY: 'price_1RqBMjDCKN2LN0QenUgKtYgD',
+  CHAMPION_YEARLY: 'price_1RqBMjDCKN2LN0QeFgcfIR2I',
+} as const;
+
 export const subscriptionPlans = [
   {
     // Use real Stripe product ID instead of UUID
-    id: 'prod_Sduka9mKXu35Ii',
+    id: PRODUCT_IDS.EXPLORER,
     name: 'EXPLORER',
     displayName: 'Explorer Plan',
     price: 0, // $0.00/month
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {
-        id: 'price_1RicueDCKN2LN0QeqyngXhRM',
+        id: PRICE_IDS.EXPLORER_MONTHLY,
         amount: 0, // $0.00 in cents
         interval: 'month'
       }
@@ -27,19 +46,19 @@ export const subscriptionPlans = [
   },
   {
     // Use real Stripe product ID instead of UUID
-    id: 'prod_Sdum3O1ZM4wK1v',
+    id: PRODUCT_IDS.STARTER,
     name: 'STARTER',
     displayName: 'Starter Plan',
     price: 10000, // $100.00/month in cents
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {
-        id: 'price_1RicwmDCKN2LN0QeMBwxwt1K',
+        id: PRICE_IDS.STARTER_MONTHLY,
         amount: 10000, // $100.00 in cents
         interval: 'month'
       },
       yearly: {
-        id: 'price_1Rid6wDCKN2LN0Qemz2ugwmI',
+        id: PRICE_IDS.STARTER_YEARLY,
         amount: 100000, // $1,000.00 in cents (saves $200/year)
         interval: 'year'
       }
@@ -57,19 +76,19 @@ export const subscriptionPlans = [
   },
   {
     // Use real Stripe product ID instead of UUID
-    id: 'prod_SdunoupDPLZfkU',
+    id: PRODUCT_IDS.BUILDER,
     name: 'BUILDER',
     displayName: 'Builder Plan',
     price: 25000, // $250.00/month in cents
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {
-        id: 'price_1RicxUDCKN2LN0Qe3f13Nmel',
+        id: PRICE_IDS.BUILDER_MONTHLY,
         amount: 25000, // $250.00 in cents
         interval: 'month'
       },
       yearly: {
-        id: 'price_1Rid7PDCKN2LN0QeDCQwHKCB',
+        id: PRICE_IDS.BUILDER_YEARLY,
         amount: 250000, // $2,500.00 in cents (saves $500/year)
         interval: 'year'
       }
@@ -87,19 +106,19 @@ export const subscriptionPlans = [
   },
   {
     // Use real Stripe product ID instead of UUID
-    id: 'prod_Sdunp5Rbb6V8Ax',
+    id: PRODUCT_IDS.CHAMPION,
     name: 'CHAMPION',
     displayName: 'Champion Plan',
     price: 50000, // $500.00/month in cents
     // Add monthly and yearly price IDs from Stripe
     prices: {
       monthly: {
-        id: 'price_1RicyCDCKN2LN0Qe7g4JO6RF',
+        id: PRICE_IDS.CHAMPION_MONTHLY,
         amount: 50000, // $500.00 in cents
         interval: 'month'
       },
       yearly: {
-        id: 'price_1Rid7nDCKN2LN0QesH6RO4pO',
+        id: PRICE_IDS.CHAMPION_YEARLY,
         amount: 500000, // $5,000.00 in cents (saves $1,000/year)
         interval: 'year'
       }

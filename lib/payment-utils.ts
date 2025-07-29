@@ -1,5 +1,6 @@
 import { createClient as createServerClient } from '@/utils/supabase/server';
 import { stripe, formatAmountForStripe, formatAmountFromStripe } from './stripe';
+import { createOrGetStripeCustomer } from '@/lib/subscription-utils';
 
 // Types for payment operations
 export interface PaymentIntent {
@@ -232,9 +233,17 @@ export async function createTopUpPaymentIntent(
   try {
     console.log('💳 Creating payment intent with:', { userId, amount });
     
+    // Get or create Stripe customer for this user
+    const customerId = await createOrGetStripeCustomer(userId);
+    if (!customerId) {
+      console.error('❌ Failed to create or get Stripe customer for user:', userId);
+      return null;
+    }
+    
     const paymentIntent = await stripe().paymentIntents.create({
       amount: formatAmountForStripe(amount),
       currency: 'usd',
+      customer: customerId, // Link to customer
       metadata: {
         userId,
         type: 'wallet_topup',
@@ -245,7 +254,11 @@ export async function createTopUpPaymentIntent(
       },
     });
 
-    console.log('✅ Payment intent created with metadata:', paymentIntent.metadata);
+    console.log('✅ Payment intent created with customer:', { 
+      paymentIntentId: paymentIntent.id, 
+      customerId: customerId,
+      metadata: paymentIntent.metadata 
+    });
 
     return {
       id: paymentIntent.id,
@@ -272,6 +285,13 @@ export async function createContestPaymentIntent(
   originalWalletBalance?: number // NEW: Original wallet balance for atomic rollback
 ): Promise<PaymentIntent | null> {
   try {
+    // Get or create Stripe customer for this user
+    const customerId = await createOrGetStripeCustomer(userId);
+    if (!customerId) {
+      console.error('❌ Failed to create or get Stripe customer for user:', userId);
+      return null;
+    }
+
     // Build metadata object
     const metadata: any = {
       userId,
@@ -292,10 +312,19 @@ export async function createContestPaymentIntent(
     const paymentIntent = await stripe().paymentIntents.create({
       amount: amount, // amount is already in cents, no conversion needed
       currency: 'usd',
+      customer: customerId, // Link to customer
       metadata,
       automatic_payment_methods: {
         enabled: true,
       },
+    });
+
+    console.log('✅ Contest payment intent created with customer:', { 
+      paymentIntentId: paymentIntent.id, 
+      customerId: customerId,
+      contestId: contestId,
+      amount: amount,
+      paymentMethod: paymentMethod
     });
 
     // Create meaningful description and remarks based on payment method
@@ -503,7 +532,8 @@ export async function logTransaction(
   paymentMethod?: 'wallet' | 'stripe' | 'split' | 'refund', // NEW: Payment method for clarity
   metadata?: any, // NEW: Flexible metadata for subscription payments
   stripeInvoiceId?: string, // NEW: Stripe invoice ID for subscription payments
-  stripeSubscriptionId?: string // NEW: Stripe subscription ID for subscription payments
+  stripeSubscriptionId?: string, // NEW: Stripe subscription ID for subscription payments
+  stripeCustomerId?: string // NEW: Stripe customer ID for transaction tracking
 ): Promise<boolean> {
   try {
     console.log('📝 Logging transaction:', {
@@ -514,10 +544,27 @@ export async function logTransaction(
       paymentIntentId,
       paymentMethod,
       remarks,
+      stripeCustomerId,
       description: description.substring(0, 100) + '...' // Truncate for readability
     });
 
     const supabase = await getSupabaseClient();
+    
+    // If no customer ID provided but we have a payment intent, try to get customer info
+    let finalMetadata = metadata || {};
+    if (!stripeCustomerId && paymentIntentId) {
+      try {
+        const paymentIntent = await stripe().paymentIntents.retrieve(paymentIntentId);
+        if (paymentIntent.customer) {
+          stripeCustomerId = paymentIntent.customer as string;
+          finalMetadata = { ...finalMetadata, stripe_customer_id: stripeCustomerId };
+        }
+      } catch (error) {
+        console.log('⚠️ Could not retrieve payment intent for customer info:', error);
+      }
+    } else if (stripeCustomerId) {
+      finalMetadata = { ...finalMetadata, stripe_customer_id: stripeCustomerId };
+    }
     
     const transactionData = {
       user_id: userId,
@@ -528,7 +575,7 @@ export async function logTransaction(
       payment_intent_id: paymentIntentId, // Store for lightning-fast lookups
       payment_method: paymentMethod, // NEW: Store payment method for clarity
       remarks, // User-friendly message
-      metadata, // NEW: Store flexible metadata
+      metadata: finalMetadata, // NEW: Store flexible metadata with customer info
       stripe_invoice_id: stripeInvoiceId, // NEW: Store Stripe invoice ID
       stripe_subscription_id: stripeSubscriptionId, // NEW: Store Stripe subscription ID
       created_at: new Date().toISOString(),
@@ -556,6 +603,7 @@ export async function logTransaction(
       payment_method: data?.payment_method,
       payment_intent_id: data?.payment_intent_id,
       remarks: data?.remarks,
+      customer_id: stripeCustomerId,
       description: data?.description?.substring(0, 50) + '...'
     });
 
@@ -951,5 +999,44 @@ export async function refundContestPaymentV2(
   } catch (error) {
     console.error('Error in refundContestPaymentV2:', error);
     return { success: false, balance: 0, error: 'Unknown error occurred' };
+  }
+} 
+
+// Utility function to get customer information for any user
+export async function getCustomerInfo(userId: string): Promise<{ customerId?: string; email?: string } | null> {
+  try {
+    const supabase = await getSupabaseClient();
+    
+    // Get customer ID from customers table
+    const { data: customerData, error: customerError } = await supabase
+      .from('customers')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .single();
+
+    if (customerError && customerError.code !== 'PGRST116') {
+      console.error('Error fetching customer data:', customerError);
+      return null;
+    }
+
+    // Get user email
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.error('Error fetching user data:', userError);
+      return null;
+    }
+
+    return {
+      customerId: customerData?.stripe_customer_id,
+      email: userData?.email
+    };
+  } catch (error) {
+    console.error('Error in getCustomerInfo:', error);
+    return null;
   }
 } 

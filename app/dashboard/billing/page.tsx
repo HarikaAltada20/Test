@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import BillingClientPage from "./BillingClientPage";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { CashTransaction, CoinTransaction, AdvertiserProfileData, PayoutMethod, UserData, WithdrawalRequest } from "@/types/earnings";
+import { subscriptionPlans, PRODUCT_IDS } from '@/constants/subscriptionPlans';
 
 // Helper function to retry database operations (for post-payment scenarios)
 async function retryOperation<T>(operation: () => Promise<T>, maxRetries = 3, delay = 1000): Promise<T> {
@@ -123,7 +124,6 @@ export default async function AdvertiserBillingServerPage({
         total_contests_run: profileData.total_contests_run || 0,
         available_deposit_balance: profileData.available_deposit_balance || 0,
         withdrawable_balance: profileData.withdrawable_balance || 0,
-        subscription_plan: profileData.subscription_info?.product_id || 'prod_Sduka9mKXu35Ii', // Default to EXPLORER
     } : null;
 
     // Fetch Payout Methods

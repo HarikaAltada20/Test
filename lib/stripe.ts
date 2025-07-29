@@ -10,7 +10,7 @@ export const stripe = (): Stripe => {
       throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
     }
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-06-30.basil' as any, // Using latest API version
+      apiVersion: '2025-06-30.basil', // Using latest API version
       typescript: true,
     });
   }

@@ -1,38 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { stripe } from '@/lib/stripe';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/utils/supabase/admin';
 import { updateTransactionStatus } from '@/lib/payment-utils';
+import Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
-  console.log('🔔 WEBHOOK RECEIVED!');
-  console.log('📍 Environment:', process.env.NODE_ENV);
-  console.log('🌐 Webhook Secret configured:', !!process.env.STRIPE_WEBHOOK_SECRET);
-  
   try {
     const body = await request.text();
-    const signature = (await headers()).get('stripe-signature');
+    const signature = request.headers.get('stripe-signature');
 
+    console.log('🔔 WEBHOOK RECEIVED!');
+    console.log('📍 Environment:', process.env.NODE_ENV);
+    console.log('🌐 Webhook Secret configured:', !!process.env.STRIPE_WEBHOOK_SECRET);
     console.log('📝 Webhook body length:', body.length);
-    console.log('🔐 Webhook signature:', signature ? 'Present' : 'Missing');
 
     if (!signature) {
-      console.error('❌ No Stripe signature found');
-      return NextResponse.json(
-        { error: 'No Stripe signature found' },
-        { status: 400 }
-      );
+      console.error('❌ No signature found');
+      return NextResponse.json({ error: 'No signature' }, { status: 400 });
     }
 
-    if (!process.env.STRIPE_WEBHOOK_SECRET) {
-      console.error('❌ STRIPE_WEBHOOK_SECRET not configured');
-      return NextResponse.json(
-        { error: 'Webhook secret not configured' },
-        { status: 500 }
-      );
-    }
+    console.log('🔐 Webhook signature: Present');
 
-    let event;
+    let event: Stripe.Event;
+
     try {
       event = stripe().webhooks.constructEvent(
         body,
@@ -40,17 +31,22 @@ export async function POST(request: NextRequest) {
         process.env.STRIPE_WEBHOOK_SECRET!
       );
       console.log('✅ Webhook signature verified successfully');
-    } catch (err) {
-      console.error('❌ Webhook signature verification failed:', err);
-      console.error('🔧 Debug info:');
-      console.error('  - Signature length:', signature?.length || 0);
-      console.error('  - Body length:', body.length);
-      console.error('  - Webhook secret length:', process.env.STRIPE_WEBHOOK_SECRET?.length || 0);
-      
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 400 }
-      );
+    } catch (err: any) {
+      console.error('❌ Webhook signature verification failed:', err.message);
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+    }
+
+    console.log('📦 Event type:', event.type);
+
+    // Only log events we actually handle to reduce noise
+    const handledEvents = [
+      'payment_intent.succeeded',
+      'payment_intent.payment_failed'
+    ];
+
+    if (!handledEvents.includes(event.type)) {
+      console.log(`ℹ️ Ignoring unhandled event type: ${event.type}`);
+      return NextResponse.json({ received: true });
     }
 
     // Handle the event
@@ -82,13 +78,11 @@ export async function POST(request: NextRequest) {
 async function handlePaymentSuccess(paymentIntent: any) {
   try {
     // Use service role client for webhook operations (bypasses RLS)
-    const supabase = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createAdminClient();
     
     console.log('=== WEBHOOK DEBUG ===');
     console.log('Payment Intent ID:', paymentIntent.id);
+    console.log('Customer ID:', paymentIntent.customer);
     console.log('Metadata:', paymentIntent.metadata);
     
     // Check if this is a subscription-related payment intent
@@ -99,7 +93,7 @@ async function handlePaymentSuccess(paymentIntent: any) {
     }
     
     const { userId, type, amount } = paymentIntent.metadata;
-    console.log('userId:', userId, 'type:', type, 'amount:', amount);
+    console.log('userId:', userId, 'type:', type, 'amount:', amount, 'customerId:', paymentIntent.customer);
     
     if (!userId || !type || !amount) {
       console.error('Missing required metadata:', { userId, type, amount });
@@ -135,6 +129,7 @@ async function handlePaymentSuccess(paymentIntent: any) {
       const amountInCents = Math.round(amountInDollars * 100);
       
       console.log(`💰 Converting $${amountInDollars} to ${amountInCents} cents for database`);
+      console.log(`👤 Customer ID: ${paymentIntent.customer}`);
       
       const { data, error } = await supabase
         .from('advertiser_profiles')
@@ -176,6 +171,7 @@ async function handlePaymentSuccess(paymentIntent: any) {
 
       console.log(`Deposit successful: $${amountInDollars} (${amountInCents} cents) added to user ${userId}`);
       console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+      console.log(`Customer ID: ${paymentIntent.customer}`);
     }
 
     if (type === 'contest_payment' || type === 'contest_payment_split') {
@@ -359,10 +355,7 @@ async function handlePaymentSuccess(paymentIntent: any) {
 async function handlePaymentFailure(paymentIntent: any) {
   try {
     // Use service role client for webhook operations (bypasses RLS)
-    const supabase = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabase = createAdminClient();
     
     const { userId, type, amount, contestId, walletAmount, totalAmount } = paymentIntent.metadata;
     const amountInDollars = parseFloat(amount);

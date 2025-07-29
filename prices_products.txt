@@ -1,8 +1,0 @@
-Price ID	Product ID	Product Name	Product Statement Descriptor	Product Tax Code	Description	Created (UTC)	Amount	Currency	Interval	Interval Count	Usage Type	Aggregate Usage	Billing Scheme	Trial Period Days	Tax Behavior
-price_1RqBMjDCKN2LN0QenUgKtYgD	prod_SlioxThbvGeLga	CHAMPION		txcd_10103001		29-07-2025 11:06	500	usd	month	1	licensed		per_unit		unspecified
-price_1RqBMjDCKN2LN0QeFgcfIR2I	prod_SlioxThbvGeLga	CHAMPION		txcd_10103001		29-07-2025 11:06	5000	usd	year	1	licensed		per_unit		unspecified
-price_1RqBLcDCKN2LN0QendahSoUJ	prod_Slinc7mb1e30Ef	BUILDER		txcd_10103001		29-07-2025 11:05	250	usd	month	1	licensed		per_unit		unspecified
-price_1RqBLcDCKN2LN0QeoHdipPyN	prod_Slinc7mb1e30Ef	BUILDER		txcd_10103001		29-07-2025 11:05	2500	usd	year	1	licensed		per_unit		unspecified
-price_1RqBKXDCKN2LN0Qe81Nq90bP	prod_SlilUeFqolEC7W	STARTER		txcd_10103001		29-07-2025 11:04	1000	usd	year	1	licensed		per_unit		unspecified
-price_1RqBK8DCKN2LN0QeVe68F0Ec	prod_SlilUeFqolEC7W	STARTER		txcd_10103001		29-07-2025 11:04	100	usd	month	1	licensed		per_unit		unspecified
-price_1RqBIUDCKN2LN0Qe2c097HHM	prod_Slij7SgNUxACLp	EXPLORER		txcd_10103001		29-07-2025 11:02	0	usd	month	1	licensed		per_unit		unspecified

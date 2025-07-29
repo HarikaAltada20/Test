@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,7 @@ import { subscriptionPlans } from '@/constants/subscriptionPlans';
 import type { UserSubscription, SubscriptionPlan } from '@/lib/subscription-types';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export function SubscriptionManagement() {
+export const SubscriptionManagement = memo(function SubscriptionManagement() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [currentSubscription, setCurrentSubscription] = useState<UserSubscription | null>(null);
@@ -72,17 +72,26 @@ export function SubscriptionManagement() {
 
     useEffect(() => {
         fetchCurrentSubscription();
-    }, []);
+    }, []); // Empty dependency array - only run once on mount
 
     const fetchCurrentSubscription = async () => {
         try {
+            // Prevent duplicate calls if already loading
+            if (isLoading) {
+                console.log('Subscription fetch already in progress, skipping...');
+                return;
+            }
+
             setIsLoading(true);
+            console.log('Fetching current subscription...');
+
             const response = await fetch('/api/subscriptions/current');
             const result = await response.json();
 
             if (response.ok) {
                 setCurrentSubscription(result.subscription);
                 setCurrentPlan(result.plan);
+                console.log('Subscription data updated successfully');
             } else {
                 console.error('Failed to fetch subscription:', result.error);
             }
@@ -420,4 +429,4 @@ export function SubscriptionManagement() {
             )}
         </div>
     );
-} 
+}); 

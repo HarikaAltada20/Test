@@ -8,9 +8,8 @@ create table public.contests (
   thumbnail_url text null,
   resources jsonb null,
   category text null,
-  inspiration_links text null,
+  inspiration_links jsonb null,
   created_at timestamp with time zone null default now(),
-  subscription_plan_of_user text null,
   updated_at timestamp with time zone null default now(),
   contest_type public.contest_type_enum null,
   contest_based_details jsonb null,
@@ -28,6 +27,7 @@ create table public.contests (
   published_at timestamp with time zone null,
   rejection_reason text null,
   payment_details jsonb null,
+  subscription_info_of_user jsonb null,
   constraint contests_pkey primary key (id),
   constraint contests_advertiser_id_fkey foreign KEY (advertiser_id) references advertiser_profiles (id),
   constraint contests_approved_by_fkey foreign KEY (approved_by) references auth.users (id)
@@ -46,6 +46,8 @@ create index IF not exists idx_contests_rules_html on public.contests using gin 
 create index IF not exists idx_contests_approved_by on public.contests using btree (approved_by) TABLESPACE pg_default
 where
   (approved_by is not null);
+
+create index IF not exists idx_contests_subscription_info_of_user on public.contests using gin (subscription_info_of_user) TABLESPACE pg_default;
 
 create trigger on_contests_update BEFORE
 update on contests for EACH row

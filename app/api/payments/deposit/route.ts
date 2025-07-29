@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
-import { createTopUpPaymentIntent, logTransaction } from '@/lib/payment-utils';
+import { createTopUpPaymentIntent, logTransaction, getCustomerInfo } from '@/lib/payment-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get customer ID for transaction logging
+    const customerInfo = await getCustomerInfo(user.id);
+    const customerId = customerInfo?.customerId;
+
     // Log pending transaction in CENTS (consistent with database)
     await logTransaction(
       user.id,
@@ -62,7 +66,12 @@ export async function POST(request: NextRequest) {
       'pending',
       `Wallet top-up initiated - Payment Intent: ${paymentIntent.id}`,
       paymentIntent.id,  // 🚀 OPTIMIZATION: Store payment_intent_id for fast lookups
-      'Processing payment...'
+      'Processing payment...',
+      'stripe',
+      undefined, // metadata
+      undefined, // stripeInvoiceId
+      undefined, // stripeSubscriptionId
+      customerId // stripeCustomerId
     );
 
     console.log('Payment intent created:', paymentIntent);
