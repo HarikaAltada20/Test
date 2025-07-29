@@ -347,6 +347,12 @@ async function handlePaymentSuccess(paymentIntent: any) {
       console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
     }
 
+    // 🆕 AUTO-SET DEFAULT PAYMENT METHOD
+    // After successful payment, set the payment method as default for the customer
+    if (paymentIntent.customer && paymentIntent.payment_method) {
+      await setDefaultPaymentMethod(paymentIntent.customer, paymentIntent.payment_method);
+    }
+
   } catch (error) {
     console.error('Error processing payment success:', error);
   }
@@ -482,4 +488,30 @@ function isSubscriptionPaymentIntent(paymentIntent: any): boolean {
   }
   
   return false;
+}
+
+// 🆕 AUTO-SET DEFAULT PAYMENT METHOD FUNCTION
+// Automatically sets the payment method used in a successful payment as the default for the customer
+async function setDefaultPaymentMethod(customerId: string, paymentMethodId: string) {
+  try {
+    console.log(`🔧 Setting payment method ${paymentMethodId} as default for customer ${customerId}`);
+    
+    // Set the payment method as default for the customer
+    const customer = await stripe().customers.update(customerId, {
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+    
+    console.log(`✅ Successfully set payment method ${paymentMethodId} as default for customer ${customerId}`);
+    console.log(`📋 Customer default payment method: ${customer.invoice_settings.default_payment_method}`);
+    
+    return true;
+  } catch (error) {
+    console.error(`❌ Error setting default payment method for customer ${customerId}:`, error);
+    
+    // Don't fail the entire webhook if this fails - it's a nice-to-have feature
+    // The payment was successful, this is just for UX improvement
+    return false;
+  }
 } 
