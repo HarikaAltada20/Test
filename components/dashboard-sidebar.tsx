@@ -119,10 +119,10 @@ export function DashboardSidebar({
       description: "Available contests",
     },
     {
-      name: "Earnings",
+      name: "Wallet",
       href: "/dashboard/earnings",
       icon: DollarSign,
-      description: "Revenue & payouts",
+      description: "Earnings & Transactions",
     },
     {
       name: "Settings",
