@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import {
     Elements,
-    CardElement,
+    CardNumberElement,
+    CardExpiryElement,
+    CardCvcElement,
     useElements,
     useStripe,
 } from '@stripe/react-stripe-js';
@@ -138,7 +140,7 @@ const CheckoutForm = ({
             setProcessingStep('confirming');
             const { error: stripeError } = await stripe.confirmCardPayment(clientSecret, {
                 payment_method: {
-                    card: elements.getElement(CardElement)!,
+                    card: elements.getElement(CardNumberElement)!,
                 },
             });
 
@@ -174,25 +176,65 @@ const CheckoutForm = ({
         onProcessingChange?.(false);
     };
 
+    const cardElementStyle = {
+        style: {
+            base: {
+                fontSize: '16px',
+                color: '#424770',
+                '::placeholder': {
+                    color: '#aab7c4',
+                },
+                padding: '12px',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+            },
+            invalid: {
+                color: '#e53e3e',
+                borderColor: '#e53e3e',
+            },
+        },
+    };
+
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="p-4 border rounded-lg bg-gray-50">
-                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                <Label className="text-sm font-medium text-gray-700 mb-3 block">
                     Card Details
                 </Label>
-                <CardElement
-                    options={{
-                        style: {
-                            base: {
-                                fontSize: '16px',
-                                color: '#424770',
-                                '::placeholder': {
-                                    color: '#aab7c4',
-                                },
-                            },
-                        },
-                    }}
-                />
+
+                {/* Card Number */}
+                <div className="mb-4">
+                    <Label className="text-xs text-gray-600 mb-2 block">
+                        Card Number
+                    </Label>
+                    <CardNumberElement
+                        options={cardElementStyle}
+                        className="w-full"
+                    />
+                </div>
+
+                {/* Expiry and CVV in a row */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label className="text-xs text-gray-600 mb-2 block">
+                            Expiry Date
+                        </Label>
+                        <CardExpiryElement
+                            options={cardElementStyle}
+                            className="w-full"
+                        />
+                    </div>
+                    <div>
+                        <Label className="text-xs text-gray-600 mb-2 block">
+                            CVC
+                        </Label>
+                        <CardCvcElement
+                            options={cardElementStyle}
+                            className="w-full"
+                        />
+                    </div>
+                </div>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">

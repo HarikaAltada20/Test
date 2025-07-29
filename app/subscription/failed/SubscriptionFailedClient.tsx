@@ -113,7 +113,7 @@ export function SubscriptionFailedClient({
 
     const handleContactSupport = () => {
         // You can customize this to open your support system
-        window.open('mailto:support@goviral.com?subject=Subscription Payment Issue', '_blank');
+        window.open('mailto:support@gameofcreators.com?subject=Subscription Payment Issue', '_blank');
     };
 
     const handleGoHome = () => {
@@ -254,12 +254,12 @@ export function SubscriptionFailedClient({
                             <div className="flex justify-center gap-6 text-sm">
                                 <div className="flex items-center gap-1 text-blue-600">
                                     <Mail className="h-4 w-4" />
-                                    support@goviral.com
+                                    support@gameofcreators.com
                                 </div>
-                                <div className="flex items-center gap-1 text-blue-600">
+                                {/* <div className="flex items-center gap-1 text-blue-600">
                                     <Phone className="h-4 w-4" />
                                     1-800-GOVIRAL
-                                </div>
+                                </div> */}
                             </div>
                         </div>
                     </CardContent>

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SubscriptionUpgradeModal } from './SubscriptionUpgradeModal';
 import { toast } from 'sonner';
@@ -39,6 +38,7 @@ export function SubscriptionManagement() {
     const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
     const [selectedTargetPlan, setSelectedTargetPlan] = useState<SubscriptionPlan | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
     const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
 
     // Handle checkout success - with protection against infinite loops
@@ -130,6 +130,7 @@ export function SubscriptionManagement() {
 
     const handleSubscribe = async (productId: string) => {
         try {
+            setProcessingPlanId(productId);
             setIsProcessing(true);
 
             // Get the plan and extract the monthly price ID
@@ -168,6 +169,7 @@ export function SubscriptionManagement() {
             toast.error('Failed to create subscription');
         } finally {
             setIsProcessing(false);
+            setProcessingPlanId(null);
         }
     };
 
@@ -302,7 +304,7 @@ export function SubscriptionManagement() {
                         return (
                             <Card
                                 key={plan.id}
-                                className={`relative ${isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
+                                className={`relative flex flex-col ${isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
                             >
 
                                 {isCurrentPlan && (
@@ -325,8 +327,8 @@ export function SubscriptionManagement() {
                                     <p className="text-sm text-gray-600">{plan.features.description}</p>
                                 </CardHeader>
 
-                                <CardContent className="space-y-4">
-                                    <div className="space-y-3">
+                                <CardContent className="space-y-4 flex-1 flex flex-col">
+                                    <div className="space-y-3 flex-1">
                                         <div className="flex items-center gap-2">
                                             <Check className="h-4 w-4 text-green-500" />
                                             <span className="text-sm">{plan.features.maxActiveContests} active contests</span>
@@ -347,7 +349,7 @@ export function SubscriptionManagement() {
 
                                     <Separator />
 
-                                    <div className="pt-2">
+                                    <div className="pt-2 mt-auto">
                                         {isCurrentPlan ? (
                                             <Button className="w-full" disabled>
                                                 Current Plan
@@ -356,7 +358,7 @@ export function SubscriptionManagement() {
                                             <Button
                                                 className="w-full"
                                                 onClick={() => handleSubscribe(plan.id)}
-                                                loading={isProcessing}
+                                                loading={isProcessing && processingPlanId === plan.id}
                                                 loadingText="Processing..."
                                                 variant={plan.price === 0 ? "outline" : "default"}
                                             >
@@ -371,7 +373,7 @@ export function SubscriptionManagement() {
                                             <Button
                                                 className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700"
                                                 onClick={() => handleUpgradeClick(plan)}
-                                                loading={isProcessing}
+                                                loading={isProcessing && processingPlanId === plan.id}
                                                 loadingText="Processing..."
                                             >
                                                 <TrendingUp className="h-4 w-4 mr-2" />
@@ -382,7 +384,7 @@ export function SubscriptionManagement() {
                                                 variant="outline"
                                                 className="w-full"
                                                 onClick={() => handleUpgradeClick(plan)}
-                                                loading={isProcessing}
+                                                loading={isProcessing && processingPlanId === plan.id}
                                                 loadingText="Processing..."
                                             >
                                                 Downgrade
