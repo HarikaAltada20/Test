@@ -24,8 +24,23 @@ import dayjs from 'dayjs';
 import { useToast } from "@/hooks/use-toast";
 
 // --- Submission Window Constants ---
+// CONFIGURATION: Change these values to modify the submission time window
+// 
+// SUBMISSION_WINDOW_VALUE: The numeric value for the time window
+// SUBMISSION_WINDOW_UNIT: The time unit (dayjs.ManipulateType)
+//   - Valid options: 'year', 'month', 'week', 'day', 'hour', 'minute', 'second'
+//   - Examples: 'year', 'month', 'week', 'day', 'hour', 'minute', 'second'
+//
+// Current setting: 2 years (content must be published within the last 2 years)
+// To change to other time periods, modify these examples:
+//   - 6 months: SUBMISSION_WINDOW_VALUE = 6, SUBMISSION_WINDOW_UNIT = 'month'
+//   - 30 days: SUBMISSION_WINDOW_VALUE = 30, SUBMISSION_WINDOW_UNIT = 'day'
+//   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
+//   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 const SUBMISSION_WINDOW_VALUE: number = 2;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = 'hour';
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = 'year';
+
+// Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
 const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${IS_SUBMISSION_WINDOW_SINGULAR ? '' : 's'}`;
 // -----------------------------------
@@ -155,7 +170,7 @@ export default function SubmitContentPage({
     if (selectedVideo) {
       if (selectedVideo.snippet?.publishedAt) {
         if (isContentTooOld(selectedVideo.snippet.publishedAt)) {
-          const errorMessage = `You can only submit the content which is posted within 2 hours. This video was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+          const errorMessage = `You can only submit the content which is posted within ${SUBMISSION_WINDOW_UNIT_DISPLAY}. This video was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
           setSubmissionTimingError(errorMessage);
           toast({
             title: "Content Too Old",
@@ -169,7 +184,7 @@ export default function SubmitContentPage({
         const errorMessage = "The selected video's publication date is missing and cannot be validated.";
         setSubmissionTimingError(errorMessage);
         toast({
-          title: "Validation Error",
+          title: "Missing Publication Date",
           description: errorMessage,
           variant: "destructive",
         });
@@ -185,7 +200,7 @@ export default function SubmitContentPage({
     if (selectedReel) {
       if (selectedReel.timestamp) {
         if (isContentTooOld(selectedReel.timestamp)) {
-          const errorMessage = `You can only submit the content which is posted within 2 hours. This Reel was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+          const errorMessage = `You can only submit the content which is posted within ${SUBMISSION_WINDOW_UNIT_DISPLAY}. This Reel was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
           setSubmissionTimingError(errorMessage);
           toast({
             title: "Content Too Old",
@@ -199,7 +214,7 @@ export default function SubmitContentPage({
         const errorMessage = "The selected Reel's publication date is missing and cannot be validated.";
         setSubmissionTimingError(errorMessage);
         toast({
-          title: "Validation Error",
+          title: "Missing Publication Date",
           description: errorMessage,
           variant: "destructive",
         });
@@ -444,7 +459,7 @@ export default function SubmitContentPage({
       const errorMessage = "Please enter a YouTube video link.";
       setError(errorMessage);
       toast({
-        title: "Validation Error",
+        title: "Missing Video Link",
         description: errorMessage,
         variant: "destructive",
       });
@@ -455,7 +470,7 @@ export default function SubmitContentPage({
       const errorMessage = "Invalid YouTube URL";
       setError(errorMessage);
       toast({
-        title: "Validation Error",
+        title: "Invalid YouTube URL",
         description: errorMessage,
         variant: "destructive",
       });
@@ -516,7 +531,7 @@ export default function SubmitContentPage({
           const errorMessage = videoData ? "Could not determine the video's publication date." : "Video not found or invalid link.";
           setSubmissionTimingError(errorMessage);
           toast({
-            title: "Validation Error",
+            title: "Missing Publication Date",
             description: errorMessage,
             variant: "destructive",
           });
@@ -546,7 +561,7 @@ export default function SubmitContentPage({
       const errorMessage = "Please enter an Instagram media URL.";
       setError(errorMessage);
       toast({
-        title: "Validation Error",
+        title: "Missing Instagram Link",
         description: errorMessage,
         variant: "destructive",
       });
@@ -556,7 +571,7 @@ export default function SubmitContentPage({
       const errorMessage = "Instagram account not connected, token missing, or user ID missing.";
       setError(errorMessage);
       toast({
-        title: "Validation Error",
+        title: "Instagram Connection Required",
         description: errorMessage,
         variant: "destructive",
       });
@@ -567,7 +582,7 @@ export default function SubmitContentPage({
       const errorMessage = "User not available. Please ensure you are logged in.";
       setError(errorMessage);
       toast({
-        title: "Validation Error",
+        title: "Authentication Required",
         description: errorMessage,
         variant: "destructive",
       });
@@ -630,7 +645,7 @@ export default function SubmitContentPage({
           const errorMessage = mediaDetails ? "Could not determine the Reel's publication date." : "Reel not found or invalid link.";
           setSubmissionTimingError(errorMessage);
           toast({
-            title: "Validation Error",
+            title: "Missing Publication Date",
             description: errorMessage,
             variant: "destructive",
           });

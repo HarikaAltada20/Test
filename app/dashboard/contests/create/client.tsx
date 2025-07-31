@@ -1431,9 +1431,9 @@ export default function CreateContestPage({
 
       // Show validation errors only after a complete value is entered
       if (numValue < MIN_PRIZE_PER_WINNER) {
-        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot be less than ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`, variant: "destructive" });
+        toast({ title: "Prize Amount Too Low", description: `Prize amount for Winner ${index + 1} cannot be less than ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`, variant: "destructive" });
       } else if (numValue > MAX_PRIZE_PER_WINNER) {
-        toast({ title: "Validation Error", description: `Prize amount for Winner ${index + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`, variant: "destructive" });
+        toast({ title: "Prize Amount Too High", description: `Prize amount for Winner ${index + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`, variant: "destructive" });
       }
     }
   };

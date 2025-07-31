@@ -64,7 +64,7 @@ export default function ResetPasswordPage() {
             setError("Passwords do not match")
             toast({
                 variant: "destructive",
-                title: "Validation Error",
+                title: "Passwords Don't Match",
                 description: "Passwords do not match",
                 duration: 5000,
             })
@@ -79,7 +79,7 @@ export default function ResetPasswordPage() {
             setError(errorMessage);
             toast({
                 variant: "destructive",
-                title: "Password Validation Error",
+                title: "Password Requirements Not Met",
                 description: errorMessage,
                 duration: 6000,
             });

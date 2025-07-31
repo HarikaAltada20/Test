@@ -622,7 +622,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         const showError = (message: string) => {
             // Always show toast on every save click - nice white UI toast
             toast({
-                title: "Validation Error",
+                title: "Form Validation Error",
                 description: message,
                 duration: 3000, // 3 seconds
             });
@@ -1824,7 +1824,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         const planFeatures = getPlanFeatures(userPlan);
         const validationResult = await validateContestForEdit(user.id, planFeatures);
         if (!validationResult.isValid) {
-            toast({ title: 'Validation Error', description: validationResult.error, variant: 'destructive' });
+            toast({ title: 'Contest Validation Error', description: validationResult.error, variant: 'destructive' });
             setFormFeedback(validationResult.error!);
             setFormFeedbackType('error');
             return;
@@ -1886,7 +1886,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const handleSubmitWithStatus = async (moderationStatus?: 'draft' | 'pending_approval', skipRedirect: boolean = false) => {
         const showError = (message: string) => {
             toast({
-                title: "Validation Error",
+                title: "Form Validation Error",
                 description: message,
                 duration: 3000,
             });
@@ -2182,7 +2182,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
                 if (!countResult.success) {
                     toast({
-                        title: "Validation Error",
+                        title: "Contest Limit Check Failed",
                         description: countResult.error || "Unable to validate contest limits. Please try again.",
                         variant: "destructive",
                     });
@@ -2211,7 +2211,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             } catch (error: any) {
                 console.error("Error checking active contest limit:", error);
                 toast({
-                    title: "Validation Error",
+                    title: "Contest Limit Check Failed",
                     description: "Unable to validate contest limits. Please try again.",
                     variant: "destructive",
                 });
