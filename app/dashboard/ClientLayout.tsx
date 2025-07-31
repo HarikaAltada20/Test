@@ -314,6 +314,18 @@ function DashboardContent({
     };
 
     fetchProfileData();
+
+    // Listen for profile update events
+    const handleProfileUpdate = () => {
+      console.log('🔄 Profile update event received, refreshing sidebar data...');
+      fetchProfileData();
+    };
+
+    window.addEventListener('profile-updated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('profile-updated', handleProfileUpdate);
+    };
   }, [user]);
 
   // Theme persistence and initialization

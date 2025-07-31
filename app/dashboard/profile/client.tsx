@@ -38,8 +38,6 @@ interface UserData {
   advertisers_referred: number;
   creators_referred: number;
   profile_picture_url?: string | null;
-  registration_ip?: string | null;
-  login_history?: { ip_address: string; timestamp: string }[];
 }
 
 interface CreatorProfile {
@@ -82,6 +80,11 @@ export default function ProfilePage({
   const supabase = createClient();
   const { toast } = useToast();
 
+  // Function to notify other components about profile updates
+  const notifyProfileUpdate = () => {
+    window.dispatchEvent(new CustomEvent('profile-updated'));
+  };
+
   const [isEditingFullName, setIsEditingFullName] = useState(false);
   const [editedFullName, setEditedFullName] = useState("");
   const [isEditingCompanyName, setIsEditingCompanyName] = useState(false);
@@ -102,71 +105,99 @@ export default function ProfilePage({
       setUserData(null);
       setAvatarPreview(null);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+        if (!user) {
+          console.log("No authenticated user found");
+          setIsLoading(false);
+          return;
+        }
 
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("*, profile_picture_url, registration_ip, login_history")
-        .eq("id", user.id)
-        .single();
-
-      if (userError) {
-        console.error("Error fetching user data:", userError);
-        setIsLoading(false);
-        return;
-      }
-
-      setUserData(userData as UserData);
-      setEditedFullName(userData.full_name);
-
-      setAvatarPreview(userData.profile_picture_url || null);
-
-      if (userData.referred_by) {
-        const { data: referrerData } = await supabase
+        const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("username")
-          .eq("referral_code", userData.referred_by)
+          .select("*, profile_picture_url")
+          .eq("id", user.id)
           .single();
 
-        if (referrerData) {
-          setReferrer(referrerData.username);
+        if (userError) {
+          console.error("Error fetching user data:", userError);
+          // Don't return here, continue with what we have
+          if (userError.code === 'PGRST116') {
+            console.log("User not found in database, but authenticated");
+            setIsLoading(false);
+            return;
+          }
         }
+
+        if (!userData) {
+          console.log("No user data returned from database");
+          setIsLoading(false);
+          return;
+        }
+
+        setUserData(userData as UserData);
+        setEditedFullName(userData.full_name);
+
+        setAvatarPreview(userData.profile_picture_url || null);
+
+        if (userData.referred_by) {
+          try {
+            const { data: referrerData } = await supabase
+              .from("users")
+              .select("username")
+              .eq("referral_code", userData.referred_by)
+              .single();
+
+            if (referrerData) {
+              setReferrer(referrerData.username);
+            }
+          } catch (referrerError) {
+            console.warn("Error fetching referrer data:", referrerError);
+            // Continue without referrer data
+          }
+        }
+
+        if (userData.user_type === "creator") {
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from("creator_profiles")
+              .select("*")
+              .eq("id", userData.id)
+              .single();
+
+            if (!profileError && profile) {
+              setCreatorProfile(profile as CreatorProfile);
+            }
+          } catch (profileError) {
+            console.warn("Error fetching creator profile:", profileError);
+            // Continue without creator profile
+          }
+        } else if (userData.user_type === "advertiser") {
+          try {
+            const { data: profile, error: profileError } = await supabase
+              .from("advertiser_profiles")
+              .select("*")
+              .eq("id", userData.id)
+              .single();
+
+            if (!profileError && profile) {
+              setAdvertiserProfile(profile as AdvertiserProfile);
+              setEditedCompanyName(profile.company_name || "");
+              setEditedWebsiteUrl(profile.website_url || "");
+            }
+          } catch (profileError) {
+            console.warn("Error fetching advertiser profile:", profileError);
+            // Continue without advertiser profile
+          }
+        }
+      } catch (error) {
+        console.error("Unexpected error in fetchUserData:", error);
+      } finally {
+        setIsLoading(false);
       }
-
-      if (userData.user_type === "creator") {
-        const { data: profile, error: profileError } = await supabase
-          .from("creator_profiles")
-          .select("*")
-          .eq("id", userData.id)
-          .single();
-
-        if (!profileError && profile) {
-          setCreatorProfile(profile as CreatorProfile);
-        }
-      } else if (userData.user_type === "advertiser") {
-        const { data: profile, error: profileError } = await supabase
-          .from("advertiser_profiles")
-          .select("*")
-          .eq("id", userData.id)
-          .single();
-
-        if (!profileError && profile) {
-          setAdvertiserProfile(profile as AdvertiserProfile);
-          setEditedCompanyName(profile.company_name || "");
-          setEditedWebsiteUrl(profile.website_url || "");
-        }
-      }
-
-
-
-      setIsLoading(false);
     };
 
     fetchUserData();
@@ -274,6 +305,9 @@ export default function ProfilePage({
       setAvatarPreview(newPublicUrl);
       setSelectedAvatarFile(null);
 
+      // Notify other components about the profile update
+      notifyProfileUpdate();
+
       toast({
         title: "Avatar Updated",
         description: "Your profile picture has been successfully updated.",
@@ -334,6 +368,10 @@ export default function ProfilePage({
         prev ? { ...prev, full_name: editedFullName } : null
       );
       setIsEditingFullName(false);
+
+      // Notify other components about the profile update
+      notifyProfileUpdate();
+
       toast({ title: "Full Name Updated" });
     } catch (error: any) {
       toast({
