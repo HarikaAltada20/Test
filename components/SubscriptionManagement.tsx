@@ -34,7 +34,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     const searchParams = useSearchParams();
     const [currentSubscription, setCurrentSubscription] = useState<UserSubscription | null>(null);
     const [currentPlan, setCurrentPlan] = useState<SubscriptionPlan | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(true); // Start with loading true
     const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
     const [selectedTargetPlan, setSelectedTargetPlan] = useState<SubscriptionPlan | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -71,16 +71,15 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         }
     }, [searchParams, hasProcessedSuccess]);
 
+    // Fetch subscription data immediately on mount
     useEffect(() => {
-        if (!hasInitialFetch) {
-            fetchCurrentSubscription();
-        }
-    }, [hasInitialFetch]); // Only run once on mount
+        fetchCurrentSubscription();
+    }, []); // Only run once on mount
 
     const fetchCurrentSubscription = async () => {
         try {
             // Prevent duplicate calls if already loading
-            if (isLoading) {
+            if (isLoading && hasInitialFetch) {
                 console.log('Subscription fetch already in progress, skipping...');
                 return;
             }
@@ -98,9 +97,15 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 console.log('Subscription data updated successfully');
             } else {
                 console.error('Failed to fetch subscription:', result.error);
+                // Even if there's no subscription, we should show the plans
+                setCurrentSubscription(null);
+                setCurrentPlan(null);
             }
         } catch (error) {
             console.error('Error fetching subscription:', error);
+            // Even if there's an error, we should show the plans
+            setCurrentSubscription(null);
+            setCurrentPlan(null);
         } finally {
             setIsLoading(false);
         }
@@ -231,14 +236,60 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         return !currentSubscription || (isOnFreePlan() && targetPlan.price > 0);
     };
 
+    // Show loading state while fetching subscription data
     if (isLoading) {
         return (
-            <div className="space-y-6">
-                <Skeleton className="h-8 w-64" />
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {[1, 2, 3, 4].map((i) => (
-                        <Skeleton key={i} className="h-96" />
-                    ))}
+            <div className="space-y-8">
+                {/* Current Subscription Status Skeleton */}
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-6 w-48" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <Skeleton className="h-12 w-12 rounded-lg" />
+                                <div>
+                                    <Skeleton className="h-6 w-32 mb-2" />
+                                    <Skeleton className="h-4 w-24" />
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Skeleton className="h-6 w-16" />
+                                <Skeleton className="h-10 w-32" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Available Plans Skeleton */}
+                <div>
+                    <div className="flex items-center justify-between mb-6">
+                        <Skeleton className="h-8 w-48" />
+                        <Skeleton className="h-6 w-32" />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {[1, 2, 3, 4].map((i) => (
+                            <Card key={i}>
+                                <CardHeader className="text-center">
+                                    <Skeleton className="h-12 w-12 rounded-xl mx-auto mb-3" />
+                                    <Skeleton className="h-6 w-24 mx-auto mb-2" />
+                                    <Skeleton className="h-8 w-20 mx-auto mb-2" />
+                                    <Skeleton className="h-4 w-32 mx-auto" />
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    {[1, 2, 3, 4].map((j) => (
+                                        <div key={j} className="flex items-center gap-2">
+                                            <Skeleton className="h-4 w-4" />
+                                            <Skeleton className="h-4 w-32" />
+                                        </div>
+                                    ))}
+                                    <Separator />
+                                    <Skeleton className="h-10 w-full" />
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
                 </div>
             </div>
         );
@@ -290,8 +341,6 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                 )}
                             </div>
                         </div>
-
-
                     </CardContent>
                 </Card>
             )}
@@ -319,7 +368,6 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                 key={plan.id}
                                 className={`relative flex flex-col ${isCurrentPlan ? 'ring-2 ring-green-500' : ''}`}
                             >
-
                                 {isCurrentPlan && (
                                     <div className="absolute -top-3 right-4">
                                         <Badge className="bg-green-600 text-white">Current Plan</Badge>

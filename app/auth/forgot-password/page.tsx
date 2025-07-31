@@ -171,9 +171,11 @@ export default function ForgotPasswordPage() {
                                     >
                                         <Link href="/auth/signin">
                                             <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                                            <Shield className="mr-2 h-5 w-5" />
-                                            <span className="relative z-10">Return to Arena</span>
-                                            <Crown className="ml-2 h-5 w-5" />
+                                            <div className="relative z-10 flex items-center justify-center gap-3">
+                                                <Shield className="h-5 w-5 flex-shrink-0" />
+                                                <span>Return to Arena</span>
+                                                <Crown className="h-5 w-5 flex-shrink-0" />
+                                            </div>
                                         </Link>
                                     </Button>
                                 </div>

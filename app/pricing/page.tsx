@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { Check, Info, Trophy, Star, Zap, Users, Crown, Calendar } from "lucide-react";
+import { Check, Info, Trophy, Star, Zap, Users, Crown, Calendar, AlertTriangle, Building2, UserCheck } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -26,6 +25,7 @@ import { createClient } from "@/utils/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
+import { useRouter } from "next/navigation";
 
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
@@ -86,7 +86,9 @@ export default function PricingPage() {
   );
   const [user, setUser] = useState<any>(null);
   const [userType, setUserType] = useState<string | null>(null);
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
   const supabase = createClient(); // Initialize Supabase client
+  const router = useRouter();
 
   // State for fetched plans, loading, and error
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -98,20 +100,27 @@ export default function PricingPage() {
   // Check for authenticated user
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        setUser(authUser);
+      setIsLoadingUser(true);
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          setUser(authUser);
 
-        // Get user type
-        const { data: userData } = await supabase
-          .from('users')
-          .select('user_type')
-          .eq('id', authUser.id)
-          .single();
+          // Get user type
+          const { data: userData } = await supabase
+            .from('users')
+            .select('user_type')
+            .eq('id', authUser.id)
+            .single();
 
-        if (userData) {
-          setUserType(userData.user_type);
+          if (userData) {
+            setUserType(userData.user_type);
+          }
         }
+      } catch (error) {
+        console.error('Error checking user:', error);
+      } finally {
+        setIsLoadingUser(false);
       }
     };
 
@@ -157,8 +166,6 @@ export default function PricingPage() {
 
     loadSubscriptionPlans();
   }, []); // No dependencies needed since we're using constants
-
-
 
   const handleBillingCycleChange = (value: string) => {
     setBillingCycle(value as "monthly" | "yearly");
@@ -262,6 +269,112 @@ export default function PricingPage() {
     return 'from-gray-500 to-gray-600';
   };
 
+  // Show loading state while checking user authentication
+  if (isLoadingUser) {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <div className="text-center py-8">
+          <div className="animate-pulse">
+            <p className="text-gray-600">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show creator message if logged in as creator
+  if (user && userType === 'creator') {
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <div className="mx-auto p-4 rounded-full bg-blue-100 w-fit mb-4">
+              <UserCheck className="h-8 w-8 text-blue-600" />
+            </div>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
+              Creator Account Detected
+            </h1>
+            <p className="text-lg text-gray-600 mb-6">
+              This pricing page is designed for brands and advertisers who want to launch creator contests.
+            </p>
+          </div>
+
+          <Alert className="mb-8">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>For Creators:</strong> You don't need a subscription to participate in contests.
+              Simply browse available opportunities and submit your content to win prizes!
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-yellow-600" />
+                  How It Works for Creators
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Browse available contests</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Submit your content</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Win prizes based on performance</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">No subscription required</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-purple-600" />
+                  For Brands & Advertisers
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Launch creator contests</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Access to 5,000+ creators</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Full content ownership</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-sm">Subscription plans available</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="text-center">
+            <Button asChild className="bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700">
+              <Link href="/dashboard/opportunities">
+                Browse Available Contests
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto py-8 px-4">
       {/* Hero Section */}
@@ -273,12 +386,24 @@ export default function PricingPage() {
           <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4">
             Game Of Creators Pricing
           </h1>
-          {/* <RotatingTagline /> */}
+          <p className="text-lg md:text-xl text-gray-600 mb-6">
+            Subscription plans for brands and advertisers to launch creator contests
+          </p>
+
+          {/* Brand-specific messaging */}
+          <div className="bg-gradient-to-r from-purple-50 to-rose-50 p-6 rounded-xl border border-purple-100 mb-6">
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <Building2 className="h-6 w-6 text-purple-600" />
+              <h2 className="text-xl font-semibold text-purple-800">For Brands & Advertisers Only</h2>
+            </div>
+            <p className="text-gray-700">
+              Launch gamified creator contests, access our network of 5,000+ verified creators,
+              and get full ownership of winning content. Perfect for brands looking to scale their
+              content marketing with authentic creator partnerships.
+            </p>
+          </div>
         </div>
-
-
       </div>
-
 
       {/* All Pricing Plans */}
       <div id="pricing" className="scroll-mt-20 px-4">
@@ -304,6 +429,25 @@ export default function PricingPage() {
               <p className="text-lg text-gray-600 max-w-2xl mx-auto">
                 Select the perfect plan to start winning with creator contests
               </p>
+
+              {/* Not logged in message */}
+              {!user && (
+                <Alert className="mt-6 max-w-2xl mx-auto">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Not logged in?</strong> You'll need to create an advertiser account to subscribe to a plan.
+                    <Button
+                      onClick={() => {
+                        localStorage.setItem('signupRole', 'brand');
+                        router.push('/auth/signup');
+                      }}
+                      className="text-purple-600 hover:text-purple-700 underline ml-1"
+                    >
+                      Sign up here
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <div className="mt-6 flex justify-center">
                 <Tabs
@@ -532,7 +676,6 @@ export default function PricingPage() {
           </Accordion>
         </div>
       </div>
-
 
     </div>
   );
