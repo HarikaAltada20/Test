@@ -436,7 +436,7 @@ export default function PricingClient() {
                                     <Info className="h-4 w-4" />
                                     <AlertDescription className="flex items-center justify-between">
                                         <span>
-                                            <strong>Not logged in?</strong> You'll need to create an advertiser account to subscribe to a plan.
+                                            <strong>Not logged in?</strong> You'll need to create a Brand account to subscribe to a plan.
                                         </span>
                                         <Button
                                             onClick={() => {

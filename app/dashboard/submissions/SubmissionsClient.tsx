@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import Image from 'next/image';
 import React from 'react';
+import { formatCurrencyFromCents, centsToDollars } from '@/lib/currency-utils';
 
 interface SubmissionsClientProps {
     initialSubmissions: SubmissionWithContest[];
@@ -63,27 +64,70 @@ export default function SubmissionsClient({
 
         // Filter by status
         if (statusFilter !== 'all') {
+            console.log('🔍 Filtering submissions by status:', statusFilter);
+            console.log('📊 All submissions before filtering:', allSubmissions.map(sub => ({
+                id: sub.id,
+                status: sub.status,
+                contestType: sub.contests?.contest_type,
+                isEnded: sub.contests?.end_date ? new Date(sub.contests.end_date) < new Date() : false,
+                earnings: sub.earnings, // in cents
+                earningsInDollars: sub.earnings ? centsToDollars(sub.earnings) : null,
+                postContestStatus: sub.contests?.post_contest_status
+            })));
+
             submissions = submissions.filter(sub => {
                 const contestEndDate = sub.contests?.end_date ? new Date(sub.contests.end_date) : null;
                 const isEnded = contestEndDate ? contestEndDate < new Date() : false;
 
+                let shouldInclude = false;
                 switch (statusFilter) {
                     case 'active':
-                        return !isEnded && (sub.status === 'pending' || sub.status === 'verified');
+                        shouldInclude = !isEnded && (sub.status === 'pending' || sub.status === 'verified');
+                        break;
                     case 'pending':
-                        return sub.status === 'pending';
+                        shouldInclude = sub.status === 'pending';
+                        break;
                     case 'verified':
-                        return sub.status === 'verified';
+                        shouldInclude = sub.status === 'verified';
+                        break;
                     case 'rejected':
-                        return sub.status === 'rejected';
+                        shouldInclude = sub.status === 'rejected';
+                        break;
                     case 'ended':
-                        return isEnded;
+                        shouldInclude = isEnded;
+                        break;
                     case 'paid':
-                        return sub.status === 'paid';
+                        // Check if submission should be considered "paid" based on earnings and contest status
+                        const hasEarnings = sub.earnings !== null && sub.earnings !== undefined && sub.earnings > 0;
+                        const isContestCompleted = sub.contests?.post_contest_status === 'verification_complete' || sub.contests?.post_contest_status === 'payouts_processed';
+                        const shouldBeConsideredPaid = sub.status === 'paid' || (hasEarnings && isContestCompleted); // This means even the submission status is not paid and contest is ended and user has earnings show as paid ..
+
+                        console.log(`💰 Paid check for ${sub.id}:`, {
+                            status: sub.status,
+                            hasEarnings,
+                            earningsInCents: sub.earnings,
+                            earningsInDollars: sub.earnings ? centsToDollars(sub.earnings) : null,
+                            isContestCompleted,
+                            postContestStatus: sub.contests?.post_contest_status,
+                            shouldBeConsideredPaid
+                        });
+
+                        shouldInclude = shouldBeConsideredPaid;
+                        break;
                     default:
-                        return true;
+                        shouldInclude = true;
                 }
+
+                console.log(`📋 Submission ${sub.id} (${sub.status}) - isEnded: ${isEnded}, shouldInclude: ${shouldInclude}`);
+                return shouldInclude;
             });
+
+            console.log('✅ Filtered submissions:', submissions.map(sub => ({
+                id: sub.id,
+                status: sub.status,
+                contestType: sub.contests?.contest_type,
+                earnings: sub.earnings ? centsToDollars(sub.earnings) : null
+            })));
         }
 
         setFilteredSubmissions(submissions);
@@ -96,6 +140,116 @@ export default function SubmissionsClient({
         if (status === 'rejected') return "bg-red-500";
         if (status === 'paid') return "bg-blue-500";
         return "bg-gray-400"; // Default or unknown
+    };
+
+    // Helper function to calculate leaderboard earnings
+    const calculateLeaderboardEarnings = (submission: SubmissionWithContest, contest: any) => {
+        console.log('🔍 calculateLeaderboardEarnings called with:', {
+            submissionId: submission.id,
+            submissionStatus: submission.status,
+            submissionEarnings: submission.earnings, // This is in cents
+            submissionEarningsInDollars: submission.earnings ? centsToDollars(submission.earnings) : null,
+            contestType: contest?.contest_type,
+            contestEndDate: contest?.end_date,
+            postContestStatus: contest?.post_contest_status,
+            hasContestDetails: !!contest?.contest_based_details
+        });
+
+        if (!contest?.contest_based_details) {
+            console.log('❌ No contest details found, returning default');
+            return { amount: 0, label: "Earnings" };
+        }
+
+        try {
+            const contestDetails = contest.contest_based_details as any;
+            const leaderboardConfig = contestDetails.leaderboard_contest;
+
+            console.log('🔍 Contest details structure:', {
+                contestDetails,
+                leaderboardConfig,
+                hasLeaderboardConfig: !!leaderboardConfig,
+                prizes: leaderboardConfig?.prizes,
+                totalPrize: leaderboardConfig?.total_prize
+            });
+
+            if (!leaderboardConfig || !leaderboardConfig.prizes) {
+                console.log('❌ No leaderboard config or prizes found');
+                return { amount: 0, label: "Earnings" };
+            }
+
+            const postContestStatus = contest.post_contest_status;
+            const isContestCompleted = postContestStatus === 'verification_complete' || postContestStatus === 'payouts_processed';
+
+            console.log('📊 Contest state analysis:', {
+                postContestStatus,
+                isContestCompleted,
+                submissionStatus: submission.status,
+                submissionEarnings: submission.earnings, // in cents
+                submissionEarningsInDollars: submission.earnings ? centsToDollars(submission.earnings) : null
+            });
+
+            // For rejected submissions
+            if (submission.status === 'rejected') {
+                console.log('🚫 Submission rejected, returning appropriate message');
+                if (isContestCompleted) {
+                    return { amount: 0, label: "No Prize Won" };
+                } else {
+                    return { amount: 0, label: "Submission Rejected" };
+                }
+            }
+
+            // For paid submissions
+            if (submission.status === 'paid') {
+                console.log('💰 Submission paid, returning paid amount');
+                // Convert cents to dollars for display
+                const earningsInDollars = submission.earnings ? centsToDollars(submission.earnings) : 0;
+                return { amount: earningsInDollars, label: "Paid" };
+            }
+
+            // For leaderboard contests - simplified logic
+            if (contest.contest_type === 'leaderboard') {
+                console.log('🏆 Processing leaderboard contest logic');
+
+                // If contest is not completed (earnings not calculated yet)
+                if (!isContestCompleted) {
+                    console.log('⏳ Contest not completed yet');
+                    if (submission.earnings === null) {
+                        console.log('📋 Earnings is null, showing check leaderboard link');
+                        return { amount: -1, label: "check_leaderboard" };
+                    } else {
+                        console.log('💰 Earnings calculated, showing estimated amount');
+                        // Convert cents to dollars for display
+                        const earningsInDollars = centsToDollars(submission.earnings);
+                        return { amount: earningsInDollars, label: "Estimated Earnings" };
+                    }
+                }
+
+                // If contest is completed (earnings have been calculated)
+                console.log('✅ Contest completed, checking final earnings');
+                if (submission.earnings === null) {
+                    console.log('❌ Earnings still null for completed contest, showing no prize won');
+                    // Shouldn't happen for completed contests, but fallback
+                    return { amount: 0, label: "No Prize Won" };
+                } else if (submission.earnings > 0) {
+                    console.log('🏆 Winner! Showing final earnings');
+                    // Convert cents to dollars for display
+                    const earningsInDollars = centsToDollars(submission.earnings);
+                    return { amount: earningsInDollars, label: "Final Earnings" };
+                } else {
+                    console.log('😔 No prize won, showing zero earnings');
+                    return { amount: 0, label: "No Prize Won" };
+                }
+            }
+
+            // For non-leaderboard contests, use default logic
+            console.log('🔄 Using default fallback for non-leaderboard contest');
+            // Convert cents to dollars for display
+            const earningsInDollars = submission.earnings ? centsToDollars(submission.earnings) : 0;
+            return { amount: earningsInDollars, label: "Earnings" };
+        } catch (error) {
+            console.warn("❌ Error calculating leaderboard earnings:", error);
+            return { amount: 0, label: "Earnings" };
+        }
     };
 
     const getDisplayStatus = (submission: SubmissionWithContest): string => {
@@ -219,7 +373,9 @@ export default function SubmissionsClient({
 
                                         if (submission.status === 'paid') {
                                             cpmLabel = "Paid";
-                                            cpmAmount = submission.earnings?.toFixed(2) || "0.00";
+                                            // Convert cents to dollars for display
+                                            const earningsInDollars = submission.earnings ? centsToDollars(submission.earnings) : 0;
+                                            cpmAmount = earningsInDollars.toFixed(2);
                                         } else if (submission.status === 'rejected') {
                                             cpmLabel = isEnded ? "Earnings" : "Est. Earnings";
                                             cpmAmount = "0.00";
@@ -245,39 +401,58 @@ export default function SubmissionsClient({
                                         );
 
                                     } else if (contest?.contest_type === 'leaderboard') {
-                                        if (!isEnded) { // LIVE Leaderboard
-                                            if (contestId) {
-                                                primaryEarningsDisplay = (
-                                                    <Link href={`/dashboard/opportunities/${contestId}#leaderboard`} className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block">
-                                                        View contest for leaderboard standing.
-                                                    </Link>
-                                                );
-                                            }
-                                        } else { // ENDED Leaderboard
-                                            // Uses the new contest.post_contest_status field
-                                            const postContestStatus = submission.contests?.post_contest_status as string | undefined;
-                                            const calculatedAmount = submission.earnings?.toFixed(2) || "0.00";
-                                            let leaderBoardLabel = "";
+                                        // Simplified leaderboard logic using calculateLeaderboardEarnings function
+                                        console.log('🏆 Processing leaderboard contest:', {
+                                            submissionId: submission.id,
+                                            contestId: contestId,
+                                            isEnded,
+                                            status: submission.status,
+                                            hasContestDetails: !!contest?.contest_based_details,
+                                            contestBasedDetails: contest?.contest_based_details,
+                                            postContestStatus: contest?.post_contest_status
+                                        });
 
-                                            if (submission.status === 'paid') {
-                                                leaderBoardLabel = "Paid";
-                                            } else {
-                                                switch (postContestStatus) {
-                                                    case 'pending_review':
-                                                    case 'in_review':
-                                                        leaderBoardLabel = "Est. Earnings";
-                                                        break;
-                                                    case 'verification_complete':
-                                                    case 'payouts_processed':
-                                                        leaderBoardLabel = "Final Earnings";
-                                                        break;
-                                                    default: // Fallback if post_contest_status is not set or has an unexpected value
-                                                        leaderBoardLabel = "Earnings";
-                                                }
-                                            }
+                                        // Use the simplified earnings calculation for all cases
+                                        const earningsData = calculateLeaderboardEarnings(submission, contest);
+
+                                        console.log('🎯 Earnings data result:', earningsData);
+
+                                        if (earningsData.label === "check_leaderboard") {
+                                            console.log('🔗 Setting leaderboard link display');
+                                            primaryEarningsDisplay = (
+                                                <Link href={`/dashboard/opportunities/${contestId}#leaderboard`} className="text-xs text-sky-600 dark:text-sky-400 hover:underline mt-0.5 block">
+                                                    Check your ranking and earnings in the leaderboard.
+                                                </Link>
+                                            );
+                                        } else if (earningsData.label === "No Prize Won") {
+                                            console.log('❌ Setting no prize won display');
+                                            primaryEarningsDisplay = (
+                                                <div className="mt-0.5">
+                                                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+                                                        No Prize Won: <span className="text-base">$0.00</span> USD
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                                        Keep creating amazing content! 🎬
+                                                    </p>
+                                                </div>
+                                            );
+                                        } else if (earningsData.label === "Submission Rejected") {
+                                            console.log('🚫 Setting rejected display');
+                                            primaryEarningsDisplay = (
+                                                <div className="mt-0.5">
+                                                    <p className="text-xs font-semibold text-red-600 dark:text-red-400">
+                                                        Submission Rejected: <span className="text-base">$0.00</span> USD
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                                        Check contest guidelines for next time.
+                                                    </p>
+                                                </div>
+                                            );
+                                        } else {
+                                            console.log('💰 Setting earnings display:', earningsData);
                                             primaryEarningsDisplay = (
                                                 <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                                                    {leaderBoardLabel}: <span className="text-base">${calculatedAmount}</span> USD
+                                                    {earningsData.label}: <span className="text-base">${earningsData.amount.toFixed(2)}</span> USD
                                                 </p>
                                             );
                                         }

@@ -3957,7 +3957,7 @@ CREATE TABLE public.submissions (
     description text,
     other_stats jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    earnings numeric DEFAULT 0,
+    earnings numeric DEFAULT NULL,
     video_id text,
     video_title text,
     video_thumbnail_url text,

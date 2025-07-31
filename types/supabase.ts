@@ -305,7 +305,7 @@ export interface Database {
           other_stats: Json | null
           created_at: string
           status: 'pending' | 'verified' | 'rejected' | 'paid'
-          earnings: number
+          earnings: number | null
           last_insights_update: string | null
           platform: string | null
           video_id: string | null
@@ -322,7 +322,7 @@ export interface Database {
           other_stats?: Json | null
           created_at?: string
           status?: 'pending' | 'verified' | 'rejected' | 'paid'
-          earnings?: number
+          earnings?: number | null
           last_insights_update?: string | null
           platform?: string | null
           video_id?: string | null
@@ -339,7 +339,7 @@ export interface Database {
           other_stats?: Json | null
           created_at?: string
           status?: 'pending' | 'verified' | 'rejected' | 'paid'
-          earnings?: number
+          earnings?: number | null
           last_insights_update?: string | null
           platform?: string | null
           video_id?: string | null

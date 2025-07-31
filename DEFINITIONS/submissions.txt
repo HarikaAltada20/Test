@@ -7,7 +7,7 @@ create table public.submissions (
   description text null,
   other_stats jsonb null,
   created_at timestamp with time zone not null default now(),
-  earnings numeric null default 0,
+  earnings numeric null default NULL,
   video_id text null,
   video_title text null,
   video_thumbnail_url text null,
