@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { Loader2, CreditCard, DollarSign } from 'lucide-react';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { PaymentAnimation } from '@/components/ui/payment-success-animation';
-import { handleFrontendPaymentFailure } from '@/lib/payment-utils-client';
+import { WALLET_TOP_UP_MAX_AMOUNT } from '@/constants/subscriptionPlans';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -400,7 +400,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                                     id="custom-amount"
                                     type="number"
                                     min="1"
-                                    max="10000"
+                                    max={WALLET_TOP_UP_MAX_AMOUNT}
                                     value={amount}
                                     onChange={(e) => setAmount(Number(e.target.value))}
                                     placeholder="Enter amount"

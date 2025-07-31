@@ -65,6 +65,14 @@ import {
   HIGH_BUDGET_THRESHOLD,
   PRODUCT_IDS,
   PRICE_IDS,
+  DEFAULT_TOTAL_PRIZE_POOL,
+  DEFAULT_WINNER_AMOUNTS,
+  DEFAULT_WINNER_COUNT,
+  TOAST_DURATION_LONG,
+  FORM_PLACEHOLDER_SMALL_AMOUNT,
+  FORM_PLACEHOLDER_LARGE_AMOUNT,
+  PLAN_PRICE_THRESHOLD_STARTER,
+  HIGH_MIN_BUDGET_THRESHOLD,
 } from "@/constants/subscriptionPlans";
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
@@ -153,7 +161,7 @@ export default function CreateContestPage({
   const router = useRouter();
   const supabase = createClient();
   const [userPlan, setUserPlan] = useState<string | null>(null);
-  const [totalPrizePool, setTotalPrizePool] = useState<number>(10000); // Default total prize pool
+  const [totalPrizePool, setTotalPrizePool] = useState<number>(DEFAULT_TOTAL_PRIZE_POOL); // Default total prize pool
   const [hasExceededBudgetThreshold, setHasExceededBudgetThreshold] =
     useState<boolean>(false);
 
@@ -1294,7 +1302,7 @@ export default function CreateContestPage({
           title: "Submission Error",
           description: `Payment was successful but we failed to automatically submit your contest. Please go to the contest page and click 'Submit for Approval'. Error: ${error.message}`,
           variant: "destructive",
-          duration: 10000,
+          duration: TOAST_DURATION_LONG,
         });
         // Still redirect to contest page so user can retry submission manually
         router.push(`/dashboard/contests/${contestId}`);
@@ -2207,21 +2215,21 @@ export default function CreateContestPage({
           {/* Current Plan Details */}
           <div className={`relative overflow-hidden border-2 rounded-2xl p-8 mb-8 shadow-xl ${currentPlan && currentPlan.price === 0
             ? "bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 border-gray-300" // Free plan - muted colors
-            : currentPlan && currentPlan.price <= 10000
-              ? "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 border-orange-200" // Bronze plan - warm colors  
+            : currentPlan && currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+              ? "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 border-orange-200" // Bronze plan - warm colors
               : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200/50" // Higher plans - premium colors
             }`}>
             {/* Background decorative elements */}
             <div className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl ${currentPlan && currentPlan.price === 0
               ? "bg-gradient-to-br from-gray-300/20 to-gray-400/20" // Free plan
-              : currentPlan && currentPlan.price <= 10000
+              : currentPlan && currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
                 ? "bg-gradient-to-br from-orange-300/20 to-amber-400/20" // Bronze plan
                 : "bg-gradient-to-br from-blue-400/20 to-purple-400/20" // Higher plans
               }`}></div>
             <div className={`absolute bottom-0 left-0 w-32 h-32 rounded-full blur-2xl ${currentPlan && currentPlan.price === 0
               ? "bg-gradient-to-br from-gray-400/15 to-slate-400/15" // Free plan
-              : currentPlan && currentPlan.price <= 10000
-                ? "bg-gradient-to-br from-amber-400/15 to-orange-400/15" // Bronze plan  
+              : currentPlan && currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                ? "bg-gradient-to-br from-amber-400/15 to-orange-400/15" // Bronze plan
                 : "bg-gradient-to-br from-indigo-400/15 to-pink-400/15" // Higher plans
               }`}></div>
 
@@ -2231,7 +2239,7 @@ export default function CreateContestPage({
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-2xl shadow-lg ${currentPlan && currentPlan.price === 0
                     ? "bg-gradient-to-br from-gray-500 to-gray-600" // Free plan
-                    : currentPlan && currentPlan.price <= 10000
+                    : currentPlan && currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
                       ? "bg-gradient-to-br from-amber-500 to-orange-600" // Bronze plan
                       : "bg-gradient-to-br from-blue-600 to-purple-600" // Higher plans
                     }`}>
@@ -2242,7 +2250,7 @@ export default function CreateContestPage({
                     <p className="text-gray-600 text-sm leading-relaxed">
                       {currentPlan && currentPlan.price === 0 ? (
                         <>Get started with basic features. <span className="font-medium text-orange-600">Upgrade for better rates and more flexibility!</span></>
-                      ) : currentPlan && currentPlan.price <= 10000 ? (
+                      ) : currentPlan && currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER ? (
                         <>Good for small campaigns. <span className="font-medium text-blue-600">Higher plans offer better commission rates!</span></>
                       ) : (
                         <>Your plan determines contest limits, commission rates, and available features. Higher plans offer better rates and more flexibility for your marketing campaigns.</>
@@ -2257,7 +2265,7 @@ export default function CreateContestPage({
                   {/* Plan Header Card */}
                   <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg ${currentPlan.price === 0
                     ? "bg-white/90 border-gray-200" // Free plan
-                    : currentPlan.price <= 10000
+                    : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
                       ? "bg-white/90 border-orange-200" // Bronze plan
                       : "bg-white/80 border-gray-200/50" // Higher plans
                     }`}>
@@ -2392,12 +2400,12 @@ export default function CreateContestPage({
                     )}
 
                     {/* Min Budget Feature */}
-                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.minContestBudget >= 10000
+                    <div className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${planFeatures.minContestBudget >= HIGH_MIN_BUDGET_THRESHOLD
                       ? "bg-orange-50/80 border-orange-200" // High minimum - warning
                       : "bg-white/80 border-gray-200/50"
                       }`}>
                       <div className="flex items-start gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.minContestBudget >= 10000
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${planFeatures.minContestBudget >= HIGH_MIN_BUDGET_THRESHOLD
                           ? "bg-gradient-to-br from-orange-500 to-red-600" // High minimum
                           : "bg-gradient-to-br from-green-500 to-emerald-600" // Low minimum
                           }`}>
@@ -2407,11 +2415,11 @@ export default function CreateContestPage({
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="text-lg font-semibold text-gray-900">Minimum Budget</h5>
                             <div className="flex items-center gap-2">
-                              <span className={`text-2xl font-bold ${planFeatures.minContestBudget >= 10000 ? "text-orange-600" : "text-green-600"
+                              <span className={`text-2xl font-bold ${planFeatures.minContestBudget >= HIGH_MIN_BUDGET_THRESHOLD ? "text-orange-600" : "text-green-600"
                                 }`}>
                                 {formatCurrencyFromCents(planFeatures.minContestBudget)}
                               </span>
-                              {planFeatures.minContestBudget >= 10000 && (
+                              {planFeatures.minContestBudget >= HIGH_MIN_BUDGET_THRESHOLD && (
                                 <span className="text-orange-500 text-sm">⚠️</span>
                               )}
                             </div>
@@ -2419,11 +2427,11 @@ export default function CreateContestPage({
                           <p className="text-sm text-gray-600 leading-relaxed">
                             The minimum total prize pool required to create a contest. Lower minimums give you more flexibility for smaller campaigns.
                           </p>
-                          <div className={`mt-3 text-xs font-medium ${planFeatures.minContestBudget >= 10000
+                          <div className={`mt-3 text-xs font-medium ${planFeatures.minContestBudget >= HIGH_MIN_BUDGET_THRESHOLD
                             ? "text-orange-600"
                             : "text-green-600"
                             }`}>
-                            {planFeatures.minContestBudget >= 10000
+                            {planFeatures.minContestBudget >= HIGH_MIN_BUDGET_THRESHOLD
                               ? "⚡ Upgrade for lower minimum budgets!"
                               : "💡 Tip: Start with smaller budgets to test campaigns"
                             }
@@ -2833,7 +2841,7 @@ export default function CreateContestPage({
                       type="number"
                       value={minViews}
                       onChange={(e) => setMinViews(e.target.value)}
-                      placeholder="e.g., 10000"
+                      placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                       min="0"
                     />
                     <p className="text-xs text-muted-foreground">
@@ -2847,7 +2855,7 @@ export default function CreateContestPage({
                       type="number"
                       value={maxViews}
                       onChange={(e) => setMaxViews(e.target.value)}
-                      placeholder="e.g., 1000000"
+                      placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
                       min="0"
                     />
                     <p className="text-xs text-muted-foreground">
@@ -2870,7 +2878,7 @@ export default function CreateContestPage({
                         setHasExceededBudgetThreshold(true);
                       }
                     }}
-                    placeholder="e.g., 10000"
+                    placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                     min="1"
                   />
                   <p className="text-xs text-muted-foreground">

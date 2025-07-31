@@ -174,3 +174,37 @@ export const DEFAULT_PRIZE_ALLOCATIONS = {
 export const WITHDRAWAL_FEE_PERCENTAGE = 10; // 10% fee
 export const MIN_WITHDRAWAL_AMOUNT = 2000; // $20.00 in cents
 
+// --- Timeout and Duration Constants ---
+// Toast and notification timeouts
+export const TOAST_DURATION_SHORT = 3000; // 3 seconds
+export const TOAST_DURATION_MEDIUM = 5000; // 5 seconds
+export const TOAST_DURATION_LONG = 10000; // 10 seconds
+export const TOAST_DURATION_EXTENDED = 6000; // 6 seconds
+export const TOAST_REMOVE_DELAY = 1000000; // 1,000,000ms (very long for manual dismissal)  1000 seconds
+
+// API connection timeouts
+export const API_TIMEOUT_SHORT = 5000; // 5 seconds
+export const API_TIMEOUT_MEDIUM = 10000; // 10 seconds
+export const API_TIMEOUT_LONG = 20000; // 20 seconds
+
+// --- Default Values ---
+// Default prize pool and budget values (in cents)
+export const DEFAULT_TOTAL_PRIZE_POOL = 10000; // $100.00 in cents
+export const DEFAULT_WINNER_AMOUNTS = [5000, 3000, 2000]; // $50, $30, $20 in cents
+export const DEFAULT_WINNER_COUNT = 3;
+
+// --- Form Limits and Placeholders ---
+// Wallet top-up limits
+export const WALLET_TOP_UP_MAX_AMOUNT = 10000; // $100.00 maximum top-up
+
+// Form placeholder values (in dollars for display)
+export const FORM_PLACEHOLDER_SMALL_AMOUNT = 10000; // $100.00
+export const FORM_PLACEHOLDER_LARGE_AMOUNT = 1000000; // $10,000.00
+
+// --- Plan Comparison Thresholds ---
+// Price thresholds for plan comparison logic
+export const PLAN_PRICE_THRESHOLD_STARTER = 10000; // $100.00 in cents (Starter plan price)
+
+// Budget threshold for plan feature comparison (high minimum budget indicates lower-tier plan)
+export const HIGH_MIN_BUDGET_THRESHOLD = 10000; // $100.00 in cents 
+

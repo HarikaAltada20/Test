@@ -21,6 +21,7 @@ import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import { useToast } from "@/hooks/use-toast";
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
+import { API_TIMEOUT_MEDIUM, API_TIMEOUT_LONG, API_TIMEOUT_SHORT } from "@/constants/subscriptionPlans";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -436,7 +437,7 @@ export default function SettingsPage({
           description: "Connection timed out. Please try again.",
           variant: "destructive",
         });
-      }, 10000);
+      }, API_TIMEOUT_MEDIUM);
 
       window.location.href = '/api/youtube/auth';
     } catch (err: any) {
@@ -488,7 +489,7 @@ export default function SettingsPage({
           description: "Connection timed out. Please try again.",
           variant: "destructive",
         });
-      }, 20000);
+      }, API_TIMEOUT_LONG);
 
       window.location.href = authUrl;
     } catch (err: any) {
@@ -513,7 +514,7 @@ export default function SettingsPage({
           description: "Disconnection timed out. Please try again.",
           variant: "destructive",
         });
-      }, 5000);
+      }, API_TIMEOUT_SHORT);
 
       const { error: updateError } = await supabase
         .from('creator_profiles')

@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
 import { formatCurrencyFromCents } from "@/lib/currency-utils"
-import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans } from "@/constants/subscriptionPlans"
+import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
 import { useToast } from "@/hooks/use-toast"
@@ -389,10 +389,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 const originalBudgetInCents = prizes.reduce((sum: number, amount: number) => sum + amount, 0);
                                 setOriginalBudget(originalBudgetInCents);
                             } else {
-                                setWinnerCount(3); // Default
-                                setWinnerAmounts([5000, 3000, 2000]); // Default
+                                setWinnerCount(DEFAULT_WINNER_COUNT); // Default
+                                setWinnerAmounts(DEFAULT_WINNER_AMOUNTS); // Default
                                 // Set default original budget (prize pool only)
-                                setOriginalBudget(10000); // Default total
+                                setOriginalBudget(DEFAULT_TOTAL_PRIZE_POOL); // Default total
                             }
                         } else if (data.contest_type === 'cpm') {
                             const cpmDetails = data.contest_based_details?.cpm_contest;
@@ -3216,7 +3216,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                             setTotalBudget(e.target.value);
                                             checkBudgetChange(undefined, e.target.value);
                                         }}
-                                        placeholder="e.g., 10000"
+                                        placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                                         step="0.01"
                                     />
                                 </div>
@@ -3230,7 +3230,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         type="number"
                                         value={minViews}
                                         onChange={(e) => setMinViews(e.target.value)}
-                                        placeholder="e.g., 10000"
+                                        placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         Optional: Minimum views a submission needs to be eligible for earnings.
@@ -3243,7 +3243,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         type="number"
                                         value={maxViews}
                                         onChange={(e) => setMaxViews(e.target.value)}
-                                        placeholder="e.g., 1000000"
+                                        placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         Optional: Maximum views for which a creator can be paid for a single submission.
