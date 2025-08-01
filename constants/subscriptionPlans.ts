@@ -161,9 +161,9 @@ export const COMMON_PLAN_FEATURES = {
   // Removed "Access to 5,000+ creators" as requested
 };
 
-export const HIGH_BUDGET_THRESHOLD = 100000; // Recommend contact for higher budget 
+export const HIGH_BUDGET_THRESHOLD = Infinity; // No upper limit - removed $1000 restriction
 export const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
-export const MAX_PRIZE_PER_WINNER = 100000  // $1,000.00 in cents
+export const MAX_PRIZE_PER_WINNER = Infinity  // No upper limit - removed $1000 restriction
 export const DEFAULT_PRIZE_ALLOCATIONS = {
     1: 5000, // $50.00
     2: 3000, // $30.00

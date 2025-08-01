@@ -3162,7 +3162,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                 }
                                             }}
                                             min={MIN_PRIZE_PER_WINNER / 100}
-                                            max={MAX_PRIZE_PER_WINNER / 100}
                                             className="w-48"
                                         />
                                         <div className="text-sm text-gray-500">

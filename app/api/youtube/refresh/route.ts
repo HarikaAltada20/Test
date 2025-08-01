@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      youtubeAccount: updatedAccount,
       access_token: credentials.access_token,
       expires_at: newExpiresAt
     });

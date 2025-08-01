@@ -129,6 +129,8 @@ export default function SubmitContentPage({
   const [isLoading, setIsLoading] = useState(false);
   const [isTokenExpired, setIsTokenExpired] = useState(false);
   const [isInstagramTokenExpired, setIsInstagramTokenExpired] = useState(false);
+  const [isRefreshingToken, setIsRefreshingToken] = useState(false);
+  const [isRefreshingInstagramToken, setIsRefreshingInstagramToken] = useState(false);
 
   const router = useRouter();
   const supabase = createClient();
@@ -242,18 +244,6 @@ export default function SubmitContentPage({
           .single();
 
         setYoutubeAccount(profile?.youtube_account);
-
-        if (profile?.youtube_account) {
-          // Check if token is expired
-          if (new Date(profile.youtube_account.expires_at) <= new Date()) {
-            setIsTokenExpired(true);
-            setError(
-              "Your YouTube connection has expired. Please re-connect your YouTube account."
-            );
-          } else {
-            fetchYouTubeVideos();
-          }
-        }
       } catch (err) {
         console.error("Error fetching YouTube account:", err);
         setError("Failed to fetch YouTube account information");
@@ -262,6 +252,34 @@ export default function SubmitContentPage({
 
     checkYouTubeConnection();
   }, [user, supabase, contestPlatform]);
+
+  // Separate useEffect to handle token expiry and automatic refresh
+  useEffect(() => {
+    if (youtubeAccount && contestPlatform === 'youtube') {
+      console.log("YouTube account state changed, checking expiry...");
+      console.log("Token expires at:", youtubeAccount.expires_at);
+      console.log("Current time:", new Date());
+      console.log("Is token expired?", new Date(youtubeAccount.expires_at) <= new Date());
+
+      if (new Date(youtubeAccount.expires_at) <= new Date()) {
+        console.log("Token is expired, attempting automatic refresh...");
+        // Automatically attempt to refresh the token
+        autoRefreshYouTubeTokenAndRetry(fetchYouTubeVideos).then((refreshSuccess) => {
+          console.log("Automatic refresh result:", refreshSuccess);
+          if (!refreshSuccess) {
+            console.log("Automatic refresh failed, setting error state");
+            setIsTokenExpired(true);
+            setError(
+              "Your YouTube connection has expired. Please re-connect your YouTube account."
+            );
+          }
+        });
+      } else {
+        console.log("Token is not expired, fetching videos normally");
+        fetchYouTubeVideos();
+      }
+    }
+  }, [youtubeAccount, contestPlatform]);
 
   // Check if user has connected Instagram account
   useEffect(() => {
@@ -291,34 +309,6 @@ export default function SubmitContentPage({
         const igAccount = profileFromDB.instagram_account as any;
         setInstagramAccount(igAccount);
         setCurrentInstagramBusinessAccountID(null); // Reset before attempting to set
-
-        if (igAccount?.access_token) {
-          if (igAccount.token_expiry && dayjs().isAfter(dayjs(igAccount.token_expiry))) {
-            setIsInstagramTokenExpired(true);
-            setError(
-              "Your Instagram connection has expired. Please re-connect your Instagram account in settings."
-            );
-            setIsLoadingReels(false);
-          } else {
-            setIsInstagramTokenExpired(false);
-            // If it's a Business or Creator account, the app_scoped_user_id IS the IGBA ID needed.
-            if ((igAccount.account_type === 'BUSINESS' || igAccount.account_type === 'MEDIA_CREATOR') && igAccount.app_scoped_user_id) {
-              setCurrentInstagramBusinessAccountID(igAccount.app_scoped_user_id);
-              // The useEffect listening to currentInstagramBusinessAccountID will now trigger fetchInstagramReels
-              setIsLoadingReels(true); // Set loading true, fetchInstagramReels will set it false in its finally block
-            } else if (!igAccount.app_scoped_user_id && (igAccount.account_type === 'BUSINESS' || igAccount.account_type === 'MEDIA_CREATOR')) {
-              setError("Connected Instagram account is Business/Creator but missing the required ID (app_scoped_user_id). Please try reconnecting the account.");
-              setIsLoadingReels(false);
-            } else {
-              setError("Instagram account must be a Business or Creator account to fetch reels. Current type: " + (igAccount.account_type || 'Unknown'));
-              setIsLoadingReels(false);
-            }
-          }
-        } else {
-          setInstagramAccount(null);
-          setCurrentInstagramBusinessAccountID(null);
-          setIsLoadingReels(false);
-        }
       } catch (err: any) {
         console.error("Error in checkInstagramConnection:", err);
         setError("Failed to process Instagram account information.");
@@ -330,6 +320,56 @@ export default function SubmitContentPage({
     checkInstagramConnection();
   }, [user, supabase, contestPlatform]);
 
+  // Separate useEffect to handle Instagram token expiry and automatic refresh
+  useEffect(() => {
+    if (instagramAccount && contestPlatform === 'instagram') {
+      console.log("Instagram account state changed, checking expiry...");
+      console.log("Token expiry:", instagramAccount.token_expiry);
+      console.log("Current time:", dayjs().format());
+      console.log("Is token expired?", instagramAccount.token_expiry && dayjs().isAfter(dayjs(instagramAccount.token_expiry)));
+
+      if (instagramAccount?.access_token) {
+        if (instagramAccount.token_expiry && dayjs().isAfter(dayjs(instagramAccount.token_expiry))) {
+          console.log("Instagram token is expired, attempting automatic refresh...");
+          // Automatically attempt to refresh the token
+          autoRefreshInstagramTokenAndRetry(async () => {
+            if (instagramAccount.app_scoped_user_id) {
+              await fetchInstagramReels(instagramAccount.access_token, instagramAccount.app_scoped_user_id);
+            }
+          }).then((refreshSuccess) => {
+            console.log("Instagram automatic refresh result:", refreshSuccess);
+            if (!refreshSuccess) {
+              console.log("Instagram automatic refresh failed, setting error state");
+              setIsInstagramTokenExpired(true);
+              setError(
+                "Your Instagram connection has expired. Please re-connect your Instagram account in settings."
+              );
+              setIsLoadingReels(false);
+            }
+          });
+        } else {
+          setIsInstagramTokenExpired(false);
+          // If it's a Business or Creator account, the app_scoped_user_id IS the IGBA ID needed.
+          if ((instagramAccount.account_type === 'BUSINESS' || instagramAccount.account_type === 'MEDIA_CREATOR') && instagramAccount.app_scoped_user_id) {
+            setCurrentInstagramBusinessAccountID(instagramAccount.app_scoped_user_id);
+            // The useEffect listening to currentInstagramBusinessAccountID will now trigger fetchInstagramReels
+            setIsLoadingReels(true); // Set loading true, fetchInstagramReels will set it false in its finally block
+          } else if (!instagramAccount.app_scoped_user_id && (instagramAccount.account_type === 'BUSINESS' || instagramAccount.account_type === 'MEDIA_CREATOR')) {
+            setError("Connected Instagram account is Business/Creator but missing the required ID (app_scoped_user_id). Please try reconnecting the account.");
+            setIsLoadingReels(false);
+          } else {
+            setError("Instagram account must be a Business or Creator account to fetch reels. Current type: " + (instagramAccount.account_type || 'Unknown'));
+            setIsLoadingReels(false);
+          }
+        }
+      } else {
+        setInstagramAccount(null);
+        setCurrentInstagramBusinessAccountID(null);
+        setIsLoadingReels(false);
+      }
+    }
+  }, [instagramAccount, contestPlatform]);
+
   // New useEffect to fetch reels once currentInstagramBusinessAccountID is set
   useEffect(() => {
     if (contestPlatform === 'instagram' && currentInstagramBusinessAccountID && instagramAccount?.access_token && !isInstagramTokenExpired) {
@@ -340,52 +380,219 @@ export default function SubmitContentPage({
     }
   }, [currentInstagramBusinessAccountID, instagramAccount, isInstagramTokenExpired, contestPlatform]);
 
-  // Fetch videos using the server API endpoint
+  // Automatic token refresh with retry functionality
+  const autoRefreshYouTubeTokenAndRetry = async (originalOperation: () => Promise<void>) => {
+    console.log("autoRefreshYouTubeTokenAndRetry called");
+    console.log("User:", user?.id);
+    console.log("YouTube account:", youtubeAccount);
+
+    if (!user || !youtubeAccount) {
+      console.log("Missing user or YouTube account, returning false");
+      toast({
+        title: "Error",
+        description: "User or YouTube account information not available.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    setIsRefreshingToken(true);
+    setError(null);
+
+    try {
+      console.log("Starting YouTube token refresh...");
+      toast({
+        title: "Refreshing Token",
+        description: "Your YouTube token has expired. Automatically refreshing...",
+        variant: "default",
+      });
+
+      const response = await fetch("/api/youtube/refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+        }),
+      });
+
+      const data = await response.json();
+      console.log("YouTube refresh response:", response.status, data);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to refresh YouTube token");
+      }
+
+      if (data.success) {
+        console.log("YouTube token refresh successful, updating state");
+        // Update the local state to reflect the refreshed token
+        setYoutubeAccount(data.youtubeAccount);
+        setIsTokenExpired(false);
+        setError(null);
+
+        toast({
+          title: "Token Refreshed",
+          description: "YouTube token refreshed successfully! Retrying your request...",
+          variant: "default",
+        });
+
+        // Retry the original operation
+        console.log("Retrying original operation...");
+        await originalOperation();
+        console.log("Original operation completed successfully");
+        return true;
+      } else {
+        throw new Error(data.error || "Token refresh failed");
+      }
+    } catch (err: any) {
+      console.error("Error refreshing YouTube token:", err);
+      setError(err.message || "Failed to refresh YouTube token. Please try reconnecting your account.");
+      setIsTokenExpired(true);
+      toast({
+        title: "Token Refresh Failed",
+        description: err.message || "Failed to refresh YouTube token. Please try reconnecting your account.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsRefreshingToken(false);
+    }
+  };
+
+  // Automatic Instagram token refresh with retry functionality
+  const autoRefreshInstagramTokenAndRetry = async (originalOperation: () => Promise<void>) => {
+    console.log("autoRefreshInstagramTokenAndRetry called");
+    console.log("User:", user?.id);
+    console.log("Instagram account:", instagramAccount);
+
+    if (!user || !instagramAccount) {
+      console.log("Missing user or Instagram account, returning false");
+      toast({
+        title: "Error",
+        description: "User or Instagram account information not available.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    setIsRefreshingInstagramToken(true);
+    setError(null);
+
+    try {
+      console.log("Starting Instagram token refresh...");
+      toast({
+        title: "Refreshing Token",
+        description: "Your Instagram token has expired. Automatically refreshing...",
+        variant: "default",
+      });
+
+      const response = await fetch("/api/instagram/refresh-token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+        }),
+      });
+
+      const data = await response.json();
+      console.log("Instagram refresh response:", response.status, data);
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to refresh Instagram token");
+      }
+
+      if (data.success) {
+        console.log("Instagram token refresh successful, updating state");
+        // Update the local state to reflect the refreshed token
+        setInstagramAccount(data.instagramAccount);
+        setIsInstagramTokenExpired(false);
+        setError(null);
+
+        toast({
+          title: "Token Refreshed",
+          description: "Instagram token refreshed successfully! Retrying your request...",
+          variant: "default",
+        });
+
+        // Retry the original operation
+        console.log("Retrying original operation...");
+        await originalOperation();
+        console.log("Original operation completed successfully");
+        return true;
+      } else {
+        throw new Error(data.error || "Token refresh failed");
+      }
+    } catch (err: any) {
+      console.error("Error refreshing Instagram token:", err);
+      setError(err.message || "Failed to refresh Instagram token. Please try reconnecting your account.");
+      setIsInstagramTokenExpired(true);
+      toast({
+        title: "Token Refresh Failed",
+        description: err.message || "Failed to refresh Instagram token. Please try reconnecting your account.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsRefreshingInstagramToken(false);
+    }
+  };
+
   const fetchYouTubeVideos = async () => { // Removed pageToken parameter
     if (contestPlatform !== 'youtube') return;
     setIsLoadingVideos(true);
     setError(null);
     setLibraryMessage(null); // Clear previous library message
 
-    try {
-      // Reverted: No longer sending pagination query parameters
-      const response = await fetch(`/api/youtube/videos`);
-      const data = await response.json(); // Expects { videos: [...], nextPageToken?: string, prevPageToken?: string, totalResults?: number }
+    const performFetch = async () => {
+      try {
+        // Reverted: No longer sending pagination query parameters
+        const response = await fetch(`/api/youtube/videos`);
+        const data = await response.json(); // Expects { videos: [...], nextPageToken?: string, prevPageToken?: string, totalResults?: number }
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          setIsTokenExpired(true);
-          setError(
-            "Your YouTube connection has expired. Please re-connect your YouTube account."
-          );
-        } else {
-          // Use error from response if available, otherwise a default
-          throw new Error(data.error || "Failed to load videos");
+        if (!response.ok) {
+          if (response.status === 401) {
+            // Token expired - try automatic refresh
+            const refreshSuccess = await autoRefreshYouTubeTokenAndRetry(performFetch);
+            if (!refreshSuccess) {
+              setIsTokenExpired(true);
+              setError(
+                "Your YouTube connection has expired. Please re-connect your YouTube account."
+              );
+              setUserVideos([]); // Clear videos on error
+              setYoutubeCurrentPage(1); // Reset page
+            }
+            return;
+          } else {
+            // Use error from response if available, otherwise a default
+            throw new Error(data.error || "Failed to load videos");
+          }
         }
-        setUserVideos([]); // Clear videos on error
-        setYoutubeCurrentPage(1); // Reset page
-        return;
+
+        const allFetchedVideos: YouTubeVideo[] = data.videos || []; // Ensure type
+        const filteredVideos = allFetchedVideos.filter((video: YouTubeVideo) => video.snippet?.publishedAt && !isContentTooOld(video.snippet.publishedAt));
+        setUserVideos(filteredVideos); // Set userVideos with the filtered list
+        setYoutubeCurrentPage(1); // Reset to first page on new data load
+
+        if ((data.videos && data.videos.length > 0) && filteredVideos.length === 0) {
+          setLibraryMessage(`No videos found in your YouTube channel that were published in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch an older video by pasting its link directly, but it must have been published within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible for the submission/ contest.`);
+        }
+
+      } catch (err: any) {
+        console.error("Error fetching YouTube videos:", err);
+        setError(
+          err.message || "Failed to load your YouTube videos. Please try again."
+        );
+        setUserVideos([]);
+        setYoutubeCurrentPage(1);
+      } finally {
+        setIsLoadingVideos(false);
       }
+    };
 
-      const allFetchedVideos: YouTubeVideo[] = data.videos || []; // Ensure type
-      const filteredVideos = allFetchedVideos.filter((video: YouTubeVideo) => video.snippet?.publishedAt && !isContentTooOld(video.snippet.publishedAt));
-      setUserVideos(filteredVideos); // Set userVideos with the filtered list
-      setYoutubeCurrentPage(1); // Reset to first page on new data load
-
-      if ((data.videos && data.videos.length > 0) && filteredVideos.length === 0) {
-        setLibraryMessage(`No videos found in your YouTube channel that were published in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch an older video by pasting its link directly, but it must have been published within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible for the submission/ contest.`);
-      }
-
-    } catch (err: any) {
-      console.error("Error fetching YouTube videos:", err);
-      setError(
-        err.message || "Failed to load your YouTube videos. Please try again."
-      );
-      setUserVideos([]);
-      setYoutubeCurrentPage(1);
-    } finally {
-      setIsLoadingVideos(false);
-    }
+    await performFetch();
   };
 
   // Handle YouTube reconnection
@@ -394,6 +601,20 @@ export default function SubmitContentPage({
       "/api/youtube/auth?returnTo=" +
       encodeURIComponent(`/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ''}`) // pass platform back
     );
+  };
+
+  // Handle YouTube token refresh (manual trigger)
+  const handleRefreshYouTubeToken = async () => {
+    await autoRefreshYouTubeTokenAndRetry(fetchYouTubeVideos);
+  };
+
+  // Handle Instagram token refresh (manual trigger)
+  const handleRefreshInstagramToken = async () => {
+    await autoRefreshInstagramTokenAndRetry(async () => {
+      if (instagramAccount?.access_token && instagramAccount?.app_scoped_user_id) {
+        await fetchInstagramReels(instagramAccount.access_token, instagramAccount.app_scoped_user_id);
+      }
+    });
   };
 
   useEffect(() => {
@@ -885,78 +1106,102 @@ export default function SubmitContentPage({
     setUserReels([]);
     console.log("[fetchInstagramReels] Starting fetch for IGBA ID:", igBusinessAccountID);
 
-    try {
-      const mediaRes = await fetch(`https://graph.instagram.com/${igBusinessAccountID}/media?fields=id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp&access_token=${accessToken}`);
-      // Added media_product_type, video_title to fields if available, to better identify reels.
+    const performFetch = async () => {
+      try {
+        const mediaRes = await fetch(`https://graph.instagram.com/${igBusinessAccountID}/media?fields=id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp&access_token=${accessToken}`);
+        // Added media_product_type, video_title to fields if available, to better identify reels.
 
-      const mediaData = await mediaRes.json();
-      console.log("[fetchInstagramReels] Raw mediaData from API:", JSON.stringify(mediaData, null, 2));
+        const mediaData = await mediaRes.json();
+        console.log("[fetchInstagramReels] Raw mediaData from API:", JSON.stringify(mediaData, null, 2));
 
+        if (!mediaRes.ok || mediaData.error) {
+          console.error("[fetchInstagramReels] API Error response:", mediaData.error);
 
-      if (!mediaRes.ok || mediaData.error) {
-        console.error("[fetchInstagramReels] API Error response:", mediaData.error);
-        throw new Error(mediaData.error?.message || "Failed to fetch Instagram media IDs using Business Account ID");
-      }
+          // Check if it's a token-related error
+          if (mediaData.error?.type === 'OAuthException' ||
+            mediaData.error?.message?.includes('token') ||
+            mediaData.error?.message?.includes('expired') ||
+            mediaRes.status === 401) {
 
-      const potentialContent = mediaData.data;
-      if (!potentialContent || potentialContent.length === 0) {
-        console.log("[fetchInstagramReels] No potential content found in API response data.");
-        setUserReels([]);
-        // setIsLoadingReels(false); // Done in finally
-        return;
-      }
+            // Token expired - try automatic refresh
+            const refreshSuccess = await autoRefreshInstagramTokenAndRetry(async () => {
+              // Retry with the new token
+              if (instagramAccount?.access_token && instagramAccount?.app_scoped_user_id) {
+                await fetchInstagramReels(instagramAccount.access_token, instagramAccount.app_scoped_user_id);
+              }
+            });
 
-      console.log(`[fetchInstagramReels] Received ${potentialContent.length} items from /media endpoint. Full list:`, JSON.stringify(potentialContent, null, 2));
+            if (!refreshSuccess) {
+              setIsInstagramTokenExpired(true);
+              setError("Your Instagram connection has expired. Please re-connect your Instagram account.");
+            }
+            return;
+          }
 
-
-      const allFetchedReels: InstagramReel[] = [];
-      // The /media endpoint returns a mix. We need to filter for Reels.
-      // Reels often have media_product_type === 'REELS' or media_type === 'VIDEO'
-      // The structure from /media might be slightly different than direct /media_id calls.
-      // We may need to iterate and fetch full details for each *potential* reel if thumbnail_url or other specific fields are missing here.
-      // For now, let's assume the direct /media call with expanded fields gives enough info.
-
-      console.log("[fetchInstagramReels] Starting to filter items for Reels...");
-      for (const item of potentialContent) {
-        console.log(`[fetchInstagramReels] Processing item: id=${item.id}, media_type=${item.media_type}, media_product_type=${item.media_product_type}`);
-        // Prioritize media_product_type if available, otherwise check media_type.
-        // Instagram API can be a bit varied here. If it's a VIDEO, we should include it.
-        if (item.media_product_type === 'REELS' || item.media_type === 'VIDEO') {
-          console.log(`[fetchInstagramReels] ✅ Including item id=${item.id} as a Reel/Video.`);
-          // Create a reel object matching our InstagramReel interface
-          allFetchedReels.push({
-            id: item.id,
-            media_type: (item.media_product_type === 'REELS') ? 'REEL' : 'VIDEO', // Be more specific based on product type if REELS
-            media_url: item.permalink, // permalink is better for media_url in this context
-            thumbnail_url: item.thumbnail_url,
-            caption: item.caption || item.video_title, // Use caption, fallback to video_title if available
-            timestamp: item.timestamp,
-            permalink: item.permalink,
-          });
-        } else {
-          console.log(`[fetchInstagramReels] ❌ Skipping item id=${item.id} - media_type: ${item.media_type}, media_product_type: ${item.media_product_type}`);
+          throw new Error(mediaData.error?.message || "Failed to fetch Instagram media IDs using Business Account ID");
         }
-      }
-      console.log(`[fetchInstagramReels] Filtered down to ${allFetchedReels.length} reels.`);
 
-      // Client-side filter based on submission window
-      const filteredReels = allFetchedReels.filter(reel => reel.timestamp && !isContentTooOld(reel.timestamp));
-      setUserReels(filteredReels.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf()));
+        const potentialContent = mediaData.data;
+        if (!potentialContent || potentialContent.length === 0) {
+          console.log("[fetchInstagramReels] No potential content found in API response data.");
+          setUserReels([]);
+          // setIsLoadingReels(false); // Done in finally
+          return;
+        }
 
-      if (allFetchedReels.length > 0 && filteredReels.length === 0) {
-        setLibraryMessage(`No Reels or Videos found on your Instagram account that were posted in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch older content by pasting its link directly, but it must have been posted within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible.`);
-      }
+        console.log(`[fetchInstagramReels] Received ${potentialContent.length} items from /media endpoint. Full list:`, JSON.stringify(potentialContent, null, 2));
 
-    } catch (err: any) {
-      console.error("Error fetching Instagram Reels:", err);
-      setError(err.message || "Failed to load your Instagram Reels.");
-      if (err.message?.includes("token") || err.message?.includes("OAuthException")) {
-        setIsInstagramTokenExpired(true);
+        const allFetchedReels: InstagramReel[] = [];
+        // The /media endpoint returns a mix. We need to filter for Reels.
+        // Reels often have media_product_type === 'REELS' or media_type === 'VIDEO'
+        // The structure from /media might be slightly different than direct /media_id calls.
+        // We may need to iterate and fetch full details for each *potential* reel if thumbnail_url or other specific fields are missing here.
+        // For now, let's assume the direct /media call with expanded fields gives enough info.
+
+        console.log("[fetchInstagramReels] Starting to filter items for Reels...");
+        for (const item of potentialContent) {
+          console.log(`[fetchInstagramReels] Processing item: id=${item.id}, media_type=${item.media_type}, media_product_type=${item.media_product_type}`);
+          // Prioritize media_product_type if available, otherwise check media_type.
+          // Instagram API can be a bit varied here. If it's a VIDEO, we should include it.
+          if (item.media_product_type === 'REELS' || item.media_type === 'VIDEO') {
+            console.log(`[fetchInstagramReels] ✅ Including item id=${item.id} as a Reel/Video.`);
+            // Create a reel object matching our InstagramReel interface
+            allFetchedReels.push({
+              id: item.id,
+              media_type: (item.media_product_type === 'REELS') ? 'REEL' : 'VIDEO', // Be more specific based on product type if REELS
+              media_url: item.permalink, // permalink is better for media_url in this context
+              thumbnail_url: item.thumbnail_url,
+              caption: item.caption || item.video_title, // Use caption, fallback to video_title if available
+              timestamp: item.timestamp,
+              permalink: item.permalink,
+            });
+          } else {
+            console.log(`[fetchInstagramReels] ❌ Skipping item id=${item.id} - media_type: ${item.media_type}, media_product_type: ${item.media_product_type}`);
+          }
+        }
+        console.log(`[fetchInstagramReels] Filtered down to ${allFetchedReels.length} reels.`);
+
+        // Client-side filter based on submission window
+        const filteredReels = allFetchedReels.filter(reel => reel.timestamp && !isContentTooOld(reel.timestamp));
+        setUserReels(filteredReels.sort((a, b) => dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf()));
+
+        if (allFetchedReels.length > 0 && filteredReels.length === 0) {
+          setLibraryMessage(`No Reels or Videos found on your Instagram account that were posted in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch older content by pasting its link directly, but it must have been posted within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible.`);
+        }
+
+      } catch (err: any) {
+        console.error("Error fetching Instagram Reels:", err);
+        setError(err.message || "Failed to load your Instagram Reels.");
+        if (err.message?.includes("token") || err.message?.includes("OAuthException")) {
+          setIsInstagramTokenExpired(true);
+        }
+      } finally {
+        console.log("[fetchInstagramReels] Fetch operation complete.");
+        setIsLoadingReels(false);
       }
-    } finally {
-      console.log("[fetchInstagramReels] Fetch operation complete.");
-      setIsLoadingReels(false);
-    }
+    };
+
+    await performFetch();
   };
 
   if (isLoadingContest) {
@@ -1049,9 +1294,30 @@ export default function SubmitContentPage({
               {isTokenExpired && (
                 <Alert variant="destructive" className="mb-4 text-center">
                   <AlertDescription>Your YouTube connection has expired.</AlertDescription>
-                  <Button onClick={handleReconnectYouTube} variant="link" className="text-destructive dark:text-red-400 mt-1">
-                    Reconnect YouTube Account
-                  </Button>
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
+                    <Button
+                      onClick={handleRefreshYouTubeToken}
+                      disabled={isRefreshingToken}
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    >
+                      {isRefreshingToken ? (
+                        <>
+                          <RefreshCw className="animate-spin mr-2 h-4 w-4" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Refresh Token
+                        </>
+                      )}
+                    </Button>
+                    <Button onClick={handleReconnectYouTube} variant="link" className="text-destructive dark:text-red-400">
+                      Reconnect Account
+                    </Button>
+                  </div>
                 </Alert>
               )}
               {!youtubeAccount && !isTokenExpired && (
@@ -1339,11 +1605,32 @@ export default function SubmitContentPage({
               {isInstagramTokenExpired && (
                 <Alert variant="destructive" className="mb-4 text-center">
                   <AlertDescription>Your Instagram connection has expired.</AlertDescription>
-                  <Link href="/dashboard/settings">
-                    <Button variant="link" className="text-destructive dark:text-red-400 mt-1">
-                      Reconnect Instagram Account
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
+                    <Button
+                      onClick={handleRefreshInstagramToken}
+                      disabled={isRefreshingInstagramToken}
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    >
+                      {isRefreshingInstagramToken ? (
+                        <>
+                          <RefreshCw className="animate-spin mr-2 h-4 w-4" />
+                          Refreshing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Refresh Token
+                        </>
+                      )}
                     </Button>
-                  </Link>
+                    <Link href="/dashboard/settings">
+                      <Button variant="link" className="text-destructive dark:text-red-400">
+                        Reconnect Account
+                      </Button>
+                    </Link>
+                  </div>
                 </Alert>
               )}
               {!instagramAccount && !isInstagramTokenExpired && (

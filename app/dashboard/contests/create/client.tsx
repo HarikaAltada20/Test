@@ -162,15 +162,14 @@ export default function CreateContestPage({
   const supabase = createClient();
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(DEFAULT_TOTAL_PRIZE_POOL); // Default total prize pool
-  const [hasExceededBudgetThreshold, setHasExceededBudgetThreshold] =
-    useState<boolean>(false);
+
 
   // New state for contest duration
   const [startDate, setStartDate] = useState<string>("");
   const [startTime, setStartTime] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [endTime, setEndTime] = useState<string>("");
-  const [showHighBudgetPrompt, setShowHighBudgetPrompt] = useState(false);
+
 
 
 
@@ -207,6 +206,7 @@ export default function CreateContestPage({
   // Add at top-level state
   const [showBackModal, setShowBackModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Add this function for handling resource file uploads
 
@@ -1627,9 +1627,8 @@ export default function CreateContestPage({
 
     if (step === "basics") return !title || (!thumbnail && !thumbnailPreview); // Updated to match nextStep validation
     if (step === "brief") {
-      // For brief step, we'll allow proceeding and validate in nextStep
-      // This prevents the editor from being blocked while user is typing
-      return false; // Allow proceeding, validation will happen in nextStep for both brief and rules
+      // Check if both brief and rules content are empty using current state
+      return isQuillEmpty(briefHtml) || isQuillEmpty(rulesHtml);
     }
     // For the "resources" step, no specific blocking validation for the entire step is defined for isNextDisabled
     // Individual resource additions handle their own feedback internally.
@@ -2142,49 +2141,7 @@ export default function CreateContestPage({
     );
   };
 
-  const HighBudgetPromptModal = () => {
-    if (!showHighBudgetPrompt) return null;
 
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white p-6 rounded-lg max-w-md w-full">
-          <h3 className="text-xl font-bold mb-4">High Value Contest</h3>
-          <p className="mb-4">
-            For contests with budgets over{" "}
-            {formatCurrencyFromCents(HIGH_BUDGET_THRESHOLD)}, we recommend reaching out
-            to our team for personalized guidance and support.
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowHighBudgetPrompt(false)}
-            >
-              Continue Anyway
-            </Button>
-            <Button
-              onClick={() => {
-                setShowHighBudgetPrompt(false);
-                // Logic to contact the team could be added here
-                window.open("mailto:support@gameofcreators.com", "_blank");
-              }}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
-            >
-              Contact Our Team
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Add this to track prize pool value and show high budget prompt only when first exceeding threshold
-  useEffect(() => {
-    // Only show the prompt when exceeding the threshold for the first time
-    if (totalPrizePool > HIGH_BUDGET_THRESHOLD && !hasExceededBudgetThreshold) {
-      setShowHighBudgetPrompt(true);
-      setHasExceededBudgetThreshold(true);
-    }
-  }, [totalPrizePool, hasExceededBudgetThreshold]);
 
   // Prize section
   const renderPrizeSection = () => {
@@ -2549,77 +2506,114 @@ export default function CreateContestPage({
                     </div>
                   </div>
 
-                  {/* Plan Benefits Summary */}
-                  <div className={`rounded-2xl p-6 text-white shadow-xl ${currentPlan.price === 0
-                    ? "bg-gradient-to-r from-gray-600 to-gray-700" // Free plan - muted
+                  {/* Enhanced Plan Benefits Summary */}
+                  <div className={`rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden ${currentPlan.price === 0
+                    ? "bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800" // Free plan - modern slate
                     : currentPlan.price <= 10000
-                      ? "bg-gradient-to-r from-orange-600 to-amber-600" // Bronze plan - warm
-                      : "bg-gradient-to-r from-blue-600 to-purple-600" // Higher plans - premium
+                      ? "bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600" // Bronze plan - warm
+                      : "bg-gradient-to-br from-blue-600 via-purple-600 to-blue-700" // Higher plans - premium
                     }`}>
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                        <Trophy className="h-5 w-5 text-white" />
-                      </div>
-                      <h4 className="text-lg font-semibold">
-                        {currentPlan.price === 0
-                          ? `Get Started with ${currentPlan.name} Plan - Then Upgrade!`
-                          : `Why Your ${currentPlan.name} Plan Matters`
-                        }
-                      </h4>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <span>Launch up to {planFeatures.maxActiveContests === Infinity ? 'unlimited' : planFeatures.maxActiveContests} simultaneous marketing campaigns</span>
-                      </div>
-                      {/* Only show winner limit for leaderboard contests */}
-                      {contestType === 'leaderboard' && (
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-white rounded-full"></div>
-                          <span>Reward up to {planFeatures.maxWinnersPerContest === Infinity ? 'unlimited' : planFeatures.maxWinnersPerContest} creators per contest (Leaderboard)</span>
-                        </div>
-                      )}
-                      {/* Show CPM info for CPM contests */}
-                      {contestType === 'cpm' && (
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 bg-white rounded-full"></div>
-                          <span>Performance-based rewards - no winner limits (CPM)</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <span>Start campaigns from just {formatCurrencyFromCents(planFeatures.minContestBudget)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-white rounded-full"></div>
-                        <span>Only {planFeatures.commissionPercentage}% platform fee on your budget</span>
-                      </div>
+
+                    {/* Background Pattern */}
+                    <div className="absolute inset-0 opacity-10">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -translate-y-16 translate-x-16"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full translate-y-12 -translate-x-12"></div>
                     </div>
 
-                    {/* Upgrade CTA for lower tier plans */}
-                    {(currentPlan.price === 0 || planFeatures.commissionPercentage >= 20) && (
-                      <div className="mt-6 pt-6 border-t border-white/20">
-                        <div className="flex items-start justify-between gap-6">
-                          <div className="flex-1 min-w-0">
-                            <h5 className="text-sm font-semibold mb-2">
-                              {currentPlan.price === 0 ? "Ready to unlock more potential?" : "Want better rates and more features?"}
-                            </h5>
-                            <p className="text-xs opacity-90 leading-relaxed pr-4">
-                              {currentPlan.price === 0 ? "Upgrade to reduce commission and get more winners" : "Higher plans offer lower commission rates and more flexibility"}
-                            </p>
+                    <div className="relative z-10">
+                      {/* Header */}
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
+                          <Trophy className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold">
+                            {currentPlan.price === 0
+                              ? `${currentPlan.name} Plan`
+                              : `${currentPlan.name} Plan`
+                            }
+                          </h4>
+                          <p className="text-sm opacity-90 font-medium">
+                            {currentPlan.price === 0
+                              ? "Get started for free, then upgrade!"
+                              : "Your current plan benefits"
+                            }
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Features Grid */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+                        <div className="flex items-start gap-3 group">
+                          <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
+                          <div>
+                            <span className="text-sm font-medium">Launch up to {planFeatures.maxActiveContests === Infinity ? 'unlimited' : planFeatures.maxActiveContests} simultaneous campaigns</span>
                           </div>
-                          <div className="flex-shrink-0">
-                            <Button
-                              asChild
-                              size="sm"
-                              className="bg-white text-gray-900 hover:bg-gray-100 font-semibold shadow-lg border border-gray-200"
-                            >
-                              <Link href="/pricing">Upgrade Plan</Link>
-                            </Button>
+                        </div>
+
+                        {/* Only show winner limit for leaderboard contests */}
+                        {contestType === 'leaderboard' && (
+                          <div className="flex items-start gap-3 group">
+                            <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
+                            <div>
+                              <span className="text-sm font-medium">Reward up to {planFeatures.maxWinnersPerContest === Infinity ? 'unlimited' : planFeatures.maxWinnersPerContest} creators per contest</span>
+                              <span className="text-xs opacity-75 block">(Leaderboard)</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Show CPM info for CPM contests */}
+                        {contestType === 'cpm' && (
+                          <div className="flex items-start gap-3 group">
+                            <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
+                            <div>
+                              <span className="text-sm font-medium">Performance-based rewards</span>
+                              <span className="text-xs opacity-75 block">(No winner limits - CPM)</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-start gap-3 group">
+                          <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
+                          <div>
+                            <span className="text-sm font-medium">Start campaigns from just {formatCurrencyFromCents(planFeatures.minContestBudget)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-3 group">
+                          <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
+                          <div>
+                            <span className="text-sm font-medium">Only {planFeatures.commissionPercentage}% platform fee</span>
+                            <span className="text-xs opacity-75 block">on your budget</span>
                           </div>
                         </div>
                       </div>
-                    )}
+
+                      {/* Enhanced Upgrade CTA for lower tier plans */}
+                      {(currentPlan.price === 0 || planFeatures.commissionPercentage >= 20) && (
+                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                          <div className="flex items-start justify-between gap-6">
+                            <div className="flex-1 min-w-0">
+                              <h5 className="text-base font-bold mb-2">
+                                {currentPlan.price === 0 ? "Ready to unlock more potential?" : "Want better rates and more features?"}
+                              </h5>
+                              <p className="text-sm opacity-90 leading-relaxed pr-4">
+                                {currentPlan.price === 0 ? "Upgrade to reduce commission and get more winners" : "Higher plans offer lower commission rates and more flexibility"}
+                              </p>
+                            </div>
+                            <div className="flex-shrink-0">
+                              <Button
+                                size="sm"
+                                className="bg-white text-gray-900 hover:bg-gray-50 font-bold shadow-xl border-0 px-6 py-3 rounded-xl transition-all duration-200 hover:scale-105"
+                                onClick={() => setShowUpgradeModal(true)}
+                              >
+                                Upgrade Plan
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -2793,7 +2787,6 @@ export default function CreateContestPage({
                           handleWinnerAmountChange(i, e.target.value) // Expects dollars
                         }
                         min={MIN_PRIZE_PER_WINNER / 100}
-                        max={MAX_PRIZE_PER_WINNER / 100}
                         className="w-48"
                       />
                       <div className="text-sm text-gray-500">
@@ -2872,11 +2865,6 @@ export default function CreateContestPage({
                     onChange={(e) => {
                       const newBudgetString = e.target.value;
                       setTotalBudget(newBudgetString); // Keep as string for input
-                      const newBudgetNumber = parseFloat(newBudgetString);
-                      if (!isNaN(newBudgetNumber) && newBudgetNumber > HIGH_BUDGET_THRESHOLD && !hasExceededBudgetThreshold) {
-                        setShowHighBudgetPrompt(true);
-                        setHasExceededBudgetThreshold(true);
-                      }
                     }}
                     placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                     min="1"
@@ -3132,6 +3120,34 @@ export default function CreateContestPage({
     }
   };
 
+  // Upgrade modal handlers
+  const handleSaveDraftAndUpgrade = async () => {
+    setShowUpgradeModal(false);
+    try {
+      // Save current progress as draft first
+      await handleSaveDraft();
+      // Then redirect to pricing page
+      router.push("/pricing");
+    } catch (error) {
+      console.error("Error saving draft before upgrade:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save draft. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpgradeWithoutSaving = () => {
+    setShowUpgradeModal(false);
+    // Direct redirect to pricing page without saving
+    router.push("/pricing");
+  };
+
+  const handleCancelUpgrade = () => {
+    setShowUpgradeModal(false);
+  };
+
   // Custom Back Modal component
   const BackModal = () => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -3142,6 +3158,45 @@ export default function CreateContestPage({
           <Button variant="outline" onClick={() => setShowBackModal(false)} disabled={isDeleting}>Cancel</Button>
           <Button variant="destructive" onClick={handleDeleteAndBack} disabled={isDeleting}>{isDeleting ? 'Deleting...' : 'Delete'}</Button>
           <Button onClick={handleSaveDraftAndBack} disabled={isDeleting}>Save as Draft</Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Upgrade Modal component
+  const UpgradeModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+            <Trophy className="h-5 w-5 text-white" />
+          </div>
+          <h2 className="text-xl font-bold">Upgrade Your Plan</h2>
+        </div>
+        <p className="mb-6 text-gray-600">
+          You have unsaved contest data. Would you like to save your progress before upgrading your plan?
+        </p>
+        <div className="space-y-3">
+          <Button
+            onClick={handleSaveDraftAndUpgrade}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
+          >
+            Save Draft & Upgrade
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleUpgradeWithoutSaving}
+            className="w-full border-2 hover:bg-gray-50"
+          >
+            Upgrade without saving draft
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={handleCancelUpgrade}
+            className="w-full text-gray-600 hover:text-gray-800"
+          >
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
@@ -4119,8 +4174,7 @@ export default function CreateContestPage({
         </div>
       )}
 
-      {/* High Budget Prompt Modal */}
-      <HighBudgetPromptModal />
+
 
       {/* Floating Error Alert */}
       {toastErrorMessage && (
@@ -4128,6 +4182,9 @@ export default function CreateContestPage({
       )}
       {/* Render BackModal if needed */}
       {showBackModal && <BackModal />}
+
+      {/* Render UpgradeModal if needed */}
+      {showUpgradeModal && <UpgradeModal />}
     </div>
   );
 }

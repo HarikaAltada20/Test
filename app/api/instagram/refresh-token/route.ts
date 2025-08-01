@@ -63,7 +63,12 @@ export async function POST(request: NextRequest) {
         }
 
         console.log('Instagram long-lived token refreshed successfully for user:', user.id);
-        return NextResponse.json({ success: true, message: 'Instagram token refreshed successfully.', new_expiry: newActualTokenExpiry });
+        return NextResponse.json({ 
+            success: true, 
+            message: 'Instagram token refreshed successfully.', 
+            instagramAccount: updatedInstagramAccountData,
+            new_expiry: newActualTokenExpiry 
+        });
 
     } catch (err: any) {
         console.error('Error during Instagram token refresh process:', err);
