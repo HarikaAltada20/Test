@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { createClient as createAdminSupabaseClient } from '@supabase/supabase-js';
-import { METRICS_REFRESH_COOLDOWN_MS } from '@/lib/constants';
+import { METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES, METRICS_REFRESH_COOLDOWN_MS_OWNER } from '@/lib/constants';
+import { verifyAdminAccess } from '@/utils/admin-auth';
 
 export async function POST(
   request: Request,
@@ -29,29 +30,39 @@ export async function POST(
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
     }
 
-    // Check if user has access (either owns the contest or is viewing opportunities)
+    // Check if user has access (either owns the contest, is admin, or is viewing opportunities)
     const { data: { user: authUser } } = await supabase.auth.getUser();
     const isOwner = contest.advertiser_id === authUser?.id;
     
+    // Check if user is admin
+    const { isAdmin } = await verifyAdminAccess();
+    
     // For opportunities side, we'll allow any authenticated user to refresh
-    // For owner side, we'll check ownership
+    // For owner side, we'll check ownership or admin status
     const isOpportunitiesRefresh = request.headers.get('x-refresh-source') === 'opportunities';
     
-    if (!isOpportunitiesRefresh && !isOwner) {
+    if (!isOpportunitiesRefresh && !isOwner && !isAdmin) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
+
+    // Determine cooldown period based on user type
+    const cooldownMs = isOpportunitiesRefresh 
+      ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES  // 60 minutes for creators
+      : METRICS_REFRESH_COOLDOWN_MS_OWNER;         // 3 minutes for brands/admins/owners
 
     // Database-based rate limiting using last_metrics_updated
     if (contest.last_metrics_updated) {
       const lastUpdate = new Date(contest.last_metrics_updated);
       const timeSinceLastUpdate = now.getTime() - lastUpdate.getTime();
       
-      if (timeSinceLastUpdate < METRICS_REFRESH_COOLDOWN_MS) {
-        const remainingMs = METRICS_REFRESH_COOLDOWN_MS - timeSinceLastUpdate;
+      if (timeSinceLastUpdate < cooldownMs) {
+        const remainingMs = cooldownMs - timeSinceLastUpdate;
         const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
+        const userType = isOpportunitiesRefresh ? 'creators' : (isAdmin ? 'admins' : 'brands/owners');
         return NextResponse.json({ 
           error: `Metrics were updated ${Math.floor(timeSinceLastUpdate / 1000 / 60)} minutes ago. Please wait ${remainingMinutes} more minutes before refreshing again.`,
-          nextRefreshAvailable: new Date(lastUpdate.getTime() + METRICS_REFRESH_COOLDOWN_MS).toISOString()
+          nextRefreshAvailable: new Date(lastUpdate.getTime() + cooldownMs).toISOString(),
+          userType
         }, { status: 429 });
       }
     }
@@ -133,7 +144,7 @@ export async function POST(
       contestId,
       contestTitle: contest.title,
       platform: contest.platform,
-      nextRefreshAvailable: new Date(now.getTime() + METRICS_REFRESH_COOLDOWN_MS).toISOString(),
+      nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
       timeSinceLastUpdate: contest.last_metrics_updated ? 
         Math.floor((now.getTime() - new Date(contest.last_metrics_updated).getTime()) / 1000 / 60) : null,
       lastMetricsUpdated: currentTime,

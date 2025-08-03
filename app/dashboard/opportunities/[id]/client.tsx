@@ -38,7 +38,7 @@ import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsL
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/utils/supabase/client";
-import { getMetricsRefreshCooldownInfo, formatRemainingTime } from "@/lib/constants";
+import { getMetricsRefreshCooldownInfoOpportunities, formatRemainingTime } from "@/lib/constants";
 import type { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -1585,7 +1585,7 @@ export function ContestClientPage({
 
                   {/* Refresh Metrics Button - Only show for active contests with submissions */}
                   {contest?.status === 'active' && totalLeaderboardEntries > 0 && (() => {
-                    const cooldownInfo = getMetricsRefreshCooldownInfo(contest?.last_metrics_updated);
+                    const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(contest?.last_metrics_updated);
 
                     return (
                       <Button

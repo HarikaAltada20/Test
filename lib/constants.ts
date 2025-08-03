@@ -3,23 +3,25 @@
 // ============================================================================
 
 /**
- * Cooldown period for metrics refresh functionality
- * This value is used across the entire application for consistent behavior
+ * Cooldown periods for metrics refresh functionality
+ * Different cooldowns for different user types to balance UX and security
  */
-export const METRICS_REFRESH_COOLDOWN_MINUTES = 60; // Can be easily changed (60, 30, 90, etc.)
+export const METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES = 60; // For creators viewing opportunities
+export const METRICS_REFRESH_COOLDOWN_MINUTES_OWNER = 3; // For brands/advertisers and admins
 
 /**
  * Cooldown period in milliseconds (derived from minutes)
  * Used by client-side components for timing calculations
  */
-export const METRICS_REFRESH_COOLDOWN_MS = METRICS_REFRESH_COOLDOWN_MINUTES * 60 * 1000;
+export const METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES = METRICS_REFRESH_COOLDOWN_MINUTES_OPPORTUNITIES * 60 * 1000;
+export const METRICS_REFRESH_COOLDOWN_MS_OWNER = METRICS_REFRESH_COOLDOWN_MINUTES_OWNER * 60 * 1000;
 
 /**
- * Helper function to get remaining cooldown time
+ * Helper function to get remaining cooldown time for opportunities (creators)
  * @param lastUpdateTimestamp - The last_metrics_updated timestamp
  * @returns Object with canRefresh boolean and remainingMs number
  */
-export function getMetricsRefreshCooldownInfo(lastUpdateTimestamp: string | null | undefined) {
+export function getMetricsRefreshCooldownInfoOpportunities(lastUpdateTimestamp: string | null | undefined) {
   if (!lastUpdateTimestamp) {
     return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
   }
@@ -28,8 +30,29 @@ export function getMetricsRefreshCooldownInfo(lastUpdateTimestamp: string | null
   const now = new Date();
   const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
   
-  const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS;
-  const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS - timeSinceUpdate);
+  const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES;
+  const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES - timeSinceUpdate);
+  const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
+
+  return { canRefresh, remainingMs, remainingMinutes };
+}
+
+/**
+ * Helper function to get remaining cooldown time for owners (brands/admins)
+ * @param lastUpdateTimestamp - The last_metrics_updated timestamp
+ * @returns Object with canRefresh boolean and remainingMs number
+ */
+export function getMetricsRefreshCooldownInfoOwner(lastUpdateTimestamp: string | null | undefined) {
+  if (!lastUpdateTimestamp) {
+    return { canRefresh: true, remainingMs: 0, remainingMinutes: 0 };
+  }
+
+  const lastUpdate = new Date(lastUpdateTimestamp);
+  const now = new Date();
+  const timeSinceUpdate = now.getTime() - lastUpdate.getTime();
+  
+  const canRefresh = timeSinceUpdate >= METRICS_REFRESH_COOLDOWN_MS_OWNER;
+  const remainingMs = Math.max(0, METRICS_REFRESH_COOLDOWN_MS_OWNER - timeSinceUpdate);
   const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
 
   return { canRefresh, remainingMs, remainingMinutes };
@@ -58,6 +81,15 @@ export function formatRemainingTime(remainingMs: number): string {
     }
   }
 } 
+
+/**
+ * Backward compatibility function - redirects to opportunities cooldown
+ * @deprecated Use getMetricsRefreshCooldownInfoOpportunities or getMetricsRefreshCooldownInfoOwner instead
+ */
+export function getMetricsRefreshCooldownInfo(lastUpdateTimestamp: string | null | undefined) {
+  console.warn('getMetricsRefreshCooldownInfo is deprecated. Use getMetricsRefreshCooldownInfoOpportunities or getMetricsRefreshCooldownInfoOwner instead.');
+  return getMetricsRefreshCooldownInfoOpportunities(lastUpdateTimestamp);
+}
 
 // Taglines for home page hero section (rotating below main heading)
 export const HERO_TAGLINES = [

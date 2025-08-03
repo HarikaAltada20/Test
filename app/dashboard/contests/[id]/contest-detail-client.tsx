@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
-import { getMetricsRefreshCooldownInfo, formatRemainingTime } from "@/lib/constants";
+import { getMetricsRefreshCooldownInfoOwner, formatRemainingTime } from "@/lib/constants";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest"; 
@@ -176,7 +176,7 @@ export default function ContestDetailClient({
     const [pendingPaymentSubmission, setPendingPaymentSubmission] = useState<string | null>(null);
     const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'paid'>('all');
 
-    const cooldownInfo = getMetricsRefreshCooldownInfo(currentContest.last_metrics_updated);
+    const cooldownInfo = getMetricsRefreshCooldownInfoOwner(currentContest.last_metrics_updated);
 
     // Filter submissions based on active tab
     const filteredSubmissions = currentSubmissions.filter(submission => {
@@ -612,27 +612,6 @@ export default function ContestDetailClient({
             <div className="space-y-6 mb-8">
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-end gap-2 mb-6">
-                    {(currentContest.moderation_status === 'published' && (currentContest.status === 'active' || currentContest.status === 'ended')) && currentSubmissions && currentSubmissions.length > 0 && (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className={`shadow-sm ${cooldownInfo.canRefresh && !isRefreshingMetrics
-                                ? 'border-green-200 text-green-700 hover:bg-green-50'
-                                : 'border-gray-200 text-gray-500 cursor-not-allowed'
-                                }`}
-                            onClick={handleRefreshMetrics}
-                            disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                            title={!cooldownInfo.canRefresh ? `Please wait ${cooldownInfo.remainingMinutes} more minute${cooldownInfo.remainingMinutes !== 1 ? 's' : ''}` : undefined}
-                        >
-                            {isRefreshingMetrics ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                                <RefreshCw className="mr-2 h-4 w-4" />
-                            )}
-                            {isRefreshingMetrics ? 'Updating...' :
-                                !cooldownInfo.canRefresh ? `Wait ${cooldownInfo.remainingMinutes}m` : 'Refresh Metrics'}
-                        </Button>
-                    )}
 
                     {/* Contest Status Update Button */}
                     {canUpdateContestStatus() && (
@@ -1399,20 +1378,27 @@ export default function ContestDetailClient({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={handleRefreshMetrics}
-                                                    disabled={isRefreshingMetrics}
-                                                    className="flex items-center gap-2 border-slate-200 hover:bg-slate-50"
-                                                >
-                                                    {isRefreshingMetrics ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                    ) : (
-                                                        <RefreshCw className="h-4 w-4" />
-                                                    )}
-                                                    Refresh Metrics
-                                                </Button>
+                                                {(currentContest.moderation_status === 'published' && (currentContest.status === 'active' || currentContest.status === 'ended')) && currentSubmissions && currentSubmissions.length > 0 && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={handleRefreshMetrics}
+                                                        disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
+                                                        className={`flex items-center gap-2 shadow-sm ${cooldownInfo.canRefresh && !isRefreshingMetrics
+                                                            ? 'border-green-200 text-green-700 hover:bg-green-50'
+                                                            : 'border-gray-200 text-gray-500 cursor-not-allowed'
+                                                            }`}
+                                                        title={!cooldownInfo.canRefresh ? `Please wait ${cooldownInfo.remainingMinutes} more minute${cooldownInfo.remainingMinutes !== 1 ? 's' : ''}` : undefined}
+                                                    >
+                                                        {isRefreshingMetrics ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <RefreshCw className="h-4 w-4" />
+                                                        )}
+                                                        {isRefreshingMetrics ? 'Updating...' :
+                                                            !cooldownInfo.canRefresh ? `Wait ${cooldownInfo.remainingMinutes}m` : 'Refresh Metrics'}
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     </CardContent>
