@@ -77,7 +77,7 @@ const PREDEFINED_REASONS = [
 interface RejectionReasonModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (reason: string) => void;
+    onConfirm: (reason: string, additionalNotes?: string) => void;
     isLoading?: boolean;
 }
 
@@ -89,17 +89,19 @@ export default function RejectionReasonModal({
 }: RejectionReasonModalProps) {
     const [selectedReason, setSelectedReason] = useState<string>('');
     const [customReason, setCustomReason] = useState<string>('');
+    const [additionalNotes, setAdditionalNotes] = useState<string>('');
 
     const handleConfirm = () => {
         const finalReason = selectedReason === 'other' ? customReason : selectedReason;
         if (finalReason.trim()) {
-            onConfirm(finalReason);
+            onConfirm(finalReason, additionalNotes.trim() || undefined);
         }
     };
 
     const handleClose = () => {
         setSelectedReason('');
         setCustomReason('');
+        setAdditionalNotes('');
         onClose();
     };
 
@@ -272,6 +274,35 @@ export default function RejectionReasonModal({
                                     </AlertDescription>
                                 </Alert>
                             )}
+                        </div>
+                    )}
+
+                    {/* Additional Notes (Optional) */}
+                    {selectedReason && selectedReason !== 'other' && (
+                        <div className="space-y-3">
+                            <Label htmlFor="additional-notes" className="text-sm font-medium">
+                                Additional Notes (Optional)
+                            </Label>
+                            <div className="relative">
+                                <Textarea
+                                    id="additional-notes"
+                                    placeholder="Add any additional context, specific feedback, or suggestions for improvement..."
+                                    value={additionalNotes}
+                                    onChange={(e) => setAdditionalNotes(e.target.value)}
+                                    rows={3}
+                                    className="resize-none pr-12"
+                                    maxLength={300}
+                                />
+                                <div className="absolute bottom-2 right-2 text-xs text-muted-foreground">
+                                    {additionalNotes.length}/300
+                                </div>
+                            </div>
+                            <div className="flex items-start gap-2">
+                                <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <p className="text-xs text-muted-foreground">
+                                    Optional: Provide specific feedback, suggestions, or additional context that might help the creator improve their future submissions.
+                                </p>
+                            </div>
                         </div>
                     )}
 

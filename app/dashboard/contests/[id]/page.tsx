@@ -73,6 +73,7 @@ export default async function ContestDetailPage({
       content_link,
       status,
       views, 
+      earnings,
       other_stats,
       platform,
       video_thumbnail_url,
@@ -163,6 +164,7 @@ export default async function ContestDetailPage({
 
   const submissions = submissionsData
     ? submissionsData.map((sub: any) => {
+      let creatorDisplayName: string | null = null;
       let creatorUsername: string | null = null;
       let creatorAvatarUrl: string | null = null;
       const actualCreatorProfileId: string | null = sub.creator_id;
@@ -176,10 +178,12 @@ export default async function ContestDetailPage({
         try {
           if (platform?.includes('youtube') && creatorProfile.youtube_account) {
             const ytAccount = typeof creatorProfile.youtube_account === 'string' ? JSON.parse(creatorProfile.youtube_account) : creatorProfile.youtube_account;
-            creatorUsername = ytAccount?.channel_title;
+            creatorDisplayName = ytAccount?.channel_title;
+            creatorUsername = ytAccount?.channel_custom_url || ytAccount?.channel_id;
             creatorAvatarUrl = ytAccount?.channel_thumbnail;
           } else if (platform?.includes('instagram') && creatorProfile.instagram_account) {
             const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
+            creatorDisplayName = igAccount?.full_name || igAccount?.display_name;
             creatorUsername = igAccount?.username;
             creatorAvatarUrl = igAccount?.profile_picture_url;
           }
@@ -189,12 +193,15 @@ export default async function ContestDetailPage({
         }
 
         // Fallback if platform-specific data extraction failed or platform is different
+        if (!creatorDisplayName && creatorProfile.username) creatorDisplayName = creatorProfile.username; // Generic username if exists
         if (!creatorUsername && creatorProfile.username) creatorUsername = creatorProfile.username; // Generic username if exists
         if (!creatorAvatarUrl && creatorProfile.avatar_url) creatorAvatarUrl = creatorProfile.avatar_url; // Generic avatar if exists
+        if (!creatorDisplayName) creatorDisplayName = 'N/A'; // Final fallback
         if (!creatorUsername) creatorUsername = 'N/A'; // Final fallback
 
       } else {
-        creatorUsername = 'Unknown Creator'; // Fallback if no creator_profile found
+        creatorDisplayName = 'Unknown Creator'; // Fallback if no creator_profile found
+        creatorUsername = 'N/A';
       }
 
       return {
@@ -203,9 +210,11 @@ export default async function ContestDetailPage({
         content_link: sub.content_link,
         status: sub.status,
         views: sub.views,
+        earnings: sub.earnings,
         other_stats: sub.other_stats,
         platform: sub.platform,
         video_thumbnail_url: sub.video_thumbnail_url,
+        creator_display_name: creatorDisplayName,
         creator_username: creatorUsername,
         creator_avatar_url: creatorAvatarUrl,
         creator_id: actualCreatorProfileId

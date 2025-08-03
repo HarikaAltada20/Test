@@ -3,11 +3,10 @@ create table public.submissions (
   contest_id uuid null,
   creator_id uuid null,
   content_link text null,
-  views integer null default 0,
+  views bigint null,
   description text null,
   other_stats jsonb null,
   created_at timestamp with time zone not null default now(),
-  earnings numeric null default NULL,
   video_id text null,
   video_title text null,
   video_thumbnail_url text null,
@@ -15,16 +14,17 @@ create table public.submissions (
   platform text null,
   last_insights_update timestamp with time zone null,
   status public.submission_status_enum null default 'pending'::submission_status_enum,
+  earnings bigint null,
   constraint submissions_pkey primary key (id),
   constraint submissions_contest_id_fkey foreign KEY (contest_id) references contests (id),
   constraint submissions_creator_id_fkey foreign KEY (creator_id) references users (id)
 ) TABLESPACE pg_default;
 
+create index IF not exists idx_submissions_views_created_at on public.submissions using btree (views desc, created_at) TABLESPACE pg_default;
+
 create index IF not exists idx_submissions_contest_id on public.submissions using btree (contest_id) TABLESPACE pg_default;
 
 create index IF not exists idx_submissions_creator_id_contest_id on public.submissions using btree (creator_id, contest_id) TABLESPACE pg_default;
-
-create index IF not exists idx_submissions_views_created_at on public.submissions using btree (views desc, created_at) TABLESPACE pg_default;
 
 create trigger on_new_submission_increment_count
 after INSERT on submissions for EACH row

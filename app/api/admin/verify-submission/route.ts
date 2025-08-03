@@ -7,14 +7,14 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   
   try {
-    const { submissionId, action, reason } = await request.json();
+    const { submissionId, action, reason, paymentDetails } = await request.json();
     
     if (!submissionId || !action) {
       return NextResponse.json({ error: 'Submission ID and action are required' }, { status: 400 });
     }
 
-    if (!['verified', 'rejected', 'pending'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid action. Must be verified, rejected, or pending' }, { status: 400 });
+    if (!['verified', 'rejected', 'pending', 'paid'].includes(action)) {
+      return NextResponse.json({ error: 'Invalid action. Must be verified, rejected, pending, or paid' }, { status: 400 });
     }
 
     // Verify admin access first
@@ -94,11 +94,50 @@ export async function POST(request: Request) {
       status: action,
     };
 
-    // Use the description column to store rejection reason if rejecting
+    // Use the metadata column to store structured metadata as JSON
     if (action === 'rejected' && reason) {
-      updateData.description = reason;
-    } else if (action !== 'rejected') {
-      updateData.description = null; // Clear description if not rejecting
+      // Parse reason and additional notes if they exist
+      const reasonParts = reason.split('\n\nAdditional Notes:');
+      const mainReason = reasonParts[0].trim();
+      const additionalNotes = reasonParts[1] ? reasonParts[1].trim() : null;
+      
+      // Map predefined reason values to their human-readable labels
+      const PREDEFINED_REASONS = {
+        'content_guidelines': 'Content Guidelines Violation',
+        'quality_standards': 'Quality Standards Not Met',
+        'brand_guidelines': 'Brand Guidelines Violation',
+        'inappropriate_content': 'Inappropriate Content',
+        'copyright_issues': 'Copyright Issues',
+        'technical_issues': 'Technical Issues',
+        'off_topic': 'Off Topic',
+        'duplicate_content': 'Duplicate Content',
+        'incomplete_submission': 'Incomplete Submission',
+        'other': 'Other Reason'
+      };
+      
+      // Use the human-readable label if it's a predefined reason, otherwise use as-is
+      const displayReason = PREDEFINED_REASONS[mainReason as keyof typeof PREDEFINED_REASONS] || mainReason;
+      
+      // Store rejection metadata
+      updateData.metadata = {
+        type: 'rejection',
+        reason: displayReason,
+        additionalNotes: additionalNotes,
+        timestamp: new Date().toISOString(),
+        updatedBy: currentUserId
+      };
+    } else if (action === 'paid' && paymentDetails) {
+      // Store payment metadata
+      updateData.metadata = {
+        type: 'payment',
+        paymentProofUrl: paymentDetails.paymentProofUrl || null,
+        paymentDescription: paymentDetails.paymentDescription || null,
+        timestamp: new Date().toISOString(),
+        updatedBy: currentUserId
+      };
+    } else if (action === 'verified' || action === 'pending') {
+      // Clear metadata for verified/pending status
+      updateData.metadata = null;
     }
 
     // Use admin client to bypass RLS for the update operation
@@ -192,8 +231,8 @@ export async function GET(request: Request) {
         platform,
         views,
         earnings,
-        status,
-        description,
+                 status,
+         metadata,
         created_at,
         contests!inner(
           title,

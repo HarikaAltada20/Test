@@ -52,8 +52,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
-import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import RejectionReasonModal from "@/components/RejectionReasonModal";
+import PaymentModal from "@/components/PaymentModal";
 import {
     ArrowLeft,
     Calendar,
@@ -130,9 +131,11 @@ interface Submission {
     other_stats: Record<string, any> | null;
     platform: string | null;
     video_thumbnail_url: string | null;
+    creator_display_name: string | null;
     creator_username: string | null;
     creator_avatar_url: string | null;
     creator_id: string | null;
+    earnings?: number | null; // Added for earnings display
 }
 // --- End Local Type Definitions ---
 
@@ -169,8 +172,17 @@ export default function ContestDetailClient({
     // Rejection modal state
     const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
     const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<string | null>(null);
+    const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+    const [pendingPaymentSubmission, setPendingPaymentSubmission] = useState<string | null>(null);
+    const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'paid'>('all');
 
     const cooldownInfo = getMetricsRefreshCooldownInfo(currentContest.last_metrics_updated);
+
+    // Filter submissions based on active tab
+    const filteredSubmissions = currentSubmissions.filter(submission => {
+        if (activeStatusTab === 'all') return true;
+        return submission.status === activeStatusTab;
+    });
 
     useEffect(() => {
         setCurrentSubmissions(initialSubmissions || []);
@@ -233,7 +245,7 @@ export default function ContestDetailClient({
         }
     };
 
-    const handleUpdateSubmissionStatus = async (submissionId: string, newStatus: Submission['status'], reason?: string) => {
+    const handleUpdateSubmissionStatus = async (submissionId: string, newStatus: Submission['status'], reason?: string, paymentDetails?: { paymentProofUrl: string; paymentDescription: string }) => {
         setIsLoadingSubmission(prev => ({ ...prev, [submissionId]: true }));
         try {
             const response = await fetch('/api/admin/verify-submission', {
@@ -245,6 +257,7 @@ export default function ContestDetailClient({
                     submissionId,
                     action: newStatus,
                     reason: reason || null,
+                    paymentDetails: paymentDetails || null,
                 }),
             });
 
@@ -284,11 +297,26 @@ export default function ContestDetailClient({
         setRejectionModalOpen(true);
     };
 
-    const handleRejectionConfirm = (reason: string) => {
+    const handleRejectionConfirm = (reason: string, additionalNotes?: string) => {
         if (pendingRejectionSubmission) {
-            handleUpdateSubmissionStatus(pendingRejectionSubmission, 'rejected', reason);
+            // Combine reason with additional notes if provided
+            const fullReason = additionalNotes ? `${reason}\n\nAdditional Notes: ${additionalNotes}` : reason;
+            handleUpdateSubmissionStatus(pendingRejectionSubmission, 'rejected', fullReason);
             setRejectionModalOpen(false);
             setPendingRejectionSubmission(null);
+        }
+    };
+
+    const handleMarkAsPaid = (submissionId: string) => {
+        setPendingPaymentSubmission(submissionId);
+        setPaymentModalOpen(true);
+    };
+
+    const handlePaymentConfirm = (paymentDetails: { paymentProofUrl: string; paymentDescription: string }) => {
+        if (pendingPaymentSubmission) {
+            handleUpdateSubmissionStatus(pendingPaymentSubmission, 'paid', undefined, paymentDetails);
+            setPaymentModalOpen(false);
+            setPendingPaymentSubmission(null);
         }
     };
 
@@ -1346,184 +1374,481 @@ export default function ContestDetailClient({
 
                     <TabsContent value="submissions" className="mt-6">
                         {currentSubmissions.length > 0 ? (
-                            <Card className="shadow-sm">
-                                <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
-                                    <CardTitle className="flex items-center gap-2 text-gray-800">
-                                        <Trophy className="h-5 w-5 text-amber-500" />
-                                        Submissions Leaderboard ({currentSubmissions.length})
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="p-0">
-                                    <div className="overflow-auto">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow className="bg-gray-50 hover:bg-gray-50">
-                                                    <TableHead className="w-12">#</TableHead>
-                                                    <TableHead>Creator</TableHead>
-                                                    <TableHead>Platform</TableHead>
-                                                    <TableHead className="text-center">Views</TableHead>
-                                                    <TableHead className="text-center">Likes</TableHead>
-                                                    <TableHead className="text-center">Comments</TableHead>
-                                                    {/* Dynamic headers based on contest platform */}
-                                                    {currentContest.platform?.toLowerCase().includes('instagram') && (
-                                                        <>
-                                                            <TableHead className="text-center">Shares</TableHead>
-                                                            <TableHead className="text-center">Saves</TableHead>
-                                                            <TableHead className="text-center">Reach</TableHead>
-                                                            <TableHead className="text-center">Interactions</TableHead>
-                                                            {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
-                                                        </>
+                            <div className="space-y-6">
+                                {/* Enhanced Header Section */}
+                                <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900/20">
+                                    <CardContent className="p-6">
+                                        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="p-3 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl shadow-lg">
+                                                    <Trophy className="h-6 w-6 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                                                        Submissions Leaderboard
+                                                    </h2>
+                                                    <div className="flex items-center gap-3 mt-1">
+                                                        <Badge variant="secondary" className="px-3 py-1">
+                                                            {filteredSubmissions.length} submission{filteredSubmissions.length !== 1 ? 's' : ''}
+                                                        </Badge>
+                                                        <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                                                            <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                                                            {currentContest.platform}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={handleRefreshMetrics}
+                                                    disabled={isRefreshingMetrics}
+                                                    className="flex items-center gap-2 border-slate-200 hover:bg-slate-50"
+                                                >
+                                                    {isRefreshingMetrics ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                    ) : (
+                                                        <RefreshCw className="h-4 w-4" />
                                                     )}
-                                                    <TableHead className="text-center">Status</TableHead>
-                                                    <TableHead className="text-center">Submitted</TableHead>
-                                                    <TableHead className="text-center">Actions</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {currentSubmissions
-                                                    .sort((a, b) => (b.views || 0) - (a.views || 0)) // Sort by views descending
-                                                    .map((submission, index) => {
-                                                        const metrics = extractPlatformMetrics(submission);
-                                                        const submissionStatus = getSubmissionStatusBadge(submission.status);
-                                                        const isLoading = isLoadingSubmission[submission.id] || false;
-                                                        const rank = index + 1;
+                                                    Refresh Metrics
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
 
-                                                        return (
-                                                            <TableRow key={submission.id} className={cn(
-                                                                "hover:bg-slate-50 dark:hover:bg-slate-800/50",
-                                                                rank <= 3 && "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10"
-                                                            )}>
-                                                                <TableCell className="font-bold text-center">
-                                                                    <div className="flex items-center justify-center">
-                                                                        {rank <= 3 && <Trophy className={cn("h-4 w-4 mr-1",
-                                                                            rank === 1 ? "text-yellow-500" :
-                                                                                rank === 2 ? "text-gray-400" :
-                                                                                    "text-amber-600")} />}
-                                                                        {rank}
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex items-center gap-3">
-                                                                        <Avatar className="h-10 w-10 border">
-                                                                            <AvatarImage src={submission.creator_avatar_url || undefined} alt={submission.creator_username || "Creator"} />
-                                                                            <AvatarFallback className="text-xs">{submission.creator_username?.charAt(0).toUpperCase() || "C"}</AvatarFallback>
-                                                                        </Avatar>
-                                                                        <div>
-                                                                            <p className="font-medium text-sm">{submission.creator_username || "Unknown Creator"}</p>
-                                                                            {submission.video_thumbnail_url && (
-                                                                                <a href={submission.content_link} target="_blank" rel="noopener noreferrer"
-                                                                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                                                                                    <PlayCircle className="h-3 w-3" />
-                                                                                    View Content
-                                                                                </a>
-                                                                            )}
+                                {/* Enhanced Status Filter Tabs */}
+                                <Card className="shadow-sm">
+                                    <CardContent className="p-4">
+                                        <Tabs value={activeStatusTab} onValueChange={(value) => setActiveStatusTab(value as any)} className="w-full">
+                                            <TabsList className="flex w-full h-auto p-1 bg-slate-100 rounded-lg">
+                                                <TabsTrigger
+                                                    value="all"
+                                                    className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <Users className="h-3 w-3" />
+                                                        <span className="text-xs font-medium">All</span>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                                                    >
+                                                        {currentSubmissions.length}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="pending"
+                                                    className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <Clock className="h-3 w-3" />
+                                                        <span className="text-xs font-medium">Pending</span>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                                                    >
+                                                        {currentSubmissions.filter(s => s.status === 'pending').length}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="verified"
+                                                    className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                        <span className="text-xs font-medium">Verified</span>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                                                    >
+                                                        {currentSubmissions.filter(s => s.status === 'verified').length}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="rejected"
+                                                    className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <XCircle className="h-3 w-3" />
+                                                        <span className="text-xs font-medium">Rejected</span>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                                                    >
+                                                        {currentSubmissions.filter(s => s.status === 'rejected').length}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                                <TabsTrigger
+                                                    value="paid"
+                                                    className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <Wallet className="h-3 w-3" />
+                                                        <span className="text-xs font-medium">Paid</span>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                                                    >
+                                                        {currentSubmissions.filter(s => s.status === 'paid').length}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                            </TabsList>
+                                        </Tabs>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Enhanced Submissions Table */}
+                                <Card className="shadow-sm">
+                                    <CardContent className="p-0">
+                                        <div className="overflow-auto">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
+                                                        <TableHead className="w-12">#</TableHead>
+                                                        <TableHead>Creator</TableHead>
+                                                        <TableHead className="text-center">Views</TableHead>
+                                                        <TableHead className="text-center">Likes</TableHead>
+                                                        <TableHead className="text-center">Comments</TableHead>
+                                                        {/* Dynamic headers based on contest platform */}
+                                                        {currentContest.platform?.toLowerCase().includes('instagram') && (
+                                                            <>
+                                                                <TableHead className="text-center">Shares</TableHead>
+                                                                <TableHead className="text-center">Saves</TableHead>
+                                                                <TableHead className="text-center">Reach</TableHead>
+                                                                <TableHead className="text-center">Interactions</TableHead>
+                                                                {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
+                                                            </>
+                                                        )}
+                                                        <TableHead className="text-center">Reward</TableHead>
+                                                        <TableHead className="text-center">Status</TableHead>
+                                                        <TableHead className="text-center">Submitted</TableHead>
+                                                        <TableHead className="text-center">Actions</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {filteredSubmissions
+                                                        .sort((a, b) => (b.views || 0) - (a.views || 0)) // Sort by views descending
+                                                        .map((submission, index) => {
+                                                            const metrics = extractPlatformMetrics(submission);
+                                                            const submissionStatus = getSubmissionStatusBadge(submission.status);
+                                                            const isLoading = isLoadingSubmission[submission.id] || false;
+                                                            const rank = index + 1;
+
+                                                            // Calculate reward/earnings display with proper color coding
+                                                            const getRewardDisplay = () => {
+                                                                // For rejected submissions - RED
+                                                                if (submission.status === 'rejected') {
+                                                                    return {
+                                                                        amount: 0,
+                                                                        label: "No Reward",
+                                                                        className: "text-red-600 font-semibold"
+                                                                    };
+                                                                }
+
+                                                                // For paid submissions - BLUE
+                                                                if (submission.status === 'paid') {
+                                                                    const earningsInDollars = submission.earnings ? centsToDollars(submission.earnings) : 0;
+                                                                    return {
+                                                                        amount: earningsInDollars,
+                                                                        label: "Paid",
+                                                                        className: "text-blue-600 font-semibold"
+                                                                    };
+                                                                }
+
+                                                                // For leaderboard contests
+                                                                if (currentContest.contest_type === 'leaderboard') {
+                                                                    const contestDetails = currentContest.contest_based_details?.leaderboard_contest;
+                                                                    const postContestStatus = currentContest.post_contest_status;
+                                                                    const isContestCompleted = postContestStatus === 'verification_complete' || postContestStatus === 'payouts_processed';
+
+                                                                    // If contest is completed and earnings are calculated
+                                                                    if (isContestCompleted && submission.earnings !== null && submission.earnings !== undefined) {
+                                                                        const earningsInDollars = centsToDollars(submission.earnings);
+                                                                        if (earningsInDollars > 0) {
+                                                                            return {
+                                                                                amount: earningsInDollars,
+                                                                                label: "Prize Won",
+                                                                                className: "text-green-600 font-semibold"
+                                                                            };
+                                                                        } else {
+                                                                            return {
+                                                                                amount: 0,
+                                                                                label: "No Prize Won",
+                                                                                className: "text-gray-600"
+                                                                            };
+                                                                        }
+                                                                    }
+
+                                                                    // If contest is not completed yet
+                                                                    if (!isContestCompleted) {
+                                                                        // Calculate estimated prize based on ranking and prize distribution
+                                                                        if (contestDetails?.prizes && Array.isArray(contestDetails.prizes)) {
+                                                                            const currentRank = index + 1; // 1-based ranking
+                                                                            const prizeForRank = contestDetails.prizes.find((prize: any) => prize.position === currentRank);
+
+                                                                            if (prizeForRank) {
+                                                                                const prizeAmount = centsToDollars(prizeForRank.amount);
+                                                                                return {
+                                                                                    amount: prizeAmount,
+                                                                                    label: "Winning Zone",
+                                                                                    className: "text-pink-600 font-semibold"
+                                                                                };
+                                                                            }
+                                                                        }
+
+                                                                        // Fallback if no prize distribution found
+                                                                        return {
+                                                                            amount: 0,
+                                                                            label: "TBD",
+                                                                            className: "text-yellow-600 font-semibold"
+                                                                        };
+                                                                    }
+                                                                }
+
+                                                                // For CPM contests
+                                                                if (currentContest.contest_type === 'cpm') {
+                                                                    const cpmConfig = currentContest.contest_based_details?.cpm_contest;
+                                                                    const views = submission.views || 0;
+                                                                    const postContestStatus = currentContest.post_contest_status;
+                                                                    const isContestCompleted = postContestStatus === 'verification_complete' || postContestStatus === 'payouts_processed';
+
+                                                                    // If contest is completed and earnings are calculated
+                                                                    if (isContestCompleted && submission.earnings !== null && submission.earnings !== undefined) {
+                                                                        const earningsInDollars = centsToDollars(submission.earnings);
+                                                                        return {
+                                                                            amount: earningsInDollars,
+                                                                            label: "Final Earnings",
+                                                                            className: "text-green-600 font-semibold"
+                                                                        };
+                                                                    }
+
+                                                                    // Calculate estimated earnings for pending/verified submissions
+                                                                    if (submission.status === 'pending' || submission.status === 'verified') {
+                                                                        if (cpmConfig?.cpm_rate_usd) {
+                                                                            let effectiveViews = views;
+                                                                            if (cpmConfig.min_views != null && views < cpmConfig.min_views) {
+                                                                                effectiveViews = 0;
+                                                                            } else if (cpmConfig.max_views != null && views > cpmConfig.max_views) {
+                                                                                effectiveViews = cpmConfig.max_views;
+                                                                            }
+
+                                                                            const calculatedEarnings = (effectiveViews * cpmConfig.cpm_rate_usd) / 1000;
+                                                                            return {
+                                                                                amount: calculatedEarnings,
+                                                                                label: "Est. Earnings",
+                                                                                className: "text-yellow-600 font-semibold"
+                                                                            };
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // Default fallback
+                                                                return {
+                                                                    amount: 0,
+                                                                    label: "TBD",
+                                                                    className: "text-gray-600"
+                                                                };
+                                                            };
+
+                                                            const rewardInfo = getRewardDisplay();
+
+                                                            return (
+                                                                <TableRow key={submission.id} className={cn(
+                                                                    "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200",
+                                                                    rank <= 3 && "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
+                                                                )}>
+                                                                    <TableCell className="font-bold text-center">
+                                                                        <div className="flex items-center justify-center">
+                                                                            {rank <= 3 && <Trophy className={cn("h-4 w-4 mr-1",
+                                                                                rank === 1 ? "text-yellow-500" :
+                                                                                    rank === 2 ? "text-gray-400" :
+                                                                                        "text-amber-600")} />}
+                                                                            {rank}
                                                                         </div>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <div className="flex items-center gap-2">
-                                                                        {getPlatformIcon(submission.platform)}
-                                                                        <span className="text-sm capitalize">{submission.platform || "N/A"}</span>
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-center font-mono text-sm">
-                                                                    {formatMetricValue(metrics.views)}
-                                                                </TableCell>
-                                                                <TableCell className="text-center font-mono text-sm">
-                                                                    <div className="flex items-center justify-center gap-1">
-                                                                        <ThumbsUp className="h-3 w-3 text-blue-500" />
-                                                                        {formatMetricValue(metrics.likes)}
-                                                                    </div>
-                                                                </TableCell>
-                                                                <TableCell className="text-center font-mono text-sm">
-                                                                    <div className="flex items-center justify-center gap-1">
-                                                                        <MessageCircle className="h-3 w-3 text-green-500" />
-                                                                        {formatMetricValue(metrics.comments)}
-                                                                    </div>
-                                                                </TableCell>
-                                                                {/* Dynamic data cells based on contest platform */}
-                                                                {currentContest.platform?.toLowerCase().includes('instagram') && (
-                                                                    <>
-                                                                        <TableCell className="text-center font-mono text-sm">
-                                                                            <div className="flex items-center justify-center gap-1">
-                                                                                <Share2 className="h-3 w-3 text-purple-500" />
-                                                                                {formatMetricValue(metrics.shares)}
+                                                                    </TableCell>
+                                                                    <TableCell>
+                                                                        <div className="flex items-center gap-3">
+                                                                            <Avatar className="h-12 w-12 border-2 border-slate-200 shadow-sm">
+                                                                                <AvatarImage src={submission.creator_avatar_url || undefined} alt={submission.creator_display_name || submission.creator_username || "Creator"} />
+                                                                                <AvatarFallback className="text-sm font-semibold bg-gradient-to-br from-slate-100 to-slate-200">
+                                                                                    {(submission.creator_display_name || submission.creator_username)?.charAt(0).toUpperCase() || "C"}
+                                                                                </AvatarFallback>
+                                                                            </Avatar>
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">
+                                                                                    {submission.creator_display_name || "Unknown Creator"}
+                                                                                </p>
+                                                                                <p className="text-xs text-slate-600 dark:text-slate-400 font-mono">
+                                                                                    {submission.creator_username || "unknown"}
+                                                                                </p>
+                                                                                {submission.video_thumbnail_url && (
+                                                                                    <a href={submission.content_link} target="_blank" rel="noopener noreferrer"
+                                                                                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 mt-1 transition-colors">
+                                                                                        <PlayCircle className="h-3 w-3" />
+                                                                                        View Content
+                                                                                    </a>
+                                                                                )}
                                                                             </div>
-                                                                        </TableCell>
-                                                                        <TableCell className="text-center font-mono text-sm">
-                                                                            {formatMetricValue((metrics as any).saves)}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-center font-mono text-sm">
-                                                                            {formatMetricValue((metrics as any).reach)}
-                                                                        </TableCell>
-                                                                        <TableCell className="text-center font-mono text-sm">
-                                                                            {formatMetricValue((metrics as any).total_interactions)}
-                                                                        </TableCell>
-                                                                        {/* <TableCell className="text-center font-mono text-sm">
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center">
+                                                                        <div className="flex flex-col items-center">
+                                                                            <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                                                                                {formatMetricValue(metrics.views)}
+                                                                            </span>
+                                                                            <span className="text-xs text-slate-500">views</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center">
+                                                                        <div className="flex flex-col items-center">
+                                                                            <div className="flex items-center gap-1">
+                                                                                <ThumbsUp className="h-3 w-3 text-blue-500" />
+                                                                                <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                                                                                    {formatMetricValue(metrics.likes)}
+                                                                                </span>
+                                                                            </div>
+                                                                            <span className="text-xs text-slate-500">likes</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center">
+                                                                        <div className="flex flex-col items-center">
+                                                                            <div className="flex items-center gap-1">
+                                                                                <MessageCircle className="h-3 w-3 text-green-500" />
+                                                                                <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                                                                                    {formatMetricValue(metrics.comments)}
+                                                                                </span>
+                                                                            </div>
+                                                                            <span className="text-xs text-slate-500">comments</span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    {/* Dynamic data cells based on contest platform */}
+                                                                    {currentContest.platform?.toLowerCase().includes('instagram') && (
+                                                                        <>
+                                                                            <TableCell className="text-center font-mono text-sm">
+                                                                                <div className="flex items-center justify-center gap-1">
+                                                                                    <Share2 className="h-3 w-3 text-purple-500" />
+                                                                                    {formatMetricValue(metrics.shares)}
+                                                                                </div>
+                                                                            </TableCell>
+                                                                            <TableCell className="text-center font-mono text-sm">
+                                                                                {formatMetricValue((metrics as any).saves)}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-center font-mono text-sm">
+                                                                                {formatMetricValue((metrics as any).reach)}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-center font-mono text-sm">
+                                                                                {formatMetricValue((metrics as any).total_interactions)}
+                                                                            </TableCell>
+                                                                            {/* <TableCell className="text-center font-mono text-sm">
                                                                             {formatMetricValue(metrics.engagement_rate, true)}
                                                                         </TableCell> */}
-                                                                    </>
-                                                                )}
-                                                                <TableCell className="text-center">
-                                                                    <Badge variant="outline" className={cn("text-xs inline-flex items-center", submissionStatus.className)}>
-                                                                        {submissionStatus.icon} {submissionStatus.text}
-                                                                    </Badge>
-                                                                </TableCell>
-                                                                <TableCell className="text-center text-xs text-muted-foreground">
-                                                                    {formatLocalDateTime(submission.created_at, { dateStyle: 'short' })}
-                                                                </TableCell>
-                                                                <TableCell className="text-center">
-                                                                    <DropdownMenu>
-                                                                        <DropdownMenuTrigger asChild>
-                                                                            <Button variant="ghost" size="sm" disabled={isLoading}>
-                                                                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
-                                                                                <span className="sr-only">Actions</span>
-                                                                            </Button>
-                                                                        </DropdownMenuTrigger>
-                                                                        <DropdownMenuContent align="end">
-                                                                            <DropdownMenuLabel>Change Status</DropdownMenuLabel>
-                                                                            <DropdownMenuSeparator />
-                                                                            {submission.status !== 'verified' &&
-                                                                                <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'verified')}>
-                                                                                    Mark as Verified
-                                                                                </DropdownMenuItem>}
-                                                                            {submission.status !== 'rejected' &&
-                                                                                <DropdownMenuItem disabled={isLoading} onClick={() => handleRejectSubmission(submission.id)} className="text-red-600">
-                                                                                    Mark as Rejected
-                                                                                </DropdownMenuItem>}
-                                                                            {submission.status !== 'pending' &&
-                                                                                <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'pending')}>
-                                                                                    Set to Pending
-                                                                                </DropdownMenuItem>}
-                                                                            {submission.status !== 'paid' && currentContest.contest_type === 'cpm' &&
-                                                                                <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'paid')}>
-                                                                                    Mark as Paid (CPM)
-                                                                                </DropdownMenuItem>}
-                                                                            <DropdownMenuSeparator />
-                                                                            <DropdownMenuItem asChild>
-                                                                                <a href={submission.content_link} target="_blank" rel="noopener noreferrer" className="flex items-center">
-                                                                                    <ExternalLink className="h-3 w-3 mr-2" />
-                                                                                    View Content
-                                                                                </a>
-                                                                            </DropdownMenuItem>
-                                                                        </DropdownMenuContent>
-                                                                    </DropdownMenu>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        );
-                                                    })}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                                                        </>
+                                                                    )}
+                                                                    <TableCell className="text-center">
+                                                                        <div className="flex flex-col items-center">
+                                                                            {rewardInfo.amount !== null ? (
+                                                                                rewardInfo.amount > 0 ? (
+                                                                                    <div className="flex flex-col items-center">
+                                                                                        <span className={cn("text-lg font-bold", rewardInfo.className)}>
+                                                                                            ${rewardInfo.amount.toFixed(2)}
+                                                                                        </span>
+                                                                                        <span className="text-xs text-slate-500 capitalize">
+                                                                                            {rewardInfo.label.toLowerCase()}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="flex flex-col items-center">
+                                                                                        <span className={cn("text-sm font-semibold", rewardInfo.className)}>
+                                                                                            {rewardInfo.label}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                )
+                                                                            ) : (
+                                                                                <div className="flex flex-col items-center">
+                                                                                    <span className={cn("text-sm font-semibold", rewardInfo.className)}>
+                                                                                        {rewardInfo.label}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center">
+                                                                        <div className="flex flex-col items-center">
+                                                                            <Badge variant="outline" className={cn("text-xs inline-flex items-center gap-1 px-3 py-1 font-medium", submissionStatus.className)}>
+                                                                                {submissionStatus.icon} {submissionStatus.text}
+                                                                            </Badge>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center text-xs text-muted-foreground">
+                                                                        <div className="flex flex-col">
+                                                                            <span>{formatLocalDateTime(submission.created_at, { dateStyle: 'short' })}</span>
+                                                                            <span className="text-xs text-gray-400">
+                                                                                {formatLocalDateTime(submission.created_at, { timeStyle: 'short' })}
+                                                                            </span>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center">
+                                                                        <DropdownMenu>
+                                                                            <DropdownMenuTrigger asChild>
+                                                                                <Button variant="ghost" size="sm" disabled={isLoading}>
+                                                                                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
+                                                                                    <span className="sr-only">Actions</span>
+                                                                                </Button>
+                                                                            </DropdownMenuTrigger>
+                                                                            <DropdownMenuContent align="end">
+                                                                                <DropdownMenuLabel>Change Status</DropdownMenuLabel>
+                                                                                <DropdownMenuSeparator />
+                                                                                {submission.status !== 'verified' &&
+                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'verified')}>
+                                                                                        Mark as Verified
+                                                                                    </DropdownMenuItem>}
+                                                                                {submission.status !== 'rejected' &&
+                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleRejectSubmission(submission.id)} className="text-red-600">
+                                                                                        Mark as Rejected
+                                                                                    </DropdownMenuItem>}
+                                                                                {submission.status !== 'pending' &&
+                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'pending')}>
+                                                                                        Set to Pending
+                                                                                    </DropdownMenuItem>}
+                                                                                {submission.status !== 'paid' && isAdminView &&
+                                                                                    (currentContest.post_contest_status === 'verification_complete' || currentContest.post_contest_status === 'payouts_processed') &&
+                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleMarkAsPaid(submission.id)}>
+                                                                                        Mark as Paid
+                                                                                    </DropdownMenuItem>}
+                                                                                <DropdownMenuSeparator />
+                                                                                <DropdownMenuItem asChild>
+                                                                                    <a href={submission.content_link} target="_blank" rel="noopener noreferrer" className="flex items-center">
+                                                                                        <ExternalLink className="h-3 w-3 mr-2" />
+                                                                                        View Content
+                                                                                    </a>
+                                                                                </DropdownMenuItem>
+                                                                            </DropdownMenuContent>
+                                                                        </DropdownMenu>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            );
+                                                        })}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
                         ) : (
-                            <Card className="mt-4">
-                                <CardContent className="py-12 flex flex-col items-center justify-center text-center">
-                                    <FileText className="h-12 w-12 text-gray-300 dark:text-gray-600 mb-4" />
-                                    <h3 className="text-lg font-medium text-slate-700 dark:text-slate-300">No Submissions Yet</h3>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                        When creators submit entries for this contest, they will appear here.
+                            <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900/20">
+                                <CardContent className="py-16 flex flex-col items-center justify-center text-center">
+                                    <div className="p-4 bg-white rounded-full shadow-lg mb-6">
+                                        <FileText className="h-12 w-12 text-slate-400" />
+                                    </div>
+                                    <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">No Submissions Yet</h3>
+                                    <p className="text-slate-600 dark:text-slate-400 max-w-md">
+                                        When creators submit entries for this contest, they will appear here with detailed metrics and status information.
                                     </p>
                                 </CardContent>
                             </Card>
@@ -1592,6 +1917,17 @@ export default function ContestDetailClient({
                 }}
                 onConfirm={handleRejectionConfirm}
                 isLoading={isLoadingSubmission[pendingRejectionSubmission || ''] || false}
+            />
+
+            {/* Payment Modal */}
+            <PaymentModal
+                isOpen={paymentModalOpen}
+                onClose={() => {
+                    setPaymentModalOpen(false);
+                    setPendingPaymentSubmission(null);
+                }}
+                onConfirm={handlePaymentConfirm}
+                isLoading={isLoadingSubmission[pendingPaymentSubmission || ''] || false}
             />
         </div>
     );

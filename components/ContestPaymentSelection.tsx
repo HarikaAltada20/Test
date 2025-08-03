@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { PaymentAnimation } from '@/components/ui/payment-success-animation';
-import { handleFrontendPaymentFailure } from '@/lib/payment-utils-client';
+import { LoadingSpinner } from '@/components/loading/LoadingSpinner';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -450,9 +450,15 @@ export function ContestPaymentSelection({
                                 <Wallet className="h-4 w-4" />
                                 Available Wallet Balance:
                             </span>
-                            <span className="text-lg font-semibold text-green-900">
-                                {formatCurrencyFromCents(walletBalance)}
-                            </span>
+                            {isLoadingBalance ? (
+                                <div className="flex items-center gap-2">
+                                    <LoadingSpinner size="sm" text="Fetching balance..." />
+                                </div>
+                            ) : (
+                                <span className="text-lg font-semibold text-green-900">
+                                    {formatCurrencyFromCents(walletBalance)}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -461,11 +467,16 @@ export function ContestPaymentSelection({
                             {/* Payment Method Selection */}
                             <div className="space-y-4">
                                 <Label className="text-base font-medium">Choose Payment Method</Label>
+                                {isLoadingBalance && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                        <LoadingSpinner size="sm" text="Loading payment options..." />
+                                    </div>
+                                )}
 
                                 <RadioGroup
                                     value={paymentMethod}
                                     onValueChange={handlePaymentMethodChange}
-                                    disabled={disabled}
+                                    disabled={disabled || isLoadingBalance}
                                 >
                                     {/* Wallet Payment Option */}
                                     <div className="flex items-center space-x-2 p-4 border rounded-lg">
@@ -589,9 +600,9 @@ export function ContestPaymentSelection({
                                 onClick={() => setShowPaymentForm(true)}
                                 className="w-full"
                                 size="lg"
-                                disabled={disabled}
+                                disabled={disabled || isLoadingBalance}
                             >
-                                {needsStripe ? 'Proceed to Payment' : 'Complete Payment'}
+                                {isLoadingBalance ? 'Loading...' : (needsStripe ? 'Proceed to Payment' : 'Complete Payment')}
                             </Button>
 
                             {/* Info Alert */}

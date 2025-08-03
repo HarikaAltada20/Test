@@ -1343,10 +1343,18 @@ export default function SubmitContentPage({
                       value="youtube-link"
                       className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300 text-xs sm:text-sm"
                     >
-                      <span className="hidden sm:inline">YouTube Link</span>
+                      <span className="hidden sm:inline">Link</span>
                       <span className="sm:hidden">Link</span>
                     </TabsTrigger>
                   </TabsList>
+
+                  {/* Informational text for creators */}
+                  <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <p className="text-sm text-blue-800 dark:text-blue-200 text-center">
+                      💡 <strong>Tip for creators:</strong> You can fetch videos from your YouTube account by entering their URL in the "Link" tab.
+                    </p>
+                  </div>
+
                   <TabsContent value="youtube-library" className="mt-4">
                     {isLoadingVideos ? (
                       <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading YouTube videos...</div>
@@ -1435,16 +1443,18 @@ export default function SubmitContentPage({
                                       >
                                         {video.snippet.title}
                                       </h3>
-                                      <a
-                                        href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-center sm:justify-start text-xs text-red-600 hover:text-red-800 hover:underline"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <ExternalLink className="h-3 w-3 mr-1" />
-                                        Open on YouTube
-                                      </a>
+                                      <div className="flex justify-center sm:justify-start">
+                                        <a
+                                          href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center text-xs text-red-600 hover:text-red-800 hover:underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <ExternalLink className="h-3 w-3 mr-1" />
+                                          Open on YouTube
+                                        </a>
+                                      </div>
                                     </div>
 
                                     {/* Date */}
@@ -1548,16 +1558,18 @@ export default function SubmitContentPage({
                                 >
                                   {videoPreview.snippet.title}
                                 </h3>
-                                <a
-                                  href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center justify-center sm:justify-start text-xs text-red-600 hover:text-red-800 hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <ExternalLink className="h-3 w-3 mr-1" />
-                                  Open on YouTube
-                                </a>
+                                <div className="flex justify-center sm:justify-start">
+                                  <a
+                                    href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center text-xs text-red-600 hover:text-red-800 hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    Open on YouTube
+                                  </a>
+                                </div>
                               </div>
 
                               {/* Date */}
@@ -1656,10 +1668,18 @@ export default function SubmitContentPage({
                       value="instagram-link"
                       className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300 text-xs sm:text-sm"
                     >
-                      <span className="hidden sm:inline">Instagram Link</span>
+                      <span className="hidden sm:inline">Link</span>
                       <span className="sm:hidden">Link</span>
                     </TabsTrigger>
                   </TabsList>
+
+                  {/* Informational text for creators */}
+                  <div className="mt-3 p-3 bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800 rounded-lg">
+                    <p className="text-sm text-pink-800 dark:text-pink-200 text-center">
+                      💡 <strong>Tip for creators:</strong> You can fetch reels and videos from your Instagram account by entering their URL in the "Link" tab.
+                    </p>
+                  </div>
+
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (
                       <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading Instagram Reels...</div>
@@ -1754,16 +1774,18 @@ export default function SubmitContentPage({
                                       >
                                         {reel.caption || "No caption available"}
                                       </h3>
-                                      <a
-                                        href={reel.permalink}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center justify-center sm:justify-start text-xs text-pink-600 hover:text-pink-800 hover:underline"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <ExternalLink className="h-3 w-3 mr-1" />
-                                        Open on Instagram
-                                      </a>
+                                      <div className="flex justify-center sm:justify-start">
+                                        <a
+                                          href={reel.permalink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center text-xs text-pink-600 hover:text-pink-800 hover:underline"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <ExternalLink className="h-3 w-3 mr-1" />
+                                          Open on Instagram
+                                        </a>
+                                      </div>
                                     </div>
 
                                     {/* Date and Type */}
@@ -1856,16 +1878,18 @@ export default function SubmitContentPage({
                                 >
                                   {instagramMediaPreview.caption || "No caption available"}
                                 </h3>
-                                <a
-                                  href={instagramMediaPreview.permalink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center justify-center sm:justify-start text-xs text-pink-600 hover:text-pink-800 hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <ExternalLink className="h-3 w-3 mr-1" />
-                                  Open on Instagram
-                                </a>
+                                <div className="flex justify-center sm:justify-start">
+                                  <a
+                                    href={instagramMediaPreview.permalink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center text-xs text-pink-600 hover:text-pink-800 hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <ExternalLink className="h-3 w-3 mr-1" />
+                                    Open on Instagram
+                                  </a>
+                                </div>
                               </div>
 
                               {/* Date and Type */}

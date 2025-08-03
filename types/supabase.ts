@@ -301,7 +301,7 @@ export interface Database {
           creator_id: string
           content_link: string
           views: number
-          description: string | null
+          metadata: Json | null
           other_stats: Json | null
           created_at: string
           status: 'pending' | 'verified' | 'rejected' | 'paid'
@@ -318,7 +318,7 @@ export interface Database {
           creator_id: string
           content_link: string
           views?: number
-          description?: string | null
+          metadata?: Json | null
           other_stats?: Json | null
           created_at?: string
           status?: 'pending' | 'verified' | 'rejected' | 'paid'
@@ -335,7 +335,7 @@ export interface Database {
           creator_id?: string
           content_link?: string
           views?: number
-          description?: string | null
+          metadata?: Json | null
           other_stats?: Json | null
           created_at?: string
           status?: 'pending' | 'verified' | 'rejected' | 'paid'
@@ -541,6 +541,26 @@ export interface CpmContestDetails {
   budget_spent?: number;
   terms_conditions: string;
 }
+
+// Submission metadata types
+export interface SubmissionRejectionMetadata {
+  type: 'rejection';
+  reason: string;
+  additionalNotes?: string | null;
+  timestamp: string;
+  updatedBy: string;
+  legacy?: boolean;
+}
+
+export interface SubmissionPaymentMetadata {
+  type: 'payment';
+  paymentProofUrl: string | null;
+  paymentDescription: string | null;
+  timestamp: string;
+  updatedBy: string;
+}
+
+export type SubmissionMetadata = SubmissionRejectionMetadata | SubmissionPaymentMetadata;
 
 // Ensure the submission status type reflects the ENUM from your database
 // If your Database["public"]["Tables"]["submissions"]["Row"]["status"] is just 'string',

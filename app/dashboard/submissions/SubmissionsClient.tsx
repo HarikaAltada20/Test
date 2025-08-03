@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import Image from 'next/image';
 import React from 'react';
-import { formatCurrencyFromCents, centsToDollars } from '@/lib/currency-utils';
+import { centsToDollars } from '@/lib/currency-utils';
 
 interface SubmissionsClientProps {
     initialSubmissions: SubmissionWithContest[];

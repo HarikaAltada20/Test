@@ -138,17 +138,37 @@ export async function GET(
       const userProfile = usersMap.get(submission.creator_id) || null;
       const creatorProfile = creatorProfilesMap.get(submission.creator_id) || null;
       let creator_pfp_url = null;
+      let creator_display_name = null;
+      let creator_username = null;
 
       if (creatorProfile && submission.platform) {
-        if (submission.platform === 'youtube') {
-          creator_pfp_url = creatorProfile.youtube_account?.channel_thumbnail || null;
-        } else if (submission.platform === 'instagram') {
-          creator_pfp_url = creatorProfile.instagram_account?.profile_picture_url || null;
+        try {
+                     if (submission.platform === 'youtube') {
+             const ytAccount = typeof creatorProfile.youtube_account === 'string' ? JSON.parse(creatorProfile.youtube_account) : creatorProfile.youtube_account;
+             creator_display_name = ytAccount?.channel_title;
+                           creator_username = ytAccount?.channel_custom_url || ytAccount?.channel_id;
+             creator_pfp_url = ytAccount?.channel_thumbnail || null;
+          } else if (submission.platform === 'instagram') {
+            const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
+            creator_display_name = igAccount?.full_name || igAccount?.display_name;
+            creator_username = igAccount?.username;
+            creator_pfp_url = igAccount?.profile_picture_url || null;
+          }
+        } catch (e) {
+          console.error('Error parsing social account JSON:', e);
         }
       }
 
+      // Fallbacks
+      if (!creator_display_name) creator_display_name = userProfile?.full_name || userProfile?.username || 'Unknown Creator';
+      if (!creator_username) creator_username = userProfile?.username || 'N/A';
+      if (!creator_pfp_url) creator_pfp_url = userProfile?.profile_picture_url || null;
+
       return {
         ...submission,
+        creator_display_name,
+        creator_username,
+        creator_avatar_url: creator_pfp_url,
         user_platform_username: userProfile?.username || 'N/A',
         user_full_name: userProfile?.full_name || 'Anonymous User',
         creator_pfp_url: creator_pfp_url,
