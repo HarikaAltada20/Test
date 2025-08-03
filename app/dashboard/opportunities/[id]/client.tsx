@@ -32,7 +32,7 @@ import {
   DollarSign
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { formatLocalDateTime } from "@/lib/utils";
+import { formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -540,19 +540,7 @@ export function ContestClientPage({
   };
 
   // Helper to format time ago
-  const formatTimeAgo = (timestamp: string | null): string => {
-    if (!timestamp) return "never";
-    const now = new Date();
-    const past = new Date(timestamp);
-    const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
-    const diffInMinutes = Math.floor(diffInSeconds / 60);
-    const diffInHours = Math.floor(diffInMinutes / 60);
 
-    if (diffInMinutes < 1) return "just now";
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    return past.toLocaleDateString();
-  };
 
   // Show loading state ONLY when fetching data (loading state)
   if (loading) {

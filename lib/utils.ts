@@ -81,4 +81,21 @@ export function toUTCISOString(dateString: string, timeString: string): string |
   }
 }
 
+/**
+ * Formats a timestamp to a human-readable "time ago" string
+ * @param timestamp ISO string or null
+ * @returns Formatted string like "2m ago", "3h ago", or date string
+ */
+export function formatTimeAgo(timestamp: string | null): string {
+  if (!timestamp) return "never";
+  const now = new Date();
+  const past = new Date(timestamp);
+  const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  const diffInHours = Math.floor(diffInMinutes / 60);
 
+  if (diffInMinutes < 1) return "just now";
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  return past.toLocaleDateString();
+}

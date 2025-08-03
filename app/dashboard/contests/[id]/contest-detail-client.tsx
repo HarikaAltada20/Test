@@ -51,7 +51,7 @@ import {
 
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { formatLocalDateTime, cn } from "@/lib/utils";
+import { formatLocalDateTime, formatTimeAgo, cn } from "@/lib/utils";
 import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import RejectionReasonModal from "@/components/RejectionReasonModal";
 import PaymentModal from "@/components/PaymentModal";
@@ -474,6 +474,8 @@ export default function ContestDetailClient({
     const formatStatKey = (key: string) => {
         return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     };
+
+
 
     const getPlatformIcon = (platform?: string | null) => {
         const lowerPlatform = platform?.toLowerCase();
@@ -1374,6 +1376,12 @@ export default function ContestDetailClient({
                                                             <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
                                                             {currentContest.platform}
                                                         </div>
+                                                        {currentContest.last_metrics_updated && (
+                                                            <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
+                                                                <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                                                                Last updated: {formatTimeAgo(currentContest.last_metrics_updated)}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
