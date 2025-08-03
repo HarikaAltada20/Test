@@ -18,7 +18,8 @@ import {
   FileText,
   Briefcase,
   Shield,
-  User
+  User,
+  HelpCircle
 } from "lucide-react";
 import Link from "next/link";
 
@@ -225,6 +226,71 @@ export function DashboardSidebar({
             })}
           </nav>
         </div>
+      </div>
+
+      {/* Getting Started Link - Bottom */}
+      <div className="p-4 border-t border-border">
+        <Link
+          href="/dashboard/getting-started"
+          className={cn(
+            "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
+            "border border-transparent bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950",
+            collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
+          )}
+          style={{
+            backgroundColor: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary))' : 'transparent',
+            borderColor: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary) / 0.3)' : 'transparent',
+            color: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))',
+            boxShadow: pathname === "/dashboard/getting-started" ? '0 4px 6px -1px hsl(var(--primary) / 0.25)' : 'none'
+          }}
+          onMouseEnter={(e) => {
+            if (pathname !== "/dashboard/getting-started") {
+              e.currentTarget.style.borderColor = 'hsl(var(--primary) / 0.3)';
+              e.currentTarget.style.backgroundColor = 'hsl(var(--primary) / 0.1)';
+              e.currentTarget.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (pathname !== "/dashboard/getting-started") {
+              e.currentTarget.style.borderColor = 'transparent';
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.boxShadow = 'none';
+            }
+          }}
+          title={collapsed ? "Getting Started" : undefined}
+        >
+          <div className={cn(
+            "flex items-center justify-center rounded-lg transition-colors",
+            collapsed ? "w-16 h-12" : "w-10 h-10"
+          )}
+            style={{
+              backgroundColor: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary-foreground) / 0.2)' : 'hsl(var(--blue-500) / 0.2)',
+              color: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary-foreground))' : 'hsl(var(--blue-500))'
+            }}>
+            <HelpCircle className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")} />
+          </div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm"
+                  style={{ color: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary-foreground))' : 'hsl(var(--foreground))' }}>
+                  Getting Started
+                </div>
+                <div className="text-xs truncate transition-colors"
+                  style={{ color: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary-foreground) / 0.8)' : 'hsl(var(--muted-foreground))' }}>
+                  Learn about contests & campaigns
+                </div>
+              </div>
+              <ChevronRight className={cn(
+                "h-4 w-4 transition-all duration-200",
+                pathname === "/dashboard/getting-started" && "translate-x-0.5"
+              )}
+                style={{
+                  color: pathname === "/dashboard/getting-started" ? 'hsl(var(--primary-foreground) / 0.8)' : 'hsl(var(--muted-foreground))'
+                }} />
+            </>
+          )}
+        </Link>
       </div>
     </div>
   );

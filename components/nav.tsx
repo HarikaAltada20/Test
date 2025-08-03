@@ -28,7 +28,7 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { subscriptionPlans } from "@/constants/subscriptionPlans";
+import { subscriptionPlans, PRODUCT_IDS } from "@/constants/subscriptionPlans";
 
 interface NavProps {
   user: UserResponse["data"]["user"];
@@ -240,7 +240,7 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                           Settings
                         </Link>
                       </DropdownMenuItem>
-                      {userType === "advertiser" && (
+                      {userType === "advertiser" && subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
                         <>
                           <DropdownMenuSeparator className="bg-violet-400/20" />
                           <DropdownMenuItem

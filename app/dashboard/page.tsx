@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Trophy, DollarSign, Plus, Video, User, Building } from "lucide-react";
+import { Trophy, DollarSign, Plus, Video, User, Building, HelpCircle } from "lucide-react";
 import { formatLocalDateTime } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
@@ -425,6 +425,35 @@ function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Getting Started Section - Only show for advertisers with no contests */}
+      {isAdvertiser && (!profile?.total_contests_run || profile.total_contests_run === 0) && (
+        <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-700/50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                  <HelpCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                    New to Game Of Creators?
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-300">
+                    Learn about our two contest types: Leaderboard and CPM contests
+                  </p>
+                </div>
+              </div>
+              <Link href="/dashboard/getting-started">
+                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+                  <HelpCircle className="w-4 h-4 mr-2" />
+                  Get Started
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">

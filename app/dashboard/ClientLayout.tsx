@@ -2208,23 +2208,25 @@ function DashboardContent({
                                       </svg>
                                     </div>
                                   </div>
-                                  <Link
-                                    href="/dashboard/billing"
-                                    onClick={() => setProfileSidebarOpen(false)}
-                                    className="inline-flex items-center gap-2 mt-3 text-xs transition-colors"
-                                    style={{
-                                      color: `rgba(${theme.primary}, 1)`
-                                    }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.color = `rgba(${theme.primary}, 1)`;
-                                    }}
-                                  >
-                                    Upgrade Plan
-                                    <ChevronRight className="h-3 w-3" />
-                                  </Link>
+                                  {currentPlan.name !== 'CHAMPION' && (
+                                    <Link
+                                      href="/dashboard/billing"
+                                      onClick={() => setProfileSidebarOpen(false)}
+                                      className="inline-flex items-center gap-2 mt-3 text-xs transition-colors"
+                                      style={{
+                                        color: `rgba(${theme.primary}, 1)`
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.color = `rgba(${theme.primary}, 1)`;
+                                      }}
+                                    >
+                                      Upgrade Plan
+                                      <ChevronRight className="h-3 w-3" />
+                                    </Link>
+                                  )}
                                 </div>
                               </div>
                             )}

@@ -541,11 +541,12 @@ export default function ChooseUsernamePage() {
 
             toast({
                 title: "Username Set Successfully!",
-                description: `Welcome, ${username}! Redirecting you to the dashboard...`,
+                description: `Welcome, ${username}! Let's get you started...`,
                 duration: 4000,
             })
 
-            router.push("/dashboard")
+            // Redirect new users to Getting Started page
+            router.push("/dashboard/getting-started")
             router.refresh()
         } catch (err: any) {
             setError(err.message || "Failed to set up your account.")

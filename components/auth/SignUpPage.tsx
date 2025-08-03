@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
+import { TOAST_DURATION_MEDIUM, TOAST_DURATION_LONG } from "@/constants/subscriptionPlans"
 import { Mail, Loader2, Crown, Trophy, Star, Sparkles, Rocket, Zap } from "lucide-react"
 import Link from "next/link"
 import { FcGoogle } from "react-icons/fc"
@@ -52,7 +53,7 @@ export default function SignUpPage() {
           variant: "destructive",
           title: "Account Already Exists",
           description: "This email is already registered. Please sign in instead.",
-          duration: 5000,
+          duration: TOAST_DURATION_MEDIUM,
         })
         setIsLoading(false)
         return
@@ -74,7 +75,7 @@ export default function SignUpPage() {
       toast({
         title: "Quest Initiated! 🚀",
         description: `Verification code sent to ${email}. Check your inbox to continue your journey!`,
-        duration: 8000,
+        duration: TOAST_DURATION_LONG,
       })
 
       // Store email for OTP verification page
@@ -90,7 +91,7 @@ export default function SignUpPage() {
         variant: "destructive",
         title: "Quest Failed",
         description: err.message || "Failed to send verification email. Please try again.",
-        duration: 5000,
+        duration: TOAST_DURATION_MEDIUM,
       })
     } finally {
       setIsLoading(false)

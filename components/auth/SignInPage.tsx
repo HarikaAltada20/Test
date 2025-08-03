@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
+import { TOAST_DURATION_SHORT, TOAST_DURATION_MEDIUM } from "@/constants/subscriptionPlans"
 import { Mail, Loader2, Lock, Eye, EyeOff, Crown, Trophy, Star, Sparkles, Shield, Gamepad2 } from "lucide-react"
 import Link from "next/link"
 import { FcGoogle } from "react-icons/fc"
@@ -64,9 +65,9 @@ export default function SignInPage() {
       }
 
       toast({
-        title: "Welcome back, Champion!",
-        description: "You have successfully entered the arena.",
-        duration: 3000,
+        title: `Welcome back, ${data.user?.user_metadata?.full_name || data.user?.email || 'User'}!`,
+        description: "You have successfully signed in.",
+        duration: TOAST_DURATION_SHORT,
       })
 
       // Navigate to dashboard and refresh to update layout with new auth state
@@ -88,7 +89,7 @@ export default function SignInPage() {
         variant: "destructive",
         title: "Access Denied",
         description: errorMessage,
-        duration: 5000,
+        duration: TOAST_DURATION_MEDIUM,
       })
     } finally {
       setIsLoading(false)
@@ -124,7 +125,7 @@ export default function SignInPage() {
         variant: "destructive",
         title: "Google Access Failed",
         description: err.message || "Failed to sign in with Google. Please try again.",
-        duration: 5000,
+        duration: TOAST_DURATION_MEDIUM,
       })
       setIsGoogleLoading(false)
     }

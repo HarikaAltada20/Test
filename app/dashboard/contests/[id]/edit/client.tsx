@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
 import { formatCurrencyFromCents } from "@/lib/currency-utils"
-import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
+import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans, PRODUCT_IDS, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, TOAST_DURATION_SHORT, API_TIMEOUT_MEDIUM, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
 import { useToast } from "@/hooks/use-toast"
@@ -624,7 +624,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             toast({
                 title: "Form Validation Error",
                 description: message,
-                duration: 3000, // 3 seconds
+                duration: TOAST_DURATION_SHORT, // 3 seconds
             });
 
             // Also show at bottom
@@ -1888,7 +1888,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             toast({
                 title: "Form Validation Error",
                 description: message,
-                duration: 3000,
+                duration: TOAST_DURATION_SHORT,
             });
             setFormFeedback(message);
             setFormFeedbackType("error");
@@ -2500,9 +2500,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 • Min Prize Pool: {formatCurrencyFromCents(planFeatures.minContestBudget)}
                             </span>
                         </div>
-                        <Link href="/pricing" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
-                            Upgrade Plan
-                        </Link>
+                        {userPlan !== PRODUCT_IDS.CHAMPION && (
+                            <Link href="/pricing" className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                Upgrade Plan
+                            </Link>
+                        )}
                     </AlertDescription>
                 </Alert>
             </div>

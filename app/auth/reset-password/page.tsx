@@ -240,7 +240,7 @@ export default function ResetPasswordPage() {
                                         <h3 className="text-3xl font-bold text-white">Access Restored!</h3>
                                         <p className="text-slate-300">
                                             🚀 Your password has been successfully updated.<br />
-                                            Welcome back to the arena, champion!
+                                            Welcome back!
                                         </p>
                                     </div>
 

@@ -152,9 +152,7 @@ export default function CreateContestPage({
   const [inspirationError, setInspirationError] = useState<string | null>(null);
 
   const [winnerCount, setWinnerCount] = useState<number>(3);
-  const [winnerAmounts, setWinnerAmounts] = useState<number[]>([
-    5000, 3000, 2000,
-  ]);
+  const [winnerAmounts, setWinnerAmounts] = useState<number[]>(DEFAULT_WINNER_AMOUNTS);
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resourceFileRef = useRef<HTMLInputElement>(null);
@@ -2509,7 +2507,7 @@ export default function CreateContestPage({
                   {/* Enhanced Plan Benefits Summary */}
                   <div className={`rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden ${currentPlan.price === 0
                     ? "bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800" // Free plan - modern slate
-                    : currentPlan.price <= 10000
+                    : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
                       ? "bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600" // Bronze plan - warm
                       : "bg-gradient-to-br from-blue-600 via-purple-600 to-blue-700" // Higher plans - premium
                     }`}>
@@ -2601,15 +2599,17 @@ export default function CreateContestPage({
                                 {currentPlan.price === 0 ? "Upgrade to reduce commission and get more winners" : "Higher plans offer lower commission rates and more flexibility"}
                               </p>
                             </div>
-                            <div className="flex-shrink-0">
-                              <Button
-                                size="sm"
-                                className="bg-white text-gray-900 hover:bg-gray-50 font-bold shadow-xl border-0 px-6 py-3 rounded-xl transition-all duration-200 hover:scale-105"
-                                onClick={() => setShowUpgradeModal(true)}
-                              >
-                                Upgrade Plan
-                              </Button>
-                            </div>
+                            {userPlan !== PRODUCT_IDS.CHAMPION && (
+                              <div className="flex-shrink-0">
+                                <Button
+                                  size="sm"
+                                  className="bg-white text-gray-900 hover:bg-gray-50 font-bold shadow-xl border-0 px-6 py-3 rounded-xl transition-all duration-200 hover:scale-105"
+                                  onClick={() => setShowUpgradeModal(true)}
+                                >
+                                  Upgrade Plan
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
