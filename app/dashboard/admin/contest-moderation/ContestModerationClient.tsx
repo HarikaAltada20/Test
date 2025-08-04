@@ -148,8 +148,8 @@ export default function ContestModerationClient() {
             }
 
             toast({
-                title: "Success",
-                description: "Contest approved successfully",
+                title: "✅ Contest Approved",
+                description: "Contest is now ready to be published by the brand",
             });
 
             await fetchContests(selectedStatus);
@@ -158,8 +158,8 @@ export default function ContestModerationClient() {
         } catch (error) {
             console.error("Error approving contest:", error);
             toast({
-                title: "Error",
-                description: "Failed to approve contest",
+                title: "❌ Approval Failed",
+                description: "Could not approve contest. Please try again.",
                 variant: "destructive",
             });
         } finally {
@@ -195,8 +195,8 @@ export default function ContestModerationClient() {
             }
 
             toast({
-                title: "Success",
-                description: "Contest rejected successfully",
+                title: "❌ Contest Rejected",
+                description: "Brand has been notified and can make changes",
             });
 
             await fetchContests(selectedStatus);
@@ -206,8 +206,8 @@ export default function ContestModerationClient() {
         } catch (error) {
             console.error("Error rejecting contest:", error);
             toast({
-                title: "Error",
-                description: "Failed to reject contest",
+                title: "❌ Rejection Failed",
+                description: "Could not reject contest. Please try again.",
                 variant: "destructive",
             });
         } finally {

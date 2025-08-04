@@ -50,7 +50,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { formatLocalDateTime, formatTimeAgo, cn } from "@/lib/utils";
 import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import RejectionReasonModal from "@/components/RejectionReasonModal";
@@ -155,7 +155,10 @@ export default function ContestDetailClient({
     isAdminView = false,
 }: ContestDetailClientProps) {
     const supabase = createClient();
-    const { toast } = useToast();
+    const { toast, toasts } = useToast();
+
+    // Debug: Log current toasts state
+    console.log('🔍 Current toasts state:', toasts);
     const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(initialSubmissions || []);
     const [isLoadingSubmission, setIsLoadingSubmission] = useState<Record<string, boolean>>({});
     const [currentContest, setCurrentContest] = useState<Contest>(contest);
@@ -183,6 +186,17 @@ export default function ContestDetailClient({
         if (activeStatusTab === 'all') return true;
         return submission.status === activeStatusTab;
     });
+
+    // Test toast function
+    const testToast = () => {
+        console.log('🧪 Test toast called');
+        const result = toast({
+            title: "🧪 Test Toast",
+            description: "This is a test toast to verify the system is working",
+            duration: 3000,
+        });
+        console.log('🧪 Toast result:', result);
+    };
 
     useEffect(() => {
         setCurrentSubmissions(initialSubmissions || []);
@@ -246,6 +260,7 @@ export default function ContestDetailClient({
     };
 
     const handleUpdateSubmissionStatus = async (submissionId: string, newStatus: Submission['status'], reason?: string, paymentDetails?: { paymentProofUrl: string; paymentDescription: string }) => {
+        console.log('🚀 Starting submission status update:', { submissionId, newStatus, reason });
         setIsLoadingSubmission(prev => ({ ...prev, [submissionId]: true }));
         try {
             const response = await fetch('/api/admin/verify-submission', {
@@ -262,6 +277,7 @@ export default function ContestDetailClient({
             });
 
             const result = await response.json();
+            console.log('📡 API Response:', { status: response.status, result });
 
             if (!response.ok) {
                 throw new Error(result.error || 'Failed to update submission status');
@@ -276,15 +292,68 @@ export default function ContestDetailClient({
                 )
             );
 
-            toast({
-                title: "Status Updated",
-                description: result.message || `Submission status updated to ${newStatus}`,
-            });
+            // Enhanced toast messages for better UX
+            const getToastConfig = (status: Submission['status']) => {
+                switch (status) {
+                    case 'verified':
+                        return {
+                            title: "✅ Submission Verified",
+                            description: "Content has been verified and is now eligible for rewards",
+                            variant: "default" as const
+                        };
+                    case 'rejected':
+                        return {
+                            title: "❌ Submission Rejected",
+                            description: reason ? `Rejected: ${reason.split('\n')[0]}` : "Submission has been rejected",
+                            variant: "destructive" as const
+                        };
+                    case 'pending':
+                        return {
+                            title: "⏳ Status Reset to Pending",
+                            description: "Submission is back in pending review",
+                            variant: "default" as const
+                        };
+                    case 'paid':
+                        return {
+                            title: "💰 Payment Confirmed",
+                            description: "Payment has been processed and confirmed",
+                            variant: "default" as const
+                        };
+                    default:
+                        return {
+                            title: "Status Updated",
+                            description: result.message || `Submission status updated to ${newStatus}`,
+                            variant: "default" as const
+                        };
+                }
+            };
+
+            const toastConfig = getToastConfig(newStatus);
+            console.log('🎉 Calling toast with config:', toastConfig);
+            toast(toastConfig);
         } catch (error: any) {
             console.error('Error updating submission status:', error);
+
+            // Enhanced error toast messages
+            let errorTitle = "❌ Update Failed";
+            let errorDescription = error.message || "Failed to update submission status";
+
+            // Provide more specific error messages based on common scenarios
+            if (error.message?.includes('Unauthorized') || error.message?.includes('Authentication')) {
+                errorTitle = "🔒 Access Denied";
+                errorDescription = "You don't have permission to perform this action";
+            } else if (error.message?.includes('not found')) {
+                errorTitle = "🔍 Not Found";
+                errorDescription = "Submission could not be found";
+            } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+                errorTitle = "🌐 Connection Error";
+                errorDescription = "Network error. Please check your connection and try again";
+            }
+
+            console.log('❌ Calling error toast:', { errorTitle, errorDescription });
             toast({
-                title: "Error",
-                description: error.message || "Failed to update submission status",
+                title: errorTitle,
+                description: errorDescription,
                 variant: "destructive",
             });
         } finally {
@@ -355,10 +424,39 @@ export default function ContestDetailClient({
                 post_contest_status: selectedStatus as any,
             }));
 
-            toast({
-                title: "Status Updated",
-                description: result.message,
-            });
+            // Enhanced contest status update toast
+            const getContestStatusToast = (status: string) => {
+                switch (status) {
+                    case 'pending_review':
+                        return {
+                            title: "📋 Status: Pending Review",
+                            description: "Contest is now pending review phase",
+                        };
+                    case 'in_review':
+                        return {
+                            title: "🔍 Status: In Review",
+                            description: "Contest is currently under review",
+                        };
+                    case 'verification_complete':
+                        return {
+                            title: "✅ Status: Verification Complete",
+                            description: "All submissions have been verified",
+                        };
+                    case 'payouts_processed':
+                        return {
+                            title: "💰 Status: Payouts Processed",
+                            description: "All payments have been processed",
+                        };
+                    default:
+                        return {
+                            title: "Status Updated",
+                            description: result.message,
+                        };
+                }
+            };
+
+            const contestToastConfig = getContestStatusToast(selectedStatus);
+            toast(contestToastConfig);
 
             setStatusUpdateDialog(false);
             setSelectedStatus('');
@@ -614,6 +712,11 @@ export default function ContestDetailClient({
             <div className="space-y-6 mb-8">
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-end gap-2 mb-6">
+
+                    {/* Test Toast Button */}
+                    <Button size="sm" variant="outline" onClick={testToast} className="border-blue-200 text-blue-700 hover:bg-blue-50 shadow-sm">
+                        🧪 Test Toast
+                    </Button>
 
                     {/* Contest Status Update Button */}
                     {canUpdateContestStatus() && (

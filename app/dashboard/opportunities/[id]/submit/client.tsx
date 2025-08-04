@@ -1077,11 +1077,28 @@ export default function SubmitContentPage({
       }
 
       console.log("Submission successful:", submissionData);
+
+      // Show success toast
+      toast({
+        title: "🎉 Content Submitted!",
+        description: "Your submission has been received and is pending review",
+        duration: 4000,
+      });
+
       setMessage("Content submitted successfully! Redirecting...");
       router.push(`/dashboard/opportunities/${contestId}?success=content_submitted`);
 
     } catch (err: any) {
       console.error("Error during submission:", err);
+
+      // Show error toast
+      toast({
+        title: "❌ Submission Failed",
+        description: err.message || "Failed to submit content. Please try again.",
+        variant: "destructive",
+        duration: 5000,
+      });
+
       setError(err.message || "Failed to submit content. Please try again.");
     } finally {
       setIsLoading(false);

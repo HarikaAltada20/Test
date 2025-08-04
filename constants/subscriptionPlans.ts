@@ -180,7 +180,7 @@ export const TOAST_DURATION_SHORT = 3000; // 3 seconds
 export const TOAST_DURATION_MEDIUM = 5000; // 5 seconds
 export const TOAST_DURATION_LONG = 10000; // 10 seconds
 export const TOAST_DURATION_EXTENDED = 6000; // 6 seconds
-export const TOAST_REMOVE_DELAY = 1000000; // 1,000,000ms (very long for manual dismissal)  1000 seconds
+export const TOAST_REMOVE_DELAY = 5000; // 5 seconds - reasonable duration for toast notifications
 
 // API connection timeouts
 export const API_TIMEOUT_SHORT = 5000; // 5 seconds
