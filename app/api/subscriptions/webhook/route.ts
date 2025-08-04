@@ -150,20 +150,72 @@ async function handleCheckoutSessionCompleted(session: any) {
       
       // 🆕 AUTO-SET DEFAULT PAYMENT METHOD FOR NEW SUBSCRIPTIONS
       // Set the payment method used in checkout as default for the customer
-      if (session.customer && session.payment_intent) {
+      console.log('🔍 Session details for payment method setting:', {
+        customer: session.customer,
+        payment_intent: session.payment_intent,
+        subscription: session.subscription,
+        mode: session.mode
+      });
+
+      if (session.customer) {
+        console.log('✅ Customer found, proceeding to set default payment method');
         try {
-          // Get the payment intent to access the payment method
-          const paymentIntent = await stripe().paymentIntents.retrieve(session.payment_intent);
-          const paymentMethodId = typeof paymentIntent.payment_method === 'string' 
-            ? paymentIntent.payment_method 
-            : paymentIntent.payment_method?.id;
-          if (paymentMethodId) {
-            await ensureDefaultPaymentMethod(session.customer, paymentMethodId);
+          let paymentMethodId: string | null = null;
+
+          // Try to get payment method from payment intent first (for one-time payments)
+          if (session.payment_intent) {
+            console.log('📋 Payment Intent found, trying to extract payment method...');
+            const paymentIntent = await stripe().paymentIntents.retrieve(session.payment_intent);
+            console.log('📋 Payment Intent details:', {
+              id: paymentIntent.id,
+              payment_method: paymentIntent.payment_method,
+              payment_method_type: typeof paymentIntent.payment_method,
+              status: paymentIntent.status
+            });
+            
+                    const paymentMethod = paymentIntent.payment_method;
+        paymentMethodId = typeof paymentMethod === 'string' 
+          ? paymentMethod 
+          : (paymentMethod && typeof paymentMethod === 'object' && 'id' in paymentMethod) 
+            ? paymentMethod.id 
+            : null;
           }
-        } catch (error) {
+          
+          // If no payment method from payment intent, try to get it from the subscription (for subscription mode)
+          if (!paymentMethodId && session.subscription) {
+            console.log('📋 No payment intent, trying to get payment method from subscription...');
+            const subscription = await stripe().subscriptions.retrieve(session.subscription);
+            console.log('📋 Subscription details:', {
+              id: subscription.id,
+              default_payment_method: subscription.default_payment_method,
+              status: subscription.status
+            });
+            
+            paymentMethodId = subscription.default_payment_method ? String(subscription.default_payment_method) : null;
+          }
+          
+          console.log(`🔑 Extracted Payment Method ID: ${paymentMethodId}`);
+          
+          if (paymentMethodId) {
+            console.log(`🚀 Calling ensureDefaultPaymentMethod with customer: ${session.customer}, paymentMethod: ${paymentMethodId}`);
+            const result = await ensureDefaultPaymentMethod(session.customer, paymentMethodId);
+            console.log(`✅ ensureDefaultPaymentMethod result: ${result}`);
+          } else {
+            console.log('❌ No payment method ID found in payment intent or subscription');
+          }
+        } catch (error: any) {
           console.error('❌ Error setting default payment method for new subscription:', error);
+          console.error('📝 Error details:', {
+            message: error?.message || 'Unknown error',
+            stack: error?.stack || 'No stack trace',
+            customer: session.customer,
+            payment_intent: session.payment_intent,
+            subscription: session.subscription
+          });
           // Don't fail the webhook - this is a nice-to-have feature
         }
+      } else {
+        console.log('❌ No customer found for setting default payment method');
       }
     } catch (error) {
       console.error('❌ Error retrieving subscription from session:', error);
@@ -353,20 +405,72 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   // 🆕 AUTO-SET DEFAULT PAYMENT METHOD FOR SUBSCRIPTIONS
   // Set the payment method used in this subscription payment as default for the customer
-  if (invoice.customer && invoice.payment_intent) {
+  console.log('🔍 Invoice details for payment method setting:', {
+    customer: invoice.customer,
+    payment_intent: invoice.payment_intent,
+    subscription: invoice.subscription,
+    status: invoice.status
+  });
+
+  if (invoice.customer) {
+    console.log('✅ Invoice customer found, proceeding to set default payment method');
     try {
-      // Get the payment intent to access the payment method
-      const paymentIntent = await stripe().paymentIntents.retrieve(invoice.payment_intent);
-      const paymentMethodId = typeof paymentIntent.payment_method === 'string' 
-        ? paymentIntent.payment_method 
-        : paymentIntent.payment_method?.id;
-      if (paymentMethodId) {
-        await ensureDefaultPaymentMethod(invoice.customer, paymentMethodId);
+      let paymentMethodId: string | null = null;
+
+      // Try to get payment method from payment intent first (for one-time payments)
+      if (invoice.payment_intent) {
+        console.log('📋 Invoice Payment Intent found, trying to extract payment method...');
+        const paymentIntent = await stripe().paymentIntents.retrieve(invoice.payment_intent);
+        console.log('📋 Invoice Payment Intent details:', {
+          id: paymentIntent.id,
+          payment_method: paymentIntent.payment_method,
+          payment_method_type: typeof paymentIntent.payment_method,
+          status: paymentIntent.status
+        });
+        
+        const paymentMethod = paymentIntent.payment_method;
+        paymentMethodId = typeof paymentMethod === 'string' 
+          ? paymentMethod 
+          : (paymentMethod && typeof paymentMethod === 'object' && 'id' in paymentMethod) 
+            ? paymentMethod.id 
+            : null;
       }
-    } catch (error) {
+      
+      // If no payment method from payment intent, try to get it from the subscription (for subscription mode)
+      if (!paymentMethodId && invoice.subscription) {
+        console.log('📋 No payment intent, trying to get payment method from subscription...');
+        const subscription = await stripe().subscriptions.retrieve(invoice.subscription);
+        console.log('📋 Invoice Subscription details:', {
+          id: subscription.id,
+          default_payment_method: subscription.default_payment_method,
+          status: subscription.status
+        });
+        
+        paymentMethodId = subscription.default_payment_method ? String(subscription.default_payment_method) : null;
+      }
+      
+      console.log(`🔑 Invoice Extracted Payment Method ID: ${paymentMethodId}`);
+      
+      if (paymentMethodId) {
+        console.log(`🚀 Calling ensureDefaultPaymentMethod for invoice with customer: ${invoice.customer}, paymentMethod: ${paymentMethodId}`);
+        const result = await ensureDefaultPaymentMethod(invoice.customer, paymentMethodId);
+        console.log(`✅ Invoice ensureDefaultPaymentMethod result: ${result}`);
+      } else {
+        console.log('❌ No payment method ID found in invoice payment intent or subscription');
+      }
+    } catch (error: any) {
       console.error('❌ Error setting default payment method for subscription:', error);
+      console.error('📝 Invoice Error details:', {
+        message: error?.message || 'Unknown error',
+        stack: error?.stack || 'No stack trace',
+        customer: invoice.customer,
+        payment_intent: invoice.payment_intent,
+        subscription: invoice.subscription
+      });
       // Don't fail the webhook - this is a nice-to-have feature
     }
+  } else {
+    console.log('❌ No customer found in invoice for setting default payment method');
   }
 
   console.log(`✅ Payment processed for user ${user_id}, subscription updated`);
