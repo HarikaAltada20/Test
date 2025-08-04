@@ -1043,11 +1043,12 @@ export async function getCustomerInfo(userId: string): Promise<{ customerId?: st
 
 // 🆕 UTILITY FUNCTION TO CHECK AND SET DEFAULT PAYMENT METHOD
 // This function checks if a customer has a default payment method and sets one if they don't
+// Also updates the local customers table for redundancy and easier access
 export async function ensureDefaultPaymentMethod(customerId: string, paymentMethodId: string): Promise<boolean> {
   try {
     console.log(`🔧 Ensuring default payment method for customer ${customerId}`);
     
-    // First, check if customer already has a default payment method
+    // First, check if customer already has a default payment method in Stripe
     const customer = await stripe().customers.retrieve(customerId);
     
     // Check if customer is deleted or doesn't exist
@@ -1056,26 +1057,186 @@ export async function ensureDefaultPaymentMethod(customerId: string, paymentMeth
       return false;
     }
     
-    if (customer.invoice_settings?.default_payment_method) {
-      console.log(`✅ Customer ${customerId} already has default payment method: ${customer.invoice_settings.default_payment_method}`);
-      return true; // Already has a default, no need to change
+    let shouldUpdateStripe = false;
+    let shouldUpdateLocal = false;
+    
+    // Check if Stripe needs updating
+    if (!customer.invoice_settings?.default_payment_method) {
+      console.log(`🆕 Customer ${customerId} has no default payment method in Stripe, setting ${paymentMethodId} as default`);
+      shouldUpdateStripe = true;
+    } else {
+      console.log(`✅ Customer ${customerId} already has default payment method in Stripe: ${customer.invoice_settings.default_payment_method}`);
     }
     
-    console.log(`🆕 Customer ${customerId} has no default payment method, setting ${paymentMethodId} as default`);
+    // Check if local database needs updating
+    const supabase = await getSupabaseClient();
+    const { data: localCustomer, error: localError } = await supabase
+      .from('customers')
+      .select('default_payment_method_id')
+      .eq('stripe_customer_id', customerId)
+      .single();
     
-    // Set the payment method as default for the customer
-    const updatedCustomer = await stripe().customers.update(customerId, {
-      invoice_settings: {
-        default_payment_method: paymentMethodId,
-      },
-    });
+    if (localError) {
+      console.log(`⚠️ Could not check local customer record: ${localError.message}`);
+    } else if (!localCustomer?.default_payment_method_id) {
+      console.log(`🆕 Customer ${customerId} has no default payment method in local DB, setting ${paymentMethodId} as default`);
+      shouldUpdateLocal = true;
+    } else {
+      console.log(`✅ Customer ${customerId} already has default payment method in local DB: ${localCustomer.default_payment_method_id}`);
+    }
     
-    console.log(`✅ Successfully set payment method ${paymentMethodId} as default for customer ${customerId}`);
-    console.log(`📋 Customer default payment method: ${updatedCustomer.invoice_settings.default_payment_method}`);
+    // Update Stripe if needed
+    if (shouldUpdateStripe) {
+      try {
+        const updatedCustomer = await stripe().customers.update(customerId, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
+        });
+        console.log(`✅ Successfully set payment method ${paymentMethodId} as default in Stripe for customer ${customerId}`);
+        console.log(`📋 Stripe customer default payment method: ${updatedCustomer.invoice_settings.default_payment_method}`);
+      } catch (stripeError) {
+        console.error(`❌ Error setting default payment method in Stripe for customer ${customerId}:`, stripeError);
+        // Continue with local update even if Stripe fails
+      }
+    }
+    
+    // Update local database if needed
+    if (shouldUpdateLocal) {
+      try {
+        const { error: updateError } = await supabase
+          .from('customers')
+          .update({ 
+            default_payment_method_id: paymentMethodId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('stripe_customer_id', customerId);
+        
+        if (updateError) {
+          console.error(`❌ Error setting default payment method in local DB for customer ${customerId}:`, updateError);
+        } else {
+          console.log(`✅ Successfully set payment method ${paymentMethodId} as default in local DB for customer ${customerId}`);
+        }
+      } catch (localUpdateError) {
+        console.error(`❌ Exception setting default payment method in local DB for customer ${customerId}:`, localUpdateError);
+      }
+    }
+    
+    return shouldUpdateStripe || shouldUpdateLocal;
+  } catch (error) {
+    console.error(`❌ Error ensuring default payment method for customer ${customerId}:`, error);
+    return false;
+  }
+} 
+
+// 🆕 UTILITY FUNCTION TO GET DEFAULT PAYMENT METHOD
+// This function retrieves the default payment method for a customer from both Stripe and local database
+// Returns the payment method ID or null if not found
+export async function getDefaultPaymentMethod(customerId: string): Promise<string | null> {
+  try {
+    console.log(`🔍 Getting default payment method for customer ${customerId}`);
+    
+    // First try to get from local database (faster)
+    const supabase = await getSupabaseClient();
+    const { data: localCustomer, error: localError } = await supabase
+      .from('customers')
+      .select('default_payment_method_id')
+      .eq('stripe_customer_id', customerId)
+      .single();
+    
+    if (!localError && localCustomer?.default_payment_method_id) {
+      console.log(`✅ Found default payment method in local DB: ${localCustomer.default_payment_method_id}`);
+      return localCustomer.default_payment_method_id;
+    }
+    
+    // Fallback to Stripe if not found locally
+    console.log(`🔄 Default payment method not found in local DB, checking Stripe...`);
+    const customer = await stripe().customers.retrieve(customerId);
+    
+    if (customer.deleted) {
+      console.log(`❌ Customer ${customerId} is deleted`);
+      return null;
+    }
+    
+    const stripeDefaultMethod = customer.invoice_settings?.default_payment_method;
+    if (stripeDefaultMethod) {
+      // Handle both string and PaymentMethod object types
+      const paymentMethodId = typeof stripeDefaultMethod === 'string' 
+        ? stripeDefaultMethod 
+        : stripeDefaultMethod.id;
+      
+      console.log(`✅ Found default payment method in Stripe: ${paymentMethodId}`);
+      
+      // Update local database to sync with Stripe
+      try {
+        await supabase
+          .from('customers')
+          .update({ 
+            default_payment_method_id: paymentMethodId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('stripe_customer_id', customerId);
+        console.log(`✅ Synced default payment method from Stripe to local DB`);
+      } catch (syncError) {
+        console.error(`⚠️ Could not sync default payment method to local DB:`, syncError);
+      }
+      
+      return paymentMethodId;
+    }
+    
+    console.log(`❌ No default payment method found for customer ${customerId}`);
+    return null;
+  } catch (error) {
+    console.error(`❌ Error getting default payment method for customer ${customerId}:`, error);
+    return null;
+  }
+}
+
+// 🆕 UTILITY FUNCTION TO SET DEFAULT PAYMENT METHOD FORCEFULLY
+// This function sets a payment method as default regardless of current state
+// Useful for when you want to explicitly change the default payment method
+export async function setDefaultPaymentMethod(customerId: string, paymentMethodId: string): Promise<boolean> {
+  try {
+    console.log(`🔧 Setting payment method ${paymentMethodId} as default for customer ${customerId}`);
+    
+    // Update Stripe
+    try {
+      const updatedCustomer = await stripe().customers.update(customerId, {
+        invoice_settings: {
+          default_payment_method: paymentMethodId,
+        },
+      });
+      console.log(`✅ Successfully set payment method ${paymentMethodId} as default in Stripe for customer ${customerId}`);
+    } catch (stripeError) {
+      console.error(`❌ Error setting default payment method in Stripe for customer ${customerId}:`, stripeError);
+      return false;
+    }
+    
+    // Update local database
+    try {
+      const supabase = await getSupabaseClient();
+      const { error: updateError } = await supabase
+        .from('customers')
+        .update({ 
+          default_payment_method_id: paymentMethodId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('stripe_customer_id', customerId);
+      
+      if (updateError) {
+        console.error(`❌ Error setting default payment method in local DB for customer ${customerId}:`, updateError);
+        return false;
+      } else {
+        console.log(`✅ Successfully set payment method ${paymentMethodId} as default in local DB for customer ${customerId}`);
+      }
+    } catch (localUpdateError) {
+      console.error(`❌ Exception setting default payment method in local DB for customer ${customerId}:`, localUpdateError);
+      return false;
+    }
     
     return true;
   } catch (error) {
-    console.error(`❌ Error ensuring default payment method for customer ${customerId}:`, error);
+    console.error(`❌ Error setting default payment method for customer ${customerId}:`, error);
     return false;
   }
 } 

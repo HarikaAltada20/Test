@@ -78,18 +78,21 @@ export interface Database {
         Row: {
           id: string
           stripe_customer_id: string
+          default_payment_method_id: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id: string
           stripe_customer_id: string
+          default_payment_method_id?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           stripe_customer_id?: string
+          default_payment_method_id?: string | null
           created_at?: string
           updated_at?: string
         }
