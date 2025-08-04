@@ -187,16 +187,6 @@ export default function ContestDetailClient({
         return submission.status === activeStatusTab;
     });
 
-    // Test toast function
-    const testToast = () => {
-        console.log('🧪 Test toast called');
-        const result = toast({
-            title: "🧪 Test Toast",
-            description: "This is a test toast to verify the system is working",
-            duration: 3000,
-        });
-        console.log('🧪 Toast result:', result);
-    };
 
     useEffect(() => {
         setCurrentSubmissions(initialSubmissions || []);
@@ -712,11 +702,6 @@ export default function ContestDetailClient({
             <div className="space-y-6 mb-8">
                 {/* Quick Actions Bar */}
                 <div className="flex items-center justify-end gap-2 mb-6">
-
-                    {/* Test Toast Button */}
-                    <Button size="sm" variant="outline" onClick={testToast} className="border-blue-200 text-blue-700 hover:bg-blue-50 shadow-sm">
-                        🧪 Test Toast
-                    </Button>
 
                     {/* Contest Status Update Button */}
                     {canUpdateContestStatus() && (
