@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
+import { validateName, NAME_CONSTRAINTS, sanitizeFullNameInput, getCharacterCountDisplay, isApproachingLimit } from "@/lib/name-utils";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
 
 interface UserData {
@@ -87,6 +88,7 @@ export default function ProfilePage({
 
   const [isEditingFullName, setIsEditingFullName] = useState(false);
   const [editedFullName, setEditedFullName] = useState("");
+  const [fullNameError, setFullNameError] = useState<string | null>(null);
   const [isEditingCompanyName, setIsEditingCompanyName] = useState(false);
   const [editedCompanyName, setEditedCompanyName] = useState("");
   const [isEditingWebsiteUrl, setIsEditingWebsiteUrl] = useState(false);
@@ -205,14 +207,44 @@ export default function ProfilePage({
 
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setSelectedAvatarFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid File Type",
+        description: "Please select a valid image file (PNG, JPG, or WEBP).",
+      });
+      // Clear the file input to allow re-selection of the same file
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
     }
+
+    // Validate file size (5MB = 5 * 1024 * 1024 bytes)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Please select an image smaller than 5MB.",
+      });
+      // Clear the file input to allow re-selection of the same file
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    setSelectedAvatarFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const triggerAvatarUpload = () => {
@@ -237,6 +269,27 @@ export default function ProfilePage({
 
   const handleAvatarUpload = async () => {
     if (!selectedAvatarFile || !userData) return;
+
+    // Double-check file validation before upload
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(selectedAvatarFile.type)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid File Type",
+        description: "Please select a valid image file (PNG, JPG, or WEBP).",
+      });
+      return;
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (selectedAvatarFile.size > maxSize) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Please select an image smaller than 5MB.",
+      });
+      return;
+    }
 
     setIsUploadingAvatar(true);
     const currentUrl = userData.profile_picture_url;
@@ -305,6 +358,11 @@ export default function ProfilePage({
       setAvatarPreview(newPublicUrl);
       setSelectedAvatarFile(null);
 
+      // Clear the file input to allow re-selection of the same file
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
       // Notify other components about the profile update
       notifyProfileUpdate();
 
@@ -323,6 +381,11 @@ export default function ProfilePage({
 
       setAvatarPreview(userData.profile_picture_url || null);
       setSelectedAvatarFile(null);
+
+      // Clear the file input to allow re-selection of the same file
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } finally {
       setIsUploadingAvatar(false);
     }
@@ -330,7 +393,20 @@ export default function ProfilePage({
 
   const handleEditFullName = () => {
     setEditedFullName(userData?.full_name || "");
+    setFullNameError(null);
     setIsEditingFullName(true);
+  };
+
+  const handleFullNameChange = (value: string) => {
+    const sanitized = sanitizeFullNameInput(value);
+    setEditedFullName(sanitized);
+
+    if (sanitized.length > 0) {
+      const validation = validateName(sanitized, 'full');
+      setFullNameError(validation.isValid ? null : validation.error || null);
+    } else {
+      setFullNameError(null);
+    }
   };
 
   const handleCancelFullName = () => setIsEditingFullName(false);
@@ -340,6 +416,14 @@ export default function ProfilePage({
       setIsEditingFullName(false);
       return;
     }
+
+    // Validate the name before saving
+    const validation = validateName(editedFullName.trim(), 'full');
+    if (!validation.isValid) {
+      setFullNameError(validation.error || 'Invalid name');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const { error } = await supabase
@@ -372,7 +456,10 @@ export default function ProfilePage({
       // Notify other components about the profile update
       notifyProfileUpdate();
 
-      toast({ title: "Full Name Updated" });
+      toast({
+        title: "Profile Updated",
+        description: "Your full name has been successfully updated.",
+      });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -493,19 +580,25 @@ export default function ProfilePage({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4 mb-4">
-            <Avatar className="h-16 w-16 border">
-              <AvatarImage
-                src={avatarPreview || undefined}
-                alt={userData?.full_name || "User"}
-              />
-              <AvatarFallback>
-                {userData?.full_name?.[0]?.toUpperCase() ||
-                  userData?.email?.[0]?.toUpperCase() ||
-                  "U"}
-              </AvatarFallback>
-            </Avatar>
-            <div>
+          <div className="flex items-center gap-6 mb-6">
+            <div className="relative group">
+              <Avatar className="h-20 w-20 border-2 border-border transition-all duration-200 group-hover:border-primary">
+                <AvatarImage
+                  src={avatarPreview || undefined}
+                  alt={userData?.full_name || "User"}
+                />
+                <AvatarFallback className="text-xl font-semibold">
+                  {userData?.full_name?.[0]?.toUpperCase() ||
+                    userData?.email?.[0]?.toUpperCase() ||
+                    "U"}
+                </AvatarFallback>
+              </Avatar>
+              <div
+                className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center cursor-pointer"
+                onClick={triggerAvatarUpload}
+              >
+                <Upload className="h-6 w-6 text-white" />
+              </div>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -513,109 +606,153 @@ export default function ProfilePage({
                 accept="image/png, image/jpeg, image/webp"
                 style={{ display: "none" }}
               />
-              <Button
-                variant="outline"
-                size="sm"
+            </div>
+            <div className="flex-1">
+              <div
+                className="flex items-center gap-2 mb-2 cursor-pointer hover:text-primary transition-colors"
                 onClick={triggerAvatarUpload}
-                disabled={isUploadingAvatar}
               >
-                <Upload className="mr-2 h-4 w-4" /> Change Avatar
-              </Button>
+                <Upload className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Change Avatar</span>
+              </div>
               {selectedAvatarFile && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="ml-2"
-                  onClick={handleAvatarUpload}
-                  disabled={isUploadingAvatar}
-                >
-                  {isUploadingAvatar ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  {isUploadingAvatar ? "Uploading..." : "Save Avatar"}
-                </Button>
+                <div className="flex gap-2 mb-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleAvatarUpload}
+                    disabled={isUploadingAvatar}
+                  >
+                    {isUploadingAvatar ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    {isUploadingAvatar ? "Uploading..." : "Save Avatar"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedAvatarFile(null);
+                      setAvatarPreview(userData?.profile_picture_url || null);
+                      // Clear the file input to allow re-selection of the same file
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                      }
+                    }}
+                    disabled={isUploadingAvatar}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1">
-                PNG, JPG, WEBP up to 5MB.
+              <p className="text-xs text-muted-foreground">
+                PNG, JPG, WEBP up to 5MB. Hover over avatar to change.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            <CardTitle>Account Information</CardTitle>
+            <User className="h-4 w-4" />
+            <CardTitle className="text-lg font-semibold">Account Information</CardTitle>
           </div>
           <CardDescription>
-            Your basic account details. Click the pencil to edit.
+            Your basic account details. Editable fields show an edit button on hover.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-x-4 gap-y-6">
-            <div>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-8">
+            <div className="space-y-3">
               <Label
                 htmlFor="fullName"
-                className="text-sm font-medium text-muted-foreground"
+                className="text-sm font-semibold text-foreground"
               >
                 Full Name
               </Label>
               {isEditingFullName ? (
-                <div className="flex items-center gap-2 mt-1">
-                  <Input
-                    id="fullName"
-                    value={editedFullName}
-                    onChange={(e) => setEditedFullName(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleSaveFullName}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
+                <div className="space-y-2 mt-1">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="fullName"
+                      value={editedFullName}
+                      onChange={(e) => handleFullNameChange(e.target.value)}
+                      disabled={isSubmitting}
+                      className={`${fullNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                        } ${isApproachingLimit(editedFullName.length, NAME_CONSTRAINTS.FULL_NAME_MAX) ? 'border-yellow-500' : ''}`}
+                      maxLength={NAME_CONSTRAINTS.FULL_NAME_MAX}
+                      placeholder="Enter your full name"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleSaveFullName}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleCancelFullName}
+                      disabled={isSubmitting}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {getCharacterCountDisplay(editedFullName.length, NAME_CONSTRAINTS.FULL_NAME_MAX)}
+                    </span>
+                    {fullNameError && (
+                      <span className="text-xs text-red-500">{fullNameError}</span>
                     )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleCancelFullName}
-                    disabled={isSubmitting}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between mt-1">
-                  <p>{userData.full_name}</p>
+                <div className="flex items-center justify-between group hover:bg-muted/30 p-3 rounded-lg transition-colors">
+                  <p className="text-base font-medium truncate flex-1 pr-2 min-w-0" title={userData.full_name}>{userData.full_name}</p>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="sm"
                     onClick={handleEditFullName}
+                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Edit
                   </Button>
                 </div>
               )}
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Email</p>
-              <p className="mt-1">{userData.email}</p>
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground">Email</Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <p className="text-base text-muted-foreground truncate min-w-0" title={userData.email}>{userData.email}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground">
                 Username / Referral Code
-              </p>
-              <p className="font-medium mt-1">{userData.username}</p>
+              </Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <p className="text-base text-muted-foreground truncate min-w-0" title={userData.username}>{userData.username}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground">
                 Account Type
-              </p>
-              <p className="capitalize mt-1">{userData.user_type}</p>
+              </Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${userData.user_type === 'creator'
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                  }`}>
+                  {userData.user_type}
+                </span>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -624,36 +761,45 @@ export default function ProfilePage({
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <UserCheck className="h-5 w-5" />
-            <CardTitle>Referral Information</CardTitle>
+            <UserCheck className="h-4 w-4" />
+            <CardTitle className="text-lg font-semibold">Referral Information</CardTitle>
           </div>
           <CardDescription>Referral statistics and details</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-6">
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground">
                 Referred By
-              </p>
-              <p>{referrer || "Not referred"}</p>
+              </Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <p className="text-lg font-medium text-muted-foreground truncate min-w-0" title={referrer || "Not referred"}>{referrer || "Not referred"}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <span className="text-lg">🪙</span>
                 Available Coins
-              </p>
-              <p>{userData.coins.toLocaleString()}</p>
+              </Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">{userData.coins.toLocaleString()}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground">
                 Creators Referred
-              </p>
-              <p>{userData.creators_referred}</p>
+              </Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <p className="text-lg font-semibold text-green-600 dark:text-green-400">{userData.creators_referred}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="space-y-3 min-w-0">
+              <Label className="text-sm font-semibold text-foreground">
                 Advertisers Referred
-              </p>
-              <p>{userData.advertisers_referred}</p>
+              </Label>
+              <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">{userData.advertisers_referred}</p>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -662,36 +808,44 @@ export default function ProfilePage({
       {creatorProfile && (
         <Card>
           <CardHeader>
-            <CardTitle>Creator Profile</CardTitle>
+            <CardTitle className="text-lg font-semibold">Creator Profile</CardTitle>
             <CardDescription>Your creator statistics</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-6">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Contests Participated
-                </p>
-                <p>{creatorProfile.total_contests_participated}</p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">{creatorProfile.total_contests_participated}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Contests Won
-                </p>
-                <p>{creatorProfile.total_contests_won}</p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">{creatorProfile.total_contests_won}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Total Money Won
-                </p>
-                <p>{formatMoney(creatorProfile.total_money_won)}</p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">{formatMoney(creatorProfile.total_money_won)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Withdrawable Balance
-                </p>
-                <p className="font-medium">
-                  {formatMoney(creatorProfile.withdrawable_balance)}
-                </p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+                    {formatMoney(creatorProfile.withdrawable_balance)}
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -701,17 +855,17 @@ export default function ProfilePage({
       {advertiserProfile && (
         <Card>
           <CardHeader>
-            <CardTitle>Advertiser Profile</CardTitle>
+            <CardTitle className="text-lg font-semibold">Advertiser Profile</CardTitle>
             <CardDescription>
-              Your advertiser statistics and details. Click the pencil to edit.
+              Your advertiser statistics and details. Editable fields show an edit button on hover.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-x-4 gap-y-6">
-              <div>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-8">
+              <div className="min-w-0">
                 <Label
                   htmlFor="gameofcreators"
-                  className="text-sm font-medium text-muted-foreground"
+                  className="text-sm font-semibold text-foreground"
                 >
                   Company Name
                 </Label>
@@ -746,8 +900,8 @@ export default function ProfilePage({
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between mt-1">
-                    <p>
+                  <div className="flex items-center justify-between group hover:bg-muted/30 p-3 rounded-lg transition-colors mt-1 min-w-0">
+                    <p className="text-base font-medium truncate flex-1 pr-2 min-w-0" title={advertiserProfile.company_name || "Not set"}>
                       {advertiserProfile.company_name || (
                         <span className="text-muted-foreground italic">
                           Not set
@@ -756,18 +910,20 @@ export default function ProfilePage({
                     </p>
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       onClick={handleEditCompanyName}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
                     </Button>
                   </div>
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label
                   htmlFor="websiteUrl"
-                  className="text-sm font-medium text-muted-foreground"
+                  className="text-sm font-semibold text-foreground"
                 >
                   Website
                 </Label>
@@ -803,73 +959,89 @@ export default function ProfilePage({
                     </Button>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center justify-between group hover:bg-muted/30 p-3 rounded-lg transition-colors mt-1 min-w-0">
                     {advertiserProfile.website_url ? (
                       <a
                         href={advertiserProfile.website_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary hover:underline truncate"
+                        className="text-primary hover:underline text-base font-medium truncate flex-1 pr-2 min-w-0"
+                        title={advertiserProfile.website_url}
                       >
                         {advertiserProfile.website_url}
                       </a>
                     ) : (
-                      <span className="text-muted-foreground italic">
+                      <span className="text-muted-foreground italic text-base font-medium truncate flex-1 pr-2 min-w-0">
                         Not set
                       </span>
                     )}
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       onClick={handleEditWebsiteUrl}
+                      className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="h-4 w-4 mr-1" />
+                      Edit
                     </Button>
                   </div>
                 )}
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Subscription Plan
-                </p>
-                <p className="font-medium mt-1">
-                  {advertiserProfile?.subscription_info?.product_id
-                    ? subscriptionPlans.find(
-                      (plan) =>
-                        plan.id === advertiserProfile.subscription_info!.product_id
-                    )?.displayName ?? "Unknown Plan"
-                    : "N/A"}
-                </p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${advertiserProfile?.subscription_info?.product_id
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
+                    }`}>
+                    {advertiserProfile?.subscription_info?.product_id
+                      ? subscriptionPlans.find(
+                        (plan) =>
+                          plan.id === advertiserProfile.subscription_info!.product_id
+                      )?.displayName ?? "Unknown Plan"
+                      : "N/A"}
+                  </span>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Contests Run
-                </p>
-                <p className="mt-1">{advertiserProfile.total_contests_run}</p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">{advertiserProfile.total_contests_run}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Total Money Spent
-                </p>
-                <p className="mt-1">
-                  {formatMoney(advertiserProfile.total_money_spent)}
-                </p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-red-600 dark:text-red-400">
+                    {formatMoney(advertiserProfile.total_money_spent)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Withdrawable Balance
-                </p>
-                <p className="mt-1">
-                  {formatMoney(advertiserProfile.withdrawable_balance)}
-                </p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
+                    {formatMoney(advertiserProfile.withdrawable_balance)}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
+              <div className="space-y-3 min-w-0">
+                <Label className="text-sm font-semibold text-foreground">
                   Available Deposit Balance
-                </p>
-                <p className="font-medium mt-1">
-                  {formatMoney(advertiserProfile.available_deposit_balance)}
-                </p>
+                </Label>
+                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
+                  <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
+                    {formatMoney(advertiserProfile.available_deposit_balance)}
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>

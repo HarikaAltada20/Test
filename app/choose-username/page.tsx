@@ -14,7 +14,8 @@ import logo from "@/public/images/gold_logo_vertical.svg";
 import { createClient } from "@/utils/supabase/client"
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils"
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter"
-import { subscriptionPlans, PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
+import { PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
+import { validateName, NAME_CONSTRAINTS, sanitizeNameInput, getCharacterCountDisplay, isApproachingLimit } from "@/lib/name-utils"
 
 interface UserProfileData {
     id: string;
@@ -81,12 +82,16 @@ export default function ChooseUsernamePage() {
     const [error, setError] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [isLoadingProfile, setIsLoadingProfile] = useState(true)
+    const [isRedirecting, setIsRedirecting] = useState(false)
     const [isCheckingUsername, setIsCheckingUsername] = useState(false)
     const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
 
     // Additional fields for email users
     const [firstName, setFirstName] = useState("")
     const [lastName, setLastName] = useState("")
+    const [firstNameError, setFirstNameError] = useState<string | null>(null)
+    const [lastNameError, setLastNameError] = useState<string | null>(null)
+    const [referralCodeError, setReferralCodeError] = useState<string | null>(null)
     const [password, setPassword] = useState("")
     const [confirmPassword, setConfirmPassword] = useState("")
     const [showPassword, setShowPassword] = useState(false)
@@ -97,6 +102,52 @@ export default function ChooseUsernamePage() {
 
     // Add state for clientIp
     const [clientIp, setClientIp] = useState<string | null>(null);
+
+    // Validate first name
+    const handleFirstNameChange = (value: string) => {
+        const sanitized = sanitizeNameInput(value);
+        setFirstName(sanitized);
+
+        if (sanitized.length > 0) {
+            const validation = validateName(sanitized, 'first');
+            setFirstNameError(validation.isValid ? null : validation.error || null);
+        } else {
+            setFirstNameError(null);
+        }
+    };
+
+    // Validate last name
+    const handleLastNameChange = (value: string) => {
+        const sanitized = sanitizeNameInput(value);
+        setLastName(sanitized);
+
+        if (sanitized.length > 0) {
+            const validation = validateName(sanitized, 'last');
+            setLastNameError(validation.isValid ? null : validation.error || null);
+        } else {
+            setLastNameError(null);
+        }
+    };
+
+    // Validate referral code (same rules as username)
+    const handleReferralCodeChange = (value: string) => {
+        const sanitized = value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20); // Same as username validation
+        setReferralCode(sanitized);
+
+        if (sanitized.length > 0) {
+            if (sanitized.length < 3) {
+                setReferralCodeError("Referral code must be at least 3 characters long");
+            } else if (sanitized.length > 20) {
+                setReferralCodeError("Referral code must be 20 characters or less");
+            } else if (!/^[a-zA-Z0-9_]+$/.test(sanitized)) {
+                setReferralCodeError("Referral code can only contain letters, numbers, and underscores");
+            } else {
+                setReferralCodeError(null);
+            }
+        } else {
+            setReferralCodeError(null);
+        }
+    };
 
     useEffect(() => {
         const fetchProfileAndRedirect = async () => {
@@ -303,6 +354,37 @@ export default function ChooseUsernamePage() {
         if (userData?.needsFullName && (!firstName.trim() || !lastName.trim())) {
             setError("First name and last name are required.")
             return
+        }
+
+        // Validate names if provided
+        if (userData?.needsFullName) {
+            const firstNameValidation = validateName(firstName.trim(), 'first');
+            if (!firstNameValidation.isValid) {
+                setError(`First name: ${firstNameValidation.error}`);
+                return;
+            }
+
+            const lastNameValidation = validateName(lastName.trim(), 'last');
+            if (!lastNameValidation.isValid) {
+                setError(`Last name: ${lastNameValidation.error}`);
+                return;
+            }
+        }
+
+        // Validate referral code if provided
+        if (referralCode.trim() && userData?.needsReferralCodeInput) {
+            if (referralCode.length < 3) {
+                setError("Referral code must be at least 3 characters long");
+                return;
+            }
+            if (referralCode.length > 20) {
+                setError("Referral code must be 20 characters or less");
+                return;
+            }
+            if (!/^[a-zA-Z0-9_]+$/.test(referralCode)) {
+                setError("Referral code can only contain letters, numbers, and underscores");
+                return;
+            }
         }
         if (userData?.needsPassword && !password) {
             setError("Password is required.")
@@ -545,6 +627,9 @@ export default function ChooseUsernamePage() {
                 duration: 4000,
             })
 
+            // Set redirecting state to prevent button re-enabling
+            setIsRedirecting(true)
+
             // Redirect new users to Getting Started page
             router.push("/dashboard/getting-started")
             router.refresh()
@@ -557,7 +642,10 @@ export default function ChooseUsernamePage() {
                 duration: 6000,
             })
         } finally {
-            setIsLoading(false)
+            // Only set loading to false if we're not redirecting
+            if (!isRedirecting) {
+                setIsLoading(false)
+            }
         }
     }
 
@@ -703,32 +791,52 @@ export default function ChooseUsernamePage() {
                                     {userData?.needsFullName && (
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-2">
-                                                <Label htmlFor="firstName" className="text-slate-300">First Name</Label>
+                                                <Label htmlFor="firstName" className="text-slate-300">
+                                                    First Name
+                                                    <span className="ml-2 text-xs text-slate-400">
+                                                        {getCharacterCountDisplay(firstName.length, NAME_CONSTRAINTS.FIRST_NAME_MAX)}
+                                                    </span>
+                                                </Label>
                                                 <Input
                                                     id="firstName"
                                                     name="given-name"
                                                     type="text"
                                                     value={firstName}
-                                                    onChange={(e) => setFirstName(e.target.value)}
-                                                    className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                                                    onChange={(e) => handleFirstNameChange(e.target.value)}
+                                                    className={`h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 ${firstNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                                                        } ${isApproachingLimit(firstName.length, NAME_CONSTRAINTS.FIRST_NAME_MAX) ? 'border-yellow-500' : ''}`}
                                                     placeholder="First name"
                                                     autoComplete="given-name"
                                                     required={userData?.needsFullName}
+                                                    maxLength={NAME_CONSTRAINTS.FIRST_NAME_MAX}
                                                 />
+                                                {firstNameError && (
+                                                    <p className="text-xs text-red-400 mt-1">{firstNameError}</p>
+                                                )}
                                             </div>
                                             <div className="space-y-2">
-                                                <Label htmlFor="lastName" className="text-slate-300">Last Name</Label>
+                                                <Label htmlFor="lastName" className="text-slate-300">
+                                                    Last Name
+                                                    <span className="ml-2 text-xs text-slate-400">
+                                                        {getCharacterCountDisplay(lastName.length, NAME_CONSTRAINTS.LAST_NAME_MAX)}
+                                                    </span>
+                                                </Label>
                                                 <Input
                                                     id="lastName"
                                                     name="family-name"
                                                     type="text"
                                                     value={lastName}
-                                                    onChange={(e) => setLastName(e.target.value)}
-                                                    className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                                                    onChange={(e) => handleLastNameChange(e.target.value)}
+                                                    className={`h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 ${lastNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                                                        } ${isApproachingLimit(lastName.length, NAME_CONSTRAINTS.LAST_NAME_MAX) ? 'border-yellow-500' : ''}`}
                                                     placeholder="Last name"
                                                     autoComplete="family-name"
                                                     required={userData?.needsFullName}
+                                                    maxLength={NAME_CONSTRAINTS.LAST_NAME_MAX}
                                                 />
+                                                {lastNameError && (
+                                                    <p className="text-xs text-red-400 mt-1">{lastNameError}</p>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -868,18 +976,27 @@ export default function ChooseUsernamePage() {
                                             <Label htmlFor="referralCode" className="text-slate-300">
                                                 Referral Code{" "}
                                                 <span className="text-slate-500">(Optional)</span>
+                                                <span className="ml-2 text-xs text-slate-400">
+                                                    {referralCode.length}/20
+                                                </span>
                                             </Label>
                                             <Input
                                                 id="referralCode"
                                                 type="text"
                                                 value={referralCode}
-                                                onChange={(e) => setReferralCode(e.target.value)}
-                                                className="h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500"
+                                                onChange={(e) => handleReferralCodeChange(e.target.value)}
+                                                className={`h-11 bg-slate-900 border-slate-700 placeholder:text-slate-500 text-white focus:border-amber-500 focus:ring-amber-500 ${referralCodeError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                                                    } ${referralCode.length >= 16 ? 'border-yellow-500' : ''}`}
                                                 placeholder="Enter referral code"
+                                                maxLength={20}
                                             />
-                                            <p className="text-xs text-slate-500">
-                                                Have a referral code? Enter it here to earn bonus rewards!
-                                            </p>
+                                            {referralCodeError ? (
+                                                <p className="text-xs text-red-400">{referralCodeError}</p>
+                                            ) : (
+                                                <p className="text-xs text-slate-500">
+                                                    Have a referral code? Enter it here to earn bonus rewards! (3-20 characters, letters, numbers, underscores only)
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 
@@ -893,13 +1010,15 @@ export default function ChooseUsernamePage() {
                                     <Button
                                         type="submit"
                                         className="group relative w-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-8 py-4 text-lg rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 overflow-hidden"
-                                        disabled={isLoading || isCheckingUsername || usernameAvailable !== true || username.length < 3}
+                                        disabled={isLoading || isRedirecting || isCheckingUsername || usernameAvailable !== true || username.length < 3}
                                     >
                                         <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                                        {isLoading ? (
+                                        {isLoading || isRedirecting ? (
                                             <>
                                                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                                <span className="relative z-10">Activating Profile...</span>
+                                                <span className="relative z-10">
+                                                    {isRedirecting ? "Entering Arena..." : "Activating Profile..."}
+                                                </span>
                                             </>
                                         ) : (
                                             <>

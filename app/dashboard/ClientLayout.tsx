@@ -2034,7 +2034,7 @@ function DashboardContent({
                               {avatarFallback}
                             </div>
                           )}
-                          <span className="hidden sm:block text-sm font-medium">
+                          <span className="hidden sm:block text-sm font-medium truncate max-w-[120px]" title={displayName}>
                             {displayName}
                           </span>
                         </div>
@@ -2109,20 +2109,22 @@ function DashboardContent({
                                 {avatarFallback}
                               </div>
                             )}
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <SheetTitle
-                                className="text-lg font-semibold"
+                                className="text-lg font-semibold truncate max-w-full"
                                 style={{
                                   color: `rgba(${mode.text.primary}, 1)`
                                 }}
+                                title={displayName}
                               >
                                 {displayName}
                               </SheetTitle>
                               <p
-                                className="text-sm"
+                                className="text-sm truncate max-w-full"
                                 style={{
                                   color: `rgba(${mode.text.secondary}, 1)`
                                 }}
+                                title={displayEmail}
                               >
                                 {displayEmail}
                               </p>
