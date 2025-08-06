@@ -61,6 +61,8 @@ import {
   subscriptionPlans,
   MIN_PRIZE_PER_WINNER,
   MAX_PRIZE_PER_WINNER,
+  MIN_CPM_RATE,
+  MAX_CPM_RATE,
   DEFAULT_PRIZE_ALLOCATIONS,
   HIGH_BUDGET_THRESHOLD,
   PRODUCT_IDS,
@@ -765,6 +767,15 @@ export default function CreateContestPage({
           return { isValid: false, error: "CPM Rate must be a positive number." };
         }
 
+        const cpmRateValue = parseFloat(cpmRate.toString());
+        if (cpmRateValue < MIN_CPM_RATE) {
+          return { isValid: false, error: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.` };
+        }
+
+        if (cpmRateValue > MAX_CPM_RATE) {
+          return { isValid: false, error: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.` };
+        }
+
         if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
           return { isValid: false, error: "Total Budget must be a positive number for CPM contests." };
         }
@@ -884,6 +895,20 @@ export default function CreateContestPage({
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
+
+          const cpmRateValue = parseFloat(cpmRate.toString());
+          if (cpmRateValue < MIN_CPM_RATE) {
+            setFormFeedback(`CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`); // Footer feedback
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+
+          if (cpmRateValue > MAX_CPM_RATE) {
+            setFormFeedback(`CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`); // Footer feedback
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+
           if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
             setFormFeedback("Total Budget must be a positive number for CPM contests."); // Footer feedback
             setFormFeedbackType("error");
@@ -2819,11 +2844,12 @@ export default function CreateContestPage({
                     value={cpmRate}
                     onChange={(e) => setCpmRate(e.target.value)}
                     placeholder="e.g., 1.50 for $1.50 per 1000 views"
-                    min="0.01"
+                    min={MIN_CPM_RATE}
+                    max={MAX_CPM_RATE}
                     step="0.01"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Amount paid to creators per 1000 views.
+                    Amount paid to creators per 1000 views. Range: ${MIN_CPM_RATE} - ${MAX_CPM_RATE} per 1000 views.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

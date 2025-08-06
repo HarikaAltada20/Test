@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
 import { formatCurrencyFromCents } from "@/lib/currency-utils"
-import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, subscriptionPlans, PRODUCT_IDS, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, TOAST_DURATION_SHORT, API_TIMEOUT_MEDIUM, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
+import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, MIN_CPM_RATE, MAX_CPM_RATE, subscriptionPlans, PRODUCT_IDS, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, TOAST_DURATION_SHORT, API_TIMEOUT_MEDIUM, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
 import { useToast } from "@/hooks/use-toast"
@@ -852,6 +852,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
             }
+
+            if (numCpmRate < MIN_CPM_RATE) {
+                toast({
+                    title: "CPM Rate Too Low",
+                    description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            if (numCpmRate > MAX_CPM_RATE) {
+                toast({
+                    title: "CPM Rate Too High",
+                    description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
             if (isNaN(numTotalBudget) || numTotalBudget <= 0) {
                 toast({
                     title: "Invalid Budget",
@@ -1444,6 +1462,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
 
             if (!parsedCpmRate || parsedCpmRate <= 0) {
                 return "CPM rate must be a positive number.";
+            }
+
+            if (parsedCpmRate < MIN_CPM_RATE) {
+                return `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`;
+            }
+
+            if (parsedCpmRate > MAX_CPM_RATE) {
+                return `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`;
             }
 
             if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
@@ -2129,6 +2155,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 toast({
                     title: "Invalid CPM Rate",
                     description: "CPM rate must be a positive number.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            if (parsedCpmRate < MIN_CPM_RATE) {
+                toast({
+                    title: "CPM Rate Too Low",
+                    description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+
+            if (parsedCpmRate > MAX_CPM_RATE) {
+                toast({
+                    title: "CPM Rate Too High",
+                    description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
                     variant: "destructive",
                 });
                 setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -3204,8 +3248,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         value={cpmRate}
                                         onChange={(e) => setCpmRate(e.target.value)}
                                         placeholder="e.g., 1.50"
+                                        min={MIN_CPM_RATE}
+                                        max={MAX_CPM_RATE}
                                         step="0.01"
                                     />
+                                    <p className="text-xs text-muted-foreground">
+                                        Range: ${MIN_CPM_RATE} - ${MAX_CPM_RATE} per 1000 views
+                                    </p>
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="totalBudget">Total Budget (USD) <span className="text-red-500">*</span></Label>

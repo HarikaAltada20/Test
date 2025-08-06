@@ -164,6 +164,10 @@ export const COMMON_PLAN_FEATURES = {
 export const HIGH_BUDGET_THRESHOLD = Infinity; // No upper limit - removed $1000 restriction
 export const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
 export const MAX_PRIZE_PER_WINNER = Infinity  // No upper limit - removed $1000 restriction
+
+// CPM Rate Limits (per 1000 views)
+export const MIN_CPM_RATE = 0.1  // $0.10 per 1000 views
+export const MAX_CPM_RATE = 100  // $100.00 per 1000 views
 export const DEFAULT_PRIZE_ALLOCATIONS = {
     1: 5000, // $50.00
     2: 3000, // $30.00
