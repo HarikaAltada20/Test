@@ -5,11 +5,12 @@ create table public.creator_profiles (
   instagram_account jsonb null,
   total_contests_participated integer null default 0,
   total_contests_won integer null default 0,
-  total_money_won numeric null default 0,
-  withdrawable_balance numeric null default 0,
   total_views bigint null default 0,
   created_at timestamp with time zone null default CURRENT_TIMESTAMP,
   updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  total_money_won bigint null default 0,
+  withdrawable_balance bigint null default 0,
+  has_seen_guidelines boolean not null default false,
   constraint creator_profiles_pkey primary key (id),
   constraint creator_profiles_id_fkey foreign KEY (id) references users (id)
 ) TABLESPACE pg_default;

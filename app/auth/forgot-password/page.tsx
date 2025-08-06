@@ -163,6 +163,9 @@ export default function ForgotPasswordPage() {
                                                 {email}
                                             </span>
                                         </p>
+                                        <p className="text-slate-400 text-sm">
+                                            📧 Can't find the email? Check your spam folder.
+                                        </p>
                                     </div>
 
                                     <Button
