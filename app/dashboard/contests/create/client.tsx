@@ -63,6 +63,9 @@ import {
   MAX_PRIZE_PER_WINNER,
   MIN_CPM_RATE,
   MAX_CPM_RATE,
+  MIN_DAYS_UNTIL_START,
+  MIN_CONTEST_DURATION_DAYS,
+  MAX_CONTEST_DURATION_DAYS,
   DEFAULT_PRIZE_ALLOCATIONS,
   HIGH_BUDGET_THRESHOLD,
   PRODUCT_IDS,
@@ -721,18 +724,26 @@ export default function CreateContestPage({
           return { isValid: false, error: "Invalid date or time format. Please check your entries." };
         }
 
-        if (startDateTime < now) {
-          return { isValid: false, error: "Contest start time must be in the future" };
+        // Check minimum days until start (1 day gap)
+        const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+          return { isValid: false, error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)` };
         }
 
         if (endDateTime <= startDateTime) {
           return { isValid: false, error: "Contest end time must be after the start time" };
         }
 
+        // Check contest duration limits
         const durationMs = endDateTime.getTime() - startDateTime.getTime();
-        const oneDayMs = 24 * 60 * 60 * 1000;
-        if (durationMs < oneDayMs) {
-          return { isValid: false, error: "Contest duration must be at least 24 hours (minimum 1 day)" };
+        const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+
+        if (durationDays < MIN_CONTEST_DURATION_DAYS) {
+          return { isValid: false, error: `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days` };
+        }
+
+        if (durationDays > MAX_CONTEST_DURATION_DAYS) {
+          return { isValid: false, error: `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days` };
         }
       } catch (error) {
         return { isValid: false, error: "There was an error with the date/time format. Please check your entries." };
@@ -1051,8 +1062,10 @@ export default function CreateContestPage({
             setIsLoading(false); setUploadProgress(null); return;
           }
 
-          if (startDateTime < now) {
-            setFormFeedback("Contest start time must be in the future");
+          // Check minimum days until start (1 day gap)
+          const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+            setFormFeedback(`Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)`);
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
@@ -1063,10 +1076,18 @@ export default function CreateContestPage({
             setIsLoading(false); setUploadProgress(null); return;
           }
 
+          // Check contest duration limits
           const durationMs = endDateTime.getTime() - startDateTime.getTime();
-          const oneDayMs = 24 * 60 * 60 * 1000;
-          if (durationMs < oneDayMs) {
-            setFormFeedback("Contest duration must be at least 24 hours (minimum 1 day)");
+          const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+
+          if (durationDays < MIN_CONTEST_DURATION_DAYS) {
+            setFormFeedback(`Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`);
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
+
+          if (durationDays > MAX_CONTEST_DURATION_DAYS) {
+            setFormFeedback(`Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`);
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
@@ -2045,14 +2066,17 @@ export default function CreateContestPage({
     return `${startMessage} ${durationMessage}`;
   };
 
-  // Get minimum allowed start date and time (current date/time)
+  // Get minimum allowed start date and time (2 days from today)
   const getMinDateTime = () => {
     const now = new Date();
+    const minStartDate = new Date(now);
+    minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+
     return {
-      date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+      date: `${minStartDate.getFullYear()}-${String(minStartDate.getMonth() + 1).padStart(
         2,
         "0"
-      )}-${String(now.getDate()).padStart(2, "0")}`,
+      )}-${String(minStartDate.getDate()).padStart(2, "0")}`,
       time: `${String(now.getHours()).padStart(2, "0")}:${String(
         now.getMinutes()
       ).padStart(2, "0")}`,
@@ -2078,13 +2102,13 @@ export default function CreateContestPage({
     return "00:00";
   };
 
-  // Get minimum allowed end date (at least 1 day after the start date)
+  // Get minimum allowed end date (at least 3 days after the start date)
   const getMinEndDate = () => {
     if (!startDate || !startTime) return getMinDateTime().date;
 
     const startDateObj = new Date(`${startDate}T${startTime}`);
-    // Add one day to the start date to ensure minimum 1 day duration
-    startDateObj.setDate(startDateObj.getDate() + 1);
+    // Add minimum duration days to the start date
+    startDateObj.setDate(startDateObj.getDate() + MIN_CONTEST_DURATION_DAYS);
 
     return `${startDateObj.getFullYear()}-${String(
       startDateObj.getMonth() + 1
@@ -2097,32 +2121,32 @@ export default function CreateContestPage({
 
     const startDateObj = new Date(`${startDate}T${startTime}`);
     const endDateObj = new Date(`${endDate}T00:00:00`);
-    const oneDayLater = new Date(startDateObj);
-    oneDayLater.setDate(oneDayLater.getDate() + 1);
+    const minEndDate = new Date(startDateObj);
+    minEndDate.setDate(minEndDate.getDate() + MIN_CONTEST_DURATION_DAYS);
 
-    // If end date is exactly 1 day after start date, minimum end time should be same as start time
-    if (endDateObj.toDateString() === oneDayLater.toDateString()) {
+    // If end date is exactly minimum duration days after start date, minimum end time should be same as start time
+    if (endDateObj.toDateString() === minEndDate.toDateString()) {
       return startTime;
     }
 
-    // If end date is more than 1 day after start date, any time is valid
+    // If end date is more than minimum duration days after start date, any time is valid
     return "00:00";
   };
 
-  // Update end date/time when start date/time changes to ensure minimum 1-day duration
+  // Update end date/time when start date/time changes to ensure minimum duration
   useEffect(() => {
     if (!startDate || !startTime) return;
 
     const startDateTime = new Date(`${startDate}T${startTime}`);
 
-    // If end date/time is set and is less than 1 day after start, update it
+    // If end date/time is set and is less than minimum duration after start, update it
     if (endDate && endTime) {
       const endDateTime = new Date(`${endDate}T${endTime}`);
       const minEndDateTime = new Date(startDateTime);
-      minEndDateTime.setDate(minEndDateTime.getDate() + 1);
+      minEndDateTime.setDate(minEndDateTime.getDate() + MIN_CONTEST_DURATION_DAYS);
 
       if (endDateTime < minEndDateTime) {
-        // Set end date/time to be exactly 1 day after start
+        // Set end date/time to be exactly minimum duration after start
         const newEndDate = getMinEndDate();
         setEndDate(newEndDate);
         setEndTime(startTime); // Keep the same time of day
@@ -2737,8 +2761,9 @@ export default function CreateContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              Contest duration must be at least 24 hours (minimum 1 day). The end date will
-              automatically adjust to maintain this minimum duration.
+              Contest must start at least {MIN_DAYS_UNTIL_START} days from today ({MIN_DAYS_UNTIL_START - 1} day gap required).
+              Duration must be between {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
+              The end date will automatically adjust to maintain minimum duration.
             </p>
           </div>
 

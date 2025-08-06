@@ -168,6 +168,11 @@ export const MAX_PRIZE_PER_WINNER = Infinity  // No upper limit - removed $1000 
 // CPM Rate Limits (per 1000 views)
 export const MIN_CPM_RATE = 0.1  // $0.10 per 1000 views
 export const MAX_CPM_RATE = 100  // $100.00 per 1000 views
+
+// Contest Date and Duration Limits
+export const MIN_DAYS_UNTIL_START = 2  // Contest must start at least 2 days from today (1 day gap)
+export const MIN_CONTEST_DURATION_DAYS = 3  // Minimum contest duration in days
+export const MAX_CONTEST_DURATION_DAYS = 28  // Maximum contest duration in days
 export const DEFAULT_PRIZE_ALLOCATIONS = {
     1: 5000, // $50.00
     2: 3000, // $30.00

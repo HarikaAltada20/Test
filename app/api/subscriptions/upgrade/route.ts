@@ -9,6 +9,54 @@ import {
 import { stripe } from '@/lib/stripe';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 
+/**
+ * Cancel any existing subscription schedules for a customer
+ * This ensures only one active schedule exists per customer
+ */
+async function cancelExistingSubscriptionSchedules(customerId: string, userId: string) {
+  try {
+    console.log(`🔍 Fetching existing subscription schedules for customer: ${customerId}`);
+    
+    // Get all subscription schedules for this customer
+    const schedules = await stripe().subscriptionSchedules.list({
+      customer: customerId,
+      limit: 100, // Get all schedules
+    });
+
+    console.log(`📋 Found ${schedules.data.length} existing schedules`);
+
+    // Filter schedules that are not yet canceled or completed
+    const activeSchedules = schedules.data.filter(schedule => 
+      schedule.status === 'not_started' || schedule.status === 'active'
+    );
+
+    console.log(`📋 Found ${activeSchedules.length} active schedules to cancel`);
+
+    // Cancel each active schedule
+    for (const schedule of activeSchedules) {
+      try {
+        console.log(`❌ Canceling existing schedule: ${schedule.id} (status: ${schedule.status})`);
+        await stripe().subscriptionSchedules.cancel(schedule.id);
+        console.log(`✅ Successfully canceled schedule: ${schedule.id}`);
+      } catch (cancelError) {
+        console.error(`❌ Failed to cancel schedule ${schedule.id}:`, cancelError);
+        // Continue with other schedules even if one fails
+      }
+    }
+
+    if (activeSchedules.length > 0) {
+      console.log(`✅ Canceled ${activeSchedules.length} existing subscription schedules`);
+    } else {
+      console.log('✅ No existing active schedules found');
+    }
+
+  } catch (error) {
+    console.error('❌ Error fetching/canceling existing subscription schedules:', error);
+    // Don't throw error - we still want to create the new schedule
+    // This is a cleanup operation, not critical for the main flow
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -129,6 +177,13 @@ export async function POST(request: NextRequest) {
       try {
         console.log(`🔄 Starting safe ${isUpgrade ? 'upgrade' : 'downgrade'} from ${currentPlan.name} to ${targetPlan.name}`);
 
+        // CRITICAL: Cancel any existing subscription schedules for this customer
+        const customerId = await createOrGetStripeCustomer(user.id);
+        if (customerId) {
+          console.log('🔍 Canceling existing schedules before immediate upgrade...');
+          await cancelExistingSubscriptionSchedules(customerId, user.id);
+        }
+
         // SAFE APPROACH: Create new checkout session with old subscription ID in metadata
         // The webhook will handle canceling the old subscription ONLY after new subscription is successful
         const checkoutSession = await createSubscriptionCheckoutSession({
@@ -136,7 +191,7 @@ export async function POST(request: NextRequest) {
           productId: targetProductId,
           priceId: targetPriceId,
           upgradeOptions: {
-            upgradeType: isUpgrade ? 'upgrade' : 'downgrade', // Set correct upgrade type based on price comparison
+            upgradeType: 'immediate', // This is an immediate upgrade/downgrade
             oldSubscriptionId: currentSubscription.id !== 'free-plan' ? currentSubscription.id : undefined
           }
         });
@@ -222,6 +277,10 @@ export async function POST(request: NextRequest) {
           throw new Error('Failed to get Stripe customer ID');
         }
 
+        // CRITICAL: Cancel any existing subscription schedules for this customer
+        console.log('🔍 Checking for existing subscription schedules to cancel...');
+        await cancelExistingSubscriptionSchedules(customerId, user.id);
+
         const subscriptionSchedule = await stripe().subscriptionSchedules.create({
           customer: customerId,
           start_date: scheduleStartDate,
@@ -251,14 +310,27 @@ export async function POST(request: NextRequest) {
         });
 
         // Set current subscription to cancel at period end (natural expiration)
-        await stripe().subscriptions.update(currentSubscription.id, {
-          cancel_at_period_end: true,
-          metadata: {
-            ...currentSubscription.subscription_info,
-            scheduled_replacement: subscriptionSchedule.id,
-            cancel_reason: `scheduled_${isUpgrade ? 'upgrade' : 'downgrade'}_to_${targetPlan.name}`
+        // Only update if subscription is not already canceled
+        try {
+          const stripeSubscription = await stripe().subscriptions.retrieve(currentSubscription.id);
+          
+          if (stripeSubscription.status !== 'canceled') {
+            await stripe().subscriptions.update(currentSubscription.id, {
+              cancel_at_period_end: true,
+              metadata: {
+                ...currentSubscription.subscription_info,
+                scheduled_replacement: subscriptionSchedule.id,
+                cancel_reason: `scheduled_${isUpgrade ? 'upgrade' : 'downgrade'}_to_${targetPlan.name}`
+              }
+            });
+            console.log('✅ Updated subscription to cancel at period end');
+          } else {
+            console.log('⚠️ Subscription is already canceled, skipping update');
           }
-        });
+        } catch (updateError) {
+          console.error('❌ Error updating subscription:', updateError);
+          // Don't fail the entire operation - the schedule was created successfully
+        }
 
         const changeType = isUpgrade ? 'upgrade' : 'downgrade';
         

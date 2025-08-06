@@ -89,7 +89,7 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       price_id: subscriptionInfo.price_id,
       status: 'active',
       current_period_start: new Date(),
-      current_period_end: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days (monthly) for free plan
       cancel_at_period_end: false,
       trial_start: undefined,
       trial_end: undefined,
@@ -231,6 +231,54 @@ export async function createOrGetStripeCustomer(userId: string): Promise<string 
   }
 }
 
+/**
+ * Cancel any existing subscription schedules for a customer
+ * This ensures only one active schedule exists per customer
+ */
+async function cancelExistingSubscriptionSchedules(customerId: string, userId: string) {
+  try {
+    console.log(`🔍 Fetching existing subscription schedules for customer: ${customerId}`);
+    
+    // Get all subscription schedules for this customer
+    const schedules = await stripe().subscriptionSchedules.list({
+      customer: customerId,
+      limit: 100, // Get all schedules
+    });
+
+    console.log(`📋 Found ${schedules.data.length} existing schedules`);
+
+    // Filter schedules that are not yet canceled or completed
+    const activeSchedules = schedules.data.filter(schedule => 
+      schedule.status === 'not_started' || schedule.status === 'active'
+    );
+
+    console.log(`📋 Found ${activeSchedules.length} active schedules to cancel`);
+
+    // Cancel each active schedule
+    for (const schedule of activeSchedules) {
+      try {
+        console.log(`❌ Canceling existing schedule: ${schedule.id} (status: ${schedule.status})`);
+        await stripe().subscriptionSchedules.cancel(schedule.id);
+        console.log(`✅ Successfully canceled schedule: ${schedule.id}`);
+      } catch (cancelError) {
+        console.error(`❌ Failed to cancel schedule ${schedule.id}:`, cancelError);
+        // Continue with other schedules even if one fails
+      }
+    }
+
+    if (activeSchedules.length > 0) {
+      console.log(`✅ Canceled ${activeSchedules.length} existing subscription schedules`);
+    } else {
+      console.log('✅ No existing active schedules found');
+    }
+
+  } catch (error) {
+    console.error('❌ Error fetching/canceling existing subscription schedules:', error);
+    // Don't throw error - we still want to create the new schedule
+    // This is a cleanup operation, not critical for the main flow
+  }
+}
+
 // Create Stripe checkout session for subscription
 export async function createSubscriptionCheckoutSession(
   params: CreateSubscriptionParams
@@ -242,6 +290,10 @@ export async function createSubscriptionCheckoutSession(
     if (!customerId) {
       throw new Error('Failed to create or get Stripe customer');
     }
+
+    // CRITICAL: Cancel any existing subscription schedules for this customer
+    console.log('🔍 Canceling existing schedules before creating checkout session...');
+    await cancelExistingSubscriptionSchedules(customerId, userId);
 
     const plan = getSubscriptionPlanById(productId);
     if (!plan) {
@@ -419,9 +471,15 @@ export async function getCustomerPortalUrl(userId: string): Promise<string | nul
 
     console.log('✅ Got customer ID:', customerId);
 
+    const returnUrl = process.env.NEXT_PUBLIC_APP_URL 
+      ? `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`
+      : 'http://localhost:3000/dashboard/billing';
+      
+    console.log('🔧 Using return URL:', returnUrl);
+    
     const portalSession = await stripe().billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+      return_url: returnUrl,
     });
 
     console.log('✅ Portal session created:', portalSession.url);
@@ -435,9 +493,13 @@ export async function getCustomerPortalUrl(userId: string): Promise<string | nul
       
       try {
         // Try without any extra parameters
+        const returnUrl = process.env.NEXT_PUBLIC_APP_URL 
+          ? `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`
+          : 'http://localhost:3000/dashboard/billing';
+          
         const portalSession = await stripe().billingPortal.sessions.create({
           customer: customerId,
-          return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+          return_url: returnUrl,
         });
         
         console.log('✅ Portal session created with fallback:', portalSession.url);

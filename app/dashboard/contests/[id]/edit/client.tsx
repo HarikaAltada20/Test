@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
 import { formatCurrencyFromCents } from "@/lib/currency-utils"
-import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, MIN_CPM_RATE, MAX_CPM_RATE, subscriptionPlans, PRODUCT_IDS, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, TOAST_DURATION_SHORT, API_TIMEOUT_MEDIUM, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
+import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, MIN_CPM_RATE, MAX_CPM_RATE, MIN_DAYS_UNTIL_START, MIN_CONTEST_DURATION_DAYS, MAX_CONTEST_DURATION_DAYS, subscriptionPlans, PRODUCT_IDS, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, TOAST_DURATION_SHORT, API_TIMEOUT_MEDIUM, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
 import { UserResponse } from "@supabase/supabase-js"
 import { useToast } from "@/hooks/use-toast"
@@ -574,20 +574,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     // Get minimum allowed start date and time (current date/time)
     const getMinDateTime = () => {
         const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
+        const minStartDate = new Date(now);
+        minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+
+        const year = minStartDate.getFullYear();
+        const month = String(minStartDate.getMonth() + 1).padStart(2, '0');
+        const day = String(minStartDate.getDate()).padStart(2, '0');
 
         return `${year}-${month}-${day}`;
     };
 
-    // Get minimum allowed end date (at least 1 day after the start date)
+    // Get minimum allowed end date (at least 3 days after the start date)
     const getMinEndDate = () => {
         if (!startDate) return getMinDateTime();
 
         const startDateObj = new Date(startDate);
-        // Add one day to the start date to ensure minimum 1 day duration
-        startDateObj.setDate(startDateObj.getDate() + 1);
+        // Add minimum duration days to the start date
+        startDateObj.setDate(startDateObj.getDate() + MIN_CONTEST_DURATION_DAYS);
 
         const year = startDateObj.getFullYear();
         const month = String(startDateObj.getMonth() + 1).padStart(2, '0');
@@ -596,20 +599,20 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         return `${year}-${month}-${day}`;
     };
 
-    // Update end date/time when start date/time changes to ensure minimum 1-day duration
+    // Update end date/time when start date/time changes to ensure minimum duration
     useEffect(() => {
         if (!startDate || !startTime) return;
 
         const startDateTime = new Date(`${startDate}T${startTime}`);
 
-        // If end date/time is set and is less than 1 day after start, update it
+        // If end date/time is set and is less than minimum duration after start, update it
         if (endDate && endTime) {
             const endDateTime = new Date(`${endDate}T${endTime}`);
             const minEndDateTime = new Date(startDateTime);
-            minEndDateTime.setDate(minEndDateTime.getDate() + 1);
+            minEndDateTime.setDate(minEndDateTime.getDate() + MIN_CONTEST_DURATION_DAYS);
 
             if (endDateTime < minEndDateTime) {
-                // Set end date/time to be exactly 1 day after start
+                // Set end date/time to be exactly minimum duration after start
                 const newEndDate = getMinEndDate();
                 setEndDate(newEndDate);
                 setEndTime(startTime); // Keep the same time of day
@@ -743,10 +746,21 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
-                // Allow editing start time for contests not yet started, but it must still be in the future from now
-                // And if contest.start_date exists, it means we are editing an existing draft, so only check if it has not started.
+                // Check minimum days until start (1 day gap) - only for new contests or contests not yet started
                 const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
-                if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
+                const isNewContest = !originalStartDate || originalStartDate > now;
+
+                if (isNewContest) {
+                    const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+                        toast({
+                            title: "Invalid Start Date",
+                            description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required).`,
+                            variant: "destructive",
+                        });
+                        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                    }
+                } else if (startDateTime < now) {
                     toast({
                         title: "Invalid Start Time",
                         description: "Contest start time must be in the future.",
@@ -754,6 +768,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
+
                 if (endDateTime <= startDateTime) {
                     toast({
                         title: "Invalid End Time",
@@ -762,12 +777,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
+
+                // Check contest duration limits
                 const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                const oneDayMs = 24 * 60 * 60 * 1000;
-                if (durationMs < oneDayMs) {
+                const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+
+                if (durationDays < MIN_CONTEST_DURATION_DAYS) {
                     toast({
                         title: "Invalid Duration",
-                        description: "Contest duration must be at least 24 hours (minimum 1 day).",
+                        description: `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+
+                if (durationDays > MAX_CONTEST_DURATION_DAYS) {
+                    toast({
+                        title: "Invalid Duration",
+                        description: `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`,
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
@@ -1415,7 +1442,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             }
 
             const originalStartDate = contest?.start_date ? new Date(contest.start_date) : null;
-            if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
+            const isNewContest = !originalStartDate || originalStartDate > now;
+
+            if (isNewContest) {
+                const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+                    return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required).`;
+                }
+            } else if (startDateTime < now) {
                 return "Contest start time must be in the future.";
             }
 
@@ -1423,10 +1457,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 return "Contest end time must be after the start time.";
             }
 
+            // Check contest duration limits
             const durationMs = endDateTime.getTime() - startDateTime.getTime();
-            const oneDayMs = 24 * 60 * 60 * 1000;
-            if (durationMs < oneDayMs) {
-                return "Contest duration must be at least 24 hours (minimum 1 day).";
+            const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+
+            if (durationDays < MIN_CONTEST_DURATION_DAYS) {
+                return `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`;
+            }
+
+            if (durationDays > MAX_CONTEST_DURATION_DAYS) {
+                return `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`;
             }
         } catch (error) {
             return "There was an error with the date/time format. Please check your entries.";
@@ -2049,7 +2089,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 }
 
                 const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
-                if (startDateTime < now && (!originalStartDate || originalStartDate > now)) {
+                const isNewContest = !originalStartDate || originalStartDate > now;
+
+                if (isNewContest) {
+                    const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+                        toast({
+                            title: "Invalid Start Date",
+                            description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required).`,
+                            variant: "destructive",
+                        });
+                        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                    }
+                } else if (startDateTime < now) {
                     toast({
                         title: "Invalid Start Time",
                         description: "Contest start time must be in the future.",
@@ -2057,6 +2109,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
+
                 if (endDateTime <= startDateTime) {
                     toast({
                         title: "Invalid End Time",
@@ -2065,12 +2118,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
+
+                // Check contest duration limits
                 const durationMs = endDateTime.getTime() - startDateTime.getTime();
-                const oneDayMs = 24 * 60 * 60 * 1000;
-                if (durationMs < oneDayMs) {
+                const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+
+                if (durationDays < MIN_CONTEST_DURATION_DAYS) {
                     toast({
                         title: "Invalid Duration",
-                        description: "Contest duration must be at least 24 hours (minimum 1 day).",
+                        description: `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+
+                if (durationDays > MAX_CONTEST_DURATION_DAYS) {
+                    toast({
+                        title: "Invalid Duration",
+                        description: `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`,
                         variant: "destructive",
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;

@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ User is advertiser, creating portal session...');
+    console.log('🔧 Environment check - NEXT_PUBLIC_APP_URL:', process.env.NEXT_PUBLIC_APP_URL);
 
     // Get customer portal URL
     const portalUrl = await getCustomerPortalUrl(user.id);

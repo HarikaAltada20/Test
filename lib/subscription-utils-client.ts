@@ -62,7 +62,7 @@ export async function getUserSubscription(userId: string): Promise<UserSubscript
       price_id: subscriptionInfo.price_id,
       status: 'active',
       current_period_start: new Date(),
-      current_period_end: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year from now
+      current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days (monthly) for free plan
       cancel_at_period_end: false,
       subscription_info: subscriptionInfo,
       created_at: new Date(),
