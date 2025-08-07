@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info, AlertTriangle, File } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
 import { toLocalDateTimeStrings, toUTCISOString, validateImageFile } from "@/lib/utils"
@@ -746,12 +746,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     });
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
-                // Check minimum days until start (1 day gap) - only for new contests or contests not yet started
-                const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
+
+                // FIXED: Handle date input properly to avoid timezone issues
+                // The HTML date input gives us YYYY-MM-DD format, we need to parse it correctly
+                const startDateParts = startDate.split('-');
+                const startYear = parseInt(startDateParts[0]);
+                const startMonth = parseInt(startDateParts[1]) - 1; // Month is 0-indexed
+                const startDay = parseInt(startDateParts[2]);
+
+                // Create date in local timezone
+                const startDateOnly = new Date(startYear, startMonth, startDay);
+                const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const daysUntilStart = Math.floor((startDateOnly.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+                const originalStartDate = contest?.start_date ? new Date(contest.start_date) : null;
                 const isNewContest = !originalStartDate || originalStartDate > now;
 
                 if (isNewContest) {
-                    const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    // CRITICAL: Use exact same logic as getMinDateTime for consistency
                     if (daysUntilStart < MIN_DAYS_UNTIL_START) {
                         toast({
                             title: "Invalid Start Date",
@@ -1005,23 +1017,34 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             // Validate image file type
             const imageValidation = validateImageFile(file);
             if (!imageValidation.isValid) {
-                setAssetUploadError(imageValidation.error || "Please upload a valid image file.");
-                if (fileInputRef.current) fileInputRef.current.value = "";
+                toast({
+                    title: "Invalid File Type",
+                    description: imageValidation.error || "Please upload a valid image file.",
+                    variant: "destructive"
+                });
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
                 return;
             }
 
-            setThumbnail(file);
-            if (!user?.id) {
-                setAssetUploadError("User not authenticated. Please sign in again.");
-                return;
-            }
-            const maxSize = 5 * 1024 * 1024;
+            const maxSize = 5 * 1024 * 1024; // 5MB
             if (file.size > maxSize) {
-                setAssetUploadError("Thumbnail must be 5MB or smaller. Please choose a smaller file.");
-                if (fileInputRef.current) fileInputRef.current.value = "";
+                toast({
+                    title: "File Too Large",
+                    description: "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
+                    variant: "destructive"
+                });
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
                 return;
             }
             try {
+                if (!user?.id) {
+                    toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
+                    return;
+                }
                 // Remove any existing thumbnail for this contest (all extensions)
                 const { data: existingFiles } = await supabase.storage
                     .from("contest-assets")
@@ -1037,63 +1060,68 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 const ext = file.name.split('.').pop() || 'jpg';
                 const timestamp = Date.now();
                 const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
-                const { error: uploadError } = await supabase.storage
-                    .from('contest-assets')
+                setThumbnail(file);
+                setThumbnailPreview("uploading");
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from("contest-assets")
                     .upload(fileName, file);
                 if (uploadError) {
-                    setAssetUploadError("Thumbnail upload failed: " + uploadError.message);
-                    return;
+                    throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
                 }
                 const { data: publicUrlData } = supabase.storage
-                    .from('contest-assets')
+                    .from("contest-assets")
                     .getPublicUrl(fileName);
-                setThumbnailPreview(publicUrlData?.publicUrl || "");
+                const publicUrl = publicUrlData?.publicUrl || "";
+                if (!publicUrl) {
+                    throw new Error("Failed to get public URL for uploaded thumbnail");
+                }
+                setThumbnail(null);
+                setThumbnailPreview(publicUrl);
                 await supabase
                     .from("contests")
-                    .update({ thumbnail_url: publicUrlData?.publicUrl || "" })
+                    .update({ thumbnail_url: publicUrl })
                     .eq("id", contestId)
                     .eq("advertiser_id", user.id);
-                setAssetUploadError(null);
+                toast({ title: "Success", description: "Thumbnail uploaded successfully!" });
             } catch (error: any) {
-                setAssetUploadError("Thumbnail upload failed: " + error.message);
+                console.error("Error uploading thumbnail:", error);
+                setThumbnail(null);
+                setThumbnailPreview(null);
+                toast({ title: "Upload Error", description: `Failed to upload thumbnail: ${error.message}`, variant: "destructive" });
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
             }
         }
     };
 
     const removeThumbnail = async () => {
-        // Delete all thumbnails for this contest (all extensions)
         try {
-            const { data: thumbnailFiles } = await supabase.storage
-                .from("contest-assets")
-                .list("contest_thumbnails");
-            if (thumbnailFiles && thumbnailFiles.length > 0) {
-                const matching = thumbnailFiles.filter(f => f.name.startsWith(`${contestId}_`));
-                if (matching.length > 0) {
-                    const thumbnailFilePaths = matching.map(f => `contest_thumbnails/${f.name}`);
-                    await supabase.storage
-                        .from("contest-assets")
-                        .remove(thumbnailFilePaths);
+            // If there's a Supabase URL, delete it from storage
+            if (thumbnailPreview && thumbnailPreview.includes('supabase.co/storage')) {
+                await deleteFromStorage(thumbnailPreview);
+
+                // Update DB to remove thumbnail URL
+                if (contestId && user) {
+                    await supabase
+                        .from("contests")
+                        .update({ thumbnail_url: null })
+                        .eq("id", contestId)
+                        .eq("advertiser_id", user.id);
                 }
+
+                toast({ title: "Success", description: "Thumbnail removed successfully!" });
             }
-        } catch (error) {
-            console.error('Error deleting thumbnail from storage:', error);
-        }
-        // Update DB to remove thumbnail URL
-        if (user?.id && contestId) {
-            try {
-                await supabase
-                    .from("contests")
-                    .update({ thumbnail_url: null })
-                    .eq("id", contestId)
-                    .eq("advertiser_id", user.id);
-            } catch (error) {
-                console.error('Error updating thumbnail in DB:', error);
+        } catch (error: any) {
+            console.error("Error removing thumbnail:", error);
+            toast({ title: "Warning", description: "Thumbnail removed from preview but may not have been deleted from storage.", variant: "destructive" });
+        } finally {
+            // Always clear the UI state regardless of storage deletion success
+            setThumbnail(null);
+            setThumbnailPreview(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
             }
-        }
-        setThumbnail(null)
-        setThumbnailPreview(null)
-        if (fileInputRef.current) {
-            fileInputRef.current.value = ""
         }
     }
 
@@ -1165,7 +1193,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 reader.onload = (ev) => setResourceFilePreview(ev.target?.result as string);
                 reader.readAsDataURL(file);
             } else {
-                setResourceFilePreview(`file-type:${file.type}::${file.name}`); // Include name for non-image preview
+                // For non-image files, we just set a special flag to indicate file type
+                setResourceFilePreview(`file-type:${file.type}`);
             }
         }
     };
@@ -1450,11 +1479,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 return "Please check your date and time entries.";
             }
 
+            // FIXED: Handle date input properly to avoid timezone issues
+            // The HTML date input gives us YYYY-MM-DD format, we need to parse it correctly
+            const startDateParts = startDate.split('-');
+            const startYear = parseInt(startDateParts[0]);
+            const startMonth = parseInt(startDateParts[1]) - 1; // Month is 0-indexed
+            const startDay = parseInt(startDateParts[2]);
+
+            // Create date in local timezone
+            const startDateOnly = new Date(startYear, startMonth, startDay);
+            const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const daysUntilStart = Math.floor((startDateOnly.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
+
             const originalStartDate = contest?.start_date ? new Date(contest.start_date) : null;
             const isNewContest = !originalStartDate || originalStartDate > now;
 
             if (isNewContest) {
-                const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                // CRITICAL: Use exact same logic as getMinDateTime for consistency
                 if (daysUntilStart < MIN_DAYS_UNTIL_START) {
                     return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required).`;
                 }
@@ -2097,11 +2138,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                     setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
                 }
 
-                const originalStartDate = contest.start_date ? new Date(contest.start_date) : null;
+                // FIXED: Handle date input properly to avoid timezone issues
+                // The HTML date input gives us YYYY-MM-DD format, we need to parse it correctly
+                const startDateParts = startDate.split('-');
+                const startYear = parseInt(startDateParts[0]);
+                const startMonth = parseInt(startDateParts[1]) - 1; // Month is 0-indexed
+                const startDay = parseInt(startDateParts[2]);
+
+                // Create date in local timezone
+                const startDateOnly = new Date(startYear, startMonth, startDay);
+                const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const daysUntilStart = Math.floor((startDateOnly.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+                const originalStartDate = contest?.start_date ? new Date(contest.start_date) : null;
                 const isNewContest = !originalStartDate || originalStartDate > now;
 
                 if (isNewContest) {
-                    const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    // CRITICAL: Use exact same logic as getMinDateTime for consistency
                     if (daysUntilStart < MIN_DAYS_UNTIL_START) {
                         toast({
                             title: "Invalid Start Date",
@@ -2870,10 +2923,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         aria-label="Upload asset">
                                         {resourceFilePreview ? (
                                             <div className="relative">
-                                                <img src={resourceFilePreview} alt="Preview" className="mx-auto max-h-48 object-contain" />
-                                                <div className="mt-2 flex justify-between items-center">
-                                                    <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); removeResourceFile(); }} className="text-red-500"><Trash className="h-4 w-4 mr-1" /> Remove</Button>
-                                                </div>
+                                                {resourceFilePreview.startsWith('file-type:') ? (
+                                                    <div className="flex flex-col items-center justify-center h-32">
+                                                        <File className="h-10 w-10 text-gray-400 mb-2" />
+                                                        <p className="text-sm font-medium mb-1">File Selected</p>
+                                                        <p className="text-xs text-gray-500">{resourceFile?.name}</p>
+                                                        <div className="mt-2">
+                                                            <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); removeResourceFile(); }} className="text-red-500"><Trash className="h-4 w-4 mr-1" /> Remove</Button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <img src={resourceFilePreview} alt="Preview" className="mx-auto max-h-48 object-contain" />
+                                                )}
+                                                {!resourceFilePreview.startsWith('file-type:') && (
+                                                    <div className="mt-2 flex justify-between items-center">
+                                                        <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); removeResourceFile(); }} className="text-red-500"><Trash className="h-4 w-4 mr-1" /> Remove</Button>
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center justify-center h-32">
@@ -3328,11 +3394,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         id="cpmRate"
                                         type="number"
                                         value={cpmRate}
-                                        onChange={(e) => {
+                                        onChange={(e) => setCpmRate(e.target.value)}
+                                        onBlur={(e) => {
                                             const value = e.target.value;
                                             const numValue = parseFloat(value);
 
-                                            // Prevent values below minimum
                                             if (value && numValue < MIN_CPM_RATE) {
                                                 setCpmRate(MIN_CPM_RATE.toString());
                                                 toast({
@@ -3340,29 +3406,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                     description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
                                                     variant: "destructive",
                                                 });
-                                                return;
-                                            }
-
-                                            // Prevent values above maximum
-                                            if (value && numValue > MAX_CPM_RATE) {
+                                            } else if (value && numValue > MAX_CPM_RATE) {
                                                 setCpmRate(MAX_CPM_RATE.toString());
                                                 toast({
                                                     title: "CPM Rate Too High",
                                                     description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
                                                     variant: "destructive",
                                                 });
-                                                return;
-                                            }
-
-                                            setCpmRate(value);
-                                        }}
-                                        onBlur={(e) => {
-                                            const value = e.target.value;
-                                            const numValue = parseFloat(value);
-
-                                            // Ensure minimum value on blur
-                                            if (value && numValue < MIN_CPM_RATE) {
-                                                setCpmRate(MIN_CPM_RATE.toString());
                                             }
                                         }}
                                         placeholder="e.g., 1.50"
@@ -3397,8 +3447,37 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         id="minViews"
                                         type="number"
                                         value={minViews}
-                                        onChange={(e) => setMinViews(e.target.value)}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setMinViews(value);
+
+                                            // Real-time validation
+                                            const minViewsValue = value && value.trim() !== "" ? parseInt(value, 10) : null;
+                                            const maxViewsValue = maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null;
+
+                                            if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+                                                toast({
+                                                    title: "Invalid View Range",
+                                                    description: "Minimum views must be less than maximum views.",
+                                                    variant: "destructive",
+                                                });
+                                            }
+                                        }}
+                                        onBlur={(e) => {
+                                            const value = e.target.value;
+                                            const minViewsValue = value && value.trim() !== "" ? parseInt(value, 10) : null;
+                                            const maxViewsValue = maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null;
+
+                                            if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+                                                toast({
+                                                    title: "Invalid View Range",
+                                                    description: "Minimum views must be less than maximum views.",
+                                                    variant: "destructive",
+                                                });
+                                            }
+                                        }}
                                         placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
+                                        min="0"
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         Optional: Minimum views a submission needs to be eligible for earnings.
@@ -3410,8 +3489,37 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         id="maxViews"
                                         type="number"
                                         value={maxViews}
-                                        onChange={(e) => setMaxViews(e.target.value)}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            setMaxViews(value);
+
+                                            // Real-time validation
+                                            const maxViewsValue = value && value.trim() !== "" ? parseInt(value, 10) : null;
+                                            const minViewsValue = minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null;
+
+                                            if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+                                                toast({
+                                                    title: "Invalid View Range",
+                                                    description: "Minimum views must be less than maximum views.",
+                                                    variant: "destructive",
+                                                });
+                                            }
+                                        }}
+                                        onBlur={(e) => {
+                                            const value = e.target.value;
+                                            const maxViewsValue = value && value.trim() !== "" ? parseInt(value, 10) : null;
+                                            const minViewsValue = minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null;
+
+                                            if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+                                                toast({
+                                                    title: "Invalid View Range",
+                                                    description: "Minimum views must be less than maximum views.",
+                                                    variant: "destructive",
+                                                });
+                                            }
+                                        }}
                                         placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
+                                        min="0"
                                     />
                                     <p className="text-xs text-muted-foreground">
                                         Optional: Maximum views for which a creator can be paid for a single submission.
