@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Image, Trash, Upload, ExternalLink, Check, Crown, Info, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
-import { toLocalDateTimeStrings, toUTCISOString } from "@/lib/utils"
+import { toLocalDateTimeStrings, toUTCISOString, validateImageFile } from "@/lib/utils"
 import { formatCurrencyFromCents } from "@/lib/currency-utils"
 import { DEFAULT_PRIZE_ALLOCATIONS, MAX_PRIZE_PER_WINNER, MIN_PRIZE_PER_WINNER, MIN_CPM_RATE, MAX_CPM_RATE, MIN_DAYS_UNTIL_START, MIN_CONTEST_DURATION_DAYS, MAX_CONTEST_DURATION_DAYS, subscriptionPlans, PRODUCT_IDS, DEFAULT_TOTAL_PRIZE_POOL, DEFAULT_WINNER_AMOUNTS, DEFAULT_WINNER_COUNT, TOAST_DURATION_LONG, TOAST_DURATION_SHORT, API_TIMEOUT_MEDIUM, FORM_PLACEHOLDER_SMALL_AMOUNT, FORM_PLACEHOLDER_LARGE_AMOUNT } from "@/constants/subscriptionPlans"
 import { createClient } from "@/utils/supabase/client"
@@ -1001,6 +1001,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
+
+            // Validate image file type
+            const imageValidation = validateImageFile(file);
+            if (!imageValidation.isValid) {
+                setAssetUploadError(imageValidation.error || "Please upload a valid image file.");
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                return;
+            }
+
             setThumbnail(file);
             if (!user?.id) {
                 setAssetUploadError("User not authenticated. Please sign in again.");
@@ -2401,6 +2410,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         setIsDragActive(false);
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
             const file = e.dataTransfer.files[0];
+
+            // Validate image file type
+            const imageValidation = validateImageFile(file);
+            if (!imageValidation.isValid) {
+                setAssetUploadError(imageValidation.error || "Please upload a valid image file.");
+                return;
+            }
+
             setThumbnail(file);
             if (!user?.id) {
                 setAssetUploadError("User not authenticated. Please sign in again.");
@@ -3311,7 +3328,43 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                         id="cpmRate"
                                         type="number"
                                         value={cpmRate}
-                                        onChange={(e) => setCpmRate(e.target.value)}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            const numValue = parseFloat(value);
+
+                                            // Prevent values below minimum
+                                            if (value && numValue < MIN_CPM_RATE) {
+                                                setCpmRate(MIN_CPM_RATE.toString());
+                                                toast({
+                                                    title: "CPM Rate Too Low",
+                                                    description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                                                    variant: "destructive",
+                                                });
+                                                return;
+                                            }
+
+                                            // Prevent values above maximum
+                                            if (value && numValue > MAX_CPM_RATE) {
+                                                setCpmRate(MAX_CPM_RATE.toString());
+                                                toast({
+                                                    title: "CPM Rate Too High",
+                                                    description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                                                    variant: "destructive",
+                                                });
+                                                return;
+                                            }
+
+                                            setCpmRate(value);
+                                        }}
+                                        onBlur={(e) => {
+                                            const value = e.target.value;
+                                            const numValue = parseFloat(value);
+
+                                            // Ensure minimum value on blur
+                                            if (value && numValue < MIN_CPM_RATE) {
+                                                setCpmRate(MIN_CPM_RATE.toString());
+                                            }
+                                        }}
                                         placeholder="e.g., 1.50"
                                         min={MIN_CPM_RATE}
                                         max={MAX_CPM_RATE}

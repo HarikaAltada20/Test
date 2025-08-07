@@ -44,6 +44,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   toLocalDateTimeStrings,
   toUTCISOString,
+  validateImageFile,
 
 } from "@/lib/utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -178,6 +179,48 @@ export default function CreateContestPage({
 
   // Add draft ID state for tracking loaded drafts
   const [draftId, setDraftId] = useState<string | null>(null);
+
+  // Refresh protection state
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showRefreshWarning, setShowRefreshWarning] = useState(false);
+
+  // Refresh protection - track changes and warn before refresh
+  useEffect(() => {
+    // Check if there are any unsaved changes
+    const hasChanges = title || thumbnail || brief || rulesHtml || resources.length > 0 ||
+      startDate || endDate || winnerAmounts.some(amount => amount > 0) ||
+      (contestType === "cpm" && (cpmRate || minViews || maxViews || totalBudget || termsConditions));
+
+    setHasUnsavedChanges(!!hasChanges);
+
+    // Set up beforeunload event listener
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return 'You have unsaved changes. Are you sure you want to leave?';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Add keyboard shortcut for refresh protection
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'F5') || (e.ctrlKey && e.key === 'r') || (e.metaKey && e.key === 'r')) {
+        if (hasChanges) {
+          e.preventDefault();
+          setShowRefreshWarning(true);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [title, thumbnail, brief, rulesHtml, resources, startDate, endDate, winnerAmounts, contestType, cpmRate, minViews, maxViews, totalBudget, termsConditions, hasUnsavedChanges]);
 
   // Add this to the state declarations
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>(
@@ -416,6 +459,21 @@ export default function CreateContestPage({
   const handleThumbnailChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+
+      // Validate image file type
+      const imageValidation = validateImageFile(file);
+      if (!imageValidation.isValid) {
+        toast({
+          title: "Invalid File Type",
+          description: imageValidation.error || "Please upload a valid image file.",
+          variant: "destructive"
+        });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+
       const maxSize = 5 * 1024 * 1024; // 5MB
       if (file.size > maxSize) {
         toast({
@@ -724,8 +782,23 @@ export default function CreateContestPage({
           return { isValid: false, error: "Invalid date or time format. Please check your entries." };
         }
 
-        // Check minimum days until start (1 day gap)
-        const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        // FIXED: Handle date input properly to avoid timezone issues
+        // The HTML date input gives us YYYY-MM-DD format, we need to parse it correctly
+        const startDateParts = startDate.split('-');
+        const startYear = parseInt(startDateParts[0]);
+        const startMonth = parseInt(startDateParts[1]) - 1; // Month is 0-indexed
+        const startDay = parseInt(startDateParts[2]);
+
+        // Create date in local timezone
+        const startDateOnly = new Date(startYear, startMonth, startDay);
+        const todayOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const daysUntilStart = Math.floor((startDateOnly.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24));
+
+
+
+
+
+        // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
           return { isValid: false, error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)` };
         }
@@ -793,6 +866,14 @@ export default function CreateContestPage({
 
         if (!termsConditions) {
           return { isValid: false, error: "Terms & Conditions are required for CPM contests." };
+        }
+
+        // Validate minimum views vs maximum views
+        const minViewsValue = minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null;
+        const maxViewsValue = maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null;
+
+        if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+          return { isValid: false, error: "Minimum views must be less than maximum views." };
         }
 
         const budgetInCents = (parseFloat(totalBudget.toString()) || 0) * 100;
@@ -930,6 +1011,16 @@ export default function CreateContestPage({
             setFormFeedbackType("error");
             setIsLoading(false); setUploadProgress(null); return;
           }
+
+          // Validate minimum views vs maximum views
+          const minViewsValue = minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null;
+          const maxViewsValue = maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null;
+
+          if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+            setFormFeedback("Minimum views must be less than maximum views."); // Footer feedback
+            setFormFeedbackType("error");
+            setIsLoading(false); setUploadProgress(null); return;
+          }
         }
         contestBasedDetails = {
           cpm_contest: {
@@ -1062,13 +1153,14 @@ export default function CreateContestPage({
             setIsLoading(false); setUploadProgress(null); return;
           }
 
-          // Check minimum days until start (1 day gap)
-          const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-            setFormFeedback(`Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)`);
-            setFormFeedbackType("error");
-            setIsLoading(false); setUploadProgress(null); return;
-          }
+          // // Check minimum days until start (1 day gap)
+          // const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          // if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+          //   console.log("daysUntilStart", daysUntilStart, MIN_DAYS_UNTIL_START)
+          //   setFormFeedback(`Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)`);
+          //   setFormFeedbackType("error");
+          //   setIsLoading(false); setUploadProgress(null); return;
+          // }
 
           if (endDateTime <= startDateTime) {
             setFormFeedback("Contest end time must be after the start time");
@@ -2068,38 +2160,29 @@ export default function CreateContestPage({
 
   // Get minimum allowed start date and time (2 days from today)
   const getMinDateTime = () => {
+    // SIMPLE AND CORRECT: Just add days to current date
     const now = new Date();
+
+    // Create minimum start date by adding MIN_DAYS_UNTIL_START days to today
     const minStartDate = new Date(now);
-    minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+    minStartDate.setDate(now.getDate() + MIN_DAYS_UNTIL_START);
+
+    // Format as YYYY-MM-DD
+    const year = minStartDate.getFullYear();
+    const month = String(minStartDate.getMonth() + 1).padStart(2, "0");
+    const day = String(minStartDate.getDate()).padStart(2, "0");
+
+    const result = `${year}-${month}-${day}`;
 
     return {
-      date: `${minStartDate.getFullYear()}-${String(minStartDate.getMonth() + 1).padStart(
-        2,
-        "0"
-      )}-${String(minStartDate.getDate()).padStart(2, "0")}`,
-      time: `${String(now.getHours()).padStart(2, "0")}:${String(
-        now.getMinutes()
-      ).padStart(2, "0")}`,
+      date: result,
+      time: "00:00", // Always start at 00:00 since we only care about date
     };
   };
 
-  // Get minimum allowed start time for today
+  // Get minimum allowed start time (always 00:00 since we only care about date)
   const getMinStartTime = () => {
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
-      2,
-      "0"
-    )}-${String(now.getDate()).padStart(2, "0")}`;
-
-    // If selected date is today, return current time
-    if (startDate === today) {
-      return `${String(now.getHours()).padStart(2, "0")}:${String(
-        now.getMinutes() + 1
-      ).padStart(2, "0")}`;
-    }
-
-    // If selected date is in future, return any time
-    return "00:00";
+    return "00:00"; // Always allow 00:00 since we only care about date, not time
   };
 
   // Get minimum allowed end date (at least 3 days after the start date)
@@ -2698,14 +2781,11 @@ export default function CreateContestPage({
                   value={startDate}
                   onChange={(e) => {
                     setStartDate(e.target.value);
-                    const minTime = getMinStartTime();
-                    if (startTime < minTime) {
-                      setStartTime(minTime);
-                    }
                   }}
                   min={getMinDateTime().date}
                   className="w-full"
                 />
+
               </div>
               <div className="space-y-2">
                 <Label htmlFor="start-time">Start Time</Label>
@@ -2714,11 +2794,6 @@ export default function CreateContestPage({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  min={
-                    startDate === getMinDateTime().date
-                      ? getMinDateTime().time
-                      : undefined
-                  }
                   className="w-full"
                 />
               </div>
@@ -2761,8 +2836,11 @@ export default function CreateContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              Contest must start at least {MIN_DAYS_UNTIL_START} days from today ({MIN_DAYS_UNTIL_START - 1} day gap required).
-              Duration must be between {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
+              <strong>📅 Start Date Rule:</strong> Contest must start at least {MIN_DAYS_UNTIL_START} days from today.
+              For example, if today is August 2nd, you can create contests starting from August 4th (00:00 onwards).
+              August 2nd and August 3rd are not allowed.
+              <br />
+              <strong>⏱️ Duration:</strong> Contest must run between {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
               The end date will automatically adjust to maintain minimum duration.
             </p>
           </div>
@@ -2868,6 +2946,26 @@ export default function CreateContestPage({
                     type="number"
                     value={cpmRate}
                     onChange={(e) => setCpmRate(e.target.value)}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      const numValue = parseFloat(value);
+
+                      if (value && numValue < MIN_CPM_RATE) {
+                        setCpmRate(MIN_CPM_RATE.toString());
+                        toast({
+                          title: "CPM Rate Too Low",
+                          description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                          variant: "destructive",
+                        });
+                      } else if (value && numValue > MAX_CPM_RATE) {
+                        setCpmRate(MAX_CPM_RATE.toString());
+                        toast({
+                          title: "CPM Rate Too High",
+                          description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                          variant: "destructive",
+                        });
+                      }
+                    }}
                     placeholder="e.g., 1.50 for $1.50 per 1000 views"
                     min={MIN_CPM_RATE}
                     max={MAX_CPM_RATE}
@@ -2884,7 +2982,22 @@ export default function CreateContestPage({
                       id="minViewsPrize"
                       type="number"
                       value={minViews}
-                      onChange={(e) => setMinViews(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMinViews(value);
+
+                        // Real-time validation
+                        const minViewsValue = value && value.trim() !== "" ? parseInt(value, 10) : null;
+                        const maxViewsValue = maxViews && maxViews.toString().trim() !== "" ? parseInt(maxViews.toString(), 10) : null;
+
+                        if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+                          toast({
+                            title: "Invalid View Range",
+                            description: "Minimum views must be less than maximum views.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
                       placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                       min="0"
                     />
@@ -2898,7 +3011,22 @@ export default function CreateContestPage({
                       id="maxViewsPrize"
                       type="number"
                       value={maxViews}
-                      onChange={(e) => setMaxViews(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setMaxViews(value);
+
+                        // Real-time validation
+                        const maxViewsValue = value && value.trim() !== "" ? parseInt(value, 10) : null;
+                        const minViewsValue = minViews && minViews.toString().trim() !== "" ? parseInt(minViews.toString(), 10) : null;
+
+                        if (minViewsValue !== null && maxViewsValue !== null && minViewsValue >= maxViewsValue) {
+                          toast({
+                            title: "Invalid View Range",
+                            description: "Minimum views must be less than maximum views.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
                       placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
                       min="0"
                     />
@@ -3199,6 +3327,23 @@ export default function CreateContestPage({
     setShowUpgradeModal(false);
   };
 
+  // Refresh protection handlers
+  const handleRefreshWarning = () => {
+    if (hasUnsavedChanges) {
+      setShowRefreshWarning(true);
+    }
+  };
+
+  const handleConfirmRefresh = () => {
+    setShowRefreshWarning(false);
+    setHasUnsavedChanges(false);
+    window.location.reload();
+  };
+
+  const handleCancelRefresh = () => {
+    setShowRefreshWarning(false);
+  };
+
   // Custom Back Modal component
   const BackModal = () => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -3244,6 +3389,45 @@ export default function CreateContestPage({
           <Button
             variant="ghost"
             onClick={handleCancelUpgrade}
+            className="w-full text-gray-600 hover:text-gray-800"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Refresh Warning Modal
+  const RefreshWarningModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-5 w-5 text-white" />
+          </div>
+          <h2 className="text-xl font-bold">Unsaved Changes</h2>
+        </div>
+        <p className="mb-6 text-gray-600">
+          You have unsaved changes. Refreshing the page will lose all your progress. What would you like to do?
+        </p>
+        <div className="space-y-3">
+          <Button
+            onClick={handleSaveDraftAndBack}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
+          >
+            Save Draft
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleConfirmRefresh}
+            className="w-full border-2 hover:bg-gray-50"
+          >
+            Refresh Anyway
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={handleCancelRefresh}
             className="w-full text-gray-600 hover:text-gray-800"
           >
             Cancel
@@ -4236,6 +4420,9 @@ export default function CreateContestPage({
 
       {/* Render UpgradeModal if needed */}
       {showUpgradeModal && <UpgradeModal />}
+
+      {/* Render RefreshWarningModal if needed */}
+      {showRefreshWarning && <RefreshWarningModal />}
     </div>
   );
 }

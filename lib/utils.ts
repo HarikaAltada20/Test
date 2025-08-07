@@ -99,3 +99,49 @@ export function formatTimeAgo(timestamp: string | null): string {
   if (diffInHours < 24) return `${diffInHours}h ago`;
   return past.toLocaleDateString();
 }
+
+/**
+ * Validates if a file is a valid image
+ * @param file - The file to validate
+ * @returns Object with isValid boolean and error message if invalid
+ */
+export function validateImageFile(file: File): { isValid: boolean; error?: string } {
+  // Check if file exists
+  if (!file) {
+    return { isValid: false, error: "No file selected" };
+  }
+
+  // Check MIME type
+  const validMimeTypes = [
+    'image/jpeg',
+    'image/jpg', 
+    'image/jfif',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/bmp',
+    'image/tiff',
+    'image/svg+xml'
+  ];
+
+  if (!validMimeTypes.includes(file.type)) {
+    return { 
+      isValid: false, 
+      error: "Invalid file type. Please upload an image file (JPEG, JFIF, PNG, GIF, WebP, BMP, TIFF, or SVG)" 
+    };
+  }
+
+  // Check file extension
+  const fileName = file.name.toLowerCase();
+  const validExtensions = ['.jpg', '.jpeg', '.jfif', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg'];
+  const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
+  
+  if (!hasValidExtension) {
+    return { 
+      isValid: false, 
+      error: "Invalid file extension. Please upload an image file with a valid extension" 
+    };
+  }
+
+  return { isValid: true };
+}
