@@ -6,6 +6,17 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.bg-orange-ellipse {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(210, 65, 17, 0.8) 0%,
+    rgba(202, 96, 57, 0.489) 40%,
+    rgba(230, 59, 59, 0.3) 70%,
+    rgba(255, 132, 0, 0) 100%
+  );
+}
+
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
