@@ -20,7 +20,20 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Menu, User, Settings, LogOut, LayoutDashboard, UserCircle, Crown, Sparkles, Shield, ChevronDown, Zap, Star } from "lucide-react";
+import {
+  Menu,
+  User,
+  Settings,
+  LogOut,
+  LayoutDashboard,
+  UserCircle,
+  Crown,
+  Sparkles,
+  Shield,
+  ChevronDown,
+  Zap,
+  Star,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
@@ -38,7 +51,13 @@ interface NavProps {
   subscriptionPlan?: string | null;
 }
 
-export function Nav({ user, profileFullName, profilePictureUrl, userType, subscriptionPlan }: NavProps) {
+export function Nav({
+  user,
+  profileFullName,
+  profilePictureUrl,
+  userType,
+  subscriptionPlan,
+}: NavProps) {
   const pathname = usePathname();
   const { logout } = useClientAuth();
 
@@ -55,21 +74,26 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
   const getPlanName = (planId: string | null | undefined): string => {
     if (!planId) return "Explorer Plan";
 
-    const plan = subscriptionPlans.find(p => p.id === planId);
-    return plan ? (plan.displayName || plan.name) : "Explorer Plan";
+    const plan = subscriptionPlans.find((p) => p.id === planId);
+    return plan ? plan.displayName || plan.name : "Explorer Plan";
   };
 
   // Enhanced user info with fallbacks
-  const displayName = profileFullName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
+  const displayName =
+    profileFullName ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
   const displayEmail = user?.email || "";
-  const avatarSrc = profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
+  const avatarSrc =
+    profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
 
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
-    pathname.startsWith('/auth') ||
+    pathname.startsWith("/auth") ||
     pathname === "/choose-username" ||
-    pathname.startsWith('/dashboard')
+    pathname.startsWith("/dashboard")
   ) {
     return null;
   }
@@ -89,11 +113,13 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
 
       <div className="relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-18 items-center justify-between">
-
+          <div className="flex h-19 items-center justify-around">
             {/* Enhanced Logo Section */}
             <div className="flex items-center">
-              <Link href="/" className="group flex items-center transition-all duration-300">
+              <Link
+                href="/"
+                className="group flex items-center transition-all duration-300"
+              >
                 <div className="relative">
                   {/* Subtle Glow Effect */}
                   <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 to-purple-600/10 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -138,11 +164,11 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                 <Link
                   href="/creators"
                   className={cn(
-                    "group relative px-6 py-3 text-sm font-semibold transition-all duration-300 rounded-xl",
-                    "text-slate-300 hover:text-white",
+                    "group relative px-6 py-3 text-sm font-semibold rounded-xl",
+                    "text-slate-300",
                     pathname === "/creators"
-                      ? "text-white bg-gradient-to-r from-amber-600/20 to-orange-600/20 border border-amber-400/30 shadow-lg shadow-amber-500/20"
-                      : "hover:bg-gradient-to-r hover:from-amber-600/10 hover:to-orange-600/10 hover:border-amber-400/20 border border-transparent"
+                      ? "text-orange-400"
+                      : "hover:text-orange-400"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -155,7 +181,7 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
             </div>
 
             {/* Right Side Actions */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-5">
               {user ? (
                 <>
                   {/* Enhanced User Dropdown */}
@@ -184,8 +210,12 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                             </div>
                           )}
                           <div className="hidden sm:block text-left">
-                            <div className="text-sm font-medium text-white">{displayName}</div>
-                            <div className="text-xs text-slate-400 max-w-[120px] truncate">{displayEmail}</div>
+                            <div className="text-sm font-medium text-white">
+                              {displayName}
+                            </div>
+                            <div className="text-xs text-slate-400 max-w-[120px] truncate">
+                              {displayEmail}
+                            </div>
                           </div>
                           <ChevronDown className="h-4 w-4 text-slate-400 group-hover:text-white transition-colors" />
                         </div>
@@ -202,9 +232,13 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                         >
                           <div className="flex items-center space-x-2">
                             <Star className="h-4 w-4 text-slate-400" />
-                            <p className="text-sm font-medium text-white">{displayName}</p>
+                            <p className="text-sm font-medium text-white">
+                              {displayName}
+                            </p>
                           </div>
-                          <p className="text-xs text-slate-400">{displayEmail}</p>
+                          <p className="text-xs text-slate-400">
+                            {displayEmail}
+                          </p>
                           {userType === "advertiser" && (
                             <Badge className="bg-gradient-to-r from-slate-600 to-slate-700 text-white text-xs w-fit border border-slate-500/30">
                               {getPlanName(subscriptionPlan)}
@@ -217,7 +251,10 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link href="/dashboard/profile" className="flex items-center">
+                        <Link
+                          href="/dashboard/profile"
+                          className="flex items-center"
+                        >
                           <User className="mr-2 h-4 w-4" />
                           Profile
                         </Link>
@@ -235,25 +272,32 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                         asChild
                         className="text-slate-300 hover:text-white hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-white cursor-pointer"
                       >
-                        <Link href="/dashboard/settings" className="flex items-center">
+                        <Link
+                          href="/dashboard/settings"
+                          className="flex items-center"
+                        >
                           <Settings className="mr-2 h-4 w-4" />
                           Settings
                         </Link>
                       </DropdownMenuItem>
-                      {userType === "advertiser" && subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
-                        <>
-                          <DropdownMenuSeparator className="bg-violet-400/20" />
-                          <DropdownMenuItem
-                            asChild
-                            className="text-violet-300 hover:text-violet-200 hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-violet-200 cursor-pointer"
-                          >
-                            <Link href="/pricing" className="flex items-center">
-                              <Crown className="mr-2 h-4 w-4" />
-                              Upgrade Plan
-                            </Link>
-                          </DropdownMenuItem>
-                        </>
-                      )}
+                      {userType === "advertiser" &&
+                        subscriptionPlan !== PRODUCT_IDS.CHAMPION && (
+                          <>
+                            <DropdownMenuSeparator className="bg-violet-400/20" />
+                            <DropdownMenuItem
+                              asChild
+                              className="text-violet-300 hover:text-violet-200 hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-violet-200 cursor-pointer"
+                            >
+                              <Link
+                                href="/pricing"
+                                className="flex items-center"
+                              >
+                                <Crown className="mr-2 h-4 w-4" />
+                                Upgrade Plan
+                              </Link>
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       <DropdownMenuSeparator className="bg-violet-400/20" />
                       <DropdownMenuItem
                         className="text-red-300 hover:text-red-200 hover:bg-red-600/10 focus:bg-red-600/10 focus:text-red-200 cursor-pointer"
@@ -271,7 +315,12 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                   <Link href="/auth/signin" className="hidden sm:block">
                     <Button
                       variant="outline"
-                      className="bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10 hover:border-violet-400/40 backdrop-blur-sm transition-all duration-300"
+                      className={cn(
+                        "px-6 py-1.5 rounded-full backdrop-blur-sm transition-all duration-300",
+                        pathname === "/creators"
+                          ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
+                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
+                      )}
                     >
                       Sign In
                     </Button>
@@ -279,9 +328,14 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
 
                   {/* Premium CTA Button */}
                   <Link href="/auth/signup">
-                    <Button className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-semibold px-6 py-2 rounded-xl shadow-xl shadow-violet-500/25 hover:shadow-violet-500/40 transition-all duration-300 hover:scale-105 border border-violet-400/20 overflow-hidden">
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
-                      <Zap className="mr-2 h-4 w-4" />
+                    <Button
+                      className={cn(
+                        "px-6 py-1.5 rounded-full transition-all duration-300",
+                        pathname === "/creators"
+                          ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
+                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
+                      )}
+                    >
                       <span className="relative z-10">Get Started</span>
                     </Button>
                   </Link>
@@ -314,7 +368,10 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                     </SheetHeader>
 
                     {/* Mobile Logo */}
-                    <Link href="/" className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15">
+                    <Link
+                      href="/"
+                      className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15"
+                    >
                       <Image
                         src={logo}
                         alt="Game Of Creators Logo"
@@ -366,8 +423,12 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                             </div>
                           )}
                           <div>
-                            <div className="text-sm font-semibold text-white">{displayName}</div>
-                            <div className="text-xs text-slate-400">{displayEmail}</div>
+                            <div className="text-sm font-semibold text-white">
+                              {displayName}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              {displayEmail}
+                            </div>
                           </div>
                         </Link>
                         <Link
@@ -402,7 +463,10 @@ export function Nav({ user, profileFullName, profilePictureUrl, userType, subscr
                     ) : (
                       <div className="space-y-4 border-t border-violet-400/20 pt-6">
                         <Link href="/auth/signin">
-                          <Button variant="outline" className="w-full bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10">
+                          <Button
+                            variant="outline"
+                            className="w-full bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10"
+                          >
                             Sign In
                           </Button>
                         </Link>
