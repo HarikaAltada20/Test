@@ -1,3 +1,5 @@
+"use client";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -30,37 +32,11 @@ import {
   Gift,
   Sparkles,
 } from "lucide-react";
-
+import CtcBanner from "@/components/CtcBanner";
+import Testimonials from "../../components/Testimonials";
+import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - replace with actual path if different
 import SocialPairPng from "@/public/images/social_pair.png";
-import { Color } from "novel";
-
-const faqItems = [
-  {
-    id: "faq-1",
-    question: "What platforms do you support for content creation?",
-    answer:
-      "We support a wide range of platforms including Instagram Reels, YouTube Shorts, as well as long-form videos for YouTube, podcasts, and interviews. Every piece of content is tailored for optimal quality and performance on its intended platform.",
-  },
-  {
-    id: "faq-2",
-    question: "How does the contest and collaboration process work?",
-    answer:
-      "Brands post briefs for their campaigns or contests. Creators can browse these opportunities, submit their content, and get selected based on quality and engagement. Payments and collaborations are managed through our secure platform.",
-  },
-  {
-    id: "faq-3",
-    question: "How do I get paid?",
-    answer:
-      "Payments for winning contests or completing collaborations are processed securely through our platform. You can link your preferred payment method to receive your earnings directly.",
-  },
-  {
-    id: "faq-4",
-    question: "Are there any fees to join as a creator?",
-    answer:
-      "Joining Game Of Creators is completely free for creators. We believe in empowering you to monetize your skills without upfront costs. We may take a small platform fee from brand payments on successful collaborations.",
-  },
-];
 
 const creatorTestimonials = [
   {
@@ -120,7 +96,7 @@ const steps = [
       "Sign up and build your profile showcasing your skills, previous work, and the platforms you create content for.",
     icon: <Users className="h-8 w-8" />,
     gradient: "from-violet-600 to-purple-600",
-    color: "bg-blue-600",
+    color: "bg-[#7F39EC87] border-4 border-[#7F39EC]",
   },
   {
     number: "2",
@@ -129,7 +105,7 @@ const steps = [
       "Explore contests from brands looking for content creators. Filter by platform, deadline, and prize amount to find the perfect opportunity.",
     icon: <Target className="h-8 w-8" />,
     gradient: "from-blue-600 to-indigo-600",
-    color: "bg-purple-600",
+    color: "bg-[#444DE787] border-4 border-[#454DE5]",
   },
   {
     number: "3",
@@ -138,7 +114,7 @@ const steps = [
       "Produce content according to the brand's brief and submit it through our platform to be considered for prizes and future opportunities.",
     icon: <Camera className="h-8 w-8" />,
     gradient: "from-amber-600 to-orange-600",
-    color: "bg-orange-500",
+    color: "bg-[#E75D0D8F] border-4 border-[#E65D09]",
   },
   {
     number: "4",
@@ -147,53 +123,107 @@ const steps = [
       "Win prizes based on your content's performance and quality. Build relationships with brands for ongoing collaborations.",
     icon: <Gift className="h-8 w-8" />,
     gradient: "from-emerald-600 to-teal-600",
-    color: "bg-green-600",
+    color: "bg-[#0C94825C] border-4 border-[#08947E]",
   },
 ];
+
+const images: string[] = [
+  "./images/Rectangle 2724.png",
+  "./images/Property 1=Rectangle 2725.png",
+  "./images/Property 1=Rectangle 2726.png",
+];
 export default function CreatorsPage() {
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [fade, setFade] = useState<boolean>(true);
+
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  const [step, setStep] = useState(0);
+  const [animate, setAnimate] = useState(false);
+
+  const creatorsNumbers = [3000, 4000, 5000, 6000, 7000];
+  const campaignNumbers = [100, 200, 300, 400, 500, 600];
+  const viewNumbers = [40, 50, 60, 70, 80];
+
+  const maxSteps =
+    Math.max(
+      creatorsNumbers.length,
+      campaignNumbers.length,
+      viewNumbers.length
+    ) - 1;
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setAnimate(true);
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (animate && step < maxSteps) {
+      const timeout = setTimeout(() => {
+        setStep((prev) => prev + 1);
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [animate, step, maxSteps]);
+
+  const getNumber = (arr: number[], i: number) =>
+    arr[Math.min(i, arr.length - 1)];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Immediately change image index and set fade true
+      setCurrentIndex((prev) => (prev + 1) % images.length);
+      setFade(true);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden">
-      {/* Strategic Background Elements */}
-      <div className="fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_30%,rgba(139,92,246,0.15),transparent_50%)]"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_70%,rgba(236,72,153,0.1),transparent_50%)]"></div>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05),transparent_70%)]"></div>
-
-        {/* Precision Grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
-      </div>
-
-      {/* Floating Creative Elements */}
-      <div className="fixed inset-0 z-10 pointer-events-none">
-        <Sparkles className="absolute top-20 left-10 h-6 w-6 text-amber-400/30 animate-pulse" />
-        <Camera
-          className="absolute top-32 right-20 h-5 w-5 text-violet-400/40 animate-bounce"
-          style={{ animationDelay: "1s" }}
-        />
-        <Star
-          className="absolute top-40 left-1/4 h-4 w-4 text-purple-400/30 animate-pulse"
-          style={{ animationDelay: "2s" }}
-        />
-        <Heart
-          className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-          style={{ animationDelay: "0.5s" }}
-        />
-        <Palette
-          className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-          style={{ animationDelay: "1.5s" }}
-        />
-        <Trophy
-          className="absolute bottom-32 right-12 h-5 w-5 text-amber-400/40 animate-bounce"
-          style={{ animationDelay: "0.8s" }}
-        />
-      </div>
-
+    <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
       <div className="relative z-20">
         <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-          {/* Orange Ellipse Background Glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1000px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-orange-ellipse"></div>
+          {/* Strategic Background Elements */}
 
-          <div className="container mx-auto  px-4 text-center relative z-10">
+          {/* Floating Creative Elements */}
+          <div className="inset-0 z-10 pointer-events-none">
+            <Sparkles className="absolute top-20 left-10 h-6 w-6 text-amber-400/30 animate-pulse" />
+            <Camera
+              className="absolute top-32 right-20 h-5 w-5 text-violet-400/40 animate-bounce"
+              style={{ animationDelay: "1s" }}
+            />
+            <Star
+              className="absolute top-40 left-1/4 h-4 w-4 text-purple-400/30 animate-pulse"
+              style={{ animationDelay: "2s" }}
+            />
+            <Heart
+              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
+              style={{ animationDelay: "0.5s" }}
+            />
+            <Palette
+              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
+              style={{ animationDelay: "1.5s" }}
+            />
+            <Trophy
+              className="absolute bottom-32 right-12 h-5 w-5 text-amber-400/40 animate-bounce"
+              style={{ animationDelay: "0.8s" }}
+            />
+          </div>
+          {/* Orange Ellipse Background Glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1250px] h-[600px] rounded-full blur-3xl opacity-50 pointer-events-none bg-orange-ellipse"></div>
+
+          <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
             <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-white-600/20 backdrop-blur-sm border border-amber-400/30 rounded-full px-6 py-3 mb-8 shadow-xl shadow-amber-500/20">
               <Sparkles className="h-5 w-5 text-white" />
@@ -231,7 +261,13 @@ export default function CreatorsPage() {
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
                 <span className="relative">
-                  <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-400 bg-clip-text text-transparent">
+                  <span
+                    className="bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+                    }}
+                  >
                     Income
                   </span>
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl "></div>
@@ -253,7 +289,7 @@ export default function CreatorsPage() {
 
             {/* Epic CTA Button */}
             <div className="flex justify-center items-center mb-12">
-              <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-12 py-3 text-lg overflow-hidden">
+              <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-12 py-2 text-lg overflow-hidden">
                 <Link
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
@@ -263,6 +299,7 @@ export default function CreatorsPage() {
 
                   <Sparkles className="h-4 w-4" />
                   <span>Get Started</span>
+                  <ArrowRight className="h-5 w-5"/>
                 </Link>
               </button>
             </div>
@@ -342,51 +379,171 @@ export default function CreatorsPage() {
 
         {/* Gaming How It Works */}
         <section className="py-16 px-4 text-white">
-      <div className="container mx-auto max-w-[1200px]">
-        <h2 className="text-center text-2xl md:text-3xl font-bold mb-12">
-          How it works
-        </h2>
+          <div className="container mx-auto max-w-[1250px]">
+            <h2 className="text-center text-2xl md:text-3xl font-bold mb-12">
+              How it works
+            </h2>
 
-        <div className="grid md:grid-cols-2 gap-10 items-start">
-          {/* Steps */}
-          <div className="relative">
-            {/* Dotted vertical line in background */}
-            <div className="absolute left-[48px] top-10 bottom-10 w-px border-l-2 border-dotted border-gray-500 z-0"></div>
+            <div className="grid md:grid-cols-2 gap-10 items-start">
+              {/* Steps */}
+              <div className="space-y-[90px] relative z-10">
+                {steps.map((step, index) => (
+                  <div key={index} className="flex items-start gap-6 relative">
+                    {/* Circle */}
+                    <div
+                      className={`w-[90px] h-[90px] rounded-full flex items-center justify-center text-white font-bold text-2xl ${step.color} flex-shrink-0 relative z-10`}
+                    >
+                      {step.number}
+                    </div>
 
-            <div className="space-y-40 relative z-10">
-              {steps.map((step, index) => (
-                <div key={index} className="flex items-start gap-6">
-                  {/* Circle */}
-                  <div
-                    className={`w-[90px] h-[90px] rounded-full flex items-center justify-center text-white font-bold text-2xl ${step.color} flex-shrink-0`}
-                  >
-                    {step.number}
+                    {/* Dotted line below the circle, except for the last step */}
+                    {index < steps.length - 1 && (
+                      <div
+                        className="absolute left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
+                        style={{
+                          top: "90px",
+                          height:
+                            index === 0
+                              ? "150px" // height A: between steps 1 and 2
+                              : index === 1
+                              ? "180px" // height B: between steps 2 and 3
+                              : index === 2
+                              ? "180px" // height C: between steps 3 and 4
+                              : "40px", // fallback (if any)
+                        }}
+                      />
+                    )}
+
+                    <div>
+                      {/* Icon box above title */}
+                      <div className="mb-4 w-12 h-12 flex items-center justify-center border border-white rounded-md">
+                        {/* Make icon white by wrapping with a span that sets color */}
+                        <span className="text-white">{step.icon}</span>
+                      </div>
+
+                      <h3 className="font-bold text-3xl">{step.title}</h3>
+                      <p className="mt-4 text-lg text-gray-300">
+                        {step.description}
+                      </p>
+                    </div>
                   </div>
-
-                  {/* Text with top margin */}
-                  <div className="">
-                    <h3 className="font-bold text-3xl">{step.title}</h3>
-                    <p className="mt-6 text-xl text-gray-300">{step.description}</p>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="relative w-[580px] h-[900px] rounded-xl overflow-hidden">
+                <Image
+                  key={currentIndex}
+                  src={images[currentIndex]}
+                  alt={`Step Image ${currentIndex + 1}`}
+                  layout="fill" // fill the parent container
+                  objectFit="cover" // crop/scale image to cover container fully
+                  className={`rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
+                  priority={true}
+                />
+              </div>
             </div>
           </div>
+        </section>
 
-          {/* Image */}
-          <div className="flex justify-center">
-            <Image
-              src="./images/Rectangle 2724.png" // replace with actual image in public folder
-              alt="How it works"
-              width={500}
-              height={600}
-              className="rounded-xl object-cover"
-            />
+        <section className="py-16" ref={sectionRef}>
+          <div className="container mx-auto max-w-6xl px-4">
+            <div className="flex justify-center items-center text-white text-center">
+              {/* Creators */}
+              <div className="flex flex-col items-start px-8">
+                <div className="flex items-center">
+                  <div className="overflow-hidden h-[72px]">
+                    <div
+                      className="flex flex-col transition-transform duration-300 ease-in-out"
+                      style={{
+                        transform: `translateY(-${
+                          Math.min(step, creatorsNumbers.length - 1) * 72
+                        }px)`,
+                      }}
+                    >
+                      {creatorsNumbers.map((num) => (
+                        <div
+                          key={num}
+                          className="flex items-center text-6xl font-semibold h-[72px]"
+                        >
+                          {num}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-orange-600 font-bold text-6xl ml-1">
+                    +
+                  </span>
+                </div>
+                <p className="mt-4 text-base">Creators on Platform</p>
+              </div>
+
+              {/* Divider */}
+              <div className="border-l border-gray-500 h-20 mx-8"></div>
+
+              {/* Campaigns */}
+              <div className="flex flex-col items-start px-8">
+                <div className="flex items-center">
+                  <div className="overflow-hidden h-[72px]">
+                    <div
+                      className="flex flex-col transition-transform duration-300 ease-in-out"
+                      style={{
+                        transform: `translateY(-${
+                          Math.min(step, campaignNumbers.length - 1) * 72
+                        }px)`,
+                      }}
+                    >
+                      {campaignNumbers.map((num) => (
+                        <div
+                          key={num}
+                          className="flex items-center text-6xl font-semibold h-[72px]"
+                        >
+                          {num}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-orange-600 font-bold text-6xl ml-1">
+                    +
+                  </span>
+                </div>
+                <p className="mt-4 text-base">Campaigns Delivered</p>
+              </div>
+
+              {/* Divider */}
+              <div className="border-l border-gray-500 h-20 mx-8"></div>
+
+              {/* Views */}
+              <div className="flex flex-col items-start px-8">
+                <div className="flex items-center">
+                  <div className="overflow-hidden h-[72px]">
+                    <div
+                      className="flex flex-col transition-transform duration-300 ease-in-out"
+                      style={{
+                        transform: `translateY(-${
+                          Math.min(step, viewNumbers.length - 1) * 72
+                        }px)`,
+                      }}
+                    >
+                      {viewNumbers.map((num) => (
+                        <div
+                          key={num}
+                          className="flex items-center text-6xl font-semibold h-[72px]"
+                        >
+                          {num}M
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-orange-600 font-bold text-6xl ml-1">
+                    +
+                  </span>
+                </div>
+                <p className="mt-4 text-base">Views Generated</p>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    </section>
-
+        </section>
         {/* Epic Stats Section */}
         {/* <section className="py-20 md:py-32 relative">
           <div className="container mx-auto px-4">
@@ -414,9 +571,9 @@ export default function CreatorsPage() {
             </div>
           </div>
         </section> */}
-
+        <Testimonials />
         {/* Gaming Testimonials Section */}
-        <section className="py-20 md:py-32 relative">
+        {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/50 to-slate-800/50 backdrop-blur-sm"></div>
 
           <div className="relative container mx-auto px-4">
@@ -466,10 +623,11 @@ export default function CreatorsPage() {
               ))}
             </div>
           </div>
-        </section>
+        </section> */}
 
         {/* Gaming FAQ Section */}
-        <section className="py-20 md:py-32 relative">
+        <FAQ />
+        {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 to-slate-800/80 backdrop-blur-sm"></div>
 
           <div className="relative container mx-auto px-4">
@@ -508,10 +666,11 @@ export default function CreatorsPage() {
               </Accordion>
             </div>
           </div>
-        </section>
+        </section> */}
 
         {/* Epic Final CTA */}
-        <section className="py-20 md:py-32 relative">
+        <CtcBanner />
+        {/* <section className="py-20 md:py-32 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-amber-900/30 via-orange-900/30 to-yellow-900/30 backdrop-blur-sm"></div>
 
           <div className="relative container mx-auto px-4">
@@ -547,7 +706,7 @@ export default function CreatorsPage() {
               </Button>
             </div>
           </div>
-        </section>
+        </section> */}
       </div>
     </div>
   );

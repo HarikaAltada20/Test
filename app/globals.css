@@ -1,9 +1,38 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
 
+.font-poppins {
+  font-family: 'Poppins', sans-serif;
+}
 body {
   font-family: Arial, Helvetica, sans-serif;
+}
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-slow-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+.animate-spin-slow-reverse {
+  animation: spin-slow-reverse 20s linear infinite;
 }
 
 .bg-orange-ellipse {
@@ -14,6 +43,14 @@ body {
     rgba(230, 59, 59, 0.3) 70%,
     rgba(255, 132, 0, 0) 100%
   );
+}
+
+.gradient-text {
+  background: linear-gradient(173.88deg, #FDC155 69.65%, #FF652D 85.87%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
 }
 
 
