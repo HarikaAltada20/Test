@@ -1,21 +1,46 @@
-// Product IDs
+
+// TEST IDs
+// TEST Product IDs
+// export const PRODUCT_IDS = {
+//   EXPLORER: 'prod_Slij7SgNUxACLp',
+//   STARTER: 'prod_SlilUeFqolEC7W',
+//   BUILDER: 'prod_Slinc7mb1e30Ef',
+//   CHAMPION: 'prod_SlioxThbvGeLga',
+// } as const;
+
+// // TEST Price IDs
+// export const PRICE_IDS = {
+//   EXPLORER_MONTHLY: 'price_1RqBIUDCKN2LN0Qe2c097HHM',
+//   STARTER_MONTHLY: 'price_1RqBK8DCKN2LN0QeVe68F0Ec',
+//   STARTER_YEARLY: 'price_1RqBKXDCKN2LN0Qe81Nq90bP',
+//   BUILDER_MONTHLY: 'price_1RqBLcDCKN2LN0QendahSoUJ',
+//   BUILDER_YEARLY: 'price_1RqBLcDCKN2LN0QeoHdipPyN',
+//   CHAMPION_MONTHLY: 'price_1RqBMjDCKN2LN0QenUgKtYgD',
+//   CHAMPION_YEARLY: 'price_1RqBMjDCKN2LN0QeFgcfIR2I',
+// } as const;
+
+
+
+// PRODUCTION IDs
+// PRODUCTION Product IDs
 export const PRODUCT_IDS = {
-  EXPLORER: 'prod_Slij7SgNUxACLp',
-  STARTER: 'prod_SlilUeFqolEC7W',
-  BUILDER: 'prod_Slinc7mb1e30Ef',
-  CHAMPION: 'prod_SlioxThbvGeLga',
+  EXPLORER: 'prod_SgtEmTCYKfROTo',
+  STARTER: 'prod_SgtFZrrxO3IdP7',
+  BUILDER: 'prod_SgtGPsQZ79Mcej',
+  CHAMPION: 'prod_SgtHIEckuTjVRV',
 } as const;
 
-// Price IDs
+// PRODUCTION Price IDs
 export const PRICE_IDS = {
-  EXPLORER_MONTHLY: 'price_1RqBIUDCKN2LN0Qe2c097HHM',
-  STARTER_MONTHLY: 'price_1RqBK8DCKN2LN0QeVe68F0Ec',
-  STARTER_YEARLY: 'price_1RqBKXDCKN2LN0Qe81Nq90bP',
-  BUILDER_MONTHLY: 'price_1RqBLcDCKN2LN0QendahSoUJ',
-  BUILDER_YEARLY: 'price_1RqBLcDCKN2LN0QeoHdipPyN',
-  CHAMPION_MONTHLY: 'price_1RqBMjDCKN2LN0QenUgKtYgD',
-  CHAMPION_YEARLY: 'price_1RqBMjDCKN2LN0QeFgcfIR2I',
+  EXPLORER_MONTHLY: 'price_1RlVS3JEc43ljUHzS4i9LI2Y',
+  STARTER_MONTHLY: 'price_1RlVT2JEc43ljUHzv7w3fJnJ',
+  STARTER_YEARLY: 'price_1RlVWNJEc43ljUHzF1hvHU6j',
+  BUILDER_MONTHLY: 'price_1RlVU7JEc43ljUHzZ5ranvXu',
+  BUILDER_YEARLY: 'price_1RlVUMJEc43ljUHzIvgrheDm',
+  CHAMPION_MONTHLY: 'price_1RlVVPJEc43ljUHzsGSTVwc6',
+  CHAMPION_YEARLY: 'price_1RlVVgJEc43ljUHzyWf2569f',
 } as const;
+
 
 export const subscriptionPlans = [
   {
