@@ -144,6 +144,47 @@ export default function CreatorsPage() {
   const creatorsNumbers = [3000, 4000, 5000, 6000, 7000];
   const campaignNumbers = [100, 200, 300, 400, 500, 600];
   const viewNumbers = [40, 50, 60, 70, 80];
+  const animationRef = useRef<HTMLDivElement>(null);
+  const [isAnimated, setIsAnimated] = useState(false);
+  const howItWorksRef = useRef<HTMLDivElement>(null);
+  const [howItWorksAnimated, setHowItWorksAnimated] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsAnimated(true);
+
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 }
+    );
+
+    if (animationRef.current) {
+      observer.observe(animationRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHowItWorksAnimated(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (howItWorksRef.current) {
+      observer.observe(howItWorksRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const maxSteps =
     Math.max(
@@ -249,7 +290,10 @@ export default function CreatorsPage() {
             </div>
 
             {/* Massive Gaming Title */}
-            <h1 className="text-4xl md:text-6xl lg:text-7xl mb-6 leading-tight">
+            <h1
+              className="text-4xl md:text-6xl lg:text-7xl mb-6 leading-tight slide-up"
+              style={{ animationDelay: "1s" }}
+            >
               <span
                 className="font-semibold  text-white drop-shadow-2xl"
                 style={{ fontFamily: "Montserrat, sans-serif" }}
@@ -276,7 +320,10 @@ export default function CreatorsPage() {
             </h1>
 
             {/* Strategic Subtitle */}
-            <p className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
+            <p
+              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+              style={{ animationDelay: "2s" }}
+            >
               Join Game Of Creators to find creative{" "}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
                 opportunities
@@ -289,7 +336,7 @@ export default function CreatorsPage() {
 
             {/* Epic CTA Button */}
             <div className="flex justify-center items-center mb-12">
-              <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-12 py-2 text-lg overflow-hidden">
+              <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-3 text-lg overflow-hidden">
                 <Link
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
@@ -299,7 +346,7 @@ export default function CreatorsPage() {
 
                   <Sparkles className="h-4 w-4" />
                   <span>Get Started</span>
-                  <ArrowRight className="h-5 w-5"/>
+                  <ArrowRight className="h-5 w-5" />
                 </Link>
               </button>
             </div>
@@ -307,16 +354,26 @@ export default function CreatorsPage() {
         </section>
 
         {/* Why Join as Creator - Gaming Style */}
-        <section className="text-white py-16">
+        <section className="text-white py-16" ref={animationRef}>
           <div className="max-w-[1200px] mx-auto px-4 text-center">
             {/* Heading */}
-            <h2 className="text-3xl md:text-5xl font-bold mb-3">
+            <h2
+              className={`text-lg md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
+              style={{ animationDelay: "0.2s" }}
+            >
               Why Join as a{" "}
               <span className="bg-gradient-to-r from-orange-500 to-yellow-500 bg-clip-text text-transparent">
                 Creator
               </span>
             </h2>
-            <p className="text-xl mt-6 md:text-2xl text-gray-300 mb-12">
+            <p
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
+              style={{ animationDelay: "1s" }}
+            >
               Unlock your creative potential and monetise your passion
             </p>
             <div className="grid gap-6 md:grid-cols-3">
@@ -325,37 +382,43 @@ export default function CreatorsPage() {
                   title: "Earn Money",
                   description:
                     "Get paid for creating content for brands you love through contests and collaborations.",
-                  icon: <DollarSign className="h-10 w-10" />,
                   number: "1",
-                  gradient: "from-emerald-600 to-teal-600",
-                  accentColor: "emerald",
+                  image:
+                    "./images/c89a26089c94c4806f6c5d35d5a13d7b9b4abe4d.png", // first card image
                 },
                 {
                   title: "Build Your Portfolio",
                   description:
                     "Create professional content for recognized brands to showcase in your portfolio.",
-                  icon: <BadgeCheck className="h-10 w-10" />,
                   number: "2",
-                  gradient: "from-violet-600 to-purple-600",
-                  accentColor: "violet",
+                  image: "./images/6260ed20a17f3e1217628986a9525a3a5987b46f.png", // second card image
                 },
                 {
                   title: "Grow Your Audience",
                   description:
                     "Gain exposure when brands share and promote your content to their followers.",
-                  icon: <Users className="h-10 w-10" />,
                   number: "3",
-                  gradient: "from-amber-600 to-orange-600",
-                  accentColor: "amber",
+                  image: "./images/e8e9c22eb82571682f04cec79d2d2cb1276138fc.png", // third card image
                 },
-              ].map((item, index) => (
+              ].map((item) => (
                 <div
                   key={item.number}
-                  className="border border-gray-500 rounded-xl p-[40px] flex flex-col items-center text-center hover:shadow-lg transition"
+                  className="cursor-pointer relative border border-gray-500 rounded-xl p-[40px] flex flex-col items-center text-center hover:shadow-lg transition overflow-hidden group"
                 >
-                  {/* Number Circle */}
                   <div
-                    className="w-[50px] h-[50px]  text-3xl flex items-center justify-center rounded-full text-white font-bold mb-4"
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                    style={{
+                      backgroundImage: `url(${item.image})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                  ></div>
+
+                  {/* Shade Overlay */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-b from-[#00000066] to-[#00000099]"></div>
+
+                  <div
+                    className="relative z-10 w-[50px] h-[50px] text-3xl flex items-center justify-center rounded-full text-white font-bold mb-4"
                     style={{
                       background:
                         "linear-gradient(180deg, #DC7308 0%, #FF652D 100%)",
@@ -363,12 +426,14 @@ export default function CreatorsPage() {
                   >
                     {item.number}
                   </div>
+
                   {/* Title */}
-                  <h3 className="text-3xl mt-5 font-semibold mb-2">
+                  <h3 className="relative z-10 text-3xl mt-5 font-semibold mb-2">
                     {item.title}
                   </h3>
+
                   {/* Description */}
-                  <p className="text-gray-300 mt-5 text-xl">
+                  <p className="relative z-10 text-gray-300 mt-5 text-xl">
                     {item.description}
                   </p>
                 </div>
@@ -378,9 +443,14 @@ export default function CreatorsPage() {
         </section>
 
         {/* Gaming How It Works */}
-        <section className="py-16 px-4 text-white">
+        <section className="py-16 px-4 text-white" ref={howItWorksRef}>
           <div className="container mx-auto max-w-[1250px]">
-            <h2 className="text-center text-2xl md:text-3xl font-bold mb-12">
+            <h2
+              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
+              style={{ animationDelay: "0.1s" }}
+            >
               How it works
             </h2>
 

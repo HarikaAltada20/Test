@@ -175,10 +175,10 @@ export function Footer() {
       </div>
 
       {/* Divider */}
-      <hr className="border-gray-700 my-10 max-w-7xl mx-auto" />
+      <hr className="border-gray-700 my-10 max-w-[1250px] mx-auto" />
 
       {/* Bottom Section */}
-      <div className="max-w-7xl mx-auto flex justify-between items-center px-8">
+      <div className="max-w-[1250px] mx-auto flex justify-between items-center px-8">
         <p className="text-sm text-gray-400">
           © {new Date().getFullYear()} Game Of Creators. All rights reserved.
         </p>

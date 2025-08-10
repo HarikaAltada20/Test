@@ -113,7 +113,7 @@ export function Nav({
 
       <div className="relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-19 items-center justify-around">
+          <div className="flex h-20 items-center justify-around">
             {/* Enhanced Logo Section */}
             <div className="flex items-center">
               <Link
@@ -125,7 +125,7 @@ export function Nav({
                   <div className="absolute inset-0 bg-gradient-to-r from-violet-600/10 to-purple-600/10 rounded-xl blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                   {/* Refined Logo Container */}
-                  <div className="relative bg-gradient-to-br from-slate-900/60 to-slate-800/60 px-3 py-2 rounded-xl border border-violet-400/10 backdrop-blur-sm group-hover:border-violet-400/20 transition-all duration-300">
+                  <div className="relative ">
                     <Image
                       src={logo}
                       alt="Game Of Creators Logo"
@@ -147,7 +147,7 @@ export function Nav({
                 <Link
                   href="/brands"
                   className={cn(
-                    "group relative px-6 py-3 text-sm font-semibold transition-all duration-300 rounded-xl",
+                    "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
                     "text-slate-300 hover:text-white",
                     pathname === "/brands"
                       ? "text-white bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-400/30 shadow-lg shadow-violet-500/20"
@@ -155,7 +155,7 @@ export function Nav({
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Crown className="h-4 w-4" />
+                    <Crown className="h-5 w-5" />
                     <span className="relative z-10">For Brands</span>
                   </div>
                   <div className="absolute inset-0 bg-gradient-to-r from-violet-600/0 to-purple-600/0 group-hover:from-violet-600/5 group-hover:to-purple-600/5 rounded-xl transition-all duration-300"></div>
@@ -164,7 +164,7 @@ export function Nav({
                 <Link
                   href="/creators"
                   className={cn(
-                    "group relative px-6 py-3 text-sm font-semibold rounded-xl",
+                    "group relative px-6 py-3 text-lg font-semibold rounded-xl",
                     "text-slate-300",
                     pathname === "/creators"
                       ? "text-orange-400"
@@ -172,7 +172,7 @@ export function Nav({
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4" />
+                    <Sparkles className="h-5 w-5" />
                     <span className="relative z-10">For Creators</span>
                   </div>
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 group-hover:from-amber-600/5 group-hover:to-orange-600/5 rounded-xl transition-all duration-300"></div>

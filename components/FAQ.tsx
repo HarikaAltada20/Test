@@ -1,7 +1,8 @@
 // components/FAQ.tsx
 "use client";
+import { useState, useEffect, useRef } from "react";
 import { Users } from "lucide-react";
-import { useState } from "react";
+
 import { FaChevronDown } from "react-icons/fa";
 
 const faqs = [
@@ -34,13 +35,37 @@ const faqs = [
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
+  const [animate, setAnimate] = useState(false);
+  const faqHeaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setAnimate(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (faqHeaderRef.current) {
+      observer.observe(faqHeaderRef.current);
+    }
+
+    return () => {
+      if (faqHeaderRef.current) {
+        observer.unobserve(faqHeaderRef.current);
+      }
+    };
+  }, []);
   const toggleFAQ = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
   };
 
   return (
-    <section className="py-16 px-4 mb-10 text-white">
-      <div className="max-w-5xl mx-auto text-center">
+    <section className="py-16 px-4 mb-10 text-white"  ref={faqHeaderRef}>
+      <div className="max-w-5xl mx-auto text-center" >
         {/* Top Tag */}
         <button className="px-5 py-2 bg-[#1A1B35] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
           <Users className="text-white h-5 w-5" /> {/* user icon in yellow */}
@@ -48,13 +73,20 @@ export default function FAQ() {
         </button>
 
         {/* Gradient Title */}
-        <h2 className="text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4">
+        <h2
+          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
+            animate ? "slide-up" : "hide-before-animate"
+          }`}
+            style={{ animationDelay: "0.2s" }}
+     
+        >
           <span
             className="bg-clip-text text-transparent"
             style={{
               backgroundImage:
                 "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
             }}
+            
           >
             Frequently
           </span>
@@ -70,7 +102,13 @@ export default function FAQ() {
           </span>
         </h2>
 
-        <p className="mt-4 mb-10 text-gray-300 md:text-xl">
+        <p
+          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
+            animate ? "slide-left" : "hide-before-animate"
+          }`}
+            style={{ animationDelay: "1s" }}
+     
+        >
           Here are some frequently asked questions
         </p>
 
@@ -93,7 +131,9 @@ export default function FAQ() {
                 />
               </button>
               {openIndex === index && (
-                <div className="text-left text-md pt-4 px-4 pb-4 text-gray-400">{faq.answer}</div>
+                <div className="text-left text-md pt-4 px-4 pb-4 text-gray-400">
+                  {faq.answer}
+                </div>
               )}
             </div>
           ))}

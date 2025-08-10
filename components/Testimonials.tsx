@@ -1,64 +1,86 @@
 import Image from "next/image";
 import { Quote, MessageSquareQuote } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+
+const testimonials = [
+  {
+    name: "Sophie Williams",
+    role: "Beauty Content Creator",
+    image: "./images/Ellipse 2355.png",
+    quote:
+      "The brands here are fantastic. I've partnered with great companies and formed strong connections.",
+  },
+  {
+    name: "Alex Thompson",
+    role: "Tech Reviewer & YouTuber",
+    image: "./images/Ellipse 2355 (3).png",
+    quote:
+      "Grew from zero to 100K followers in 8 months through brand collaborations. This platform transformed my life!",
+  },
+  {
+    name: "Marcus Rivera",
+    role: "Fitness Influencer & Coach",
+    image: "./images/Ellipse 2355 (1).png",
+    quote:
+      "Game Of Creators turned my passion into a full-time income, inspiring my best work.",
+  },
+  {
+    name: "Aisha Khan",
+    role: "Travel Vlogger & Influencer",
+    image: "./images/Ellipse 2355 (2).png",
+    quote:
+      "A platform that truly gets the creator economy, offering diverse opportunities and a supportive community.",
+  },
+  {
+    name: "James Carter",
+    role: "Software Engineer",
+    image: "./images/Ellipse 2355 (4).png",
+    quote:
+      "The Game Of Creators streamlined our workflow and boosted efficiency.",
+  },
+  {
+    name: "Emily Clark",
+    role: "Lifestyle Blogger",
+    image: "./images/Ellipse 2355 (6).png",
+    quote:
+      "Collaborating here opened doors to amazing partnerships and growth.",
+  },
+  {
+    name: "Daniel Kim",
+    role: "Photographer",
+    image: "./images/Ellipse 2355 (7).png",
+    quote:
+      "A fantastic platform to connect with brands and showcase my creativity.",
+  },
+  {
+    name: "Olivia White",
+    role: "Fashion Influencer",
+    image: "./images/Ellipse 2355 (1).png",
+    quote:
+      "This community is amazing — full of supportive and inspiring people.",
+  },
+];
 export default function Testimonials() {
-  const testimonials = [
-    {
-      name: "Sophie Williams",
-      role: "Beauty Content Creator",
-      image: "./images/Ellipse 2355.png",
-      quote:
-        "The brands here are fantastic. I've partnered with great companies and formed strong connections.",
-    },
-    {
-      name: "Alex Thompson",
-      role: "Tech Reviewer & YouTuber",
-      image: "./images/Ellipse 2355 (3).png",
-      quote:
-        "Grew from zero to 100K followers in 8 months through brand collaborations. This platform transformed my life!",
-    },
-    {
-      name: "Marcus Rivera",
-      role: "Fitness Influencer & Coach",
-      image: "./images/Ellipse 2355 (1).png",
-      quote:
-        "Game Of Creators turned my passion into a full-time income, inspiring my best work.",
-    },
-    {
-      name: "Aisha Khan",
-      role: "Travel Vlogger & Influencer",
-      image: ",/images/Ellipse 2355 (2).png",
-      quote:
-        "A platform that truly gets the creator economy, offering diverse opportunities and a supportive community.",
-    },
-    {
-      name: "James Carter",
-      role: "Software Engineer",
-      image: "./images/Ellipse 2355 (4).png",
-      quote:
-        "The Game Of Creators streamlined our workflow and boosted efficiency.",
-    },
-    {
-      name: "Emily Clark",
-      role: "Lifestyle Blogger",
-      image: "./images/Ellipse 2355 (6).png",
-      quote:
-        "Collaborating here opened doors to amazing partnerships and growth.",
-    },
-    {
-      name: "Daniel Kim",
-      role: "Photographer",
-      image: "./images/Ellipse 2355 (7).png",
-      quote:
-        "A fantastic platform to connect with brands and showcase my creativity.",
-    },
-    {
-      name: "Olivia White",
-      role: "Fashion Influencer",
-      image: "/images/olivia.jpg",
-      quote:
-        "This community is amazing — full of supportive and inspiring people.",
-    },
-  ];
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [isAnimated, setIsAnimated] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsAnimated(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const rows = [];
   for (let i = 0; i < testimonials.length; i += 4) {
@@ -66,13 +88,18 @@ export default function Testimonials() {
   }
 
   return (
-    <section className="text-white py-20 px-6">
+    <section className="text-white py-20 px-6" ref={sectionRef}>
       {/* Heading */}
       <div className="text-center max-w-3xl mx-auto">
         <button className="bg-[#1E233E] text-white py-1 px-4 rounded-full mb-7">
           ✨ Our Brands
         </button>
-        <h2 className="text-3xl md:text-5xl font-bold mb-7">
+        <h2
+          className={`text-3xl md:text-5xl font-bold mb-7 ${
+            isAnimated ? "slide-up" : "hide-before-animate"
+          }`}
+          style={{ animationDelay: "0.2s" }}
+        >
           What{" "}
           <span
             className="bg-clip-text text-transparent"
@@ -85,7 +112,12 @@ export default function Testimonials() {
           </span>{" "}
           Say About Us
         </h2>
-        <p className="text-xl text-gray-300">
+        <p
+          className={`text-xl text-gray-300 ${
+            isAnimated ? "slide-left" : "hide-before-animate"
+          }`}
+          style={{ animationDelay: "1s" }}
+        >
           "Creators love our platform for its user-friendly interface, diverse
           opportunities, and responsive community support."
         </p>
@@ -94,21 +126,19 @@ export default function Testimonials() {
       {/* Rows */}
       <div className="mt-12 space-y-8">
         {rows.map((row, rowIndex) => (
+     
           <div key={rowIndex} className="overflow-hidden relative">
-            <div className="flex justify-center gap-6">
-              {row.map((t, i) => (
+            <div
+              className={`flex justify-center gap-6 scroll-row ${
+                rowIndex % 2 === 0
+                  ? "scroll-right-seamless"
+                  : "scroll-left-seamless"
+              }`}
+            >
+              {[...row, ...row].map((t, i) => (
                 <div
                   key={i}
-                  className={`p-8 rounded-xl border border-gray-700 flex-shrink-0 
-               ${i === 0 || i === 3 ? "w-[500px]" : "w-[500px]"}`}
-                  style={{
-                    transform:
-                      i === 0
-                        ? "translateX(-1%)"
-                        : i === 3
-                        ? "translateX(1%)"
-                        : "translateX(0)",
-                  }}
+                    className="p-8 rounded-xl border border-gray-700 flex-shrink-0 w-[500px]"
                 >
                   <div className="flex items-center justify-between gap-4">
                     {/* Left: Quote + Name + Role */}
