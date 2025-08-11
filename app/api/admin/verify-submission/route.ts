@@ -2,6 +2,8 @@ import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { NextResponse } from 'next/server';
 import { creditCreatorWithdrawableBalance, debitCreatorWithdrawableBalance, logTransaction, logTransactionAsAdmin, REVERSAL_TRANSACTION_REMARK } from '@/lib/payment-utils';
+import { MetricsService } from '@/lib/metrics-service';
+import { SUBMISSION_STATUS } from '@/lib/constants-status';
 import { verifyAdminAccess } from '@/utils/admin-auth';
 
 export async function POST(request: Request) {
@@ -167,7 +169,7 @@ export async function POST(request: Request) {
     }
 
     // Handle wallet credit/debit on status changes
-    if (action === 'paid') {
+    if (action === SUBMISSION_STATUS.paid) {
       // Determine amount: custom from paymentDetails or default to earnings
       const customAmount = paymentDetails?.amountInCents && paymentDetails?.isCustom ? Number(paymentDetails.amountInCents) : null;
       let rewardAmount = customAmount && customAmount > 0 ? customAmount : (submissionFull.earnings || 0);
@@ -208,6 +210,13 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: `Failed to credit creator: ${creditRes.error}` }, { status: 500 });
         }
 
+        // Update creator metrics: contests won (+1)
+        try {
+          await MetricsService.incrementContestsWon(submissionFull.creator_id);
+        } catch (e: any) {
+          console.error('Metrics update (paid) failed:', e);
+        }
+
         // Ensure reward amount is reflected on the submission for UI display
         if (!submissionFull.earnings || submissionFull.earnings <= 0 || customAmount) {
           await supabaseAdmin
@@ -219,7 +228,7 @@ export async function POST(request: Request) {
     }
 
     // If status is changed away from paid, remove reward and delete related reward transactions
-    if ((action === 'verified' || action === 'pending' || action === 'rejected') && submission.status === 'paid') {
+    if ((action === SUBMISSION_STATUS.verified || action === SUBMISSION_STATUS.pending || action === SUBMISSION_STATUS.rejected) && submission.status === SUBMISSION_STATUS.paid) {
       // Sum all reward transactions for this submission
       // Use admin client to bypass RLS when reading creator transactions
       const { data: rewardTxns, error: listErr } = await supabaseAdmin
@@ -240,6 +249,12 @@ export async function POST(request: Request) {
         const debitRes = await debitCreatorWithdrawableBalance(submissionFull.creator_id, reversalAmount);
         if (!debitRes.success) {
           return NextResponse.json({ error: `Failed to reverse creator credit: ${debitRes.error}` }, { status: 500 });
+        }
+        // Metrics revert for paid reversal: contests won (-1)
+        try {
+          await MetricsService.decrementContestsWon(submissionFull.creator_id);
+        } catch (e: any) {
+          console.error('Metrics update (revert paid) failed:', e);
         }
         // Do NOT delete the original reward transactions. We only add a new explicit reversal entry.
         // Always log a reversal transaction entry for audit trail
