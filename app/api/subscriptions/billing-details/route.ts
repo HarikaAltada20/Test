@@ -6,6 +6,8 @@ import { subscriptionPlans, PRICE_IDS } from '@/constants/subscriptionPlans';
 
 export async function GET(request: NextRequest) {
   try {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log('[API] GET /api/subscriptions/billing-details:start', { requestId });
     const supabase = await createClient();
     
     // Get authenticated user
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest) {
     const subscription = await getUserSubscription(user.id);
     
     if (!subscription) {
+      console.log('[API] /subscriptions/billing-details:none', { requestId, userId: user.id });
       return NextResponse.json({
         billingDetails: null,
         scheduledChanges: [],
@@ -69,7 +72,7 @@ export async function GET(request: NextRequest) {
     
     if (subscription.id !== 'free-plan' && subscription.id) {
       try {
-        console.log('🔍 Fetching scheduled changes for subscription:', subscription.id);
+        console.log('[API] 🔍 Fetching scheduled changes for subscription:', { requestId, subscriptionId: subscription.id });
         
         // Get subscription schedules for this customer
         const customerId = await getStripeCustomerId(user.id);
@@ -127,7 +130,7 @@ export async function GET(request: NextRequest) {
           console.log('❌ No customer ID found');
         }
       } catch (error) {
-        console.error('❌ Error fetching scheduled changes:', error);
+        console.error('❌ Error fetching scheduled changes:', { requestId, error });
         // Don't fail the entire request if scheduled changes can't be fetched
       }
     } else {
@@ -271,6 +274,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    console.log('[API] /subscriptions/billing-details:success', { requestId, hasScheduledChanges: scheduledChanges.length > 0 });
     return NextResponse.json({
       billingDetails,
       scheduledChanges,
@@ -278,7 +282,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching billing details:', error);
+    console.error('[API] /subscriptions/billing-details:error', { message: (error as any)?.message || String(error), raw: error });
     return NextResponse.json(
       { error: 'Failed to fetch billing details' },
       { status: 500 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import { MetricsService } from "@/lib/metrics-service";
+import { POST_CONTEST_STATUS } from "@/lib/constants-status";
 
 export async function POST(
     request: NextRequest,
@@ -106,6 +108,15 @@ export async function POST(
             return NextResponse.json({ 
                 error: "Failed to update contest status" 
             }, { status: 500 });
+        }
+
+        // Kick off async views credit when entering verification or payouts_processed
+        if (status === POST_CONTEST_STATUS.verification_complete || status === POST_CONTEST_STATUS.payouts_processed) {
+            try {
+                await MetricsService.creditViewsForContest(contestId, 20000);
+            } catch (e) {
+                console.warn('Views credit processing failed:', e);
+            }
         }
 
         // Note: Audit logging could be added here in the future if needed

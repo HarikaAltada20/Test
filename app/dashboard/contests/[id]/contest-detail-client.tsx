@@ -177,6 +177,7 @@ export default function ContestDetailClient({
     const [pendingRejectionSubmission, setPendingRejectionSubmission] = useState<string | null>(null);
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
     const [pendingPaymentSubmission, setPendingPaymentSubmission] = useState<string | null>(null);
+    const [confirmReversal, setConfirmReversal] = useState<{ id: string; target: 'verified' | 'pending' | 'rejected'; needRejectionReason?: boolean } | null>(null);
     const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'paid'>('all');
 
     const cooldownInfo = getMetricsRefreshCooldownInfoOwner(currentContest.last_metrics_updated);
@@ -273,14 +274,16 @@ export default function ContestDetailClient({
                 throw new Error(result.error || 'Failed to update submission status');
             }
 
-            // Update the local submissions state
-            setCurrentSubmissions(prev =>
-                prev.map(sub =>
-                    sub.id === submissionId
-                        ? { ...sub, status: newStatus }
-                        : sub
-                )
-            );
+            // Update the local submissions state with latest fields from API (status + earnings)
+            const updated = result?.submission;
+            setCurrentSubmissions(prev => prev.map(sub => {
+                if (sub.id !== submissionId) return sub;
+                const merged: any = { ...sub, status: newStatus };
+                if (updated && typeof updated.earnings !== 'undefined') {
+                    merged.earnings = updated.earnings;
+                }
+                return merged;
+            }));
 
             // Enhanced toast messages for better UX
             const getToastConfig = (status: Submission['status']) => {
@@ -371,12 +374,25 @@ export default function ContestDetailClient({
         setPaymentModalOpen(true);
     };
 
-    const handlePaymentConfirm = (paymentDetails: { paymentProofUrl: string; paymentDescription: string }) => {
+    const handlePaymentConfirm = (paymentDetails: { paymentProofUrl: string; paymentDescription: string; amountInCents?: number; isCustom?: boolean }) => {
         if (pendingPaymentSubmission) {
-            handleUpdateSubmissionStatus(pendingPaymentSubmission, 'paid', undefined, paymentDetails);
+            handleUpdateSubmissionStatus(pendingPaymentSubmission, 'paid', undefined, paymentDetails as any);
             setPaymentModalOpen(false);
             setPendingPaymentSubmission(null);
         }
+    };
+
+    const handleConfirmReversal = async () => {
+        if (!confirmReversal) return;
+        const { id, target, needRejectionReason } = confirmReversal;
+        setConfirmReversal(null);
+        if (needRejectionReason) {
+            // After confirming reversal, open rejection reason modal
+            setPendingRejectionSubmission(id);
+            setRejectionModalOpen(true);
+            return;
+        }
+        await handleUpdateSubmissionStatus(id, target);
     };
 
     const handleUpdateContestStatus = async () => {
@@ -1667,8 +1683,8 @@ export default function ContestDetailClient({
                                                                         }
                                                                     }
 
-                                                                    // If contest is not completed yet
-                                                                    if (!isContestCompleted) {
+                                                                    // If contest is not completed yet OR completed but submission not verified yet
+                                                                    if (!isContestCompleted || submission.status === 'pending') {
                                                                         // Calculate estimated prize based on ranking and prize distribution
                                                                         if (contestDetails?.prizes && Array.isArray(contestDetails.prizes)) {
                                                                             const currentRank = index + 1; // 1-based ranking
@@ -1703,10 +1719,11 @@ export default function ContestDetailClient({
                                                                     // If contest is completed and earnings are calculated
                                                                     if (isContestCompleted && submission.earnings !== null && submission.earnings !== undefined) {
                                                                         const earningsInDollars = centsToDollars(submission.earnings);
+                                                                        const label = submission.status === 'verified' ? 'Final Earnings' : 'Pending';
                                                                         return {
                                                                             amount: earningsInDollars,
-                                                                            label: "Final Earnings",
-                                                                            className: "text-green-600 font-semibold"
+                                                                            label,
+                                                                            className: submission.status === 'verified' ? 'text-green-600 font-semibold' : 'text-yellow-600 font-semibold'
                                                                         };
                                                                     }
 
@@ -1886,23 +1903,50 @@ export default function ContestDetailClient({
                                                                             <DropdownMenuContent align="end">
                                                                                 <DropdownMenuLabel>Change Status</DropdownMenuLabel>
                                                                                 <DropdownMenuSeparator />
-                                                                                {submission.status !== 'verified' &&
-                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'verified')}>
-                                                                                        Mark as Verified
-                                                                                    </DropdownMenuItem>}
-                                                                                {submission.status !== 'rejected' &&
-                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleRejectSubmission(submission.id)} className="text-red-600">
-                                                                                        Mark as Rejected
-                                                                                    </DropdownMenuItem>}
-                                                                                {submission.status !== 'pending' &&
-                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'pending')}>
-                                                                                        Set to Pending
-                                                                                    </DropdownMenuItem>}
+                                                                                {submission.status !== 'verified' && (
+                                                                                    submission.status === 'paid' ? (
+                                                                                        <DropdownMenuItem disabled={isLoading} onClick={() => setConfirmReversal({ id: submission.id, target: 'verified' })}>
+                                                                                            Mark as Verified
+                                                                                        </DropdownMenuItem>
+                                                                                    ) : (
+                                                                                        <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'verified')}>
+                                                                                            Mark as Verified
+                                                                                        </DropdownMenuItem>
+                                                                                    )
+                                                                                )}
+                                                                                {submission.status !== 'rejected' && (
+                                                                                    submission.status === 'paid' ? (
+                                                                                        <DropdownMenuItem disabled={isLoading} onClick={() => setConfirmReversal({ id: submission.id, target: 'rejected', needRejectionReason: true })} className="text-red-600">
+                                                                                            Mark as Rejected
+                                                                                        </DropdownMenuItem>
+                                                                                    ) : (
+                                                                                        <DropdownMenuItem disabled={isLoading} onClick={() => handleRejectSubmission(submission.id)} className="text-red-600">
+                                                                                            Mark as Rejected
+                                                                                        </DropdownMenuItem>
+                                                                                    )
+                                                                                )}
+                                                                                {submission.status !== 'pending' && (
+                                                                                    submission.status === 'paid' ? (
+                                                                                        <DropdownMenuItem disabled={isLoading} onClick={() => setConfirmReversal({ id: submission.id, target: 'pending' })}>
+                                                                                            Set to Pending
+                                                                                        </DropdownMenuItem>
+                                                                                    ) : (
+                                                                                        <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'pending')}>
+                                                                                            Set to Pending
+                                                                                        </DropdownMenuItem>
+                                                                                    )
+                                                                                )}
                                                                                 {submission.status !== 'paid' && isAdminView &&
-                                                                                    (currentContest.post_contest_status === 'verification_complete' || currentContest.post_contest_status === 'payouts_processed') &&
-                                                                                    <DropdownMenuItem disabled={isLoading} onClick={() => handleMarkAsPaid(submission.id)}>
-                                                                                        Mark as Paid
-                                                                                    </DropdownMenuItem>}
+                                                                                    (currentContest.post_contest_status === 'verification_complete' || currentContest.post_contest_status === 'payouts_processed') && (
+                                                                                        <>
+                                                                                            <DropdownMenuItem disabled={isLoading} onClick={() => handleUpdateSubmissionStatus(submission.id, 'paid')}>
+                                                                                                Mark as Paid
+                                                                                            </DropdownMenuItem>
+                                                                                            <DropdownMenuItem disabled={isLoading} onClick={() => handleMarkAsPaid(submission.id)}>
+                                                                                                Mark as Custom Paid
+                                                                                            </DropdownMenuItem>
+                                                                                        </>
+                                                                                    )}
                                                                                 <DropdownMenuSeparator />
                                                                                 <DropdownMenuItem asChild>
                                                                                     <a href={submission.content_link} target="_blank" rel="noopener noreferrer" className="flex items-center">
@@ -2001,7 +2045,7 @@ export default function ContestDetailClient({
                 isLoading={isLoadingSubmission[pendingRejectionSubmission || ''] || false}
             />
 
-            {/* Payment Modal */}
+            {/* Custom Pay Modal only */}
             <PaymentModal
                 isOpen={paymentModalOpen}
                 onClose={() => {
@@ -2010,7 +2054,29 @@ export default function ContestDetailClient({
                 }}
                 onConfirm={handlePaymentConfirm}
                 isLoading={isLoadingSubmission[pendingPaymentSubmission || ''] || false}
+                initialMode="custom"
+                showModeSwitcher={false}
+                showProofAndDescription={false}
             />
+
+            {/* Reversal confirmation dialog */}
+            <Dialog open={!!confirmReversal} onOpenChange={(open) => !open && setConfirmReversal(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Revert payment and update status?</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 text-sm text-muted-foreground">
+                        <p>
+                            Changing status from Paid will reverse the credited amount from the creator's wallet and remove related reward transactions.
+                        </p>
+                        <p className="font-medium">This action cannot be undone.</p>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                        <Button variant="outline" onClick={() => setConfirmReversal(null)}>Cancel</Button>
+                        <Button onClick={handleConfirmReversal} className="bg-red-600 hover:bg-red-700">Confirm Reversal</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 } 

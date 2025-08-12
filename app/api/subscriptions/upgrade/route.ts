@@ -59,6 +59,8 @@ async function cancelExistingSubscriptionSchedules(customerId: string, userId: s
 
 export async function POST(request: NextRequest) {
   try {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log('[API] POST /api/subscriptions/upgrade:start', { requestId });
     const supabase = await createClient();
     
     // Get authenticated user
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest) {
     // Parse request body - updated to use new parameter names
     const body = await request.json();
     const { targetProductId, targetPriceId, upgradeType = 'immediate', scheduledDate } = body;
+    console.log('[API] /subscriptions/upgrade:body', { requestId, targetProductId, targetPriceId, upgradeType, scheduledDate });
 
     // Validate required fields
     if (!targetProductId || !targetPriceId) {
@@ -186,12 +189,15 @@ export async function POST(request: NextRequest) {
 
         // SAFE APPROACH: Create new checkout session with old subscription ID in metadata
         // The webhook will handle canceling the old subscription ONLY after new subscription is successful
+        // Pass accurate change type so downstream logging shows Upgrade vs Downgrade correctly
+        const changeTypeForMetadata = isUpgrade ? 'upgrade' : 'downgrade';
         const checkoutSession = await createSubscriptionCheckoutSession({
           userId: user.id,
           productId: targetProductId,
           priceId: targetPriceId,
           upgradeOptions: {
-            upgradeType: 'immediate', // This is an immediate upgrade/downgrade
+            upgradeType: 'immediate',
+            changeType: changeTypeForMetadata,
             oldSubscriptionId: currentSubscription.id !== 'free-plan' ? currentSubscription.id : undefined
           }
         });
@@ -205,6 +211,7 @@ export async function POST(request: NextRequest) {
           ? 'Your current subscription will remain active until the new subscription is successfully created. This ensures no service interruption.'
           : 'You will be charged immediately for the new plan.';
 
+        console.log('[API] /subscriptions/upgrade:immediate-success', { requestId, sessionId: checkoutSession.sessionId, urlDefined: Boolean(checkoutSession.url) });
         return NextResponse.json({
           success: true,
           checkoutUrl: checkoutSession.url,
@@ -334,6 +341,7 @@ export async function POST(request: NextRequest) {
 
         const changeType = isUpgrade ? 'upgrade' : 'downgrade';
         
+        console.log('[API] /subscriptions/upgrade:scheduled-success', { requestId, scheduleId: subscriptionSchedule.id, startDate: currentPeriodEnd.toISOString() });
         return NextResponse.json({
           success: true,
           message: `Scheduled ${changeType} created successfully`,
@@ -360,7 +368,10 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('Error upgrading subscription:', error);
+    console.error('[API] /subscriptions/upgrade:error', {
+      message: (error as any)?.message || String(error),
+      raw: error,
+    });
     return NextResponse.json(
       { error: 'Failed to upgrade subscription' },
       { status: 500 }

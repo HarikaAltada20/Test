@@ -1,4 +1,5 @@
 import { createClient as createServerClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 import { stripe, formatAmountForStripe, formatAmountFromStripe } from './stripe';
 import { createOrGetStripeCustomer } from '@/lib/subscription-utils';
 
@@ -10,6 +11,8 @@ export interface PaymentIntent {
   currency: string;
   status: string;
 }
+// Global remark for payout reversals so it is consistent app-wide
+export const REVERSAL_TRANSACTION_REMARK = 'Forfeited due to status reversal';
 
 export interface DepositBalanceResponse {
   success: boolean;
@@ -523,7 +526,7 @@ export async function refundContestPayment(
 // Enhanced transaction logging with payment method and meaningful descriptions
 export async function logTransaction(
   userId: string,
-  type: 'deposit' | 'contest_payment' | 'refund' | 'withdrawal' | 'subscription_payment',
+  type: 'deposit' | 'contest_payment' | 'refund' | 'withdrawal' | 'subscription_payment' | 'reward',
   amountInCents: number,
   status: 'pending' | 'success' | 'failed' | 'cancelled' | 'completed',
   description: string,
@@ -610,6 +613,149 @@ export async function logTransaction(
     return true;
   } catch (error) {
     console.error('❌ Error in logTransaction:', error);
+    return false;
+  }
+}
+
+// 🆕 Creator balance helpers (withdrawable balance in cents)
+export async function creditCreatorWithdrawableBalance(
+  creatorId: string,
+  amountInCents: number,
+  description: string,
+  opts?: { remarks?: string; metadata?: any }
+): Promise<{ success: boolean; newBalance?: number; transactionId?: string; error?: string }> {
+  try {
+    if (amountInCents <= 0) {
+      return { success: false, error: 'Amount must be positive' };
+    }
+
+    // Use service role to bypass RLS when crediting other users
+    const supabase = createAdminClient();
+
+    // Read current balances
+    const { data: profile, error: readErr } = await supabase
+      .from('creator_profiles')
+      .select('withdrawable_balance, total_money_won')
+      .eq('id', creatorId)
+      .single();
+
+    if (readErr) {
+      return { success: false, error: readErr.message };
+    }
+
+    const currentBalance = profile?.withdrawable_balance || 0;
+    const currentTotalWon = profile?.total_money_won || 0;
+    const newBalance = currentBalance + amountInCents;
+    const newTotalWon = currentTotalWon + amountInCents;
+
+    const { error: updateErr } = await supabase
+      .from('creator_profiles')
+      .update({ withdrawable_balance: newBalance, total_money_won: newTotalWon })
+      .eq('id', creatorId);
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    // Log reward transaction
+    const supabaseInsert = await supabase
+      .from('money_transactions')
+      .insert({
+        user_id: creatorId,
+        type: 'reward',
+        status: 'success',
+        amount: amountInCents,
+        description,
+        remarks: opts?.remarks,
+        metadata: opts?.metadata,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (supabaseInsert.error) {
+      return { success: false, error: supabaseInsert.error.message };
+    }
+
+    return { success: true, newBalance, transactionId: supabaseInsert.data?.id };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Unknown error' };
+  }
+}
+
+export async function debitCreatorWithdrawableBalance(
+  creatorId: string,
+  amountInCents: number
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  try {
+    if (amountInCents <= 0) {
+      return { success: false, error: 'Amount must be positive' };
+    }
+
+    // Use service role to bypass RLS when touching other users
+    const supabase = createAdminClient();
+
+    const { data: profile, error: readErr } = await supabase
+      .from('creator_profiles')
+      .select('withdrawable_balance, total_money_won')
+      .eq('id', creatorId)
+      .single();
+
+    if (readErr) {
+      return { success: false, error: readErr.message };
+    }
+
+    const currentBalance = profile?.withdrawable_balance || 0;
+    const currentTotalWon = profile?.total_money_won || 0;
+    const newBalance = Math.max(0, currentBalance - amountInCents);
+    const newTotalWon = Math.max(0, currentTotalWon - amountInCents);
+
+    const { error: updateErr } = await supabase
+      .from('creator_profiles')
+      .update({ withdrawable_balance: newBalance, total_money_won: newTotalWon })
+      .eq('id', creatorId);
+
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    return { success: true, newBalance };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Unknown error' };
+  }
+}
+
+// 🆕 Admin-privileged transaction logger (bypasses RLS for cross-user entries)
+export async function logTransactionAsAdmin(
+  userId: string,
+  type: 'deposit' | 'contest_payment' | 'refund' | 'withdrawal' | 'subscription_payment' | 'reward',
+  amountInCents: number,
+  status: 'pending' | 'success' | 'failed' | 'cancelled' | 'completed',
+  description: string,
+  extra?: { remarks?: string; paymentMethod?: 'wallet' | 'stripe' | 'split' | 'refund'; metadata?: any; paymentIntentId?: string; stripeInvoiceId?: string; stripeSubscriptionId?: string; }
+): Promise<boolean> {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from('money_transactions')
+      .insert({
+        user_id: userId,
+        type,
+        status,
+        amount: amountInCents,
+        description,
+        remarks: extra?.remarks,
+        payment_method: extra?.paymentMethod,
+        metadata: extra?.metadata,
+        payment_intent_id: extra?.paymentIntentId,
+        stripe_invoice_id: extra?.stripeInvoiceId,
+        stripe_subscription_id: extra?.stripeSubscriptionId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    return !error;
+  } catch {
     return false;
   }
 }

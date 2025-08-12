@@ -21,11 +21,25 @@ function createServiceRoleClient() {
 }
 
 const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
+const describeEnv = () => {
+  const mask = (val?: string | null) => (val ? `${val.slice(0, 6)}...${val.slice(-4)}` : 'undefined');
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
+  const webhookSecret = endpointSecret;
+  return {
+    mode: secretKey?.startsWith('sk_live_') ? 'live' : (secretKey?.startsWith('sk_test_') ? 'test' : 'unknown'),
+    secretMasked: mask(secretKey),
+    publishableMasked: mask(publishableKey),
+    webhookMasked: mask(webhookSecret),
+  };
+};
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get('stripe-signature');
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  console.log('[Webhook] /api/subscriptions/webhook:start', { requestId, env: describeEnv() });
 
   if (!sig) {
     console.error('No Stripe signature found');
@@ -42,11 +56,11 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe().webhooks.constructEvent(body, sig, endpointSecret);
   } catch (err: any) {
-    console.error(`Webhook signature verification failed:`, err.message);
+    console.error(`[Webhook] signature verification failed`, { requestId, message: err?.message, raw: err });
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  console.log(`📥 Subscription Webhook received: ${event.type}`);
+  console.log(`📥 Subscription Webhook received: ${event.type}`, { requestId, eventId: event.id });
 
   // CRITICAL: Always return 200 for valid webhooks to prevent retries
   // Even if processing fails, we acknowledge receipt to Stripe
@@ -97,8 +111,10 @@ export async function POST(request: NextRequest) {
         }
     }
   } catch (error) {
-    console.error(`❌ Error processing subscription webhook ${event.type}:`, error);
-    console.error('📝 Event data:', JSON.stringify(event.data.object, null, 2));
+    console.error(`❌ Error processing subscription webhook ${event.type}:`, { requestId, message: (error as any)?.message || String(error) });
+    try {
+      console.error('📝 Event data:', JSON.stringify(event.data.object, null, 2));
+    } catch {}
     
     // Log error but still return 200 to prevent retries
     // Add error to internal logging system if available
@@ -115,7 +131,7 @@ export async function POST(request: NextRequest) {
         })
         .single();
     } catch (logError) {
-      console.error('❌ Failed to log webhook error:', logError);
+      console.error('❌ Failed to log webhook error:', { requestId, logError });
     }
   }
 

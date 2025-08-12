@@ -4,6 +4,8 @@ import { getUserSubscription, getSubscriptionPlanById } from '@/lib/subscription
 
 export async function GET(request: NextRequest) {
   try {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log('[API] GET /api/subscriptions/current:start', { requestId });
     const supabase = await createClient();
     
     // Get authenticated user
@@ -27,6 +29,7 @@ export async function GET(request: NextRequest) {
     const subscription = await getUserSubscription(user.id);
     
     if (!subscription) {
+      console.log('[API] /subscriptions/current:none', { requestId, userId: user.id });
       return NextResponse.json({
         subscription: null,
         plan: null,
@@ -36,6 +39,7 @@ export async function GET(request: NextRequest) {
 
     // Get plan details
     const plan = getSubscriptionPlanById(subscription.product_id);
+    console.log('[API] /subscriptions/current:success', { requestId, hasPlan: Boolean(plan), subscriptionId: subscription.id });
     
     return NextResponse.json({
       subscription,
@@ -44,7 +48,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching subscription:', error);
+    console.error('[API] /subscriptions/current:error', { message: (error as any)?.message || String(error), raw: error });
     return NextResponse.json(
       { error: 'Failed to fetch subscription' },
       { status: 500 }

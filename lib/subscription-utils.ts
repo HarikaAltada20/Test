@@ -150,7 +150,15 @@ export async function getUserPlanFeatures(userId: string): Promise<SubscriptionP
   }
 
   const plan = getSubscriptionPlanById(subscription.product_id);
-  return plan?.features || null;
+  if (!plan) {
+    console.warn('[Subscriptions] Unknown product_id for user subscription, falling back to EXPLORER features', {
+      userId,
+      product_id: subscription.product_id,
+    });
+    const explorerPlan = getSubscriptionPlanByName('EXPLORER');
+    return explorerPlan?.features || null;
+  }
+  return plan.features;
 }
 
 // Create or get Stripe customer
@@ -285,7 +293,28 @@ export async function createSubscriptionCheckoutSession(
 ): Promise<{ sessionId: string; url: string } | null> {
   const { userId, productId, priceId, upgradeOptions, trialDays = 0 } = params;
 
+  const requestContext = {
+    requestId: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    userId,
+  };
+
   try {
+    const mask = (val?: string | null) => (val ? `${val.slice(0, 6)}...${val.slice(-4)}` : 'undefined');
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    const keyMode = secretKey?.startsWith('sk_live_') ? 'live' : (secretKey?.startsWith('sk_test_') ? 'test' : 'unknown');
+
+    console.log('[Subscriptions] createCheckoutSession:start', {
+      ...requestContext,
+      productId,
+      priceId,
+      upgradeOptions,
+      trialDays,
+      appUrlDefined: Boolean(appUrl),
+      stripeKeyMode: keyMode,
+      stripeSecretMasked: mask(secretKey || ''),
+    });
+
     const customerId = await createOrGetStripeCustomer(userId);
     if (!customerId) {
       throw new Error('Failed to create or get Stripe customer');
@@ -301,6 +330,17 @@ export async function createSubscriptionCheckoutSession(
     }
 
     // Create checkout session
+    const successUrl = `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${process.env.NEXT_PUBLIC_APP_URL}/subscription/failed?error=payment_cancelled`;
+
+    console.log('[Subscriptions] creating Stripe checkout session', {
+      ...requestContext,
+      customerId,
+      plan: { id: plan.id, name: plan.name, price: plan.price },
+      successUrl,
+      cancelUrl,
+    });
+
     const session = await stripe().checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
@@ -315,7 +355,9 @@ export async function createSubscriptionCheckoutSession(
       metadata: {
         user_id: userId,
         product_id: productId,
-        upgrade_type: upgradeOptions?.upgradeType || 'immediate',
+        // Preserve timing vs direction distinctly in metadata
+        change_timing: upgradeOptions?.upgradeType || 'immediate',
+        change_type: upgradeOptions?.changeType || 'upgrade',
         ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
       },
       subscription_data: {
@@ -324,13 +366,20 @@ export async function createSubscriptionCheckoutSession(
         metadata: {
           user_id: userId,
           product_id: productId,
-          upgrade_type: upgradeOptions?.upgradeType || 'immediate',
+          change_timing: upgradeOptions?.upgradeType || 'immediate',
+          change_type: upgradeOptions?.changeType || 'upgrade',
           ...(upgradeOptions?.oldSubscriptionId && { old_subscription_id: upgradeOptions.oldSubscriptionId }),
         },
       },
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/subscription/failed?error=payment_cancelled`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       allow_promotion_codes: true,
+    });
+
+    console.log('[Subscriptions] createCheckoutSession:success', {
+      ...requestContext,
+      sessionId: session.id,
+      urlDefined: Boolean(session.url),
     });
 
     return {
@@ -338,7 +387,14 @@ export async function createSubscriptionCheckoutSession(
       url: session.url || '',
     };
   } catch (error) {
-    console.error('Error creating checkout session:', error);
+    const err = error as any;
+    console.error('[Subscriptions] createCheckoutSession:error', {
+      ...requestContext,
+      message: err?.message || String(err),
+      type: err?.type,
+      code: err?.code,
+      raw: err,
+    });
     return null;
   }
 }

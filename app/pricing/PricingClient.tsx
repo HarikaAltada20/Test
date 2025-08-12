@@ -135,7 +135,7 @@ export default function PricingClient() {
             try {
                 // Import plans from constants (new subscription system)
                 const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
-
+                console.log('🔍 Subscription Plans:', subscriptionPlans);
                 // Convert to the format expected by the UI
                 const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map((plan) => ({
                     id: plan.id, // Now real Stripe product ID

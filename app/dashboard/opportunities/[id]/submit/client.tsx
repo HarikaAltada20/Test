@@ -1078,6 +1078,15 @@ export default function SubmitContentPage({
 
       console.log("Submission successful:", submissionData);
 
+      // Idempotent participation increment (application-level)
+      try {
+        await fetch('/api/metrics/participation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contestId }),
+        });
+      } catch { }
+
       // Show success toast
       toast({
         title: "🎉 Content Submitted!",

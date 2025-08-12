@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { MetricsService } from "@/lib/metrics-service";
 
 export async function POST(
     request: NextRequest,
@@ -64,6 +65,17 @@ export async function POST(
             return NextResponse.json({ 
                 error: "Failed to publish contest" 
             }, { status: 500 });
+        }
+
+        // Application-level advertiser accounting on publish
+        try {
+            const budgetCents = (contest as any)?.payment_details?.total_amount_paid || 0;
+            if (contest.advertiser_id) {
+                await MetricsService.applyContestPublished(contest.advertiser_id, budgetCents);
+            }
+        } catch (accErr: any) {
+            console.error('Error applying advertiser publish accounting:', accErr);
+            return NextResponse.json({ error: `Published, but accounting failed: ${accErr?.message || 'unknown error'}` }, { status: 500 });
         }
 
         return NextResponse.json({ 
