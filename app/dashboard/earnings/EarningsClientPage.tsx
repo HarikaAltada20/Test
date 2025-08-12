@@ -596,13 +596,40 @@ export default function EarningsClientPage({
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-4 mb-6">
-                        <Button
-                            onClick={() => setIsWithdrawModalOpen(true)}
-                            className="flex-1"
-                            disabled={!profile || (profile.withdrawable_balance || 0) < MIN_WITHDRAWAL_AMOUNT || payoutMethods.length === 0 || isLoading}
-                        >
-                            <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw Balance
-                        </Button>
+                        {(() => {
+                            const balance = (profile?.withdrawable_balance || 0);
+                            const canOpenWithdraw = !!profile && balance >= MIN_WITHDRAWAL_AMOUNT && !isLoading;
+                            const hasPayoutMethods = payoutMethods.length > 0;
+                            if (canOpenWithdraw && hasPayoutMethods) {
+                                return (
+                                    <Button onClick={() => setIsWithdrawModalOpen(true)} className="flex-1">
+                                        <ArrowDownToLine className="h-4 w-4 mr-2" /> Withdraw Balance
+                                    </Button>
+                                );
+                            }
+                            if (canOpenWithdraw && !hasPayoutMethods) {
+                                return (
+                                    <Button
+                                        onClick={() => { resetPayoutForm(); setIsPayoutModalOpen(true); }}
+                                        className="flex-1"
+                                    >
+                                        <PlusCircle className="h-4 w-4 mr-2" /> Add Payout Method to Withdraw
+                                    </Button>
+                                );
+                            }
+                            // Fallback: disabled button with reason
+                            const reason = !profile || isLoading
+                                ? 'Loading account...'
+                                : balance < MIN_WITHDRAWAL_AMOUNT
+                                    ? `Minimum withdrawal: ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}`
+                                    : 'Withdraw Balance';
+                            return (
+                                <Button className="flex-1" disabled>
+                                    <ArrowDownToLine className="h-4 w-4 mr-2" /> {reason}
+                                </Button>
+                            );
+                        })()}
+
                         <Button
                             variant="outline"
                             onClick={() => { resetPayoutForm(); setIsPayoutModalOpen(true); }}
