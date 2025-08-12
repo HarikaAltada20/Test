@@ -1,6 +1,6 @@
 export default function TermsOfServicePage() {
     return (
-       <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#000825' }}>
+       <div className="min-h-screen relative overflow-hidden border-b border-[#A87313]" style={{ backgroundColor: '#000825' }}>
       {/* Top Right Decorative Element */}
       {/* <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/30 rounded-full blur-2xl"></div>
       <div className="absolute top-4 right-4 w-16 h-16 bg-purple-400/40 rounded-full blur-lg"></div>

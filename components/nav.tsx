@@ -175,7 +175,7 @@ export function Nav({
                     <Sparkles className="h-5 w-5" />
                     <span className="relative z-10">For Creators</span>
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 group-hover:from-amber-600/5 group-hover:to-orange-600/5 rounded-xl transition-all duration-300"></div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-600/0 to-orange-600/0 rounded-xl transition-all duration-300"></div>
                 </Link>
               </nav>
             </div>

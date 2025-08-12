@@ -23,6 +23,7 @@ export default function ContactPage() {
     }, 3000); // change every 3 sec
     return () => clearInterval(interval);
   }, [images.length]);
+  
   return (
     // <div className="min-h-[60vh] flex flex-col items-center justify-center bg-gradient-to-b from-white to-slate-50 py-16 px-4">
     //   <div className="text-center mb-8">
@@ -64,7 +65,7 @@ export default function ContactPage() {
     //   </div>
     // </div>
 
-    <section className="bg-[#050A30] text-white py-16 px-6">
+    <section className="bg-[#050A30] text-white py-16 px-6 border-b border-[#A87313]">
       <div className="max-w-[1200px] mx-auto grid md:grid-cols-2 gap-20 items-start">
         {/* Left Section */}
         <div>

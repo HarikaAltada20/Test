@@ -20,7 +20,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="relative w-full bg-[#000825] text-white py-10 px-8 overflow-hidden border-t border-[#A87313]">
+    <footer className="relative w-full bg-[#000825] text-white py-10 px-8 overflow-hidden">
       <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-wrap justify-between gap-16">
         {/* Logo & Description */}
         <div className="flex flex-col max-w-xl space-y-6">

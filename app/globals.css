@@ -99,7 +99,8 @@ body {
 .bg-blue-ellipse {
   background: radial-gradient(
     ellipse at center,
-    rgba(62, 17, 210, 0.8) 0%,
+       rgba(45, 29, 101, 0.8) 0%,
+   
     rgba(69, 57, 202, 0.489) 40%,
     rgba(5, 29, 211, 0.3) 70%,
     rgba(255, 132, 0, 0) 100%

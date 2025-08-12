@@ -1,8 +1,8 @@
 import Image from "next/image";
-import { Quote, MessageSquareQuote } from "lucide-react";
+import { Crown, Sparkle, Sparkles } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-
-const testimonials = [
+import { usePathname } from "next/navigation";
+const creatorsTestimonials = [
   {
     name: "Sophie Williams",
     role: "Beauty Content Creator",
@@ -60,9 +60,74 @@ const testimonials = [
       "This community is amazing — full of supportive and inspiring people.",
   },
 ];
+
+const brandsTestimonials = [
+  {
+    name: "Sophie Williams",
+    role: "Beauty Content Creator",
+    image: "./images/Ellipse 2355.png",
+    quote:
+      "The brands here are fantastic. I've partnered with great companies and formed strong connections.",
+  },
+  {
+    name: "Sarah Johnson",
+    role: "Marketing Director, Fashion Brand",
+    image: "./images/Ellipse 2355 (3).png",
+    quote:
+      "Game Of Creators revamped our content strategy, producing 50 unique pieces in two weeks and boosting engagement.",
+  },
+  {
+    name: "Mike Chen",
+    role: "Founder, Tech Startup",
+    image: "./images/Ellipse 2355 (1).png",
+    quote:
+      "The Game of Creators has streamlined our workflow and boosted efficiency",
+  },
+  {
+    name: "Emma Rodriguez",
+    role: "CMO, E- commerce Platform",
+    image: "./images/Ellipse 2355 (2).png",
+    quote:
+      "Game Of Creators exceeded our expectations, enhancing our brand with authentic creator content.",
+  },
+  {
+    name: "James Carter",
+    role: "Software Engineer",
+    image: "./images/Ellipse 2355 (4).png",
+    quote:
+      "The Game Of Creators streamlined our workflow and boosted efficiency.",
+  },
+  {
+    name: "Emily Clark",
+    role: "Lifestyle Blogger",
+    image: "./images/Ellipse 2355 (6).png",
+    quote:
+      "Collaborating with skilled creators here has been seamless. The content quality was impressive, leading to a great ROI.",
+  },
+  {
+    name: "Lisa Chen",
+    role: "Head of Digital Marketing, SaaS Company",
+    image: "./images/Ellipse 2355 (7).png",
+    quote:
+      "A platform that truly aligns brand goals with creator strengths, ensuring a smooth and effective collaboration process.",
+  },
+  {
+    name: "Olivia White",
+    role: "Fashion Influencer",
+    image: "./images/Ellipse 2355 (1).png",
+    quote:
+      "This community is amazing — full of supportive and inspiring people.",
+  },
+];
+
 export default function Testimonials() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const [isAnimated, setIsAnimated] = useState(false);
+  const pathname = usePathname();
+  const blurColor = pathname === "/brands" ? "#7F39EC" : "#FF652D";
+  // Pick dataset based on route
+  const testimonials =
+    pathname === "/brands" ? brandsTestimonials : creatorsTestimonials;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -75,10 +140,7 @@ export default function Testimonials() {
       { threshold: 0.3 }
     );
 
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
-
+    if (sectionRef.current) observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
 
@@ -87,12 +149,28 @@ export default function Testimonials() {
     rows.push(testimonials.slice(i, i + 4));
   }
 
+  const iconSrc =
+    pathname === "/brands"
+      ? "./images/Frame 2147207526 (1).png"
+      : "./images/Frame 2147207526.png";
+
+  const buttonConfig =
+    pathname === "/brands"
+      ? { text: "Our Brands", icon: Crown }
+      : { text: "Our Brands", icon: Sparkles };
+
+  const gradientText =
+    pathname === "/brands"
+      ? "linear-gradient(180deg, #7F39EC 33.29%, #B16FF4 81.2%)" // Purple gradient for brands
+      : "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)"; // Orange gradient for creators
+
   return (
     <section className="text-white py-20 px-6" ref={sectionRef}>
       {/* Heading */}
       <div className="text-center max-w-3xl mx-auto">
-        <button className="bg-[#1E233E] text-white py-1 px-4 rounded-full mb-7">
-          ✨ Our Brands
+        <button className="bg-[#2C3247] text-white py-1 px-4 rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
+          <buttonConfig.icon size={16} />
+          <span>{buttonConfig.text}</span>
         </button>
         <h2
           className={`text-3xl md:text-5xl font-bold mb-7 ${
@@ -102,14 +180,11 @@ export default function Testimonials() {
         >
           What{" "}
           <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-            }}
+            className="bg-clip-text text-transparent mx-2"
+            style={{ backgroundImage: gradientText }}
           >
-            Creators
-          </span>{" "}
+            {pathname === "/brands" ? "Brands" : "Creators"}
+          </span>
           Say About Us
         </h2>
         <p
@@ -118,15 +193,15 @@ export default function Testimonials() {
           }`}
           style={{ animationDelay: "1s" }}
         >
-          "Creators love our platform for its user-friendly interface, diverse
-          opportunities, and responsive community support."
+          {pathname === "/brands"
+            ? "Brands appreciate our platform for connecting them with top-tier talent and boosting campaigns."
+            : "Creators love our platform for its user-friendly interface, diverse opportunities, and supportive community."}
         </p>
       </div>
 
       {/* Rows */}
       <div className="mt-12 space-y-8">
         {rows.map((row, rowIndex) => (
-     
           <div key={rowIndex} className="overflow-hidden relative">
             <div
               className={`flex justify-center gap-6 scroll-row ${
@@ -138,7 +213,7 @@ export default function Testimonials() {
               {[...row, ...row].map((t, i) => (
                 <div
                   key={i}
-                    className="p-8 rounded-xl border border-gray-700 flex-shrink-0 w-[500px]"
+                  className="p-8 rounded-xl border border-gray-700 flex-shrink-0 w-[500px]"
                 >
                   <div className="flex items-center justify-between gap-4">
                     {/* Left: Quote + Name + Role */}
@@ -146,16 +221,15 @@ export default function Testimonials() {
                       <div className="flex items-start gap-2">
                         {/* Image with orange shade background */}
                         <div className="relative w-8 h-8 flex-shrink-0">
-                          {/* Orange shade background */}
                           <div
                             className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 
-                                  w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
-                            style={{ backgroundColor: "#FF652D" }}
+    w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
+                            style={{ backgroundColor: blurColor }}
                           ></div>
 
                           {/* Icon image */}
                           <Image
-                            src="./images/Frame 2147207526.png" // replace with your image path
+                            src={iconSrc}
                             alt="quote"
                             width={32}
                             height={32}

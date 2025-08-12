@@ -102,7 +102,7 @@ export default function AboutPage() {
     };
   }, []);
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
+    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">
         <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
           {/* Strategic Background Elements */}
@@ -136,7 +136,7 @@ export default function AboutPage() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A;] rounded-full px-6 py-3 mb-8">
+            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
               <Sparkles className="h-5 w-5 text-white" />
               <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
                 #1 Gamified Creator Marketing Platform

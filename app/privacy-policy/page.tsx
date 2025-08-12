@@ -1,7 +1,7 @@
 export default function PrivacyPolicyPage() {
   return (
     <div
-      className="min-h-screen text-white"
+      className="min-h-screen text-white border-b border-[#A87313]"
       style={{ backgroundColor: "#000825" }}
     >
       <div className="container mx-auto px-2 py-12 max-w-[1250px]">

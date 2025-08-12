@@ -2,10 +2,10 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { Users } from "lucide-react";
-
+import { usePathname } from "next/navigation";
 import { FaChevronDown } from "react-icons/fa";
 
-const faqs = [
+const creatorFaqs = [
   {
     id: "faq-1",
     question: "What platforms do you support for content creation?",
@@ -31,12 +31,39 @@ const faqs = [
       "Joining Game Of Creators is completely free for creators. We believe in empowering you to monetize your skills without upfront costs. We may take a small platform fee from brand payments on successful collaborations.",
   },
 ];
-
+const brandFaqs = [
+  {
+    id: "faq-brand-1",
+    question: "How do I create a contest for creators?",
+    answer:
+      "Our platform makes it easy. Simply define your campaign brief, set your prize pool, specify the type of content you're looking for (e.g., youtube videos, Instagram Reels), and launch. Creators in our network will then be able to see and participate in your contest.",
+  },
+  {
+    id: "faq-brand-2",
+    question: "How do I ensure content quality and brand alignment?",
+    answer:
+      "You provide a detailed brief outlining your brand guidelines, key messages, and content expectations. You can review submissions and provide feedback before selecting winners. Many brands also use contests to discover creators for longer-term collaborations.",
+  },
+  {
+    id: "faq-brand-3",
+    question: "What kind of results can I expect from creator contests?",
+    answer:
+      "Results vary, but brands typically receive a diverse range of authentic content pieces at a fraction of traditional production costs. This content can be used for social media, ads, and other marketing channels, often leading to increased engagement, brand awareness, and reach.",
+  },
+  {
+    id: "faq-brand-4",
+    question: "How are creators paid and how much does it cost?",
+    answer:
+      "You set the prize pool for your contest. Payments to winning creators are handled securely through our platform. Our pricing is transparent, typically involving a platform fee on top of the prize money you allocate for creators.",
+  },
+];
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-
   const [animate, setAnimate] = useState(false);
   const faqHeaderRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+
+  const faqs = pathname.includes("brands") ? brandFaqs : creatorFaqs;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -59,17 +86,17 @@ export default function FAQ() {
       }
     };
   }, []);
+
   const toggleFAQ = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
   };
-
   return (
-    <section className="py-16 px-4 mb-10 text-white"  ref={faqHeaderRef}>
-      <div className="max-w-5xl mx-auto text-center" >
+    <section className="py-16 px-4 mb-10 text-white" ref={faqHeaderRef}>
+      <div className="max-w-5xl mx-auto text-center">
         {/* Top Tag */}
-        <button className="px-5 py-2 bg-[#1A1B35] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
+        <button className="px-5 py-2 bg-[#2C3247] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
           <Users className="text-white h-5 w-5" /> {/* user icon in yellow */}
-          <span className="text-gray-300">Have inquiries?</span>
+          <span className="text-white">Have inquiries?</span>
         </button>
 
         {/* Gradient Title */}
@@ -77,8 +104,7 @@ export default function FAQ() {
           className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
             animate ? "slide-up" : "hide-before-animate"
           }`}
-            style={{ animationDelay: "0.2s" }}
-     
+          style={{ animationDelay: "0.2s" }}
         >
           <span
             className="bg-clip-text text-transparent"
@@ -86,7 +112,6 @@ export default function FAQ() {
               backgroundImage:
                 "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
             }}
-            
           >
             Frequently
           </span>
@@ -106,8 +131,7 @@ export default function FAQ() {
           className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
             animate ? "slide-left" : "hide-before-animate"
           }`}
-            style={{ animationDelay: "1s" }}
-     
+          style={{ animationDelay: "1s" }}
         >
           Here are some frequently asked questions
         </p>
@@ -121,7 +145,13 @@ export default function FAQ() {
             >
               <button
                 onClick={() => toggleFAQ(index)}
-                className="w-full flex justify-between items-center px-6 py-6 bg-gradient-to-r from-transparent via-[#ff652d30] to-transparent hover:bg-[#1A1B35] transition-colors"
+                className={`w-full flex justify-between items-center px-6 py-6 
+    ${
+      pathname.includes("brands")
+        ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
+        : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
+    } 
+    hover:bg-[#1A1B35] transition-colors`}
               >
                 <span className="text-left text-xl">{faq.question}</span>
                 <FaChevronDown
@@ -130,6 +160,7 @@ export default function FAQ() {
                   }`}
                 />
               </button>
+
               {openIndex === index && (
                 <div className="text-left text-md pt-4 px-4 pb-4 text-gray-400">
                   {faq.answer}

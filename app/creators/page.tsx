@@ -11,23 +11,14 @@ import {
 } from "@/components/ui/accordion";
 import {
   ArrowRight,
-  BadgeCheck,
-  DollarSign,
-  Zap,
   Star,
-  Plus,
-  X,
   Users,
   Crown,
   Target,
-  TrendingUp,
   Trophy,
-  Rocket,
-  Shield,
   Palette,
   Camera,
   Heart,
-  Award,
   Gift,
   Sparkles,
 } from "lucide-react";
@@ -87,7 +78,7 @@ const creatorTestimonials = [
     avatar: "/images/avatar_placeholder.png",
   },
 ];
-const steps = [
+const creatorsteps = [
   {
     number: "1",
     title: "Create Your Creator Profile",
@@ -231,7 +222,7 @@ export default function CreatorsPage() {
     return () => clearInterval(interval);
   }, []);
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
+    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">
         <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
           {/* Strategic Background Elements */}
@@ -265,9 +256,9 @@ export default function CreatorsPage() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-white-600/20 backdrop-blur-sm border border-amber-400/30 rounded-full px-6 py-3 mb-8 shadow-xl shadow-amber-500/20">
-              <Sparkles className="h-5 w-5 text-white" />
-              <span className="text-sm font-semibold bg-white bg-clip-text text-transparent">
+            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
+              <Crown className="h-5 w-5" />
+              <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
                 #1 Gamified Creator Marketing Platform
               </span>
             </div>
@@ -336,7 +327,7 @@ export default function CreatorsPage() {
             {/* Epic CTA Button */}
             <div className="flex justify-center items-center mb-12">
               <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-3 text-lg overflow-hidden">
-              <div className="scan-line"></div>
+                <div className="scan-line"></div>
                 <Link
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
@@ -459,7 +450,7 @@ export default function CreatorsPage() {
             <div className="grid md:grid-cols-2 gap-10 items-start">
               {/* Steps */}
               <div className="space-y-[90px] relative z-10">
-                {steps.map((step, index) => (
+               {creatorsteps.map((step, index) => (
                   <div key={index} className="flex items-start gap-6 relative">
                     {/* Circle */}
                     <div
@@ -469,7 +460,7 @@ export default function CreatorsPage() {
                     </div>
 
                     {/* Dotted line below the circle, except for the last step */}
-                    {index < steps.length - 1 && (
+                    {index < creatorsteps.length - 1 && (
                       <div
                         className="absolute left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
                         style={{
