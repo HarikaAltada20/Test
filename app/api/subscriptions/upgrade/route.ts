@@ -225,6 +225,7 @@ export async function POST(request: NextRequest) {
             warning: `${safetyMessage} You will be charged ${formatCurrencyFromCents(targetPlan.price)} for your new subscription.`
           }
         });
+        
 
       } catch (error) {
         console.error(`Error in safe ${isUpgrade ? 'upgrade' : 'downgrade'}:`, error);

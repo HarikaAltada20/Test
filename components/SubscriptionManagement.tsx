@@ -239,8 +239,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 });
 
                 const result = await response.json();
+                console.log('[Client] 📋 Subscription creation result:', result);
 
                 if (!response.ok) {
+                    console.log('response is not okay', response);
                     console.error('[Client] /subscriptions/create failed', { status: response.status, result });
                     throw new Error(result.error || 'Subscription creation failed');
                 }
@@ -270,8 +272,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             });
 
             const result = await response.json();
+            console.log('[Client] 📋 Subscription upgrade result:', result);
 
             if (!response.ok) {
+                console.log('response is not okay', response);
                 console.error('[Client] /subscriptions/upgrade failed', { status: response.status, result });
                 throw new Error(result.error || 'Subscription update failed');
             }
