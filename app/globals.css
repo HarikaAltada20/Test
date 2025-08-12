@@ -62,14 +62,20 @@ body {
     opacity: 1;
   }
 }
-
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(50px); }
+  to { opacity: 1; transform: translateX(0); }
+}
 
 .slide-left {
   opacity: 0;
   animation: slideFromLeft 0.7s ease-out forwards;
   animation-delay: 1s;
 }
-
+.slide-right {
+  opacity: 0;
+  animation: slideRight 0.8s ease-out forwards;
+}
 
 
 .animate-spin-slow {
@@ -90,6 +96,16 @@ body {
   );
 }
 
+.bg-blue-ellipse {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(62, 17, 210, 0.8) 0%,
+    rgba(69, 57, 202, 0.489) 40%,
+    rgba(5, 29, 211, 0.3) 70%,
+    rgba(255, 132, 0, 0) 100%
+  );
+}
+
 .gradient-text {
   background: linear-gradient(173.88deg, #FDC155 69.65%, #FF652D 85.87%);
   -webkit-background-clip: text;
@@ -104,6 +120,38 @@ body {
   display: flex;
   flex-wrap: nowrap;
 }
+
+
+
+.scan-line {
+  position: absolute;
+  width: 50%;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.9),
+    transparent
+  );
+  transform: rotate(120deg);
+  top: -10%;
+  left: 0%;
+  animation: scan-diagonal 2s linear infinite;
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+@keyframes scan-diagonal {
+  0% {
+    top: -20%;
+    left: -20%;
+  }
+  100% {
+    top: 120%;
+    left: 120%;
+  }
+}
+
 
 /* Right infinite loop */
 @keyframes scrollRightSeamless {

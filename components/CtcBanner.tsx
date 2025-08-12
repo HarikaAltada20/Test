@@ -1,10 +1,35 @@
-// components/CtcBanner.tsx
+
 import { ArrowRight, Rocket } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+
+
 export default function CtcBanner() {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setInView(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => {
+      if (sectionRef.current) observer.unobserve(sectionRef.current);
+    };
+  }, []);
   return (
     <section
       className="relative flex flex-col items-center justify-center min-h-[500px] text-center text-white overflow-hidden"
+         ref={sectionRef}
       style={{
         background:
           "linear-gradient(180deg, #161C34 0%, rgba(231, 93, 13, 0.56) 166.78%)",
@@ -36,7 +61,9 @@ export default function CtcBanner() {
       </div>
 
       {/* Main Heading */}
-      <h1 className="mt-6 text-3xl md:text-5xl font-bold z-10">
+      <h1  className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${
+          inView ? "slide-up" : "opacity-0 translate-y-10"
+        }`}>
         Ready to Transform Your{" "}
         <span
          
@@ -52,7 +79,9 @@ export default function CtcBanner() {
       </h1>
 
       {/* Subtitle */}
-      <p className="mt-4 max-w-2xl text-lg text-gray-200 z-10">
+      <p  className={`mt-4 max-w-2xl text-xl text-gray-200 z-10 ${
+          inView ? "slide-left" : "opacity-0 translate-x-10"
+        }`}>
         Join thousands of creators and brands. Sign up today and unlock your
         potential!
       </p>

@@ -312,33 +312,39 @@ export function Nav({
               ) : (
                 <>
                   {/* Enhanced Sign In Button */}
-                  <Link href="/auth/signin" className="hidden sm:block">
+                 
                     <Button
                       variant="outline"
                       className={cn(
-                        "px-6 py-1.5 rounded-full backdrop-blur-sm transition-all duration-300",
+                        "px-6 py-1.5 text-md rounded-full backdrop-blur-sm transition-all duration-300",
                         pathname === "/creators"
                           ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
                           : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
                       )}
                     >
+                       <Link href="/auth/signin" className="hidden sm:block">
                       Sign In
+                      </Link>
                     </Button>
-                  </Link>
+                
 
-                  {/* Premium CTA Button */}
-                  <Link href="/auth/signup">
+                
                     <Button
                       className={cn(
-                        "px-6 py-1.5 rounded-full transition-all duration-300",
+                        "px-6 py-1.5 text-md rounded-full transition-all duration-300 relative overflow-hidden", // added relative + overflow-hidden
                         pathname === "/creators"
                           ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
                           : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
                       )}
                     >
+                        <Link href="/auth/signup">
+                      {/* Scan line */}
+                      <div className="scan-line"></div>
+
                       <span className="relative z-10">Get Started</span>
+                      </Link>
                     </Button>
-                  </Link>
+                
                 </>
               )}
 
@@ -470,12 +476,13 @@ export function Nav({
                             Sign In
                           </Button>
                         </Link>
-                        <Link href="/auth/signup">
-                          <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
+
+                        <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
+                          <Link href="/auth/signup">
                             <Zap className="mr-2 h-4 w-4" />
                             Get Started
-                          </Button>
-                        </Link>
+                          </Link>
+                        </Button>
                       </div>
                     )}
                   </SheetContent>

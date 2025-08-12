@@ -2,8 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+
 import {
   Accordion,
   AccordionContent,
@@ -337,6 +336,7 @@ export default function CreatorsPage() {
             {/* Epic CTA Button */}
             <div className="flex justify-center items-center mb-12">
               <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-3 text-lg overflow-hidden">
+              <div className="scan-line"></div>
                 <Link
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
@@ -391,14 +391,16 @@ export default function CreatorsPage() {
                   description:
                     "Create professional content for recognized brands to showcase in your portfolio.",
                   number: "2",
-                  image: "./images/6260ed20a17f3e1217628986a9525a3a5987b46f.png", // second card image
+                  image:
+                    "./images/6260ed20a17f3e1217628986a9525a3a5987b46f.png", // second card image
                 },
                 {
                   title: "Grow Your Audience",
                   description:
                     "Gain exposure when brands share and promote your content to their followers.",
                   number: "3",
-                  image: "./images/e8e9c22eb82571682f04cec79d2d2cb1276138fc.png", // third card image
+                  image:
+                    "./images/e8e9c22eb82571682f04cec79d2d2cb1276138fc.png", // third card image
                 },
               ].map((item) => (
                 <div
