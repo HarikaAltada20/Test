@@ -1,12 +1,30 @@
 begin;
 
+-- 0) Clean up any existing products with conflicting names (TEST products)
+delete from public.products
+where name in ('EXPLORER', 'STARTER', 'BUILDER', 'CHAMPION')
+and id not in ('prod_SgtEmTCYKfROTo', 'prod_SgtFZrrxO3IdP7', 'prod_SgtGPsQZ79Mcej', 'prod_SgtHIEckuTjVRV');
+
 -- 1) Ensure LIVE products exist (idempotent)
 insert into public.products (id,active,name,description,display_name,plan_features,created,updated) values
   ('prod_SgtEmTCYKfROTo', true, 'EXPLORER','Entry-level users, startups, or small businesses wanting to test the platform','Explorer Plan','{}', now(), now()),
   ('prod_SgtFZrrxO3IdP7', true, 'STARTER','Small to medium-sized businesses that want to run more contests and grow their presence','Starter Plan','{}', now(), now()),
   ('prod_SgtGPsQZ79Mcej', true, 'BUILDER','Medium to large brands scaling their presence and want more contests and flexibility','Builder Plan','{}', now(), now()),
   ('prod_SgtHIEckuTjVRV', true, 'CHAMPION','Large businesses, agencies, and enterprises looking to run high-volume campaigns with premium support','Champion Plan','{}', now(), now())
-on conflict (id) do nothing;
+on conflict (id) do update set
+  active = excluded.active,
+  name = excluded.name,
+  description = excluded.description,
+  display_name = excluded.display_name,
+  plan_features = excluded.plan_features,
+  updated = now()
+on conflict (name) do update set
+  id = excluded.id,
+  active = excluded.active,
+  description = excluded.description,
+  display_name = excluded.display_name,
+  plan_features = excluded.plan_features,
+  updated = now();
 
 -- 2) Ensure LIVE prices exist (idempotent)
 insert into public.prices (id,product_id,active,unit_amount,currency,type,interval,interval_count,trial_period_days,billing_scheme,description,created,updated) values
@@ -17,7 +35,18 @@ insert into public.prices (id,product_id,active,unit_amount,currency,type,interv
   ('price_1RlVUMJEc43ljUHzIvgrheDm','prod_SgtGPsQZ79Mcej',true,250000,'usd','recurring','year',1,0,'per_unit','Annual billing - Save $500',now(),now()),
   ('price_1RlVVPJEc43ljUHzsGSTVwc6','prod_SgtHIEckuTjVRV',true,50000,'usd','recurring','month',1,0,'per_unit','Monthly billing',now(),now()),
   ('price_1RlVVgJEc43ljUHzyWf2569f','prod_SgtHIEckuTjVRV',true,500000,'usd','recurring','year',1,0,'per_unit','Annual billing - Save $1000',now(),now())
-on conflict (id) do nothing;
+on conflict (id) do update set
+  product_id = excluded.product_id,
+  active = excluded.active,
+  unit_amount = excluded.unit_amount,
+  currency = excluded.currency,
+  type = excluded.type,
+  interval = excluded.interval,
+  interval_count = excluded.interval_count,
+  trial_period_days = excluded.trial_period_days,
+  billing_scheme = excluded.billing_scheme,
+  description = excluded.description,
+  updated = now();
 
 -- 3) Remap references in subscriptions (TEST → LIVE)
 update public.subscriptions
