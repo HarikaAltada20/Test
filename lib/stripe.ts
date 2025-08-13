@@ -7,7 +7,7 @@ let stripeInstance: Stripe | null = null;
 export const stripe = (): Stripe => {
   if (!stripeInstance) {
     const secretKey = process.env.STRIPE_SECRET_KEY;
-    const apiVersion = process.env.STRIPE_API_VERSION || '2024-06-20';
+    const apiVersion = process.env.STRIPE_API_VERSION || '2025-07-30.basil'; // Updated to latest working version
     if (!secretKey) {
       throw new Error('STRIPE_SECRET_KEY is not set in environment variables');
     }
