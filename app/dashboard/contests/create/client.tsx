@@ -1463,16 +1463,24 @@ export default function CreateContestPage({
     setExternalLinkError(null);
     if (!newResourceUrl.trim()) {
       setExternalLinkError("Resource link cannot be empty.");
+      toast({ title: "Invalid Input", description: "Resource link cannot be empty.", variant: "destructive" });
       return;
     }
     try {
-      new URL(newResourceUrl);
+      const urlObj = new URL(newResourceUrl);
+      if (urlObj.protocol !== "https:") {
+        setExternalLinkError("URL must start with https://");
+        toast({ title: "Invalid URL", description: "URL must start with https://", variant: "destructive" });
+        return;
+      }
     } catch (_) {
       setExternalLinkError("Invalid URL format.");
+      toast({ title: "Invalid URL", description: "Invalid URL format.", variant: "destructive" });
       return;
     }
     if (!externalResourceDescription.trim()) {
       setExternalLinkError("Resource description cannot be empty for external link.");
+      toast({ title: "Missing Description", description: "Resource description cannot be empty for external link.", variant: "destructive" });
       return;
     }
     // Check if both URL and description are the same as an existing external link (most specific)
@@ -1531,6 +1539,9 @@ export default function CreateContestPage({
       if (resource.type === "internal" && resource.url.includes('supabase.co/storage')) {
         await deleteFromStorage(resource.url); // Reuse the same deletion logic
         toast({ title: "Success", description: "Resource deleted successfully!" });
+      } else {
+        // For external resources, show success message
+        toast({ title: "Success", description: "External link removed successfully!" });
       }
     } catch (error: any) {
       console.error("Error deleting resource from storage:", error);
@@ -2237,6 +2248,53 @@ export default function CreateContestPage({
     }
   }, [startDate, startTime]);
 
+  // Format helper: "August 2nd" based on user timezone
+  const formatDateWithOrdinal = (date: Date) => {
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    const day = date.getDate();
+    const j = day % 10,
+      k = day % 100;
+    let suffix = "th";
+    if (j === 1 && k !== 11) suffix = "st";
+    else if (j === 2 && k !== 12) suffix = "nd";
+    else if (j === 3 && k !== 13) suffix = "rd";
+    return `${months[date.getMonth()]} ${day}${suffix}`;
+  };
+
+  // Build dynamic example text for start date rule using local timezone
+  const getStartDateRuleExample = () => {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const minStartDate = new Date(startOfToday);
+    minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+
+    // Disallowed dates list: today .. (minStartDate - 1)
+    const disallowed: string[] = [];
+    for (let i = 0; i < MIN_DAYS_UNTIL_START; i++) {
+      const d = new Date(startOfToday);
+      d.setDate(startOfToday.getDate() + i);
+      disallowed.push(formatDateWithOrdinal(d));
+    }
+    const disallowedText = disallowed.length === 1
+      ? disallowed[0]
+      : disallowed.slice(0, -1).join(", ") + " and " + disallowed[disallowed.length - 1];
+
+    return `For example, if today is ${formatDateWithOrdinal(startOfToday)}, you can create contests starting from ${formatDateWithOrdinal(minStartDate)} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"} not allowed.`;
+  };
+
   // High Budget Prompt Modal
   // Modern Error Alert Component with auto-dismiss
   const ErrorAlert = ({ message }: { message: string }) => {
@@ -2836,12 +2894,9 @@ export default function CreateContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              <strong>📅 Start Date Rule:</strong> Contest must start at least {MIN_DAYS_UNTIL_START} days from today.
-              For example, if today is August 2nd, you can create contests starting from August 4th (00:00 onwards).
-              August 2nd and August 3rd are not allowed.
+              <strong>📅 Start Date Rule:</strong> Contest must start at least {MIN_DAYS_UNTIL_START} days from today. {getStartDateRuleExample()}
               <br />
-              <strong>⏱️ Duration:</strong> Contest must run between {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
-              The end date will automatically adjust to maintain minimum duration.
+              <strong>⏱️ Duration:</strong> Contest must run between {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days. The end date will automatically adjust to maintain minimum duration.
             </p>
           </div>
 
@@ -3154,20 +3209,24 @@ export default function CreateContestPage({
     setInspirationError(null);
     if (!newInspirationUrl.trim()) {
       setInspirationError("URL cannot be empty.");
+      toast({ title: "Invalid Input", description: "URL cannot be empty.", variant: "destructive" });
       return;
     }
     try {
       const urlObj = new URL(newInspirationUrl);
       if (urlObj.protocol !== "https:") {
         setInspirationError("URL must start with https://");
+        toast({ title: "Invalid URL", description: "URL must start with https://", variant: "destructive" });
         return;
       }
     } catch {
       setInspirationError("Invalid URL format.");
+      toast({ title: "Invalid URL", description: "Invalid URL format.", variant: "destructive" });
       return;
     }
     if (!newInspirationDescription.trim()) {
       setInspirationError("Description is required.");
+      toast({ title: "Missing Description", description: "Description is required.", variant: "destructive" });
       return;
     }
     // Duplicate check: same URL and description
@@ -3193,7 +3252,13 @@ export default function CreateContestPage({
     setInspirationLinks([...inspirationLinks, { url: newInspirationUrl, description: newInspirationDescription }]);
     setNewInspirationUrl("");
     setNewInspirationDescription("");
+    toast({ title: "Success", description: "Inspiration link added!" });
   };
+
+  const removeInspirationLink = (index: number) => {
+    setInspirationLinks(inspirationLinks.filter((_, i) => i !== index));
+    toast({ title: "Success", description: "Inspiration link removed!" });
+  }
 
   // Add this function near your other handlers:
   const handleResourceDrop = async (e: React.DragEvent<HTMLDivElement>) => {
@@ -4240,7 +4305,7 @@ export default function CreateContestPage({
                           <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline break-all">{item.url}</a>
                           <div className="text-xs text-gray-500 mt-1">{item.description}</div>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => setInspirationLinks(inspirationLinks.filter((_, i) => i !== index))} className="text-red-500"><Trash className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => removeInspirationLink(index)} className="text-red-500"><Trash className="h-4 w-4" /></Button>
                       </li>
                     ))}
                   </ul>
