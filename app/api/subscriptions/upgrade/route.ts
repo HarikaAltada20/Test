@@ -16,7 +16,7 @@ import { formatCurrencyFromCents } from '@/lib/currency-utils';
 async function cancelExistingSubscriptionSchedules(customerId: string, userId: string) {
   try {
     console.log(`🔍 Fetching existing subscription schedules for customer: ${customerId}`);
-    
+
     // Get all subscription schedules for this customer
     const schedules = await stripe().subscriptionSchedules.list({
       customer: customerId,
@@ -59,10 +59,10 @@ async function cancelExistingSubscriptionSchedules(customerId: string, userId: s
 
 export async function POST(request: NextRequest) {
   try {
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    console.log('[API] POST /api/subscriptions/upgrade:start', { requestId });
+
+
     const supabase = await createClient();
-    
+
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     // Parse request body - updated to use new parameter names
     const body = await request.json();
     const { targetProductId, targetPriceId, upgradeType = 'immediate', scheduledDate } = body;
-    console.log('[API] /subscriptions/upgrade:body', { requestId, targetProductId, targetPriceId, upgradeType, scheduledDate });
+
 
     // Validate required fields
     if (!targetProductId || !targetPriceId) {
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     const isUpgrade = targetPlan.price > currentPlan.price;
     const isDowngrade = targetPlan.price < currentPlan.price;
     const isSamePlan = targetPlan.price === currentPlan.price;
-    
+
     // Allow upgrades, downgrades, or moving to free plan
     if (isSamePlan && targetPlan.id !== currentPlan.id) {
       return NextResponse.json({ error: 'Target plan is the same price as current plan' }, { status: 400 });
@@ -189,15 +189,15 @@ export async function POST(request: NextRequest) {
 
         // SAFE APPROACH: Create new checkout session with old subscription ID in metadata
         // The webhook will handle canceling the old subscription ONLY after new subscription is successful
-        // Pass accurate change type so downstream logging shows Upgrade vs Downgrade correctly
-        const changeTypeForMetadata = isUpgrade ? 'upgrade' : 'downgrade';
+
+
         const checkoutSession = await createSubscriptionCheckoutSession({
           userId: user.id,
           productId: targetProductId,
           priceId: targetPriceId,
           upgradeOptions: {
-            upgradeType: 'immediate',
-            changeType: changeTypeForMetadata,
+            upgradeType: 'immediate', // This is an immediate upgrade/downgrade
+
             oldSubscriptionId: currentSubscription.id !== 'free-plan' ? currentSubscription.id : undefined
           }
         });
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
           ? 'Your current subscription will remain active until the new subscription is successfully created. This ensures no service interruption.'
           : 'You will be charged immediately for the new plan.';
 
-        console.log('[API] /subscriptions/upgrade:immediate-success', { requestId, sessionId: checkoutSession.sessionId, urlDefined: Boolean(checkoutSession.url) });
+
         return NextResponse.json({
           success: true,
           checkoutUrl: checkoutSession.url,
@@ -225,7 +225,6 @@ export async function POST(request: NextRequest) {
             warning: `${safetyMessage} You will be charged ${formatCurrencyFromCents(targetPlan.price)} for your new subscription.`
           }
         });
-        
 
       } catch (error) {
         console.error(`Error in safe ${isUpgrade ? 'upgrade' : 'downgrade'}:`, error);
@@ -242,7 +241,7 @@ export async function POST(request: NextRequest) {
 
         // For scheduled changes, we create a subscription schedule in Stripe
         // This will automatically start the new subscription when current one ends
-        
+
         if (currentSubscription.id === 'free-plan') {
           // User is on free plan, just create immediate subscription since there's no current billing cycle
           const checkoutSession = await createSubscriptionCheckoutSession({
@@ -321,7 +320,7 @@ export async function POST(request: NextRequest) {
         // Only update if subscription is not already canceled
         try {
           const stripeSubscription = await stripe().subscriptions.retrieve(currentSubscription.id);
-          
+
           if (stripeSubscription.status !== 'canceled') {
             await stripe().subscriptions.update(currentSubscription.id, {
               cancel_at_period_end: true,
@@ -341,8 +340,8 @@ export async function POST(request: NextRequest) {
         }
 
         const changeType = isUpgrade ? 'upgrade' : 'downgrade';
-        
-        console.log('[API] /subscriptions/upgrade:scheduled-success', { requestId, scheduleId: subscriptionSchedule.id, startDate: currentPeriodEnd.toISOString() });
+
+
         return NextResponse.json({
           success: true,
           message: `Scheduled ${changeType} created successfully`,
@@ -369,13 +368,13 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('[API] /subscriptions/upgrade:error', {
-      message: (error as any)?.message || String(error),
-      raw: error,
-    });
+    console.error('Error upgrading subscription:', error);
+
+
+
     return NextResponse.json(
       { error: 'Failed to upgrade subscription' },
       { status: 500 }
     );
   }
-} 
+}

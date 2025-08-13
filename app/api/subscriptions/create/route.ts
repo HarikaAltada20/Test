@@ -4,10 +4,10 @@ import { createSubscriptionCheckoutSession, getSubscriptionPlanById } from '@/li
 
 export async function POST(request: NextRequest) {
   try {
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    console.log('[API] POST /api/subscriptions/create:start', { requestId });
+
+
     const supabase = await createClient();
-    
+
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     // Parse request body - updated to use new parameter names
     const body = await request.json();
     const { productId, priceId, upgradeType = 'immediate', scheduledDate, trialDays } = body;
-    console.log('[API] /subscriptions/create:body', { requestId, productId, priceId, upgradeType, scheduledDate, trialDays });
+
 
     // Validate required fields
     if (!productId || !priceId) {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     // Validate plan exists
     const plan = getSubscriptionPlanById(productId);
     if (!plan) {
-      console.warn('[API] /subscriptions/create:invalid-plan', { requestId, productId });
+
       return NextResponse.json({ error: 'Invalid product ID' }, { status: 400 });
     }
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 });
       }
 
-      console.log('[API] /subscriptions/create:free-plan-success', { requestId, userId: user.id, productId, priceId });
+
       return NextResponse.json({
         success: true,
         message: 'Free plan subscription activated',
@@ -90,11 +90,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (!checkoutSession) {
-      console.error('[API] /subscriptions/create:checkout-session-null', { requestId, userId: user.id, productId, priceId });
+
       return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
     }
 
-    console.log('[API] /subscriptions/create:success', { requestId, sessionId: checkoutSession.sessionId, urlDefined: Boolean(checkoutSession.url) });
+
     return NextResponse.json({
       success: true,
       checkoutUrl: checkoutSession.url,
@@ -103,13 +103,13 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('[API] /subscriptions/create:error', {
-      message: (error as any)?.message || String(error),
-      raw: error,
-    });
+    console.error('Error creating subscription:', error);
+
+
+
     return NextResponse.json(
       { error: 'Failed to create subscription' },
       { status: 500 }
     );
   }
-} 
+}

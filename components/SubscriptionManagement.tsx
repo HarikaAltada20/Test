@@ -95,20 +95,20 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         try {
             // Prevent duplicate calls if already loading
             if (isLoading && hasInitialFetch) {
-                console.log('[Client] Subscription fetch already in progress, skipping...');
+                console.log('Subscription fetch already in progress, skipping...');
                 return;
             }
 
             setIsLoading(true);
             setHasInitialFetch(true);
-            console.log('[Client] Fetching current subscription...');
+            console.log('Fetching current subscription...');
 
             // Fetch basic subscription data
             const subscriptionResponse = await fetch('/api/subscriptions/current');
             const subscriptionResult = await subscriptionResponse.json();
 
             if (subscriptionResponse.ok) {
-                console.log('[Client] /api/subscriptions/current OK', { hasSubscription: Boolean(subscriptionResult.subscription) });
+
                 setCurrentSubscription(subscriptionResult.subscription);
                 setCurrentPlan(subscriptionResult.plan);
 
@@ -119,10 +119,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                         const billingResult = await billingResponse.json();
 
                         if (billingResponse.ok) {
-                            console.log('[Client] 📋 Billing details received:', billingResult);
+                            console.log('📋 Billing details received:', billingResult);
                             setBillingDetails(billingResult.billingDetails);
                             setScheduledChanges(billingResult.scheduledChanges);
-                            console.log('[Client] 📋 Scheduled changes set:', billingResult.scheduledChanges);
+                            console.log('📋 Scheduled changes set:', billingResult.scheduledChanges);
                         } else {
                             // Fallback to basic billing details
                             const now = new Date();
@@ -141,7 +141,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                             setScheduledChanges([]);
                         }
                     } catch (billingError) {
-                        console.error('[Client] Error fetching billing details:', billingError);
+                        console.error('Error fetching billing details:', billingError);
                         // Fallback to basic billing details
                         const now = new Date();
                         const periodStart = new Date(subscriptionResult.subscription.current_period_start);
@@ -160,24 +160,24 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     }
                 }
 
-                console.log('[Client] Subscription data updated successfully');
+                console.log('Subscription data updated successfully');
             } else if (subscriptionResponse.status === 401) {
                 // Handle unauthorized gracefully - user might not be logged in
-                console.log('[Client] User not authenticated, showing available plans');
+                console.log('User not authenticated, showing available plans');
                 setCurrentSubscription(null);
                 setCurrentPlan(null);
                 setBillingDetails(null);
                 setScheduledChanges([]);
             } else {
                 // Handle other errors gracefully
-                console.log('[Client] No active subscription found, showing available plans');
+                console.log('No active subscription found, showing available plans');
                 setCurrentSubscription(null);
                 setCurrentPlan(null);
                 setBillingDetails(null);
                 setScheduledChanges([]);
             }
         } catch (error) {
-            console.log('[Client] Error fetching subscription, showing available plans');
+            console.log('Error fetching subscription, showing available plans');
             setCurrentSubscription(null);
             setCurrentPlan(null);
             setBillingDetails(null);
@@ -227,7 +227,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             // For users without any subscription (new users)
             if (!currentPlan && !currentSubscription) {
                 // Use the create subscription API for new users
-                console.log('[Client] Creating subscription for new user', { planId, priceId: targetPlan.prices?.monthly?.id });
+
                 const response = await fetch('/api/subscriptions/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -239,16 +239,14 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 });
 
                 const result = await response.json();
-                console.log('[Client] 📋 Subscription creation result:', result);
 
                 if (!response.ok) {
-                    console.log('response is not okay', response);
-                    console.error('[Client] /subscriptions/create failed', { status: response.status, result });
+
                     throw new Error(result.error || 'Subscription creation failed');
                 }
 
                 if (result.checkoutUrl) {
-                    console.log('[Client] Redirecting to checkout', { url: result.checkoutUrl });
+
                     window.location.href = result.checkoutUrl;
                 } else {
                     toast.success(result.message || 'Subscription created successfully!');
@@ -260,7 +258,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             // For existing users with subscriptions, use upgrade API
             if (!currentPlan) return;
 
-            console.log('[Client] Upgrading subscription', { planId, priceId: targetPlan.prices?.monthly?.id });
+
             const response = await fetch('/api/subscriptions/upgrade', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -272,23 +270,21 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             });
 
             const result = await response.json();
-            console.log('[Client] 📋 Subscription upgrade result:', result);
 
             if (!response.ok) {
-                console.log('response is not okay', response);
-                console.error('[Client] /subscriptions/upgrade failed', { status: response.status, result });
+
                 throw new Error(result.error || 'Subscription update failed');
             }
 
             if (result.checkoutUrl) {
-                console.log('[Client] Redirecting to checkout (upgrade)', { url: result.checkoutUrl });
+
                 window.location.href = result.checkoutUrl;
             } else {
                 toast.success(result.message || 'Subscription updated successfully!');
                 fetchCurrentSubscription();
             }
         } catch (error) {
-            console.error('[Client] Subscription error:', error);
+            console.error('Subscription error:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to process subscription');
         } finally {
             setIsProcessing(false);
@@ -302,15 +298,15 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         setIsProcessing(true);
 
         try {
-            console.log('[Client] 🔍 Requesting customer portal access...');
+            console.log('🔍 Requesting customer portal access...');
             const response = await fetch('/api/subscriptions/portal', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             });
 
-            console.log('[Client] 📋 Portal response status:', response.status);
+            console.log('📋 Portal response status:', response.status);
             const result = await response.json();
-            console.log('[Client] 📋 Portal response result:', result);
+            console.log('📋 Portal response result:', result);
 
             if (!response.ok) {
                 throw new Error(result.error || 'Failed to access billing portal');
@@ -321,10 +317,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 throw new Error('No portal URL received from server');
             }
 
-            console.log('[Client] ✅ Redirecting to portal URL:', result.portalUrl);
+            console.log('✅ Redirecting to portal URL:', result.portalUrl);
             window.location.href = result.portalUrl;
         } catch (error) {
-            console.error('[Client] ❌ Portal error:', error);
+            console.error('❌ Portal error:', error);
             toast.error(error instanceof Error ? error.message : 'Failed to access billing portal');
         } finally {
             setIsProcessing(false);
@@ -332,7 +328,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     };
 
     const handleCancelScheduledChange = async (scheduleId: string) => {
-        console.log('[Client] 🔍 Attempting to cancel scheduled change:', scheduleId);
+        console.log('🔍 Attempting to cancel scheduled change:', scheduleId);
         setIsProcessing(true);
 
         try {
@@ -342,9 +338,9 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 body: JSON.stringify({ scheduleId })
             });
 
-            console.log('[Client] 📋 Response status:', response.status);
+            console.log('📋 Response status:', response.status);
             const result = await response.json();
-            console.log('[Client] 📋 Response result:', result);
+            console.log('📋 Response result:', result);
 
             if (!response.ok) {
                 throw new Error(result.error || 'Failed to cancel scheduled change');
@@ -974,4 +970,4 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             )}
         </div>
     );
-}); 
+});

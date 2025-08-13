@@ -21,25 +21,25 @@ function createServiceRoleClient() {
 }
 
 const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
-const describeEnv = () => {
-  const mask = (val?: string | null) => (val ? `${val.slice(0, 6)}...${val.slice(-4)}` : 'undefined');
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
-  const webhookSecret = endpointSecret;
-  return {
-    mode: secretKey?.startsWith('sk_live_') ? 'live' : (secretKey?.startsWith('sk_test_') ? 'test' : 'unknown'),
-    secretMasked: mask(secretKey),
-    publishableMasked: mask(publishableKey),
-    webhookMasked: mask(webhookSecret),
-  };
-};
+
+
+
+
+
+
+
+
+
+
+
+
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get('stripe-signature');
-  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  console.log('[Webhook] /api/subscriptions/webhook:start', { requestId, env: describeEnv() });
+
+
 
   if (!sig) {
     console.error('No Stripe signature found');
@@ -56,107 +56,66 @@ export async function POST(request: NextRequest) {
   try {
     event = stripe().webhooks.constructEvent(body, sig, endpointSecret);
   } catch (err: any) {
-    console.error(`[Webhook] signature verification failed`, { requestId, message: err?.message, raw: err });
+    console.error(`Webhook signature verification failed:`, err.message);
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
-  console.log(`📥 Subscription Webhook received: ${event.type}`, { requestId, eventId: event.id });
-  
-  // 🆕 COMPREHENSIVE EVENT TRACKING: Log all events for debugging
-  try {
-    const supabase = createServiceRoleClient();
-    await supabase
-      .from('webhook_events')
-      .insert({
-        event_type: event.type,
-        event_id: event.id,
-        object_id: (event.data.object as any).id,
-        object_type: (event.data.object as any).object,
-        created_at: event.created ? new Date(event.created * 1000).toISOString() : new Date().toISOString(),
-        processed_at: new Date().toISOString(),
-        request_id: requestId,
-        metadata: (event.data.object as any).metadata || {},
-        status: 'processing'
-      })
-      .single();
-  } catch (logError) {
-    console.error('❌ Failed to log webhook event:', { requestId, logError });
-  }
+  console.log(`📥 Subscription Webhook received: ${event.type}`);
 
   // CRITICAL: Always return 200 for valid webhooks to prevent retries
   // Even if processing fails, we acknowledge receipt to Stripe
   try {
-    // Process the event based on type
     switch (event.type) {
       case 'checkout.session.completed':
-        console.log('🔍 Checkout session completed:', event.data.object);
         await handleCheckoutSessionCompleted(event.data.object);
         break;
 
       case 'customer.subscription.created':
-        console.log('🔍 Subscription created:', event.data.object);
         await handleSubscriptionCreated(event.data.object);
         break;
 
       case 'customer.subscription.updated':
-        console.log('🔍 Subscription updated:', event.data.object);
         await handleSubscriptionUpdated(event.data.object);
         break;
 
       case 'customer.subscription.deleted':
-        console.log('🔍 Subscription deleted:', event.data.object);
         await handleSubscriptionDeleted(event.data.object);
         break;
 
       case 'subscription_schedule.created':
-        console.log('🔍 Subscription schedule created:', event.data.object);
         await handleSubscriptionScheduleCreated(event.data.object);
         break;
 
       case 'subscription_schedule.released':
-        console.log('🔍 Subscription schedule released:', event.data.object);
         await handleSubscriptionScheduleReleased(event.data.object);
         break;
 
       case 'subscription_schedule.canceled':
-        console.log('🔍 Subscription schedule canceled:', event.data.object);
         await handleSubscriptionScheduleCanceled(event.data.object);
         break;
 
       case 'invoice.payment_succeeded':
-        console.log('🔍 Invoice payment succeeded:', event.data.object);
         await handleInvoicePaymentSucceeded(event.data.object);
         break;
 
       case 'invoice.payment_failed':
-        console.log('🔍 Invoice payment failed:', event.data.object);
         await handleInvoicePaymentFailed(event.data.object);
         break;
 
-      case 'invoice.refunded' as any:
-        console.log('🔍 Invoice refunded:', event.data.object);
-        await handleInvoiceRefunded(event.data.object);
-        break;
-
-      case 'checkout.session.expired' as any:
-        console.log('🔍 Checkout session expired:', event.data.object);
-        await handleCheckoutSessionExpired(event.data.object);
-        break;
-
-      case 'checkout.session.canceled' as any:
-        console.log('🔍 Checkout session canceled:', event.data.object);
-        await handleCheckoutSessionCanceled(event.data.object);
-        break;
-
       default:
-        console.log(`🔔 Unhandled subscription event type: ${event.type}`);
+        // Handle invoice.refunded and other events generically
+        if ((event as any).type === 'invoice.refunded') {
+          await handleInvoiceRefunded((event as any).data.object);
+        } else {
+          console.log(`🔔 Unhandled subscription event type: ${event.type}`);
+        }
     }
   } catch (error) {
-    console.error(`❌ Error processing subscription webhook ${event.type}:`, { requestId, message: (error as any)?.message || String(error) });
-    try {
-      console.error('📝 Event data:', JSON.stringify(event.data.object, null, 2));
-    } catch {}
-    
+    console.error(`❌ Error processing subscription webhook ${event.type}:`, error);
+    console.error('📝 Event data:', JSON.stringify(event.data.object, null, 2));
+
+
+
     // Log error but still return 200 to prevent retries
     // Add error to internal logging system if available
     try {
@@ -172,7 +131,7 @@ export async function POST(request: NextRequest) {
         })
         .single();
     } catch (logError) {
-      console.error('❌ Failed to log webhook error:', { requestId, logError });
+      console.error('❌ Failed to log webhook error:', logError);
     }
   }
 
@@ -188,9 +147,9 @@ export async function POST(request: NextRequest) {
 async function handleCheckoutSessionCompleted(session: any) {
   console.log('✅ Checkout session completed:', session.id);
   console.log('📋 Session metadata:', session.metadata);
-  
+
   const { user_id, product_id } = session.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in checkout session:', { user_id, product_id });
     return;
@@ -202,13 +161,9 @@ async function handleCheckoutSessionCompleted(session: any) {
     try {
       const subscription = await stripe().subscriptions.retrieve(session.subscription);
       console.log(`📊 Retrieved subscription status: ${subscription.status}`);
-      
-      // 🚨 CRITICAL FIX: Do NOT create subscription here - let handleSubscriptionCreated handle it
-      // This prevents duplicate processing and race conditions
-      console.log(`🛡️ Checkout session completed for subscription ${session.subscription}`);
-      console.log(`💡 Subscription creation will be handled by customer.subscription.created webhook`);
-      console.log(`🔒 This prevents duplicate processing and ensures proper order`);
-      
+
+      await createSubscriptionInDatabase(subscription, user_id, product_id);
+
       // 🆕 AUTO-SET DEFAULT PAYMENT METHOD FOR NEW SUBSCRIPTIONS
       // Set the payment method used in checkout as default for the customer
       console.log('🔍 Session details for payment method setting:', {
@@ -233,40 +188,40 @@ async function handleCheckoutSessionCompleted(session: any) {
               payment_method_type: typeof paymentIntent.payment_method,
               status: paymentIntent.status
             });
-            
-            const paymentMethod = paymentIntent.payment_method;
-            paymentMethodId = typeof paymentMethod === 'string' 
-              ? paymentMethod 
-              : (paymentMethod && typeof paymentMethod === 'object' && 'id' in paymentMethod) 
-                ? paymentMethod.id 
-                : null;
+
+                    const paymentMethod = paymentIntent.payment_method;
+        paymentMethodId = typeof paymentMethod === 'string' 
+          ? paymentMethod 
+          : (paymentMethod && typeof paymentMethod === 'object' && 'id' in paymentMethod) 
+            ? paymentMethod.id 
+            : null;
           }
-          
+
           // If no payment method from payment intent, try to get it from the subscription (for subscription mode)
           if (!paymentMethodId && session.subscription) {
             console.log('📋 No payment intent, trying to get payment method from subscription...');
             const subscription = await stripe().subscriptions.retrieve(session.subscription);
-            console.log('📋 Session Subscription details:', {
+            console.log('📋 Subscription details:', {
               id: subscription.id,
               default_payment_method: subscription.default_payment_method,
               status: subscription.status
             });
-            
+
             paymentMethodId = subscription.default_payment_method ? String(subscription.default_payment_method) : null;
           }
-          
-          console.log(`🔑 Session Extracted Payment Method ID: ${paymentMethodId}`);
-          
+
+          console.log(`🔑 Extracted Payment Method ID: ${paymentMethodId}`);
+
           if (paymentMethodId) {
-            console.log(`🚀 Calling ensureDefaultPaymentMethod for session with customer: ${session.customer}, paymentMethod: ${paymentMethodId}`);
+            console.log(`🚀 Calling ensureDefaultPaymentMethod with customer: ${session.customer}, paymentMethod: ${paymentMethodId}`);
             const result = await ensureDefaultPaymentMethod(session.customer, paymentMethodId);
-            console.log(`✅ Session ensureDefaultPaymentMethod result: ${result}`);
+            console.log(`✅ ensureDefaultPaymentMethod result: ${result}`);
           } else {
-            console.log('❌ No payment method ID found in session payment intent or subscription');
+            console.log('❌ No payment method ID found in payment intent or subscription');
           }
         } catch (error: any) {
-          console.error('❌ Error setting default payment method for session:', error);
-          console.error('📝 Session Error details:', {
+          console.error('❌ Error setting default payment method for new subscription:', error);
+          console.error('📝 Error details:', {
             message: error?.message || 'Unknown error',
             stack: error?.stack || 'No stack trace',
             customer: session.customer,
@@ -276,309 +231,92 @@ async function handleCheckoutSessionCompleted(session: any) {
           // Don't fail the webhook - this is a nice-to-have feature
         }
       } else {
-        console.log('❌ No customer found in session for payment method setting');
+        console.log('❌ No customer found for setting default payment method');
       }
-      
     } catch (error) {
-      console.error('❌ Error retrieving subscription from checkout session:', error);
+      console.error('❌ Error retrieving subscription from session:', error);
     }
   } else {
-    console.log('⚠️ Checkout session completed but no subscription found');
+    console.log('⚠️ Checkout session completed but no subscription found - might be a one-time payment');
   }
-}
-
-async function handleCheckoutSessionExpired(session: any) {
-  console.log('⚠️ Checkout session expired:', session.id);
-  console.log('📋 Session metadata:', session.metadata);
-  
-  const { user_id, product_id } = session.metadata || {};
-  
-  if (!user_id || !product_id) {
-    console.error('❌ Missing metadata in expired checkout session:', { user_id, product_id });
-    return;
-  }
-
-    // 🚨 CRITICAL FIX: DO NOTHING to subscriptions table on checkout expiration
-  // This prevents the bug where failed payments result in subscription status changes
-  console.log(`🛡️ CRITICAL: NOT updating subscription status in database - preserving current state`);
-  console.log(`💡 User's current subscription remains unchanged - no database modifications`);
-  
-  // 🚨 CRITICAL: DO NOT update user's profile - preserve their current working plan
-  console.log(`🛡️ CRITICAL: NOT updating user profile - preserving current working subscription`);
-  console.log(`💡 User will retain their current plan until they have a successful payment`);
-  
-  console.log(`🛑 Checkout session expired for user ${user_id}. Preserving current plan; NOT setting to free automatically.`);
-  console.log(`💡 This prevents accidental downgrades when payments fail or are interrupted.`);
-}
-
-async function handleCheckoutSessionCanceled(session: any) {
-  console.log('⚠️ Checkout session canceled:', session.id);
-  console.log('📋 Session metadata:', session.metadata);
-  
-  const { user_id, product_id } = session.metadata || {};
-  
-  if (!user_id || !product_id) {
-    console.error('❌ Missing metadata in canceled checkout session:', { user_id, product_id });
-    return;
-  }
-
-  // 🚨 CRITICAL FIX: DO NOTHING to subscriptions table on checkout cancellation
-  // This prevents the bug where failed payments result in subscription status changes
-  console.log(`🛡️ CRITICAL: NOT updating subscription status in database - preserving current state`);
-  console.log(`💡 User's current subscription remains unchanged - no database modifications`);
-  
-  // 🚨 CRITICAL: DO NOT update user's profile - preserve their current working plan
-  console.log(`🛡️ CRITICAL: NOT updating user profile - preserving current working subscription`);
-  console.log(`💡 User will retain their current plan until they have a successful payment`);
-  
-  console.log(`🛑 Checkout session canceled for user ${user_id}. Preserving current plan; NOT setting to free automatically.`);
-      console.log(`💡 This prevents accidental downgrades when payments fail or are interrupted.`);
-      
-      // 🆕 CRITICAL SAFETY CHECK: Only update profile if user has a truly active subscription
-      const supabase = createServiceRoleClient();
-      const { data: activeSubs, error: activeError } = await supabase
-        .from('subscriptions')
-        .select('id, status')
-        .eq('user_id', user_id)
-        .in('status', ['active', 'trialing', 'past_due'])
-        .not('status', 'in', ['incomplete', 'incomplete_expired', 'canceled', 'unpaid']);
-      
-      if (activeError) {
-        console.error('❌ Error checking for active subscriptions:', activeError);
-        return;
-      }
-      
-      if (activeSubs && activeSubs.length > 0) {
-        console.log(`✅ User ${user_id} has ${activeSubs.length} active subscriptions, updating profile safely`);
-        await updateAdvertiserProfileWithCurrentSubscription(user_id);
-      } else {
-        console.log(`⚠️ User ${user_id} has NO active subscriptions after checkout cancellation`);
-        console.log(`🛡️ NOT updating profile to prevent accidental free plan assignment`);
-        console.log(`💡 User will retain their last known plan until they have a working subscription`);
-      }
 }
 
 async function handleSubscriptionCreated(subscription: any) {
   console.log('🆕 Subscription created:', subscription.id);
-  console.log(`📋 Subscription metadata:`, subscription.metadata);
   console.log(`📊 Subscription status: ${subscription.status}`);
-  console.log(`💰 Subscription amount: ${subscription.items.data[0]?.price?.unit_amount} cents`);
-  
-  const { user_id, product_id, change_type, change_timing, old_subscription_id } = subscription.metadata || {};
-  
-  console.log(`🔍 Extracted metadata:`, {
-    user_id,
-    product_id,
-    change_type,
-    change_timing,
-    old_subscription_id
-  });
-  
+  console.log('📋 Subscription metadata:', subscription.metadata);
+
+  const { user_id, product_id, upgrade_type, old_subscription_id } = subscription.metadata || {};
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in subscription:', { user_id, product_id });
-    
+
     // Try to get user_id from customer metadata
     if (subscription.customer && typeof subscription.customer === 'string') {
       try {
         const customer = await stripe().customers.retrieve(subscription.customer);
         if (customer && !customer.deleted && customer.metadata?.user_id) {
           console.log('✅ Found user_id in customer metadata:', customer.metadata.user_id);
-          
-          // 🚨 CRITICAL FIX: Only create subscription in database if it's active
-          // This prevents the bug where failed payments result in incomplete subscriptions being added
-          if (subscription.status === 'active' || subscription.status === 'trialing') {
-            console.log(`✅ Subscription ${subscription.id} is active (status: ${subscription.status}), creating in database via customer metadata fallback`);
-            await createSubscriptionInDatabase(subscription, customer.metadata.user_id, product_id || 'unknown');
-          } else {
-            console.log(`🛡️ CRITICAL: Subscription ${subscription.id} has status '${subscription.status}' - NOT creating in database via customer metadata fallback`);
-            console.log(`💡 This prevents the bug where failed payments result in incomplete subscriptions being added`);
-            console.log(`🔒 User's current plan is preserved until subscription becomes active`);
-          }
+          await createSubscriptionInDatabase(subscription, customer.metadata.user_id, product_id || 'unknown');
           return;
         }
       } catch (error) {
         console.error('❌ Error retrieving customer metadata:', error);
       }
     }
-    
+
     console.error('❌ Cannot process subscription without user_id');
     return;
   }
 
   console.log(`👤 Processing subscription for user: ${user_id}, product: ${product_id}`);
-  console.log(`🔄 Change type: ${change_type}, Change timing: ${change_timing}, Old subscription: ${old_subscription_id || 'none'}`);
-  
-  // 🚨 CRITICAL: Log the old subscription ID if present
-  if (old_subscription_id) {
-    console.log(`🆔 OLD SUBSCRIPTION ID FOUND: ${old_subscription_id}`);
-    console.log(`💡 This subscription will be canceled ONLY after payment succeeds in handleInvoicePaymentSucceeded`);
-    console.log(`🛡️ This prevents the bug where failed payments result in plan downgrades`);
-    
-    // 🆕 SAFETY CHECK: Verify the old subscription still exists and is active
-    try {
-      console.log(`🔍 Verifying old subscription ${old_subscription_id} still exists...`);
-      const oldSubscription = await stripe().subscriptions.retrieve(old_subscription_id);
-      console.log(`✅ Old subscription found:`, {
-        id: oldSubscription.id,
-        status: oldSubscription.status,
-        current_period_end: (oldSubscription as any).current_period_end ? new Date((oldSubscription as any).current_period_end * 1000).toISOString() : 'unknown'
-      });
-      
-      if (oldSubscription.status === 'active' || oldSubscription.status === 'trialing') {
-        console.log(`✅ Old subscription ${old_subscription_id} is active and will be canceled after payment succeeds`);
-        
-        // 🆕 ADDITIONAL SAFETY: Check if this old subscription is already being processed
-        console.log(`🔍 Checking if old subscription ${old_subscription_id} is already being processed...`);
-        const supabase = createServiceRoleClient();
-        const { data: existingSub, error: existingError } = await supabase
-          .from('subscriptions')
-          .select('id, status, updated')
-          .eq('id', old_subscription_id)
-          .single();
-        
-        if (existingError && existingError.code !== 'PGRST116') {
-          console.error(`❌ Error checking existing subscription ${old_subscription_id}:`, existingError);
-        } else if (existingSub) {
-          console.log(`📊 Old subscription ${old_subscription_id} in database:`, {
-            id: existingSub.id,
-            status: existingSub.status,
-            last_updated: existingSub.updated
-          });
-          
-          // 🆕 CRITICAL SAFETY CHECK: If old subscription is already canceled, log warning
-          if (existingSub.status === 'canceled') {
-            console.warn(`⚠️ WARNING: Old subscription ${old_subscription_id} is already canceled in database!`);
-            console.warn(`🚨 This suggests the old subscription was canceled prematurely - investigate this!`);
-            console.warn(`📋 New subscription metadata:`, subscription.metadata);
-            console.warn(`📊 Old subscription database status: ${existingSub.status}`);
-          }
-        } else {
-          console.log(`ℹ️ Old subscription ${old_subscription_id} not found in database yet`);
-        }
-      } else {
-        console.log(`⚠️ Old subscription ${old_subscription_id} is not active (status: ${oldSubscription.status}) - may have been already canceled`);
-      }
-    } catch (error) {
-      console.error(`❌ Error verifying old subscription ${old_subscription_id}:`, error);
-      console.log(`⚠️ Old subscription ${old_subscription_id} may not exist or be accessible`);
-    }
-  } else {
-    console.log(`ℹ️ No old subscription ID - this is a new subscription, not an upgrade/downgrade`);
-  }
-  
-  // 🆕 ADDITIONAL SAFETY: Log all existing subscriptions for this user before creating new one
-  try {
-    console.log(`🔍 Checking all existing subscriptions for user ${user_id} before creating new one...`);
-    const supabase = createServiceRoleClient();
-    const { data: allUserSubs, error: allSubsError } = await supabase
-      .from('subscriptions')
-      .select('id, status, price_id, created')
-      .eq('user_id', user_id)
-      .order('created', { ascending: false });
-    
-    if (allSubsError) {
-      console.error('❌ Error checking all user subscriptions:', allSubsError);
-    } else if (allUserSubs && allUserSubs.length > 0) {
-      console.log(`📋 User ${user_id} has ${allUserSubs.length} total subscriptions:`, 
-        allUserSubs.map(s => ({ id: s.id, status: s.status, price_id: s.price_id, created: s.created })));
-      
-      const activeSubs = allUserSubs.filter(s => ['active', 'trialing', 'past_due'].includes(s.status));
-      if (activeSubs.length > 0) {
-        console.log(`🛡️ User ${user_id} has ${activeSubs.length} active subscriptions that will be preserved:`, 
-          activeSubs.map(s => ({ id: s.id, status: s.status, price_id: s.price_id })));
-      }
-    } else {
-      console.log(`ℹ️ User ${user_id} has no existing subscriptions`);
-    }
-  } catch (error) {
-    console.error('❌ Error in safety check for all user subscriptions:', error);
-  }
-  
-  // 🚨 CRITICAL FIX: Only create subscription in database if it's active
-  // This prevents the bug where failed payments result in incomplete subscriptions being added
-  if (subscription.status === 'active' || subscription.status === 'trialing') {
-    console.log(`✅ Subscription ${subscription.id} is active (status: ${subscription.status}), creating in database`);
-    await createSubscriptionInDatabase(subscription, user_id, product_id);
-  } else {
-    console.log(`🛡️ CRITICAL: Subscription ${subscription.id} has status '${subscription.status}' - NOT creating in database`);
-    console.log(`💡 This prevents the bug where failed payments result in incomplete subscriptions being added`);
-    console.log(`🔒 User's current plan is preserved until subscription becomes active`);
-    console.log(`📋 Subscription metadata:`, subscription.metadata);
-    
-    // 🚨 CRITICAL: DO NOT add failed subscriptions to database
-    // This prevents the bug where failed payments result in subscription status changes
-    console.log(`🛡️ CRITICAL: NOT adding subscription to database - preserving current state`);
-    console.log(`💡 User's current subscription remains unchanged - no database modifications`);
-  }
+  console.log(`🔄 Upgrade type: ${upgrade_type}, Old subscription: ${old_subscription_id}`);
+  await createSubscriptionInDatabase(subscription, user_id, product_id);
 }
 
 async function handleSubscriptionUpdated(subscription: any) {
   console.log('🔄 Subscription updated:', subscription.id);
   console.log(`📊 New status: ${subscription.status}`);
-  
+
   const { user_id, product_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription metadata');
-    
+
     // Try to get user_id from customer metadata as fallback
     if (subscription.customer && typeof subscription.customer === 'string') {
       try {
         const customer = await stripe().customers.retrieve(subscription.customer);
         if (customer && !customer.deleted && customer.metadata?.user_id) {
           console.log('✅ Found user_id in customer metadata:', customer.metadata.user_id);
-          
-          // 🚨 CRITICAL FIX: Only update subscription in database if it's active
-          // This prevents the bug where failed payments result in subscription status changes
-          if (subscription.status === 'active' || subscription.status === 'trialing' || subscription.status === 'past_due') {
-            console.log(`✅ Subscription ${subscription.id} is active (status: ${subscription.status}), updating in database via customer metadata fallback`);
-            const actualProductId = await getProductIdFromSubscription(subscription, product_id);
-            await updateSubscriptionInDatabaseCorrect(subscription, customer.metadata.user_id, actualProductId);
-          } else {
-            console.log(`🛡️ CRITICAL: Subscription ${subscription.id} has status '${subscription.status}' - NOT updating in database via customer metadata fallback`);
-            console.log(`💡 This prevents the bug where failed payments result in subscription status changes`);
-          }
+          const actualProductId = await getProductIdFromSubscription(subscription, product_id);
+          await updateSubscriptionInDatabaseCorrect(subscription, customer.metadata.user_id, actualProductId);
           return;
         }
       } catch (error) {
         console.error('❌ Error retrieving customer metadata:', error);
       }
     }
-    
+
     console.error('❌ Cannot process subscription update without user_id');
     return;
   }
 
-  // 🚨 CRITICAL FIX: Only update subscription in database if it's active
-  // This prevents the bug where failed payments result in subscription status changes
-  if (subscription.status === 'active' || subscription.status === 'trialing' || subscription.status === 'past_due') {
-    console.log(`✅ Subscription ${subscription.id} is active (status: ${subscription.status}), updating in database`);
-    
-    // Get the product ID from the subscription items if not in metadata
-    const actualProductId = await getProductIdFromSubscription(subscription, product_id);
-    
-    if (actualProductId) {
-      await updateSubscriptionInDatabaseCorrect(subscription, user_id, actualProductId);
-    } else {
-      console.error('❌ Could not determine product ID for subscription update');
-    }
+  // Get the product ID from the subscription items if not in metadata
+  const actualProductId = await getProductIdFromSubscription(subscription, product_id);
+
+  if (actualProductId) {
+    await updateSubscriptionInDatabaseCorrect(subscription, user_id, actualProductId);
   } else {
-    console.log(`🛡️ CRITICAL: Subscription ${subscription.id} has status '${subscription.status}' - NOT updating in database`);
-    console.log(`💡 This prevents the bug where failed payments result in subscription status changes`);
-    console.log(`🔒 User's current plan is preserved until subscription becomes active`);
-    
-    // 🚨 CRITICAL: DO NOT update failed subscriptions in database
-    // This prevents the bug where failed payments result in subscription status changes
-    console.log(`🛡️ CRITICAL: NOT updating subscription in database - preserving current state`);
-    console.log(`💡 User's current subscription remains unchanged - no database modifications`);
+    console.error('❌ Could not determine product ID for subscription update');
   }
 }
 
 async function handleSubscriptionDeleted(subscription: any) {
   console.log('❌ Subscription deleted:', subscription.id);
-  
+
   const { user_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription metadata');
     return;
@@ -590,9 +328,9 @@ async function handleSubscriptionDeleted(subscription: any) {
 async function handleSubscriptionScheduleCreated(schedule: any) {
   console.log('📅 Subscription schedule created:', schedule.id);
   console.log('📋 Schedule metadata:', schedule.metadata);
-  
+
   const { user_id, product_id, scheduled_change_type } = schedule.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in subscription schedule:', { user_id, product_id });
     return;
@@ -605,37 +343,27 @@ async function handleSubscriptionScheduleCreated(schedule: any) {
 async function handleSubscriptionScheduleReleased(schedule: any) {
   console.log('✅ Subscription schedule released (new subscription created):', schedule.id);
   console.log('📋 Released schedule metadata:', schedule.metadata);
-  
+
   const { user_id, product_id, scheduled_change_type } = schedule.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in released subscription schedule:', { user_id, product_id });
     return;
   }
 
   console.log(`✅ Scheduled ${scheduled_change_type || 'change'} activated for user: ${user_id}, product: ${product_id}`);
-  
+
   // When a schedule is released, it creates a new subscription
   // The new subscription will be handled by the normal subscription.created webhook
   // We just need to update our advertiser_profiles to reflect the new subscription
-  
+
   try {
     const supabase = createServiceRoleClient();
-    
+
     // Get the subscription that was created from this schedule
     if (schedule.subscription) {
       const subscription = await stripe().subscriptions.retrieve(schedule.subscription);
-      
-      // 🚨 CRITICAL FIX: Only create subscription in database if it's active
-      // This prevents the bug where failed payments result in incomplete subscriptions being added
-      if (subscription.status === 'active' || subscription.status === 'trialing') {
-        console.log(`✅ Scheduled subscription ${subscription.id} is active (status: ${subscription.status}), creating in database`);
-        await createSubscriptionInDatabase(subscription, user_id, product_id);
-      } else {
-        console.log(`🛡️ CRITICAL: Scheduled subscription ${subscription.id} has status '${subscription.status}' - NOT creating in database`);
-        console.log(`💡 This prevents the bug where failed payments result in incomplete subscriptions being added`);
-        console.log(`🔒 User's current plan is preserved until subscription becomes active`);
-      }
+      await createSubscriptionInDatabase(subscription, user_id, product_id);
     }
   } catch (error) {
     console.error('❌ Error processing released subscription schedule:', error);
@@ -645,9 +373,9 @@ async function handleSubscriptionScheduleReleased(schedule: any) {
 async function handleSubscriptionScheduleCanceled(schedule: any) {
   console.log('❌ Subscription schedule canceled:', schedule.id);
   console.log('📋 Canceled schedule metadata:', schedule.metadata);
-  
+
   const { user_id, scheduled_change_type } = schedule.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in canceled subscription schedule:', user_id);
     return;
@@ -660,14 +388,14 @@ async function handleSubscriptionScheduleCanceled(schedule: any) {
 async function handleInvoicePaymentSucceeded(invoice: any) {
   console.log('💰 Invoice payment succeeded:', invoice.id);
   console.log("Invoice", invoice);
-  
+
   // Handle new Stripe invoice structure where subscription is nested
   let subscriptionId = invoice.subscription;
   if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
     subscriptionId = invoice.parent.subscription_details.subscription;
     console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
   }
-  
+
   if (!subscriptionId) {
     console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
@@ -675,7 +403,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription for invoice');
     return;
@@ -690,69 +418,6 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   // Log subscription payment to money_transactions table
   await logSubscriptionPaymentToTransactions(invoice, subscription, user_id);
-
-  // 🆕 HANDLE OLD SUBSCRIPTION CANCELLATION AFTER SUCCESSFUL PAYMENT
-  // This is the safe place to cancel old subscriptions - only after payment succeeds
-  const { old_subscription_id } = subscription.metadata || {};
-  if (old_subscription_id) {
-    console.log(`🔄 Payment succeeded for new subscription ${subscription.id}, now safely canceling old subscription ${old_subscription_id}`);
-    console.log(`🛡️ CRITICAL: Old subscription is only canceled AFTER payment succeeds - this prevents the bug where failed payments result in plan downgrades`);
-    console.log(`📋 Old subscription ID from metadata: ${old_subscription_id}`);
-    console.log(`✅ New subscription ID: ${subscription.id}`);
-    console.log(`💰 Payment confirmed successful - safe to cancel old subscription`);
-    
-    // 🆕 ADDITIONAL SAFETY: Verify old subscription status before canceling
-    try {
-      console.log(`🔍 Verifying old subscription ${old_subscription_id} status before canceling...`);
-      const oldSubscription = await stripe().subscriptions.retrieve(old_subscription_id);
-      console.log(`📊 Old subscription status in Stripe: ${oldSubscription.status}`);
-      
-      if (oldSubscription.status === 'canceled') {
-        console.log(`⚠️ Old subscription ${old_subscription_id} is already canceled in Stripe - no action needed`);
-        return;
-      }
-      
-      if (oldSubscription.status !== 'active' && oldSubscription.status !== 'trialing') {
-        console.log(`⚠️ Old subscription ${old_subscription_id} is not active (status: ${oldSubscription.status}) - may have been already canceled`);
-        return;
-      }
-      
-      console.log(`✅ Old subscription ${old_subscription_id} is active and ready for cancellation`);
-    } catch (error) {
-      console.error(`❌ Error verifying old subscription ${old_subscription_id} before cancellation:`, error);
-      console.log(`⚠️ Proceeding with cancellation attempt despite verification error`);
-    }
-    
-    try {
-      // Cancel the old subscription in Stripe
-      console.log(`🔄 Canceling old subscription ${old_subscription_id} in Stripe...`);
-      await stripe().subscriptions.update(old_subscription_id, { cancel_at_period_end: true });
-      console.log(`✅ Successfully scheduled cancellation of old subscription ${old_subscription_id}`);
-      
-      // Also cancel it in our database
-      console.log(`🔄 Canceling old subscription ${old_subscription_id} in database...`);
-      const oldSubscription = await stripe().subscriptions.retrieve(old_subscription_id);
-      if (oldSubscription) {
-        await cancelSubscriptionInDatabase(oldSubscription, user_id);
-        console.log(`✅ Successfully canceled old subscription ${old_subscription_id} in database`);
-      } else {
-        console.log(`⚠️ Old subscription ${old_subscription_id} not found in Stripe - may have been already canceled`);
-      }
-    } catch (error) {
-      console.error(`❌ Error canceling old subscription ${old_subscription_id}:`, error);
-      console.error(`📝 Error details:`, {
-        message: (error as any)?.message || String(error),
-        stack: (error as any)?.stack || 'No stack trace',
-        old_subscription_id,
-        new_subscription_id: subscription.id,
-        user_id
-      });
-      // Don't fail the webhook - this is a cleanup operation
-    }
-  } else {
-    console.log(`ℹ️ No old subscription to cancel - this is a new subscription, not an upgrade/downgrade`);
-    console.log(`📋 Subscription metadata:`, subscription.metadata);
-  }
 
   // 🆕 AUTO-SET DEFAULT PAYMENT METHOD FOR SUBSCRIPTIONS
   // Set the payment method used in this subscription payment as default for the customer
@@ -778,7 +443,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
           payment_method_type: typeof paymentIntent.payment_method,
           status: paymentIntent.status
         });
-        
+
         const paymentMethod = paymentIntent.payment_method;
         paymentMethodId = typeof paymentMethod === 'string' 
           ? paymentMethod 
@@ -786,7 +451,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
             ? paymentMethod.id 
             : null;
       }
-      
+
       // If no payment method from payment intent, try to get it from the subscription (for subscription mode)
       if (!paymentMethodId && invoice.subscription) {
         console.log('📋 No payment intent, trying to get payment method from subscription...');
@@ -796,12 +461,12 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
           default_payment_method: subscription.default_payment_method,
           status: subscription.status
         });
-        
+
         paymentMethodId = subscription.default_payment_method ? String(subscription.default_payment_method) : null;
       }
-      
+
       console.log(`🔑 Invoice Extracted Payment Method ID: ${paymentMethodId}`);
-      
+
       if (paymentMethodId) {
         console.log(`🚀 Calling ensureDefaultPaymentMethod for invoice with customer: ${invoice.customer}, paymentMethod: ${paymentMethodId}`);
         const result = await ensureDefaultPaymentMethod(invoice.customer, paymentMethodId);
@@ -829,56 +494,14 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
 async function handleInvoicePaymentFailed(invoice: any) {
   console.log('❌ Invoice payment failed:', invoice.id);
-  
+
   // Handle new Stripe invoice structure where subscription is nested
   let subscriptionId = invoice.subscription;
   if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
     subscriptionId = invoice.parent.subscription_details.subscription;
     console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
   }
-  
-  if (!subscriptionId) {
-    console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
-    return; // Not a subscription invoice
-  }
 
-  const subscription = await stripe().subscriptions.retrieve(subscriptionId);
-  const { user_id, product_id, old_subscription_id } = subscription.metadata || {};
-  
-  if (!user_id) {
-    console.error('❌ Missing user_id in subscription for failed invoice');
-    return;
-  }
-
-  console.log(`❌ Payment failed for user ${user_id}, subscription ${subscriptionId}`);
-  console.log(`🛡️ CRITICAL: NOT updating user profile - preserving current working subscription`);
-  console.log(`📋 Failed subscription metadata:`, subscription.metadata);
-
-  // 🚨 CRITICAL FIX: DO NOTHING to subscriptions table on payment failure
-  // This prevents the bug where failed payments result in subscription status changes
-  console.log(`🛡️ CRITICAL: NOT updating subscription status in database - preserving current state`);
-  console.log(`💡 User's current subscription remains unchanged - no database modifications`);
-  
-  // 🚨 CRITICAL: DO NOT update user's profile - preserve their current working plan
-  console.log(`🛡️ CRITICAL: NOT updating user profile - preserving current working subscription`);
-  console.log(`💡 User will retain their current plan until they have a successful payment`);
-
-  // Log failed subscription payment to money_transactions table
-  await logFailedSubscriptionPaymentToTransactions(invoice, subscription, user_id);
-
-  console.log(`✅ Payment failure handled - user's current plan preserved`);
-}
-
-async function handleInvoiceRefunded(invoice: any) {
-  console.log('💰 Invoice refunded:', invoice.id);
-  
-  // Handle new Stripe invoice structure where subscription is nested
-  let subscriptionId = invoice.subscription;
-  if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
-    subscriptionId = invoice.parent.subscription_details.subscription;
-    console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
-  }
-  
   if (!subscriptionId) {
     console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
@@ -886,7 +509,41 @@ async function handleInvoiceRefunded(invoice: any) {
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
-  
+
+  if (!user_id) {
+    console.error('❌ Missing user_id in subscription for failed invoice');
+    return;
+  }
+
+  // Update subscription status (Stripe will mark it as past_due, etc.)
+  if (product_id) {
+    await updateSubscriptionInDatabaseCorrect(subscription, user_id, product_id);
+  }
+
+  // Log failed subscription payment to money_transactions table
+  await logFailedSubscriptionPaymentToTransactions(invoice, subscription, user_id);
+
+  console.log(`💸 Payment failed for user ${user_id}, subscription status updated`);
+}
+
+async function handleInvoiceRefunded(invoice: any) {
+  console.log('💰 Invoice refunded:', invoice.id);
+
+  // Handle new Stripe invoice structure where subscription is nested
+  let subscriptionId = invoice.subscription;
+  if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
+    subscriptionId = invoice.parent.subscription_details.subscription;
+    console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
+  }
+
+  if (!subscriptionId) {
+    console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
+    return; // Not a subscription invoice
+  }
+
+  const subscription = await stripe().subscriptions.retrieve(subscriptionId);
+  const { user_id, product_id } = subscription.metadata || {};
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription for refunded invoice');
     return;
@@ -903,7 +560,7 @@ async function getProductIdFromSubscription(subscription: any, fallbackProductId
   if (fallbackProductId) {
     return fallbackProductId;
   }
-  
+
   if (subscription.items?.data?.length > 0) {
     const priceId = subscription.items.data[0].price.id;
     try {
@@ -913,21 +570,16 @@ async function getProductIdFromSubscription(subscription: any, fallbackProductId
       console.error('❌ Error retrieving product from price:', error);
     }
   }
-  
+
   return 'unknown';
 }
 
 async function createSubscriptionInDatabase(subscription: any, userId: string, productId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`Creating subscription in database for user ${userId}: ${subscription.id}`);
-    
-    // 🚨 CRITICAL SAFETY CHECK: NEVER cancel existing subscriptions in this function
-    console.log(`🛡️ CRITICAL SAFETY: createSubscriptionInDatabase will NEVER cancel existing subscriptions`);
-    console.log(`💡 This function is ONLY for creating new subscriptions - old subscriptions are preserved`);
-    console.log(`🔒 User's current plan is protected until payment succeeds for new subscription`);
-    
+
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined, useCurrentTimeAsFallback: boolean = false): string | null => {
       if (!timestamp || timestamp <= 0) {
@@ -960,33 +612,67 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       return;
     }
 
-    // 🚨 CRITICAL FIX: Do NOT cancel existing subscriptions here!
-    // This was causing the bug where old subscriptions were canceled before payment succeeded
-    // Old subscriptions are now only canceled in handleInvoicePaymentSucceeded AFTER successful payment
-    console.log(`🛡️ NOT canceling existing subscriptions for user ${userId} - waiting for successful payment confirmation`);
-    console.log(`💡 This prevents the bug where failed payments result in plan downgrades`);
-    console.log(`🔒 User's current plan is preserved until new subscription payment succeeds`);
-    console.log(`✅ This ensures no service interruption and prevents accidental downgrades`);
-    
-    // 🆕 SAFETY CHECK: Log existing active subscriptions for debugging
-    try {
-      const { data: existingActiveSubscriptions, error: activeError } = await supabase
-        .from('subscriptions')
-        .select('id, status, price_id')
-        .eq('user_id', userId)
-        .in('status', ['active', 'trialing', 'past_due']);
-      
-      if (activeError) {
-        console.error('❌ Error checking existing active subscriptions:', activeError);
-      } else if (existingActiveSubscriptions && existingActiveSubscriptions.length > 0) {
-        console.log(`📋 User ${userId} has ${existingActiveSubscriptions.length} existing active subscriptions:`, 
-          existingActiveSubscriptions.map(s => ({ id: s.id, status: s.status, price_id: s.price_id })));
-        console.log(`🛡️ These will be preserved until payment succeeds for new subscription ${subscription.id}`);
-      } else {
-        console.log(`ℹ️ User ${userId} has no existing active subscriptions`);
+    // Cancel ALL existing active subscriptions for this user BEFORE creating new one
+    const { data: activeSubscriptions, error: activeError } = await supabase
+      .from('subscriptions')
+      .select('id, status, price_id')
+      .eq('user_id', userId)
+      .in('status', ['active', 'trialing', 'past_due']);
+
+    if (activeError) {
+      console.error('❌ Error fetching active subscriptions:', activeError);
+    } else if (activeSubscriptions && activeSubscriptions.length > 0) {
+      console.log(`🔄 Found ${activeSubscriptions.length} active subscriptions for user ${userId}, canceling them...`);
+
+      // Detect if this is a downgrade by comparing prices
+      const newPriceId = subscription.items.data[0].price.id;
+      const oldPriceId = activeSubscriptions[0]?.price_id;
+      console.log(`💰 Price change: ${oldPriceId} → ${newPriceId}`);
+
+      for (const activeSub of activeSubscriptions) {
+        if (activeSub.id !== subscription.id) {
+          console.log(`🔄 Canceling old subscription: ${activeSub.id}`);
+
+          // Cancel in Stripe first - be more aggressive for downgrades
+          try {
+            await stripe().subscriptions.cancel(activeSub.id, {
+              invoice_now: false,
+              prorate: false
+            });
+            console.log(`✅ Successfully cancelled old Stripe subscription: ${activeSub.id}`);
+          } catch (stripeError) {
+            console.error(`❌ Error canceling old subscription ${activeSub.id} in Stripe:`, stripeError);
+
+            // For downgrades, try to force cancel even if it fails
+            try {
+              await stripe().subscriptions.update(activeSub.id, {
+                cancel_at_period_end: true
+              });
+              console.log(`⚠️ Set subscription ${activeSub.id} to cancel at period end as fallback`);
+            } catch (fallbackError) {
+              console.error(`❌ Fallback cancellation also failed for ${activeSub.id}:`, fallbackError);
+            }
+          }
+
+          // Then update database
+          const { error: cancelError } = await supabase
+            .from('subscriptions')
+            .update({ 
+              status: 'canceled',
+              cancel_at_period_end: false,
+              updated: new Date().toISOString(),
+              canceled_at: new Date().toISOString(),
+              ended_at: new Date().toISOString()
+            })
+            .eq('id', activeSub.id);
+
+          if (cancelError) {
+            console.error(`❌ Error canceling old subscription ${activeSub.id} in database:`, cancelError);
+          } else {
+            console.log(`✅ Successfully cancelled old subscription ${activeSub.id} in database`);
+          }
+        }
       }
-    } catch (error) {
-      console.error('❌ Error in safety check for existing subscriptions:', error);
     }
 
     // Handle period start/end with proper constraint logic
@@ -1042,50 +728,13 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       }
     }
 
-    // 🚨 CRITICAL FIX: Only update advertiser profile if subscription is active
-    // This prevents the bug where failed payments result in plan downgrades
-    if (subscription.status === 'active' || subscription.status === 'trialing') {
-      const stripePriceId = subscription.items.data[0].price.id;
-      console.log(`🔄 Calling updateAdvertiserProfilePlan for user ${userId} with price ${stripePriceId}`);
-      console.log(`✅ Subscription ${subscription.id} is active, updating profile safely`);
-      await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
-    } else {
-      console.log(`🛡️ CRITICAL SAFETY: Subscription ${subscription.id} has status '${subscription.status}' - NOT updating profile`);
-      console.log(`💡 This prevents the bug where failed payments result in plan downgrades`);
-      console.log(`🔒 User's current plan is preserved until subscription becomes active`);
-      
-      // 🚨 CRITICAL FIX: Check if user has any truly active subscriptions before updating profile
-      // This prevents the bug where failed payments result in plan downgrades
-      try {
-        const { data: activeSubs, error: activeError } = await supabase
-          .from('subscriptions')
-          .select('id, status')
-          .eq('user_id', userId)
-          .in('status', ['active', 'trialing', 'past_due'])
-          .not('status', 'in', ['incomplete', 'incomplete_expired', 'canceled', 'unpaid']);
-        
-        if (activeError) {
-          console.error('❌ Error checking for active subscriptions:', activeError);
-          console.log(`🛡️ NOT updating profile due to error - preserving current plan`);
-          return;
-        }
-        
-        if (activeSubs && activeSubs.length > 0) {
-          console.log(`✅ User ${userId} has ${activeSubs.length} active subscriptions, updating profile safely`);
-          await updateAdvertiserProfileWithCurrentSubscription(userId);
-        } else {
-          console.log(`⚠️ User ${userId} has NO active subscriptions after failed payment`);
-          console.log(`🛡️ NOT updating profile to prevent accidental free plan assignment`);
-          console.log(`💡 User will retain their last known plan until they have a working subscription`);
-        }
-      } catch (error) {
-        console.error('❌ Error in safety check for active subscriptions:', error);
-        console.log(`🛡️ NOT updating profile due to error - preserving current plan`);
-      }
-    }
+    // Update advertiser profile - CRITICAL for all subscription changes
+    const stripePriceId = subscription.items.data[0].price.id;
+    console.log(`🔄 Calling updateAdvertiserProfilePlan for user ${userId} with price ${stripePriceId}`);
+    await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
 
     console.log(`✅ Created new subscription: ${subscription.id} for user ${userId}`);
-    
+
     // Double-check: Ensure advertiser profile was updated correctly
     try {
       const supabase = createServiceRoleClient();
@@ -1094,7 +743,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
         .select('subscription_info')
         .eq('id', userId)
         .single();
-        
+
       if (finalError) {
         console.error('❌ Error checking final advertiser profile state:', finalError);
       } else {
@@ -1103,9 +752,9 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     } catch (verifyError) {
       console.error('❌ Error verifying final profile state:', verifyError);
     }
-    
+
     // No need to handle oldSubscriptionId from metadata anymore - we handle all active subscriptions above
-    
+
   } catch (error) {
     console.error('❌ Error in createSubscriptionInDatabase:', error);
   }
@@ -1114,43 +763,41 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
 // Helper function to update advertiser profile with correct subscription info (JSONB)
 async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string, subscriptionId?: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`📋 Getting active subscription info for user: ${userId}`);
-    
+
     // Get current subscription info for comparison
     const { data: currentProfile, error: currentError } = await supabase
       .from('advertiser_profiles')
       .select('subscription_info')
       .eq('id', userId)
       .single();
-    
+
     if (currentError) {
       console.error('❌ Error fetching current advertiser profile:', currentError);
     } else {
       console.log(`📊 Current subscription_info:`, currentProfile?.subscription_info);
     }
-    
+
     // SIMPLIFIED APPROACH: Get subscription details directly from subscriptions table
     // This is much more reliable than looking up via prices table
-    // 🚨 CRITICAL FIX: Exclude failed/incomplete subscriptions - only consider truly active ones
     const { data: activeSubscription, error: subError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
       .in('status', ['active', 'trialing', 'past_due'])
-      .not('status', 'in', ['incomplete', 'incomplete_expired', 'canceled', 'unpaid'])
       .order('created', { ascending: false })
       .limit(1)
       .single();
-    
+
     if (subError || !activeSubscription) {
       console.error(`❌ Could not find active subscription for user ${userId}:`, subError);
       return;
     }
-    
+
     console.log(`✅ Found active subscription: ${activeSubscription.id} - Price: ${activeSubscription.price_id}`);
-    
+
     // Get product info from prices table for display purposes
     const { data: priceData, error: priceError } = await supabase
       .from('prices')
@@ -1162,9 +809,9 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       `)
       .eq('id', activeSubscription.price_id)
       .single();
-    
+
     let productId, productName, priceAmount;
-    
+
     if (priceError || !priceData || !priceData.products) {
       console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription data`);
       // Fallback to subscription data
@@ -1177,12 +824,12 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       priceAmount = priceData.unit_amount;
       console.log(`✅ Found product: ${productId} (${productName}) - Amount: ${priceAmount} cents`);
     }
-    
+
     // Determine if this is a downgrade by comparing amounts
     const currentAmount = currentProfile?.subscription_info?.price_amount || 0;
     const isDowngrade = priceAmount < currentAmount;
     console.log(`💰 Price comparison: ${currentAmount} → ${priceAmount} (${isDowngrade ? 'DOWNGRADE' : 'UPGRADE/SAME'})`);
-    
+
     // Update subscription_info JSONB field with correct structure using subscription table data
     const newSubscriptionInfo = {
       product_id: productId,
@@ -1195,11 +842,11 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       cancel_at_period_end: activeSubscription.cancel_at_period_end,
       last_synced: new Date().toISOString()
     };
-    
+
     console.log(`📝 New subscription_info from subscription table:`, newSubscriptionInfo);
-    
+
     await updateAdvertiserProfileWithSubscriptionInfo(userId, newSubscriptionInfo);
-    
+
   } catch (error) {
     console.error('❌ Error updating advertiser profile plan:', error);
   }
@@ -1207,33 +854,33 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
 
 async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subscriptionInfo: any) {
   const supabase = createServiceRoleClient();
-  
+
   console.log(`📝 Updating advertiser profile with subscription_info:`, subscriptionInfo);
   console.log(`👤 User ID: ${userId}`);
-  
+
   // First check if the advertiser profile exists
   const { data: existingProfile, error: checkError } = await supabase
     .from('advertiser_profiles')
     .select('id, subscription_info')
     .eq('id', userId)
     .single();
-    
+
   if (checkError) {
     console.error('❌ Error checking advertiser profile existence:', checkError);
     return;
   }
-  
+
   if (!existingProfile) {
     console.error('❌ Advertiser profile not found for user:', userId);
     return;
   }
-  
+
   console.log(`📊 Current profile subscription_info:`, existingProfile.subscription_info);
-  
+
   // Force update with retry logic
   let retryCount = 0;
   const maxRetries = 3;
-  
+
   while (retryCount < maxRetries) {
     const { error: profileError } = await supabase
       .from('advertiser_profiles')
@@ -1243,31 +890,31 @@ async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subsc
     if (profileError) {
       retryCount++;
       console.error(`❌ Error updating advertiser profile subscription_info (attempt ${retryCount}):`, profileError);
-      
+
       if (retryCount < maxRetries) {
         console.log(`🔄 Retrying in 1 second...`);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } else {
       console.log(`✅ Updated advertiser profile subscription_info successfully:`, subscriptionInfo);
-      
+
       // Verify the update
       const { data: verifyData, error: verifyError } = await supabase
         .from('advertiser_profiles')
         .select('subscription_info')
         .eq('id', userId)
         .single();
-        
+
       if (verifyError) {
         console.error('❌ Error verifying update:', verifyError);
       } else {
         console.log(`✅ Verified updated subscription_info:`, verifyData.subscription_info);
       }
-      
+
       break;
     }
   }
-  
+
   if (retryCount >= maxRetries) {
     console.error(`❌ Failed to update advertiser profile after ${maxRetries} attempts`);
   }
@@ -1276,29 +923,27 @@ async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subsc
 // Update advertiser profile with current active subscription data from database
 async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`🔄 Getting current active subscription for user ${userId} to update profile`);
-    
-    // 🚨 CRITICAL FIX: Exclude failed/incomplete subscriptions - only consider truly active ones
-    // This prevents the bug where failed payments result in plan downgrades
+
+    // Get current active subscription from database
     const { data: activeSubscription, error: subError } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
       .in('status', ['active', 'trialing', 'past_due'])
-      .not('status', 'in', ['incomplete', 'incomplete_expired', 'canceled', 'unpaid'])
       .order('created', { ascending: false })
       .limit(1)
       .single();
-    
+
     if (subError || !activeSubscription) {
       console.error(`❌ Could not find active subscription for user ${userId}:`, subError);
       return;
     }
-    
+
     console.log(`✅ Found current active subscription: ${activeSubscription.id}`);
-    
+
     // Get product info from prices table
     const { data: priceData, error: priceError } = await supabase
       .from('prices')
@@ -1310,9 +955,9 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       `)
       .eq('id', activeSubscription.price_id)
       .single();
-    
+
     let productId, priceAmount;
-    
+
     if (priceError || !priceData || !priceData.products) {
       console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using fallback`);
       productId = 'unknown';
@@ -1321,7 +966,7 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       productId = priceData.product_id;
       priceAmount = priceData.unit_amount;
     }
-    
+
     // Update subscription_info with current active subscription data
     const currentSubscriptionInfo = {
       product_id: productId,
@@ -1334,11 +979,11 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       cancel_at_period_end: activeSubscription.cancel_at_period_end,
       last_synced: new Date().toISOString()
     };
-    
+
     console.log(`📝 Updating profile with current subscription info:`, currentSubscriptionInfo);
-    
+
     await updateAdvertiserProfileWithSubscriptionInfo(userId, currentSubscriptionInfo);
-    
+
   } catch (error) {
     console.error('❌ Error updating advertiser profile with current subscription:', error);
   }
@@ -1347,10 +992,10 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
 // Update subscription using correct schema
 async function updateSubscriptionInDatabaseCorrect(subscription: any, userId: string, productId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`Updating subscription in database for user ${userId}: ${subscription.id}`);
-    
+
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined, useCurrentTimeAsFallback: boolean = false): string | null => {
       if (!timestamp || timestamp <= 0) {
@@ -1406,47 +1051,9 @@ async function updateSubscriptionInDatabaseCorrect(subscription: any, userId: st
       return;
     }
 
-    // 🚨 CRITICAL FIX: Only update advertiser profile if subscription is active
-    // This prevents the bug where failed payments result in plan downgrades
-    if (subscription.status === 'active' || subscription.status === 'trialing') {
-      const stripePriceId = subscription.items.data[0].price.id;
-      console.log(`🔄 Calling updateAdvertiserProfilePlan for user ${userId} with price ${stripePriceId}`);
-      console.log(`✅ Subscription ${subscription.id} is active, updating profile safely`);
-      await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
-    } else {
-      console.log(`🛡️ CRITICAL SAFETY: Subscription ${subscription.id} has status '${subscription.status}' - NOT updating profile`);
-      console.log(`💡 This prevents the bug where failed payments result in plan downgrades`);
-      console.log(`🔒 User's current plan is preserved until subscription becomes active`);
-      
-      // 🚨 CRITICAL FIX: Check if user has any truly active subscriptions before updating profile
-      // This prevents the bug where failed payments result in plan downgrades
-      try {
-        const { data: activeSubs, error: activeError } = await supabase
-          .from('subscriptions')
-          .select('id, status')
-          .eq('user_id', userId)
-          .in('status', ['active', 'trialing', 'past_due'])
-          .not('status', 'in', ['incomplete', 'incomplete_expired', 'canceled', 'unpaid']);
-        
-        if (activeError) {
-          console.error('❌ Error checking for active subscriptions:', activeError);
-          console.log(`🛡️ NOT updating profile due to error - preserving current plan`);
-          return;
-        }
-        
-        if (activeSubs && activeSubs.length > 0) {
-          console.log(`✅ User ${userId} has ${activeSubs.length} active subscriptions, updating profile safely`);
-          await updateAdvertiserProfileWithCurrentSubscription(userId);
-        } else {
-          console.log(`⚠️ User ${userId} has NO active subscriptions after failed payment`);
-          console.log(`🛡️ NOT updating profile to prevent accidental free plan assignment`);
-          console.log(`💡 User will retain their last known plan until they have a working subscription`);
-        }
-      } catch (error) {
-        console.error('❌ Error in safety check for active subscriptions:', error);
-        console.log(`🛡️ NOT updating profile due to error - preserving current plan`);
-      }
-    }
+    // Update advertiser profile if plan changed
+    const stripePriceId = subscription.items.data[0].price.id;
+    await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
 
     console.log(`✅ Updated subscription for user ${userId}: ${subscription.id}`);
   } catch (error) {
@@ -1457,10 +1064,10 @@ async function updateSubscriptionInDatabaseCorrect(subscription: any, userId: st
 // Cancel subscription using correct schema
 async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`Canceling subscription in database for user ${userId}: ${subscription.id}`);
-    
+
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined): string | null => {
       if (!timestamp || timestamp <= 0) return null;
@@ -1490,13 +1097,11 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
     }
 
     // Check if user has any other ACTIVE subscriptions before setting to free plan
-    // 🚨 CRITICAL FIX: Exclude failed/incomplete subscriptions - only consider truly active ones
     const { data: otherActiveSubscriptions, error: activeError } = await supabase
       .from('subscriptions')
       .select('id, status')
       .eq('user_id', userId)
-      .in('status', ['active', 'trialing', 'past_due'])
-      .not('status', 'in', ['incomplete', 'incomplete_expired', 'canceled', 'unpaid'])
+      .in('status', ['active', 'trialing'])
       .neq('id', subscription.id); // Exclude the subscription we just canceled
 
     if (activeError) {
@@ -1507,15 +1112,32 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
     if (otherActiveSubscriptions && otherActiveSubscriptions.length > 0) {
       console.log(`✅ User has ${otherActiveSubscriptions.length} other active subscriptions, NOT setting to free plan`);
       console.log(`🔄 Other active subscriptions:`, otherActiveSubscriptions.map(s => s.id));
-      
+
       // Update profile with current active subscription data instead of leaving it unchanged
       console.log(`🔄 Updating profile with current active subscription data`);
       await updateAdvertiserProfileWithCurrentSubscription(userId);
     } else {
-      // SAFETY: do NOT force-set to free automatically on deletion
-      // Keep last known subscription_info to avoid accidental downgrades when payments fail
-      console.log(`🛑 No other active subscriptions found. Preserving last known plan; not setting free automatically.`);
-      console.log(`💡 This prevents accidental downgrades when payments fail or subscriptions are canceled.`);
+      console.log(`🆓 No other active subscriptions found, setting user to free plan`);
+
+      // Only set to free plan if no other active subscriptions exist
+      const freeSubscriptionInfo = {
+        product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free plan)
+        price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
+        subscription_id: null,
+        last_synced: new Date().toISOString()
+      };
+
+      const { error: profileError } = await supabase
+        .from('advertiser_profiles')
+        .update({ subscription_info: freeSubscriptionInfo })
+        .eq('id', userId);
+
+      if (profileError) {
+        console.error('❌ Error updating advertiser profile to free plan:', profileError);
+        return;
+      }
+
+      console.log(`✅ Updated advertiser profile to free plan`);
     }
 
     console.log(`✅ Canceled subscription for user ${userId}: ${subscription.id}`);
@@ -1527,10 +1149,10 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
 // Log subscription payment to money_transactions table
 async function logSubscriptionPaymentToTransactions(invoice: any, subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`💰 Logging subscription payment to money_transactions for user ${userId}`);
-    
+
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;
     const { data: priceData, error: priceError } = await supabase
@@ -1542,18 +1164,18 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       `)
       .eq('id', priceId)
       .single();
-    
+
     let productName = 'Unknown Subscription';
     let productDescription = 'Subscription payment';
-    
+
     if (!priceError && priceData && priceData.products) {
       productName = (priceData.products as any).name;
       productDescription = (priceData.products as any).description || `Subscription payment for ${productName}`;
     }
-    
+
     // Calculate amount in cents (Stripe stores amounts in cents)
     const amountInCents = invoice.amount_paid || 0;
-    
+
     // Create comprehensive metadata for subscription payment
     const metadata = {
       stripe_invoice_id: invoice.id,
@@ -1581,19 +1203,19 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       status_transitions: invoice.status_transitions,
       created_at: new Date().toISOString()
     };
-    
+
     // Determine if this is a new subscription, upgrade, or downgrade
     const subscriptionMetadata = subscription.metadata || {};
     const upgradeType = subscriptionMetadata.upgrade_type;
     const oldSubscriptionId = subscriptionMetadata.old_subscription_id;
-    
+
     console.log(`🔍 Subscription metadata analysis:`, {
       subscription_id: subscription.id,
       upgrade_type: upgradeType,
       old_subscription_id: oldSubscriptionId,
       full_metadata: subscriptionMetadata
     });
-    
+
     let description = '';
     if (oldSubscriptionId) {
       // This is an upgrade or downgrade - check the upgrade_type from metadata
@@ -1612,9 +1234,9 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       // This is a new subscription
       description = `Subscribed to ${productName} Plan`;
     }
-    
+
     console.log(`📝 Final description: "${description}" for subscription ${subscription.id}`);
-    
+
     // Format the plan start date properly
     const planStartDate = subscription.current_period_start 
       ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
@@ -1626,7 +1248,7 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
           }
           return new Date().toLocaleDateString();
         })();
-    
+
     // Create transaction record using the new subscription_payment type
     const transactionData = {
       user_id: userId,
@@ -1642,7 +1264,7 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     console.log(`📝 Inserting subscription payment transaction:`, {
       user_id: userId,
       amount: amountInCents,
@@ -1650,23 +1272,23 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       subscription_id: subscription.id,
       type: 'subscription_payment'
     });
-    
+
     const { data: transaction, error: insertError } = await supabase
       .from('money_transactions')
       .insert(transactionData)
       .select()
       .single();
-    
+
     if (insertError) {
       console.error('❌ Error logging subscription payment to money_transactions:', insertError);
       return;
     }
-    
+
     console.log(`✅ Successfully logged subscription payment transaction: ${transaction.id}`);
     console.log(`💰 Amount: ${amountInCents} cents (${(amountInCents / 100).toFixed(2)} USD)`);
     console.log(`📦 Product: ${productName}`);
     console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
-    
+
   } catch (error) {
     console.error('❌ Error in logSubscriptionPaymentToTransactions:', error);
   }
@@ -1675,10 +1297,10 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
 // Log failed subscription payment to money_transactions table
 async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`💰 Logging failed subscription payment to money_transactions for user ${userId}`);
-    
+
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;
     const { data: priceData, error: priceError } = await supabase
@@ -1690,18 +1312,18 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       `)
       .eq('id', priceId)
       .single();
-    
+
     let productName = 'Unknown Subscription';
     let productDescription = 'Subscription payment';
-    
+
     if (!priceError && priceData && priceData.products) {
       productName = (priceData.products as any).name;
       productDescription = (priceData.products as any).description || `Subscription payment for ${productName}`;
     }
-    
+
     // Calculate amount in cents (Stripe stores amounts in cents)
     const amountInCents = invoice.amount_paid || 0;
-    
+
     // Format the plan start date properly
     const planStartDate = subscription.current_period_start 
       ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
@@ -1713,7 +1335,7 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
           }
           return new Date().toLocaleDateString();
         })();
-    
+
     // Create comprehensive metadata for failed subscription payment
     const metadata = {
       stripe_invoice_id: invoice.id,
@@ -1742,7 +1364,7 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       failure_reason: 'Payment failed',
       created_at: new Date().toISOString()
     };
-    
+
     // Create transaction record using the new subscription_payment type
     const transactionData = {
       user_id: userId,
@@ -1758,7 +1380,7 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     console.log(`📝 Inserting failed subscription payment transaction:`, {
       user_id: userId,
       amount: amountInCents,
@@ -1766,23 +1388,23 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       subscription_id: subscription.id,
       type: 'subscription_payment'
     });
-    
+
     const { data: transaction, error: insertError } = await supabase
       .from('money_transactions')
       .insert(transactionData)
       .select()
       .single();
-    
+
     if (insertError) {
       console.error('❌ Error logging failed subscription payment to money_transactions:', insertError);
       return;
     }
-    
+
     console.log(`✅ Successfully logged failed subscription payment transaction: ${transaction.id}`);
     console.log(`💰 Amount: ${amountInCents} cents (${(amountInCents / 100).toFixed(2)} USD)`);
     console.log(`📦 Product: ${productName}`);
     console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
-    
+
   } catch (error) {
     console.error('❌ Error in logFailedSubscriptionPaymentToTransactions:', error);
   }
@@ -1791,10 +1413,10 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
 // Log subscription refund to money_transactions table
 async function logSubscriptionRefundToTransactions(invoice: any, subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`💰 Logging subscription refund to money_transactions for user ${userId}`);
-    
+
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;
     const { data: priceData, error: priceError } = await supabase
@@ -1803,21 +1425,20 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
         id,
         unit_amount,
         products!inner(id, name, description)
-      `)
-      .eq('id', priceId)
+      `).eq('id', priceId)
       .single();
-    
+
     let productName = 'Unknown Subscription';
     let productDescription = 'Subscription refund';
-    
+
     if (!priceError && priceData && priceData.products) {
       productName = (priceData.products as any).name;
       productDescription = `Subscription refund for ${productName}`;
     }
-    
+
     // Calculate refund amount in cents (negative amount for refunds)
     const refundAmountInCents = -(invoice.amount_refunded || 0);
-    
+
     // Format the plan start date properly
     const planStartDate = subscription.current_period_start 
       ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
@@ -1827,9 +1448,9 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
           if (subscription.created) {
             return new Date(subscription.created * 1000).toLocaleDateString();
           }
-          return new Date().toISOString();
+          return new Date().toLocaleDateString();
         })();
-    
+
     // Create comprehensive metadata for subscription refund
     const metadata = {
       stripe_invoice_id: invoice.id,
@@ -1859,7 +1480,7 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
       refund_reason: 'Subscription refund',
       created_at: new Date().toISOString()
     };
-    
+
     // Create transaction record using the new subscription_refund type
     const transactionData = {
       user_id: userId,
@@ -1875,7 +1496,7 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     console.log(`📝 Inserting subscription refund transaction:`, {
       user_id: userId,
       amount: refundAmountInCents,
@@ -1883,23 +1504,23 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
       subscription_id: subscription.id,
       type: 'subscription_refund'
     });
-    
+
     const { data: transaction, error: insertError } = await supabase
       .from('money_transactions')
       .insert(transactionData)
       .select()
       .single();
-    
+
     if (insertError) {
       console.error('❌ Error logging subscription refund to money_transactions:', insertError);
       return;
     }
-    
+
     console.log(`✅ Successfully logged subscription refund transaction: ${transaction.id}`);
     console.log(`💰 Refund Amount: ${refundAmountInCents} cents (${(refundAmountInCents / 100).toFixed(2)} USD)`);
     console.log(`📦 Product: ${productName}`);
     console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
-    
+
   } catch (error) {
     console.error('❌ Error in logSubscriptionRefundToTransactions:', error);
   }
