@@ -303,7 +303,7 @@ export default function BrandsPage() {
               className="rounded-3xl relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"
               style={{
                 background:
-                  "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                  "linear-gradient(90deg, #4C238B 0%, #7F39EC 50%, #4C238B 100%)",
               }}
             >
               <div className="scan-line"></div>

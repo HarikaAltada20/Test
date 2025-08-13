@@ -5,6 +5,38 @@ import { Users } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { FaChevronDown } from "react-icons/fa";
 
+const homeFaqs = [
+  {
+    id: "faq-home-1",
+    question: "What makes Game of Creators different from other platforms?",
+    answer:
+      "We have 50,000+ verified creators across every niche - gaming, lifestyle, tech, fashion, fitness, food, and more. From micro-influencers to mega creators!",
+  },
+  {
+    id: "faq-home-2",
+    question: "Do you guarantee results?",
+    answer:
+      "Yes! We're so confident in our platform that we offer performance guarantees. If your campaign doesn't meet the agreed metrics, we'll refund your investment.",
+  },
+  {
+    id: "faq-home-3",
+    question: "How quickly can I launch my first content?",
+    answer:
+      "You can create and launch your first contest in under 5 minutes! Our streamlined process gets you from idea to viral campaign faster than any competitor.",
+  },
+  {
+    id: "faq-home-4",
+    question: "What makes Game of Creators different from other platforms?",
+    answer:
+      "We're the only platform that gamifies creator marketing with contests, leaderboards, and achievement systems. Plus, we guarantee results or your money back!",
+  },
+  {
+    id: "faq-home-4",
+    question: "How do you ensure content quality?",
+    answer:
+      "We're the only platform that gamifies creator marketing with contests, leaderboards, and achievement systems. Plus, we guarantee results or your money back!",
+  },
+];
 const creatorFaqs = [
   {
     id: "faq-1",
@@ -63,7 +95,13 @@ export default function FAQ() {
   const faqHeaderRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
-  const faqs = pathname.includes("brands") ? brandFaqs : creatorFaqs;
+  // const faqs = pathname.includes("brands") ? brandFaqs : creatorFaqs;
+
+  const faqs = pathname.includes("brands")
+    ? brandFaqs
+    : pathname === "/"
+    ? homeFaqs
+    : creatorFaqs;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -147,7 +185,7 @@ export default function FAQ() {
                 onClick={() => toggleFAQ(index)}
                 className={`w-full flex justify-between items-center px-6 py-6 
     ${
-      pathname.includes("brands")
+      pathname.includes("brands") || pathname === "/"
         ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
         : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
     } 

@@ -1,14 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
 
 .font-poppins {
-  font-family: 'Poppins', sans-serif;
+  font-family: "Poppins", sans-serif;
 }
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.scroll-container {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+
+.scroll-track {
+  display: flex;
+  animation: scroll-horizontal 20s linear infinite;
+}
+
+@keyframes scroll-horizontal {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+
+
+
 
 .hide-before-animate {
   opacity: 0;
@@ -25,9 +50,7 @@ body {
   }
 }
 
-
-
-.slide-up{
+.slide-up {
   opacity: 0; /* Initially invisible */
   animation: slideUp 0.7s ease-out forwards;
   /* animation-delay: 0.2s; */
@@ -51,7 +74,6 @@ body {
   }
 }
 
-
 @keyframes slideFromLeft {
   0% {
     transform: translateX(-40px);
@@ -63,8 +85,14 @@ body {
   }
 }
 @keyframes slideRight {
-  from { opacity: 0; transform: translateX(50px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .slide-left {
@@ -76,7 +104,6 @@ body {
   opacity: 0;
   animation: slideRight 0.8s ease-out forwards;
 }
-
 
 .animate-spin-slow {
   animation: spin-slow 20s linear infinite;
@@ -99,8 +126,8 @@ body {
 .bg-blue-ellipse {
   background: radial-gradient(
     ellipse at center,
-       rgba(45, 29, 101, 0.8) 0%,
-   
+    rgba(45, 29, 101, 0.8) 0%,
+
     rgba(69, 57, 202, 0.489) 40%,
     rgba(5, 29, 211, 0.3) 70%,
     rgba(255, 132, 0, 0) 100%
@@ -108,21 +135,18 @@ body {
 }
 
 .gradient-text {
-  background: linear-gradient(173.88deg, #FDC155 69.65%, #FF652D 85.87%);
+  background: linear-gradient(173.88deg, #fdc155 69.65%, #ff652d 85.87%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-fill-color: transparent;
 }
 
-
 /* Common row */
 .scroll-row {
   display: flex;
   flex-wrap: nowrap;
 }
-
-
 
 .scan-line {
   position: absolute;
@@ -153,7 +177,6 @@ body {
   }
 }
 
-
 /* Right infinite loop */
 @keyframes scrollRightSeamless {
   0% {
@@ -182,17 +205,16 @@ body {
   animation: scrollLeftSeamless 12s linear infinite;
 }
 
-
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
-  
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -277,17 +299,17 @@ body {
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Global scaling to make the platform more compact - similar to 80% zoom */
   html {
     font-size: 14px; /* Reduced from default 16px (87.5% of original) */
   }
-  
+
   /* Reduce default spacing and sizing */
   .dashboard-container {
     zoom: 0.85; /* Scale down dashboard content to 85% */
   }
-  
+
   /* Ensure sidebar takes full height despite zoom */
   .dashboard-container aside {
     height: 117.647vh !important; /* 100vh / 0.85 = 117.647vh */

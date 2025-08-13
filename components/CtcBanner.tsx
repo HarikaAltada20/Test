@@ -1,5 +1,5 @@
 "use client";
-import { ArrowRight, Rocket } from "lucide-react";
+import { ArrowRight, Rocket, ShieldCheck, Zap, CheckCircle, Globe } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,10 +9,12 @@ export default function CtcBanner() {
   const [inView, setInView] = useState(false);
   const pathname = usePathname();
 
-  // Colors based on route
+  // Route flags
   const isBrands = pathname === "/brands";
   const isCreators = pathname === "/creators";
+  const isHome = pathname === "/";
 
+  // Styles
   const styles = {
     creators: {
       bgGradient:
@@ -31,21 +33,18 @@ export default function CtcBanner() {
     },
   };
 
-  const theme = isBrands ? styles.brands : styles.creators;
+  // Theme selection: / and /brands share the brands theme
+  const theme = isCreators ? styles.creators : styles.brands;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          setInView(true);
-        }
+        if (entries[0].isIntersecting) setInView(true);
       },
       { threshold: 0.3 }
     );
 
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
+    if (sectionRef.current) observer.observe(sectionRef.current);
 
     return () => {
       if (sectionRef.current) observer.unobserve(sectionRef.current);
@@ -86,7 +85,13 @@ export default function CtcBanner() {
       {/* Tagline */}
       <div className="flex items-center gap-2 px-4 py-2 bg-[#2C3148] rounded-full text-lg z-10">
         <Rocket className="w-4 h-4" />
-        <span>Read to go viral?</span>
+        <span>
+          {isHome
+            ? "Ready to go viral?"
+            : isBrands
+            ? "Ready to go viral?"
+            : "Ready to go viral?"}
+        </span>
       </div>
 
       {/* Main Heading */}
@@ -95,12 +100,18 @@ export default function CtcBanner() {
           inView ? "slide-up" : "opacity-0 translate-y-10"
         }`}
       >
-        Ready to Transform Your{" "}
+        {isHome
+          ? "Join the "
+          : "Ready to Transform Your "}{" "}
         <span
           className="bg-clip-text text-transparent"
           style={{ backgroundImage: theme.textGradient }}
         >
-          {isBrands ? "Content Strategy" : "Creativity"}
+          {isCreators
+            ? "Creativity"
+            : isHome
+            ? "Creator Revolutions "
+            : "Content Strategy"}
         </span>
         ?
       </h1>
@@ -111,28 +122,52 @@ export default function CtcBanner() {
           inView ? "slide-left" : "opacity-0 translate-x-10"
         }`}
       >
-       {isBrands
-    ? "Launch your first contest today and witness the power of creator-generated content."
-    : "Join thousands of creators and brands. Sign up today and unlock your potential!"}
+        {isHome
+          ? "50,000+ creators, 1000+ brands, millions of viral moments. Your turn to dominate!"
+          : isCreators
+          ? "Join thousands of creators and brands. Sign up today and unlock your potential!"
+          : "Launch your first contest today and witness the power of creator-generated content."}
       </p>
 
       {/* CTA Button */}
       <div className="flex justify-center items-center mt-12">
-      <button className="rounded-3xl relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"  style={{ backgroundImage: theme.btnGradient }}>
-     
-       <div className="scan-line"></div>
-      <Link
-        href="/auth/signup"
-        className="relative z-10 flex items-center gap-2"
-        
-      >
-       
-        <Rocket className="w-4 h-4" />
-        {isBrands ? "Launch a contest" : "Join Game Of Creators"}
-        <ArrowRight className="h-5 w-5" />
-      </Link>
-      </button>
+        <button
+          className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden"
+          style={{ backgroundImage: theme.btnGradient }}
+        >
+          <div className="scan-line"></div>
+          <Link
+            href="/auth/signup"
+            className="relative z-10 flex items-center gap-2"
+          >
+            <Rocket className="w-4 h-4" />
+            {isHome
+              ? "Start your Campaign"
+              : isCreators
+              ? "Join Game Of Creators"
+              : "Launch a contest"}
+            <ArrowRight className="h-5 w-5" />
+          </Link>
+        </button>
       </div>
+
+        {/* Feature Buttons for Home */}
+      {isHome && (
+        <div className="flex flex-wrap justify-center gap-6 mt-12 z-10">
+          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
+            <ShieldCheck className="w-4 h-4" /> 100% Secure
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
+            <Zap className="w-4 h-4" /> Instant Setup
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
+            <CheckCircle className="w-4 h-4" /> Guaranteed Results
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
+            <Globe className="w-4 h-4" /> Global Research
+          </div>
+        </div>
+      )}
     </section>
   );
 }

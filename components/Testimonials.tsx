@@ -1,9 +1,10 @@
 import Image from "next/image";
-import { Crown, Sparkle, Sparkles } from "lucide-react";
+import { Crown, Sparkles, Users } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-const creatorsTestimonials = [
-  {
+
+const homeTestimonials = [
+{
     name: "Sophie Williams",
     role: "Beauty Content Creator",
     image: "./images/Ellipse 2355.png",
@@ -11,25 +12,25 @@ const creatorsTestimonials = [
       "The brands here are fantastic. I've partnered with great companies and formed strong connections.",
   },
   {
-    name: "Alex Thompson",
-    role: "Tech Reviewer & YouTuber",
+    name: "Sarah Johnson",
+    role: "Marketing Director, Fashion Brand",
     image: "./images/Ellipse 2355 (3).png",
     quote:
-      "Grew from zero to 100K followers in 8 months through brand collaborations. This platform transformed my life!",
+      "Game Of Creators revamped our content strategy, producing 50 unique pieces in two weeks and boosting engagement.",
   },
   {
-    name: "Marcus Rivera",
-    role: "Fitness Influencer & Coach",
+    name: "Mike Chen",
+    role: "Founder, Tech Startup",
     image: "./images/Ellipse 2355 (1).png",
     quote:
-      "Game Of Creators turned my passion into a full-time income, inspiring my best work.",
+      "The Game of Creators has streamlined our workflow and boosted efficiency",
   },
   {
-    name: "Aisha Khan",
-    role: "Travel Vlogger & Influencer",
+    name: "Emma Rodriguez",
+    role: "CMO, E- commerce Platform",
     image: "./images/Ellipse 2355 (2).png",
     quote:
-      "A platform that truly gets the creator economy, offering diverse opportunities and a supportive community.",
+      "Game Of Creators exceeded our expectations, enhancing our brand with authentic creator content.",
   },
   {
     name: "James Carter",
@@ -43,14 +44,14 @@ const creatorsTestimonials = [
     role: "Lifestyle Blogger",
     image: "./images/Ellipse 2355 (6).png",
     quote:
-      "Collaborating here opened doors to amazing partnerships and growth.",
+      "Collaborating with skilled creators here has been seamless. The content quality was impressive, leading to a great ROI.",
   },
   {
-    name: "Daniel Kim",
-    role: "Photographer",
+    name: "Lisa Chen",
+    role: "Head of Digital Marketing, SaaS Company",
     image: "./images/Ellipse 2355 (7).png",
     quote:
-      "A fantastic platform to connect with brands and showcase my creativity.",
+      "A platform that truly aligns brand goals with creator strengths, ensuring a smooth and effective collaboration process.",
   },
   {
     name: "Olivia White",
@@ -120,14 +121,116 @@ const brandsTestimonials = [
   },
 ];
 
+const creatorsTestimonials = [
+  {
+    name: "Sophie Williams",
+    role: "Beauty Content Creator",
+    image: "./images/Ellipse 2355.png",
+    quote:
+      "The brands here are fantastic. I've partnered with great companies and formed strong connections.",
+  },
+  {
+    name: "Alex Thompson",
+    role: "Tech Reviewer & YouTuber",
+    image: "./images/Ellipse 2355 (3).png",
+    quote:
+      "Grew from zero to 100K followers in 8 months through brand collaborations. This platform transformed my life!",
+  },
+  {
+    name: "Marcus Rivera",
+    role: "Fitness Influencer & Coach",
+    image: "./images/Ellipse 2355 (1).png",
+    quote:
+      "Game Of Creators turned my passion into a full-time income, inspiring my best work.",
+  },
+  {
+    name: "Aisha Khan",
+    role: "Travel Vlogger & Influencer",
+    image: "./images/Ellipse 2355 (2).png",
+    quote:
+      "A platform that truly gets the creator economy, offering diverse opportunities and a supportive community.",
+  },
+  {
+    name: "James Carter",
+    role: "Software Engineer",
+    image: "./images/Ellipse 2355 (4).png",
+    quote:
+      "The Game Of Creators streamlined our workflow and boosted efficiency.",
+  },
+  {
+    name: "Emily Clark",
+    role: "Lifestyle Blogger",
+    image: "./images/Ellipse 2355 (6).png",
+    quote:
+      "Collaborating here opened doors to amazing partnerships and growth.",
+  },
+  {
+    name: "Daniel Kim",
+    role: "Photographer",
+    image: "./images/Ellipse 2355 (7).png",
+    quote:
+      "A fantastic platform to connect with brands and showcase my creativity.",
+  },
+  {
+    name: "Olivia White",
+    role: "Fashion Influencer",
+    image: "./images/Ellipse 2355 (1).png",
+    quote:
+      "This community is amazing — full of supportive and inspiring people.",
+  },
+];
+
+const config = {
+  "/": {
+    testimonials: homeTestimonials,
+    button: { text: "Our Customers", icon: Users },
+    gradientText: "linear-gradient(180deg, #7F39EC 33.29%, #B16FF4 81.2%)",
+    headingWord: "People",
+    description:
+      "Creators often commend our platform for its top-notch quality, user-friendly interface, and remarkable customer service.",
+    blurColor: "#7F39EC",
+    iconSrc: "./images/Frame 2147207526 (1).png",
+  },
+  "/brands": {
+    testimonials: brandsTestimonials,
+    button: { text: "Our Brands", icon: Crown },
+    gradientText: "linear-gradient(180deg, #7F39EC 33.29%, #B16FF4 81.2%)",
+    
+    headingWord: "Brands",
+    description:
+      "Brands appreciate our platform for connecting them with top-tier talent and boosting campaigns.",
+    blurColor: "#7F39EC",
+    iconSrc: "./images/Frame 2147207526 (1).png",
+  },
+  default: {
+    testimonials: creatorsTestimonials,
+    button: { text: "Our Creators", icon: Sparkles },
+    gradientText: "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+    headingWord: "Creators",
+    description:
+      "Creators love our platform for its user-friendly interface, diverse opportunities, and supportive community.",
+    blurColor: "#FF652D",
+    iconSrc: "./images/Frame 2147207526.png",
+  },
+};
+
 export default function Testimonials() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const [isAnimated, setIsAnimated] = useState(false);
   const pathname = usePathname();
-  const blurColor = pathname === "/brands" ? "#7F39EC" : "#FF652D";
-  // Pick dataset based on route
-  const testimonials =
-    pathname === "/brands" ? brandsTestimonials : creatorsTestimonials;
+
+  const key = (pathname in config ? pathname : "default") as keyof typeof config;
+
+const {
+  testimonials,
+  button,
+  gradientText,
+  headingWord,
+  description,
+  blurColor,
+  iconSrc,
+} = config[key];
+
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -149,28 +252,15 @@ export default function Testimonials() {
     rows.push(testimonials.slice(i, i + 4));
   }
 
-  const iconSrc =
-    pathname === "/brands"
-      ? "./images/Frame 2147207526 (1).png"
-      : "./images/Frame 2147207526.png";
-
-  const buttonConfig =
-    pathname === "/brands"
-      ? { text: "Our Brands", icon: Crown }
-      : { text: "Our Brands", icon: Sparkles };
-
-  const gradientText =
-    pathname === "/brands"
-      ? "linear-gradient(180deg, #7F39EC 33.29%, #B16FF4 81.2%)" // Purple gradient for brands
-      : "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)"; // Orange gradient for creators
+  const ButtonIcon = button.icon;
 
   return (
     <section className="text-white py-20 px-6" ref={sectionRef}>
       {/* Heading */}
       <div className="text-center max-w-3xl mx-auto">
         <button className="bg-[#2C3247] text-white py-1 px-4 rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
-          <buttonConfig.icon size={16} />
-          <span>{buttonConfig.text}</span>
+          <ButtonIcon size={16} />
+          <span>{button.text}</span>
         </button>
         <h2
           className={`text-3xl md:text-5xl font-bold mb-7 ${
@@ -183,9 +273,9 @@ export default function Testimonials() {
             className="bg-clip-text text-transparent mx-2"
             style={{ backgroundImage: gradientText }}
           >
-            {pathname === "/brands" ? "Brands" : "Creators"}
+            {headingWord}
           </span>
-          Say About Us
+          {pathname === "/" ? "are Saying" : "Say About Us"}
         </h2>
         <p
           className={`text-xl text-gray-300 ${
@@ -193,9 +283,7 @@ export default function Testimonials() {
           }`}
           style={{ animationDelay: "1s" }}
         >
-          {pathname === "/brands"
-            ? "Brands appreciate our platform for connecting them with top-tier talent and boosting campaigns."
-            : "Creators love our platform for its user-friendly interface, diverse opportunities, and supportive community."}
+          {description}
         </p>
       </div>
 
@@ -219,11 +307,11 @@ export default function Testimonials() {
                     {/* Left: Quote + Name + Role */}
                     <div className="flex flex-col">
                       <div className="flex items-start gap-2">
-                        {/* Image with orange shade background */}
+                        {/* Image with shade background */}
                         <div className="relative w-8 h-8 flex-shrink-0">
                           <div
                             className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 
-    w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
+                            w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
                             style={{ backgroundColor: blurColor }}
                           ></div>
 
@@ -238,9 +326,7 @@ export default function Testimonials() {
                         </div>
 
                         {/* Quote text */}
-                        <p className="font-poppins ml-1 text-gray-200">
-                          {t.quote}
-                        </p>
+                        <p className="font-poppins ml-1 text-gray-200">{t.quote}</p>
                       </div>
 
                       <div className="mt-6">
