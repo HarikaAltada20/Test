@@ -79,7 +79,10 @@ export interface CreateSubscriptionParams {
   productId: string; // Stripe product ID
   priceId: string; // Stripe price ID
   upgradeOptions?: {
+    // Timing of the change
     upgradeType: 'immediate' | 'scheduled';
+    // Direction of the change (optional; used for accurate logging/labeling)
+    changeType?: 'upgrade' | 'downgrade';
     scheduledDate?: Date;
     oldSubscriptionId?: string; // For safe upgrades - old subscription to cancel after new one is successful
   };

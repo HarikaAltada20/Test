@@ -4,17 +4,18 @@ import { getCustomerPortalUrl } from '@/lib/subscription-utils';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🔧 Creating customer portal session...');
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log('[API] POST /api/subscriptions/portal:start', { requestId });
     const supabase = await createClient();
     
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      console.error('❌ Authentication error:', authError);
+      console.error('[API] /subscriptions/portal:auth-error', { requestId, authError });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('✅ User authenticated:', user.id);
+    console.log('[API] /subscriptions/portal:user', { requestId, userId: user.id });
 
     // Check if user is an advertiser
     const { data: userData, error: userError } = await supabase
@@ -24,29 +25,28 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (userError) {
-      console.error('❌ Error fetching user data:', userError);
+      console.error('[API] /subscriptions/portal:user-error', { requestId, userError });
       return NextResponse.json({ error: 'Failed to fetch user data' }, { status: 500 });
     }
 
     if (userData?.user_type !== 'advertiser') {
-      console.error('❌ User is not an advertiser:', userData?.user_type);
+      console.error('[API] /subscriptions/portal:not-advertiser', { requestId, userType: userData?.user_type });
       return NextResponse.json({ error: 'Access denied - advertiser account required' }, { status: 403 });
     }
 
-    console.log('✅ User is advertiser, creating portal session...');
-    console.log('🔧 Environment check - NEXT_PUBLIC_APP_URL:', process.env.NEXT_PUBLIC_APP_URL);
+    console.log('[API] /subscriptions/portal:authorized', { requestId, appUrlDefined: Boolean(process.env.NEXT_PUBLIC_APP_URL) });
 
     // Get customer portal URL
     const portalUrl = await getCustomerPortalUrl(user.id);
     
     if (!portalUrl) {
-      console.error('❌ Failed to create portal session for user:', user.id);
+      console.error('[API] /subscriptions/portal:failed', { requestId, userId: user.id });
       return NextResponse.json({ 
         error: 'Failed to create portal session. Please ensure you have an active subscription.' 
       }, { status: 500 });
     }
 
-    console.log('✅ Portal session created successfully:', portalUrl);
+    console.log('[API] /subscriptions/portal:success', { requestId, hasUrl: Boolean(portalUrl) });
 
     return NextResponse.json({
       success: true,
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Error creating customer portal session:', error);
+    console.error('[API] /subscriptions/portal:error', { message: (error as any)?.message || String(error), raw: error });
     return NextResponse.json(
       { error: 'Failed to create customer portal session' },
       { status: 500 }

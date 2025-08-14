@@ -97,8 +97,10 @@ export function SubscriptionUpgradeModal({
             });
 
             const result = await response.json();
+            console.log('[Client] 📋 Subscription upgrade result:', result);
 
             if (!response.ok) {
+                console.log('response is not okay', response);
                 throw new Error(result.error || 'Upgrade failed');
             }
 

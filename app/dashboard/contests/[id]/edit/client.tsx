@@ -150,6 +150,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const [resourceFilePreview, setResourceFilePreview] = useState<string | null>(null);
     const [resourceDescription, setResourceDescription] = useState("");
     const [externalResourceDescription, setExternalResourceDescription] = useState("");
+    const [newExternalResourceUrl, setNewExternalResourceUrl] = useState("");
     const resourceFileRef = useRef<HTMLInputElement>(null);
     const [resourceSuccess, setResourceSuccess] = useState<string | null>(null);
     const [resourceError, setResourceError] = useState<string | null>(null);
@@ -584,6 +585,90 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         return `${year}-${month}-${day}`;
     };
 
+    // Get minimum allowed end time based on start date/time
+    const getMinEndTime = () => {
+        if (!startDate || !startTime || !endDate) return "00:00";
+
+        const startDateObj = new Date(`${startDate}T${startTime}`);
+        const endDateObj = new Date(`${endDate}T00:00:00`);
+        const minEndDate = new Date(startDateObj);
+        minEndDate.setDate(minEndDate.getDate() + MIN_CONTEST_DURATION_DAYS);
+
+        // If end date is exactly minimum duration days after start date, minimum end time should be same as start time
+        if (endDateObj.toDateString() === minEndDate.toDateString()) {
+            return startTime;
+        }
+
+        // If end date is more than minimum duration days after start date, any time is valid
+        return "00:00";
+    };
+
+    // Calculate and format contest duration (for user-friendly info)
+    const getContestDuration = () => {
+        if (!startDate || !startTime || !endDate || !endTime) return null;
+
+        const startDateTime = new Date(`${startDate}T${startTime}`);
+        const endDateTime = new Date(`${endDate}T${endTime}`);
+        const now = new Date();
+
+        if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) return null;
+
+        // Calculate time until start
+        const msUntilStart = startDateTime.getTime() - now.getTime();
+        const daysUntilStart = Math.floor(msUntilStart / (1000 * 60 * 60 * 24));
+        const hoursUntilStart = Math.floor((msUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+        // Calculate contest duration
+        const msDuration = endDateTime.getTime() - startDateTime.getTime();
+        const durationDays = Math.floor(msDuration / (1000 * 60 * 60 * 24));
+        const durationHours = Math.floor((msDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+        let startMessage = "";
+        if (daysUntilStart > 0) {
+            startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""}`;
+            if (hoursUntilStart > 0) startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""}`;
+        } else if (hoursUntilStart > 0) {
+            startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""}`;
+        } else {
+            startMessage = "Your contest will be live soon";
+        }
+
+        const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""}${durationHours > 0 ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}` : ""}`;
+
+        return `${startMessage} ${durationMessage}`;
+    };
+
+    // Format helper: "August 2nd" based on user timezone
+    const formatDateWithOrdinal = (date: Date) => {
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const day = date.getDate();
+        const j = day % 10, k = day % 100;
+        let suffix = "th";
+        if (j === 1 && k !== 11) suffix = "st";
+        else if (j === 2 && k !== 12) suffix = "nd";
+        else if (j === 3 && k !== 13) suffix = "rd";
+        return `${months[date.getMonth()]} ${day}${suffix}`;
+    };
+
+    // Build dynamic example text for start date rule using local timezone
+    const getStartDateRuleExample = () => {
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const minStartDate = new Date(startOfToday);
+        minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+
+        const disallowed: string[] = [];
+        for (let i = 0; i < MIN_DAYS_UNTIL_START; i++) {
+            const d = new Date(startOfToday);
+            d.setDate(startOfToday.getDate() + i);
+            disallowed.push(formatDateWithOrdinal(d));
+        }
+        const disallowedText = disallowed.length === 1
+            ? disallowed[0]
+            : disallowed.slice(0, -1).join(", ") + " and " + disallowed[disallowed.length - 1];
+
+        return `For example, if today is ${formatDateWithOrdinal(startOfToday)}, you can create contests starting from ${formatDateWithOrdinal(minStartDate)} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"} not allowed.`;
+    };
     // Get minimum allowed end date (at least 3 days after the start date)
     const getMinEndDate = () => {
         if (!startDate) return getMinDateTime();
@@ -1129,20 +1214,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         setInspirationError(null);
         if (!newInspirationUrl.trim()) {
             setInspirationError("URL cannot be empty.");
+            toast({ title: "Invalid Link", description: "URL cannot be empty.", variant: "destructive" });
             return;
         }
         try {
             const urlObj = new URL(newInspirationUrl);
             if (urlObj.protocol !== "https:") {
                 setInspirationError("URL must start with https://");
+                toast({ title: "Invalid Link", description: "URL must start with https://", variant: "destructive" });
                 return;
             }
         } catch {
             setInspirationError("Invalid URL format.");
+            toast({ title: "Invalid Link", description: "Invalid URL format.", variant: "destructive" });
             return;
         }
         if (!newInspirationDescription.trim()) {
             setInspirationError("Description is required.");
+            toast({ title: "Missing Description", description: "Description is required.", variant: "destructive" });
             return;
         }
         // Duplicate check: same URL and description
@@ -1168,10 +1257,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         setInspirationLinks([...inspirationLinks, { url: newInspirationUrl, description: newInspirationDescription }]);
         setNewInspirationUrl("");
         setNewInspirationDescription("");
+        toast({ title: "Success", description: "Inspiration link added!" });
+
     };
 
-    const removeInspirationLink = (link: { url: string; description: string }) => {
-        setInspirationLinks(inspirationLinks.filter(l => l !== link))
+    const removeInspirationLink = (index: number) => {
+        setInspirationLinks(inspirationLinks.filter((_, i) => i !== index));
+        toast({ title: "Success", description: "Inspiration link removed!" });
     }
 
     // Resource Management Handlers
@@ -1214,20 +1306,24 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
         setResourceSuccess(null);
         if (!resourceFile) {
             setAssetUploadError("No file selected or file is too large.");
+            toast({ title: "Upload Error", description: "No file selected or file is too large.", variant: "destructive" });
             return;
         }
         if (!resourceDescription.trim()) {
             setAssetUploadError("Please provide a description for the asset.");
+            toast({ title: "Missing Description", description: "Please provide a description for the asset.", variant: "destructive" });
             return;
         }
         const maxSize = 20 * 1024 * 1024; // 20MB
         if (resourceFile.size > maxSize) {
             setAssetUploadError("File must be 20MB or smaller. Please choose a smaller file.");
+            toast({ title: "File Too Large", description: "File must be 20MB or smaller. Please choose a smaller file.", variant: "destructive" });
             return;
         }
         const resourceName = resourceDescription.trim();
         if (resources.some(r => r.description === resourceName)) {
             setAssetUploadError(`A resource with the description \"${resourceName}\" already exists. Please use a unique description.`);
+            toast({ title: "Duplicate Description", description: `A resource with the description \"${resourceName}\" already exists. Please use a unique description.`, variant: "destructive" });
             return;
         }
         try {
@@ -1269,6 +1365,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             setResources(newResources);
             await updateContestResourcesInDB(newResources);
             setResourceSuccess(`Asset \"${resourceName}\" uploaded successfully!`);
+            toast({ title: "Success", description: "Asset uploaded successfully!" });
             removeResourceFile();
             setAssetUploadError(null);
         } catch (error: any) {
@@ -1286,13 +1383,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
     const addExternalResource = async () => {
         setResourceError(null);
         setResourceSuccess(null);
+        if (!newExternalResourceUrl.trim()) {
+            setResourceError("Please enter a valid external link URL.");
+            toast({ title: "Invalid Link", description: "External link URL cannot be empty.", variant: "destructive" });
+            return;
+        }
         if (!externalResourceDescription.trim()) {
             setResourceError("Please provide a description for the external resource.");
+            toast({ title: "Missing Description", description: "Please provide a description for the external resource.", variant: "destructive" });
             return;
         }
         const resourceName = externalResourceDescription.trim();
         // Check if both URL and description are the same as an existing external link (most specific)
-        if (resources.some(r => r.type === "external" && r.url === newInspirationUrl && r.description === resourceName)) {
+        if (resources.some(r => r.type === "external" && r.url === newExternalResourceUrl && r.description === resourceName)) {
             setResourceError("This external link and description have already been added. Please use a different link or description.");
             toast({
                 title: "Duplicate Link & Description",
@@ -1302,7 +1405,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             return;
         }
         // Check if external link with same URL already exists
-        if (resources.some(r => r.type === "external" && r.url === newInspirationUrl)) {
+        if (resources.some(r => r.type === "external" && r.url === newExternalResourceUrl)) {
             setResourceError("This external link has already been added. Please use a different link.");
             toast({
                 title: "Duplicate Link",
@@ -1312,32 +1415,36 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
             return;
         }
         try {
-            const urlObj = new URL(newInspirationUrl);
+            const urlObj = new URL(newExternalResourceUrl);
             if (urlObj.protocol !== "https:") {
                 setResourceError("URL must start with https://");
+                toast({ title: "Invalid Link", description: "URL must start with https://", variant: "destructive" });
                 return;
             }
         } catch (_) {
             setResourceError("Invalid URL format.");
+            toast({ title: "Invalid Link", description: "Invalid URL format.", variant: "destructive" });
             return;
         }
         const newResources: ResourceItem[] = [...resources, {
-            url: newInspirationUrl,
+            url: newExternalResourceUrl,
             description: resourceName,
             type: "external"
         }];
         setResources(newResources);
         await updateContestResourcesInDB(newResources);
         setResourceSuccess(`External resource \"${resourceName}\" added successfully!`);
-        setNewInspirationUrl("");
+        toast({ title: "Success", description: "External resource added!" });
+        setNewExternalResourceUrl("");
         setExternalResourceDescription("");
     };
 
-    const removeResource = async (description: string) => {
+    const removeResource = async (index: number) => {
         setResourceError(null);
         setResourceSuccess(null);
-        const resourceToRemove = resources.find(r => r.description === description);
+        const resourceToRemove = resources[index];
         if (!resourceToRemove) return;
+
         try {
             // If it's an internal resource with a Supabase URL, delete it from storage
             if (resourceToRemove.type === "internal" && resourceToRemove.url.includes('supabase.co/storage')) {
@@ -1351,14 +1458,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         .from('contest-assets')
                         .remove([filePath]);
                 }
-                setResourceSuccess(`Resource "${description}" deleted successfully!`);
+                setResourceSuccess(`Resource "${resourceToRemove.description}" deleted successfully!`);
+                toast({ title: "Success", description: "Resource deleted successfully!" });
+            } else {
+                // For external resources, show success message
+                toast({ title: "Success", description: "External link removed successfully!" });
             }
         } catch (error: any) {
             console.error("Error deleting resource from storage:", error);
             setResourceSuccess(`Resource removed from list but may not have been deleted from storage.`);
+            toast({ title: "Warning", description: "Resource removed from list but may not have been deleted from storage.", variant: "destructive" });
         } finally {
             // Always remove from UI regardless of storage deletion success
-            const newResources = resources.filter(r => r.description !== description);
+            const newResources = resources.filter((_, i) => i !== index);
             setResources(newResources);
             await updateContestResourcesInDB(newResources);
         }
@@ -2986,10 +3098,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                 {/* External Link Input */}
                                 <div className="border rounded-lg p-6 bg-gray-50 dark:bg-gray-900">
                                     <Label htmlFor="resourceLinkUrl">External Link</Label>
-                                    <Input id="resourceLinkUrl" type="url" placeholder="https://example.com/resource" value={newInspirationUrl} onChange={e => setNewInspirationUrl(e.target.value)} className="mb-2" />
+                                    <Input id="resourceLinkUrl" type="url" placeholder="https://example.com/resource" value={newExternalResourceUrl} onChange={e => setNewExternalResourceUrl(e.target.value)} className="mb-2" />
                                     <Label htmlFor="resourceLinkDescription">Description <span className="text-red-500">*</span></Label>
                                     <Input id="resourceLinkDescription" placeholder="Describe this link" value={externalResourceDescription} onChange={e => setExternalResourceDescription(e.target.value)} className="mb-2" />
-                                    <Button type="button" onClick={addExternalResource} disabled={!newInspirationUrl || !externalResourceDescription} className="w-full">Add Link</Button>
+                                    <Button type="button" onClick={addExternalResource} disabled={!newExternalResourceUrl || !externalResourceDescription} className="w-full">Add Link</Button>
                                     {externalLinkError && <div className="text-red-500 text-sm mt-1">{externalLinkError}</div>}
                                 </div>
                                 {/* Resource List */}
@@ -3110,7 +3222,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <Button variant="ghost" size="sm" onClick={() => removeResource(resource.description)} className="text-red-500"><Trash className="h-4 w-4" /></Button>
+                                                    <Button variant="ghost" size="sm" onClick={() => removeResource(idx)} className="text-red-500"><Trash className="h-4 w-4" /></Button>
                                                 </li>
                                             );
                                         })}
@@ -3148,7 +3260,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                                     <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline break-all">{item.url}</a>
                                                     <div className="text-xs text-gray-500 mt-1">{item.description}</div>
                                                 </div>
-                                                <Button variant="ghost" size="sm" onClick={() => setInspirationLinks(inspirationLinks.filter((_, i) => i !== index))} className="text-red-500"><Trash className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="sm" onClick={() => removeInspirationLink(index)} className="text-red-500"><Trash className="h-4 w-4" /></Button>
                                             </li>
                                         ))}
                                     </ul>
@@ -3215,13 +3327,21 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                                     type="time"
                                     value={endTime}
                                     onChange={(e) => setEndTime(e.target.value)}
+                                    min={endDate === getMinEndDate() ? getMinEndTime() : undefined}
                                     className="w-full"
                                 />
                             </div>
                         </div>
 
+                        {getContestDuration() && (
+                            <Alert className="mt-2 bg-green-50 border-green-200 text-green-700">
+                                <AlertDescription>{getContestDuration()}</AlertDescription>
+                            </Alert>
+                        )}
                         <p className="text-sm text-gray-500 mt-1">
-                            Contest duration must be at least 24 hours (minimum 1 day).
+                            <strong>Start Date Rule:</strong> Contest must start at least {MIN_DAYS_UNTIL_START} days from today. {getStartDateRuleExample()}
+                            <br />
+                            <strong>Duration:</strong> Contest must run between {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days. The end date will automatically adjust to maintain minimum duration.
                         </p>
                     </div>
 

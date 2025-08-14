@@ -4,8 +4,10 @@ import { createSubscriptionCheckoutSession, getSubscriptionPlanById } from '@/li
 
 export async function POST(request: NextRequest) {
   try {
+
+
     const supabase = await createClient();
-    
+
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -27,6 +29,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { productId, priceId, upgradeType = 'immediate', scheduledDate, trialDays } = body;
 
+
     // Validate required fields
     if (!productId || !priceId) {
       return NextResponse.json({ error: 'Product ID and Price ID are required' }, { status: 400 });
@@ -35,6 +38,7 @@ export async function POST(request: NextRequest) {
     // Validate plan exists
     const plan = getSubscriptionPlanById(productId);
     if (!plan) {
+
       return NextResponse.json({ error: 'Invalid product ID' }, { status: 400 });
     }
 
@@ -56,6 +60,7 @@ export async function POST(request: NextRequest) {
         console.error('Error updating free plan subscription:', updateError);
         return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 });
       }
+
 
       return NextResponse.json({
         success: true,
@@ -85,8 +90,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!checkoutSession) {
+
       return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
     }
+
 
     return NextResponse.json({
       success: true,
@@ -97,9 +104,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error creating subscription:', error);
+
+
+
     return NextResponse.json(
       { error: 'Failed to create subscription' },
       { status: 500 }
     );
   }
-} 
+}

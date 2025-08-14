@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🔧 STARTING NEGATIVE BALANCE RECOVERY');
+    console.log('🔧 STARTING NEGATIVE BALANCE RECOVERY ..');
 
     // Get current advertiser profile
     const { data: advertiser, error: advertiserError } = await supabase

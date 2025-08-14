@@ -22,10 +22,24 @@ function createServiceRoleClient() {
 
 const endpointSecret = process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
 
+
+
+
+
+
+
+
+
+
+
+
+
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const headersList = await headers();
   const sig = headersList.get('stripe-signature');
+
+
 
   if (!sig) {
     console.error('No Stripe signature found');
@@ -99,7 +113,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error(`❌ Error processing subscription webhook ${event.type}:`, error);
     console.error('📝 Event data:', JSON.stringify(event.data.object, null, 2));
-    
+
+
+
     // Log error but still return 200 to prevent retries
     // Add error to internal logging system if available
     try {
@@ -131,9 +147,9 @@ export async function POST(request: NextRequest) {
 async function handleCheckoutSessionCompleted(session: any) {
   console.log('✅ Checkout session completed:', session.id);
   console.log('📋 Session metadata:', session.metadata);
-  
+
   const { user_id, product_id } = session.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in checkout session:', { user_id, product_id });
     return;
@@ -145,9 +161,9 @@ async function handleCheckoutSessionCompleted(session: any) {
     try {
       const subscription = await stripe().subscriptions.retrieve(session.subscription);
       console.log(`📊 Retrieved subscription status: ${subscription.status}`);
-      
+
       await createSubscriptionInDatabase(subscription, user_id, product_id);
-      
+
       // 🆕 AUTO-SET DEFAULT PAYMENT METHOD FOR NEW SUBSCRIPTIONS
       // Set the payment method used in checkout as default for the customer
       console.log('🔍 Session details for payment method setting:', {
@@ -172,7 +188,7 @@ async function handleCheckoutSessionCompleted(session: any) {
               payment_method_type: typeof paymentIntent.payment_method,
               status: paymentIntent.status
             });
-            
+
                     const paymentMethod = paymentIntent.payment_method;
         paymentMethodId = typeof paymentMethod === 'string' 
           ? paymentMethod 
@@ -180,7 +196,7 @@ async function handleCheckoutSessionCompleted(session: any) {
             ? paymentMethod.id 
             : null;
           }
-          
+
           // If no payment method from payment intent, try to get it from the subscription (for subscription mode)
           if (!paymentMethodId && session.subscription) {
             console.log('📋 No payment intent, trying to get payment method from subscription...');
@@ -190,12 +206,12 @@ async function handleCheckoutSessionCompleted(session: any) {
               default_payment_method: subscription.default_payment_method,
               status: subscription.status
             });
-            
+
             paymentMethodId = subscription.default_payment_method ? String(subscription.default_payment_method) : null;
           }
-          
+
           console.log(`🔑 Extracted Payment Method ID: ${paymentMethodId}`);
-          
+
           if (paymentMethodId) {
             console.log(`🚀 Calling ensureDefaultPaymentMethod with customer: ${session.customer}, paymentMethod: ${paymentMethodId}`);
             const result = await ensureDefaultPaymentMethod(session.customer, paymentMethodId);
@@ -229,12 +245,12 @@ async function handleSubscriptionCreated(subscription: any) {
   console.log('🆕 Subscription created:', subscription.id);
   console.log(`📊 Subscription status: ${subscription.status}`);
   console.log('📋 Subscription metadata:', subscription.metadata);
-  
+
   const { user_id, product_id, upgrade_type, old_subscription_id } = subscription.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in subscription:', { user_id, product_id });
-    
+
     // Try to get user_id from customer metadata
     if (subscription.customer && typeof subscription.customer === 'string') {
       try {
@@ -248,7 +264,7 @@ async function handleSubscriptionCreated(subscription: any) {
         console.error('❌ Error retrieving customer metadata:', error);
       }
     }
-    
+
     console.error('❌ Cannot process subscription without user_id');
     return;
   }
@@ -261,12 +277,12 @@ async function handleSubscriptionCreated(subscription: any) {
 async function handleSubscriptionUpdated(subscription: any) {
   console.log('🔄 Subscription updated:', subscription.id);
   console.log(`📊 New status: ${subscription.status}`);
-  
+
   const { user_id, product_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription metadata');
-    
+
     // Try to get user_id from customer metadata as fallback
     if (subscription.customer && typeof subscription.customer === 'string') {
       try {
@@ -281,14 +297,14 @@ async function handleSubscriptionUpdated(subscription: any) {
         console.error('❌ Error retrieving customer metadata:', error);
       }
     }
-    
+
     console.error('❌ Cannot process subscription update without user_id');
     return;
   }
 
   // Get the product ID from the subscription items if not in metadata
   const actualProductId = await getProductIdFromSubscription(subscription, product_id);
-  
+
   if (actualProductId) {
     await updateSubscriptionInDatabaseCorrect(subscription, user_id, actualProductId);
   } else {
@@ -298,9 +314,9 @@ async function handleSubscriptionUpdated(subscription: any) {
 
 async function handleSubscriptionDeleted(subscription: any) {
   console.log('❌ Subscription deleted:', subscription.id);
-  
+
   const { user_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription metadata');
     return;
@@ -312,9 +328,9 @@ async function handleSubscriptionDeleted(subscription: any) {
 async function handleSubscriptionScheduleCreated(schedule: any) {
   console.log('📅 Subscription schedule created:', schedule.id);
   console.log('📋 Schedule metadata:', schedule.metadata);
-  
+
   const { user_id, product_id, scheduled_change_type } = schedule.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in subscription schedule:', { user_id, product_id });
     return;
@@ -327,23 +343,23 @@ async function handleSubscriptionScheduleCreated(schedule: any) {
 async function handleSubscriptionScheduleReleased(schedule: any) {
   console.log('✅ Subscription schedule released (new subscription created):', schedule.id);
   console.log('📋 Released schedule metadata:', schedule.metadata);
-  
+
   const { user_id, product_id, scheduled_change_type } = schedule.metadata || {};
-  
+
   if (!user_id || !product_id) {
     console.error('❌ Missing metadata in released subscription schedule:', { user_id, product_id });
     return;
   }
 
   console.log(`✅ Scheduled ${scheduled_change_type || 'change'} activated for user: ${user_id}, product: ${product_id}`);
-  
+
   // When a schedule is released, it creates a new subscription
   // The new subscription will be handled by the normal subscription.created webhook
   // We just need to update our advertiser_profiles to reflect the new subscription
-  
+
   try {
     const supabase = createServiceRoleClient();
-    
+
     // Get the subscription that was created from this schedule
     if (schedule.subscription) {
       const subscription = await stripe().subscriptions.retrieve(schedule.subscription);
@@ -357,9 +373,9 @@ async function handleSubscriptionScheduleReleased(schedule: any) {
 async function handleSubscriptionScheduleCanceled(schedule: any) {
   console.log('❌ Subscription schedule canceled:', schedule.id);
   console.log('📋 Canceled schedule metadata:', schedule.metadata);
-  
+
   const { user_id, scheduled_change_type } = schedule.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in canceled subscription schedule:', user_id);
     return;
@@ -372,14 +388,14 @@ async function handleSubscriptionScheduleCanceled(schedule: any) {
 async function handleInvoicePaymentSucceeded(invoice: any) {
   console.log('💰 Invoice payment succeeded:', invoice.id);
   console.log("Invoice", invoice);
-  
+
   // Handle new Stripe invoice structure where subscription is nested
   let subscriptionId = invoice.subscription;
   if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
     subscriptionId = invoice.parent.subscription_details.subscription;
     console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
   }
-  
+
   if (!subscriptionId) {
     console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
@@ -387,7 +403,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription for invoice');
     return;
@@ -427,7 +443,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
           payment_method_type: typeof paymentIntent.payment_method,
           status: paymentIntent.status
         });
-        
+
         const paymentMethod = paymentIntent.payment_method;
         paymentMethodId = typeof paymentMethod === 'string' 
           ? paymentMethod 
@@ -435,7 +451,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
             ? paymentMethod.id 
             : null;
       }
-      
+
       // If no payment method from payment intent, try to get it from the subscription (for subscription mode)
       if (!paymentMethodId && invoice.subscription) {
         console.log('📋 No payment intent, trying to get payment method from subscription...');
@@ -445,12 +461,12 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
           default_payment_method: subscription.default_payment_method,
           status: subscription.status
         });
-        
+
         paymentMethodId = subscription.default_payment_method ? String(subscription.default_payment_method) : null;
       }
-      
+
       console.log(`🔑 Invoice Extracted Payment Method ID: ${paymentMethodId}`);
-      
+
       if (paymentMethodId) {
         console.log(`🚀 Calling ensureDefaultPaymentMethod for invoice with customer: ${invoice.customer}, paymentMethod: ${paymentMethodId}`);
         const result = await ensureDefaultPaymentMethod(invoice.customer, paymentMethodId);
@@ -478,14 +494,14 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
 
 async function handleInvoicePaymentFailed(invoice: any) {
   console.log('❌ Invoice payment failed:', invoice.id);
-  
+
   // Handle new Stripe invoice structure where subscription is nested
   let subscriptionId = invoice.subscription;
   if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
     subscriptionId = invoice.parent.subscription_details.subscription;
     console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
   }
-  
+
   if (!subscriptionId) {
     console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
@@ -493,7 +509,7 @@ async function handleInvoicePaymentFailed(invoice: any) {
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription for failed invoice');
     return;
@@ -512,14 +528,14 @@ async function handleInvoicePaymentFailed(invoice: any) {
 
 async function handleInvoiceRefunded(invoice: any) {
   console.log('💰 Invoice refunded:', invoice.id);
-  
+
   // Handle new Stripe invoice structure where subscription is nested
   let subscriptionId = invoice.subscription;
   if (!subscriptionId && invoice.parent?.subscription_details?.subscription) {
     subscriptionId = invoice.parent.subscription_details.subscription;
     console.log(`📋 Found subscription ID in parent.subscription_details: ${subscriptionId}`);
   }
-  
+
   if (!subscriptionId) {
     console.log('⚠️ No subscription found in invoice - this may be a standalone invoice payment');
     return; // Not a subscription invoice
@@ -527,7 +543,7 @@ async function handleInvoiceRefunded(invoice: any) {
 
   const subscription = await stripe().subscriptions.retrieve(subscriptionId);
   const { user_id, product_id } = subscription.metadata || {};
-  
+
   if (!user_id) {
     console.error('❌ Missing user_id in subscription for refunded invoice');
     return;
@@ -544,7 +560,7 @@ async function getProductIdFromSubscription(subscription: any, fallbackProductId
   if (fallbackProductId) {
     return fallbackProductId;
   }
-  
+
   if (subscription.items?.data?.length > 0) {
     const priceId = subscription.items.data[0].price.id;
     try {
@@ -554,16 +570,16 @@ async function getProductIdFromSubscription(subscription: any, fallbackProductId
       console.error('❌ Error retrieving product from price:', error);
     }
   }
-  
+
   return 'unknown';
 }
 
 async function createSubscriptionInDatabase(subscription: any, userId: string, productId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`Creating subscription in database for user ${userId}: ${subscription.id}`);
-    
+
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined, useCurrentTimeAsFallback: boolean = false): string | null => {
       if (!timestamp || timestamp <= 0) {
@@ -607,16 +623,16 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
       console.error('❌ Error fetching active subscriptions:', activeError);
     } else if (activeSubscriptions && activeSubscriptions.length > 0) {
       console.log(`🔄 Found ${activeSubscriptions.length} active subscriptions for user ${userId}, canceling them...`);
-      
+
       // Detect if this is a downgrade by comparing prices
       const newPriceId = subscription.items.data[0].price.id;
       const oldPriceId = activeSubscriptions[0]?.price_id;
       console.log(`💰 Price change: ${oldPriceId} → ${newPriceId}`);
-      
+
       for (const activeSub of activeSubscriptions) {
         if (activeSub.id !== subscription.id) {
           console.log(`🔄 Canceling old subscription: ${activeSub.id}`);
-          
+
           // Cancel in Stripe first - be more aggressive for downgrades
           try {
             await stripe().subscriptions.cancel(activeSub.id, {
@@ -626,7 +642,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
             console.log(`✅ Successfully cancelled old Stripe subscription: ${activeSub.id}`);
           } catch (stripeError) {
             console.error(`❌ Error canceling old subscription ${activeSub.id} in Stripe:`, stripeError);
-            
+
             // For downgrades, try to force cancel even if it fails
             try {
               await stripe().subscriptions.update(activeSub.id, {
@@ -718,7 +734,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     await updateAdvertiserProfilePlan(userId, stripePriceId, subscription.id);
 
     console.log(`✅ Created new subscription: ${subscription.id} for user ${userId}`);
-    
+
     // Double-check: Ensure advertiser profile was updated correctly
     try {
       const supabase = createServiceRoleClient();
@@ -727,7 +743,7 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
         .select('subscription_info')
         .eq('id', userId)
         .single();
-        
+
       if (finalError) {
         console.error('❌ Error checking final advertiser profile state:', finalError);
       } else {
@@ -736,9 +752,9 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
     } catch (verifyError) {
       console.error('❌ Error verifying final profile state:', verifyError);
     }
-    
+
     // No need to handle oldSubscriptionId from metadata anymore - we handle all active subscriptions above
-    
+
   } catch (error) {
     console.error('❌ Error in createSubscriptionInDatabase:', error);
   }
@@ -747,23 +763,23 @@ async function createSubscriptionInDatabase(subscription: any, userId: string, p
 // Helper function to update advertiser profile with correct subscription info (JSONB)
 async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string, subscriptionId?: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`📋 Getting active subscription info for user: ${userId}`);
-    
+
     // Get current subscription info for comparison
     const { data: currentProfile, error: currentError } = await supabase
       .from('advertiser_profiles')
       .select('subscription_info')
       .eq('id', userId)
       .single();
-    
+
     if (currentError) {
       console.error('❌ Error fetching current advertiser profile:', currentError);
     } else {
       console.log(`📊 Current subscription_info:`, currentProfile?.subscription_info);
     }
-    
+
     // SIMPLIFIED APPROACH: Get subscription details directly from subscriptions table
     // This is much more reliable than looking up via prices table
     const { data: activeSubscription, error: subError } = await supabase
@@ -774,14 +790,14 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       .order('created', { ascending: false })
       .limit(1)
       .single();
-    
+
     if (subError || !activeSubscription) {
       console.error(`❌ Could not find active subscription for user ${userId}:`, subError);
       return;
     }
-    
+
     console.log(`✅ Found active subscription: ${activeSubscription.id} - Price: ${activeSubscription.price_id}`);
-    
+
     // Get product info from prices table for display purposes
     const { data: priceData, error: priceError } = await supabase
       .from('prices')
@@ -793,9 +809,9 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       `)
       .eq('id', activeSubscription.price_id)
       .single();
-    
+
     let productId, productName, priceAmount;
-    
+
     if (priceError || !priceData || !priceData.products) {
       console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using subscription data`);
       // Fallback to subscription data
@@ -808,12 +824,12 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       priceAmount = priceData.unit_amount;
       console.log(`✅ Found product: ${productId} (${productName}) - Amount: ${priceAmount} cents`);
     }
-    
+
     // Determine if this is a downgrade by comparing amounts
     const currentAmount = currentProfile?.subscription_info?.price_amount || 0;
     const isDowngrade = priceAmount < currentAmount;
     console.log(`💰 Price comparison: ${currentAmount} → ${priceAmount} (${isDowngrade ? 'DOWNGRADE' : 'UPGRADE/SAME'})`);
-    
+
     // Update subscription_info JSONB field with correct structure using subscription table data
     const newSubscriptionInfo = {
       product_id: productId,
@@ -826,11 +842,11 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
       cancel_at_period_end: activeSubscription.cancel_at_period_end,
       last_synced: new Date().toISOString()
     };
-    
+
     console.log(`📝 New subscription_info from subscription table:`, newSubscriptionInfo);
-    
+
     await updateAdvertiserProfileWithSubscriptionInfo(userId, newSubscriptionInfo);
-    
+
   } catch (error) {
     console.error('❌ Error updating advertiser profile plan:', error);
   }
@@ -838,33 +854,33 @@ async function updateAdvertiserProfilePlan(userId: string, stripePriceId: string
 
 async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subscriptionInfo: any) {
   const supabase = createServiceRoleClient();
-  
+
   console.log(`📝 Updating advertiser profile with subscription_info:`, subscriptionInfo);
   console.log(`👤 User ID: ${userId}`);
-  
+
   // First check if the advertiser profile exists
   const { data: existingProfile, error: checkError } = await supabase
     .from('advertiser_profiles')
     .select('id, subscription_info')
     .eq('id', userId)
     .single();
-    
+
   if (checkError) {
     console.error('❌ Error checking advertiser profile existence:', checkError);
     return;
   }
-  
+
   if (!existingProfile) {
     console.error('❌ Advertiser profile not found for user:', userId);
     return;
   }
-  
+
   console.log(`📊 Current profile subscription_info:`, existingProfile.subscription_info);
-  
+
   // Force update with retry logic
   let retryCount = 0;
   const maxRetries = 3;
-  
+
   while (retryCount < maxRetries) {
     const { error: profileError } = await supabase
       .from('advertiser_profiles')
@@ -874,31 +890,31 @@ async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subsc
     if (profileError) {
       retryCount++;
       console.error(`❌ Error updating advertiser profile subscription_info (attempt ${retryCount}):`, profileError);
-      
+
       if (retryCount < maxRetries) {
         console.log(`🔄 Retrying in 1 second...`);
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } else {
       console.log(`✅ Updated advertiser profile subscription_info successfully:`, subscriptionInfo);
-      
+
       // Verify the update
       const { data: verifyData, error: verifyError } = await supabase
         .from('advertiser_profiles')
         .select('subscription_info')
         .eq('id', userId)
         .single();
-        
+
       if (verifyError) {
         console.error('❌ Error verifying update:', verifyError);
       } else {
         console.log(`✅ Verified updated subscription_info:`, verifyData.subscription_info);
       }
-      
+
       break;
     }
   }
-  
+
   if (retryCount >= maxRetries) {
     console.error(`❌ Failed to update advertiser profile after ${maxRetries} attempts`);
   }
@@ -907,10 +923,10 @@ async function updateAdvertiserProfileWithSubscriptionInfo(userId: string, subsc
 // Update advertiser profile with current active subscription data from database
 async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`🔄 Getting current active subscription for user ${userId} to update profile`);
-    
+
     // Get current active subscription from database
     const { data: activeSubscription, error: subError } = await supabase
       .from('subscriptions')
@@ -920,14 +936,14 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       .order('created', { ascending: false })
       .limit(1)
       .single();
-    
+
     if (subError || !activeSubscription) {
       console.error(`❌ Could not find active subscription for user ${userId}:`, subError);
       return;
     }
-    
+
     console.log(`✅ Found current active subscription: ${activeSubscription.id}`);
-    
+
     // Get product info from prices table
     const { data: priceData, error: priceError } = await supabase
       .from('prices')
@@ -939,9 +955,9 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       `)
       .eq('id', activeSubscription.price_id)
       .single();
-    
+
     let productId, priceAmount;
-    
+
     if (priceError || !priceData || !priceData.products) {
       console.warn(`⚠️ Could not find product details for price ID ${activeSubscription.price_id}, using fallback`);
       productId = 'unknown';
@@ -950,7 +966,7 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       productId = priceData.product_id;
       priceAmount = priceData.unit_amount;
     }
-    
+
     // Update subscription_info with current active subscription data
     const currentSubscriptionInfo = {
       product_id: productId,
@@ -963,11 +979,11 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
       cancel_at_period_end: activeSubscription.cancel_at_period_end,
       last_synced: new Date().toISOString()
     };
-    
+
     console.log(`📝 Updating profile with current subscription info:`, currentSubscriptionInfo);
-    
+
     await updateAdvertiserProfileWithSubscriptionInfo(userId, currentSubscriptionInfo);
-    
+
   } catch (error) {
     console.error('❌ Error updating advertiser profile with current subscription:', error);
   }
@@ -976,10 +992,10 @@ async function updateAdvertiserProfileWithCurrentSubscription(userId: string) {
 // Update subscription using correct schema
 async function updateSubscriptionInDatabaseCorrect(subscription: any, userId: string, productId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`Updating subscription in database for user ${userId}: ${subscription.id}`);
-    
+
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined, useCurrentTimeAsFallback: boolean = false): string | null => {
       if (!timestamp || timestamp <= 0) {
@@ -1048,10 +1064,10 @@ async function updateSubscriptionInDatabaseCorrect(subscription: any, userId: st
 // Cancel subscription using correct schema
 async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`Canceling subscription in database for user ${userId}: ${subscription.id}`);
-    
+
     // Helper function to safely convert Stripe timestamp to ISO string
     const safeTimestamp = (timestamp: number | null | undefined): string | null => {
       if (!timestamp || timestamp <= 0) return null;
@@ -1096,13 +1112,13 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
     if (otherActiveSubscriptions && otherActiveSubscriptions.length > 0) {
       console.log(`✅ User has ${otherActiveSubscriptions.length} other active subscriptions, NOT setting to free plan`);
       console.log(`🔄 Other active subscriptions:`, otherActiveSubscriptions.map(s => s.id));
-      
+
       // Update profile with current active subscription data instead of leaving it unchanged
       console.log(`🔄 Updating profile with current active subscription data`);
       await updateAdvertiserProfileWithCurrentSubscription(userId);
     } else {
       console.log(`🆓 No other active subscriptions found, setting user to free plan`);
-      
+
       // Only set to free plan if no other active subscriptions exist
       const freeSubscriptionInfo = {
         product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free plan)
@@ -1120,7 +1136,7 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
         console.error('❌ Error updating advertiser profile to free plan:', profileError);
         return;
       }
-      
+
       console.log(`✅ Updated advertiser profile to free plan`);
     }
 
@@ -1133,10 +1149,10 @@ async function cancelSubscriptionInDatabase(subscription: any, userId: string) {
 // Log subscription payment to money_transactions table
 async function logSubscriptionPaymentToTransactions(invoice: any, subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`💰 Logging subscription payment to money_transactions for user ${userId}`);
-    
+
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;
     const { data: priceData, error: priceError } = await supabase
@@ -1148,18 +1164,18 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       `)
       .eq('id', priceId)
       .single();
-    
+
     let productName = 'Unknown Subscription';
     let productDescription = 'Subscription payment';
-    
+
     if (!priceError && priceData && priceData.products) {
       productName = (priceData.products as any).name;
       productDescription = (priceData.products as any).description || `Subscription payment for ${productName}`;
     }
-    
+
     // Calculate amount in cents (Stripe stores amounts in cents)
     const amountInCents = invoice.amount_paid || 0;
-    
+
     // Create comprehensive metadata for subscription payment
     const metadata = {
       stripe_invoice_id: invoice.id,
@@ -1187,19 +1203,19 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       status_transitions: invoice.status_transitions,
       created_at: new Date().toISOString()
     };
-    
+
     // Determine if this is a new subscription, upgrade, or downgrade
     const subscriptionMetadata = subscription.metadata || {};
     const upgradeType = subscriptionMetadata.upgrade_type;
     const oldSubscriptionId = subscriptionMetadata.old_subscription_id;
-    
+
     console.log(`🔍 Subscription metadata analysis:`, {
       subscription_id: subscription.id,
       upgrade_type: upgradeType,
       old_subscription_id: oldSubscriptionId,
       full_metadata: subscriptionMetadata
     });
-    
+
     let description = '';
     if (oldSubscriptionId) {
       // This is an upgrade or downgrade - check the upgrade_type from metadata
@@ -1218,9 +1234,9 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       // This is a new subscription
       description = `Subscribed to ${productName} Plan`;
     }
-    
+
     console.log(`📝 Final description: "${description}" for subscription ${subscription.id}`);
-    
+
     // Format the plan start date properly
     const planStartDate = subscription.current_period_start 
       ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
@@ -1232,7 +1248,7 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
           }
           return new Date().toLocaleDateString();
         })();
-    
+
     // Create transaction record using the new subscription_payment type
     const transactionData = {
       user_id: userId,
@@ -1248,7 +1264,7 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     console.log(`📝 Inserting subscription payment transaction:`, {
       user_id: userId,
       amount: amountInCents,
@@ -1256,23 +1272,23 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
       subscription_id: subscription.id,
       type: 'subscription_payment'
     });
-    
+
     const { data: transaction, error: insertError } = await supabase
       .from('money_transactions')
       .insert(transactionData)
       .select()
       .single();
-    
+
     if (insertError) {
       console.error('❌ Error logging subscription payment to money_transactions:', insertError);
       return;
     }
-    
+
     console.log(`✅ Successfully logged subscription payment transaction: ${transaction.id}`);
     console.log(`💰 Amount: ${amountInCents} cents (${(amountInCents / 100).toFixed(2)} USD)`);
     console.log(`📦 Product: ${productName}`);
     console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
-    
+
   } catch (error) {
     console.error('❌ Error in logSubscriptionPaymentToTransactions:', error);
   }
@@ -1281,10 +1297,10 @@ async function logSubscriptionPaymentToTransactions(invoice: any, subscription: 
 // Log failed subscription payment to money_transactions table
 async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`💰 Logging failed subscription payment to money_transactions for user ${userId}`);
-    
+
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;
     const { data: priceData, error: priceError } = await supabase
@@ -1296,18 +1312,18 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       `)
       .eq('id', priceId)
       .single();
-    
+
     let productName = 'Unknown Subscription';
     let productDescription = 'Subscription payment';
-    
+
     if (!priceError && priceData && priceData.products) {
       productName = (priceData.products as any).name;
       productDescription = (priceData.products as any).description || `Subscription payment for ${productName}`;
     }
-    
+
     // Calculate amount in cents (Stripe stores amounts in cents)
     const amountInCents = invoice.amount_paid || 0;
-    
+
     // Format the plan start date properly
     const planStartDate = subscription.current_period_start 
       ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
@@ -1319,7 +1335,7 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
           }
           return new Date().toLocaleDateString();
         })();
-    
+
     // Create comprehensive metadata for failed subscription payment
     const metadata = {
       stripe_invoice_id: invoice.id,
@@ -1348,7 +1364,7 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       failure_reason: 'Payment failed',
       created_at: new Date().toISOString()
     };
-    
+
     // Create transaction record using the new subscription_payment type
     const transactionData = {
       user_id: userId,
@@ -1364,7 +1380,7 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     console.log(`📝 Inserting failed subscription payment transaction:`, {
       user_id: userId,
       amount: amountInCents,
@@ -1372,23 +1388,23 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
       subscription_id: subscription.id,
       type: 'subscription_payment'
     });
-    
+
     const { data: transaction, error: insertError } = await supabase
       .from('money_transactions')
       .insert(transactionData)
       .select()
       .single();
-    
+
     if (insertError) {
       console.error('❌ Error logging failed subscription payment to money_transactions:', insertError);
       return;
     }
-    
+
     console.log(`✅ Successfully logged failed subscription payment transaction: ${transaction.id}`);
     console.log(`💰 Amount: ${amountInCents} cents (${(amountInCents / 100).toFixed(2)} USD)`);
     console.log(`📦 Product: ${productName}`);
     console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
-    
+
   } catch (error) {
     console.error('❌ Error in logFailedSubscriptionPaymentToTransactions:', error);
   }
@@ -1397,10 +1413,10 @@ async function logFailedSubscriptionPaymentToTransactions(invoice: any, subscrip
 // Log subscription refund to money_transactions table
 async function logSubscriptionRefundToTransactions(invoice: any, subscription: any, userId: string) {
   const supabase = createServiceRoleClient();
-  
+
   try {
     console.log(`💰 Logging subscription refund to money_transactions for user ${userId}`);
-    
+
     // Get product details for better transaction description
     const priceId = subscription.items.data[0].price.id;
     const { data: priceData, error: priceError } = await supabase
@@ -1409,21 +1425,20 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
         id,
         unit_amount,
         products!inner(id, name, description)
-      `)
-      .eq('id', priceId)
+      `).eq('id', priceId)
       .single();
-    
+
     let productName = 'Unknown Subscription';
     let productDescription = 'Subscription refund';
-    
+
     if (!priceError && priceData && priceData.products) {
       productName = (priceData.products as any).name;
       productDescription = `Subscription refund for ${productName}`;
     }
-    
+
     // Calculate refund amount in cents (negative amount for refunds)
     const refundAmountInCents = -(invoice.amount_refunded || 0);
-    
+
     // Format the plan start date properly
     const planStartDate = subscription.current_period_start 
       ? new Date(subscription.current_period_start * 1000).toLocaleDateString() 
@@ -1435,7 +1450,7 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
           }
           return new Date().toLocaleDateString();
         })();
-    
+
     // Create comprehensive metadata for subscription refund
     const metadata = {
       stripe_invoice_id: invoice.id,
@@ -1465,7 +1480,7 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
       refund_reason: 'Subscription refund',
       created_at: new Date().toISOString()
     };
-    
+
     // Create transaction record using the new subscription_refund type
     const transactionData = {
       user_id: userId,
@@ -1481,7 +1496,7 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     console.log(`📝 Inserting subscription refund transaction:`, {
       user_id: userId,
       amount: refundAmountInCents,
@@ -1489,23 +1504,23 @@ async function logSubscriptionRefundToTransactions(invoice: any, subscription: a
       subscription_id: subscription.id,
       type: 'subscription_refund'
     });
-    
+
     const { data: transaction, error: insertError } = await supabase
       .from('money_transactions')
       .insert(transactionData)
       .select()
       .single();
-    
+
     if (insertError) {
       console.error('❌ Error logging subscription refund to money_transactions:', insertError);
       return;
     }
-    
+
     console.log(`✅ Successfully logged subscription refund transaction: ${transaction.id}`);
     console.log(`💰 Refund Amount: ${refundAmountInCents} cents (${(refundAmountInCents / 100).toFixed(2)} USD)`);
     console.log(`📦 Product: ${productName}`);
     console.log(`🔗 Invoice: ${invoice.id}, Subscription: ${subscription.id}`);
-    
+
   } catch (error) {
     console.error('❌ Error in logSubscriptionRefundToTransactions:', error);
   }

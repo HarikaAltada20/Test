@@ -108,6 +108,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             const subscriptionResult = await subscriptionResponse.json();
 
             if (subscriptionResponse.ok) {
+
                 setCurrentSubscription(subscriptionResult.subscription);
                 setCurrentPlan(subscriptionResult.plan);
 
@@ -226,6 +227,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             // For users without any subscription (new users)
             if (!currentPlan && !currentSubscription) {
                 // Use the create subscription API for new users
+
                 const response = await fetch('/api/subscriptions/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -239,10 +241,12 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 const result = await response.json();
 
                 if (!response.ok) {
+
                     throw new Error(result.error || 'Subscription creation failed');
                 }
 
                 if (result.checkoutUrl) {
+
                     window.location.href = result.checkoutUrl;
                 } else {
                     toast.success(result.message || 'Subscription created successfully!');
@@ -253,6 +257,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
 
             // For existing users with subscriptions, use upgrade API
             if (!currentPlan) return;
+
 
             const response = await fetch('/api/subscriptions/upgrade', {
                 method: 'POST',
@@ -267,10 +272,12 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             const result = await response.json();
 
             if (!response.ok) {
+
                 throw new Error(result.error || 'Subscription update failed');
             }
 
             if (result.checkoutUrl) {
+
                 window.location.href = result.checkoutUrl;
             } else {
                 toast.success(result.message || 'Subscription updated successfully!');
@@ -963,4 +970,4 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             )}
         </div>
     );
-}); 
+});

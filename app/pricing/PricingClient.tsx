@@ -153,36 +153,32 @@ export default function PricingClient() {
     checkUser();
   }, [supabase]);
 
-  // Load subscription plans from constants (new system)
-  useEffect(() => {
-    const loadSubscriptionPlans = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        // Import plans from constants (new subscription system)
-        const { subscriptionPlans } = await import(
-          "@/constants/subscriptionPlans"
-        );
-
-        // Convert to the format expected by the UI
-        const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map(
-          (plan) => ({
-            id: plan.id, // Now real Stripe product ID
-            name: plan.name,
-            displayName: plan.displayName,
-            price: plan.price, // Already in cents
-            features: {
-              maxActiveContests: plan.features.maxActiveContests,
-              minContestBudget: plan.features.minContestBudget,
-              maxWinnersPerContest: plan.features.maxWinnersPerContest,
-              commissionPercentage: plan.features.commissionPercentage,
-              contestTypes: plan.features.contestTypes,
-              analytics: plan.features.analytics,
-              support: plan.features.support,
-              description: plan.features.description,
-            },
-          })
-        );
+    // Load subscription plans from constants (new system)
+    useEffect(() => {
+        const loadSubscriptionPlans = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                // Import plans from constants (new subscription system)
+                const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
+                console.log('🔍 Subscription Plans:', subscriptionPlans);
+                // Convert to the format expected by the UI
+                const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map((plan) => ({
+                    id: plan.id, // Now real Stripe product ID
+                    name: plan.name,
+                    displayName: plan.displayName,
+                    price: plan.price, // Already in cents
+                    features: {
+                        maxActiveContests: plan.features.maxActiveContests,
+                        minContestBudget: plan.features.minContestBudget,
+                        maxWinnersPerContest: plan.features.maxWinnersPerContest,
+                        commissionPercentage: plan.features.commissionPercentage,
+                        contestTypes: plan.features.contestTypes,
+                        analytics: plan.features.analytics,
+                        support: plan.features.support,
+                        description: plan.features.description,
+                    },
+                }));
 
         setDbSubscriptionPlans(mappedPlans);
       } catch (error: any) {
