@@ -447,58 +447,61 @@ export default function CreatorsPage() {
               How it works
             </h2>
 
-            <div className="grid md:grid-cols-2 gap-10 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
               {/* Steps */}
               <div className="space-y-[90px] relative z-10">
-               {creatorsteps.map((step, index) => (
+                {creatorsteps.map((step, index) => (
                   <div key={index} className="flex items-start gap-6 relative">
                     {/* Circle */}
                     <div
-                      className={`w-[90px] h-[90px] rounded-full flex items-center justify-center text-white font-bold text-2xl ${step.color} flex-shrink-0 relative z-10`}
+                      className={`w-16 h-16 md:w-[90px] md:h-[90px] rounded-full flex items-center justify-center text-white font-bold text-lg md:text-2xl ${step.color} flex-shrink-0 relative z-10`}
                     >
                       {step.number}
                     </div>
 
-                    {/* Dotted line below the circle, except for the last step */}
+                    {/* Dotted line - hidden on small screens */}
                     {index < creatorsteps.length - 1 && (
                       <div
-                        className="absolute left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
+                        className="absolute left-8 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0 hidden md:block"
                         style={{
                           top: "90px",
                           height:
                             index === 0
-                              ? "150px" // height A: between steps 1 and 2
+                              ? "150px"
                               : index === 1
-                              ? "180px" // height B: between steps 2 and 3
+                              ? "180px"
                               : index === 2
-                              ? "180px" // height C: between steps 3 and 4
-                              : "40px", // fallback (if any)
+                              ? "180px"
+                              : "40px",
                         }}
                       />
                     )}
 
                     <div>
                       {/* Icon box above title */}
-                      <div className="mb-4 w-12 h-12 flex items-center justify-center border border-white rounded-md">
-                        {/* Make icon white by wrapping with a span that sets color */}
+                      <div className="mb-4 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center border border-white rounded-md">
                         <span className="text-white">{step.icon}</span>
                       </div>
 
-                      <h3 className="font-bold text-3xl">{step.title}</h3>
-                      <p className="mt-4 text-lg text-gray-300">
+                      <h3 className="font-bold text-xl md:text-3xl">
+                        {step.title}
+                      </h3>
+                      <p className="mt-4 text-base md:text-lg text-gray-300">
                         {step.description}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="relative w-[580px] h-[900px] rounded-xl overflow-hidden">
+
+              {/* Image */}
+              <div className="relative w-full h-64 md:h-[900px] rounded-xl overflow-hidden">
                 <Image
                   key={currentIndex}
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
-                  layout="fill" // fill the parent container
-                  objectFit="cover" // crop/scale image to cover container fully
+                  layout="fill"
+                  objectFit="cover"
                   className={`rounded-xl transition-opacity duration-500 ${
                     fade ? "opacity-100" : "opacity-0"
                   }`}
@@ -511,102 +514,108 @@ export default function CreatorsPage() {
 
         <section className="py-16" ref={sectionRef}>
           <div className="container mx-auto max-w-6xl px-4">
-            <div className="flex justify-center items-center text-white text-center">
+            <div className="flex justify-center items-center text-white text-center gap-4 sm:gap-8 overflow-x-auto">
               {/* Creators */}
-              <div className="flex flex-col items-start px-8">
+              <div className="flex flex-col items-center sm:items-start px-2 sm:px-8">
                 <div className="flex items-center">
-                  <div className="overflow-hidden h-[72px]">
+                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
                     <div
                       className="flex flex-col transition-transform duration-300 ease-in-out"
                       style={{
                         transform: `translateY(-${
-                          Math.min(step, creatorsNumbers.length - 1) * 72
+                          Math.min(step, creatorsNumbers.length - 1) *
+                          (window.innerWidth < 640 ? 48 : 72)
                         }px)`,
                       }}
                     >
                       {creatorsNumbers.map((num) => (
                         <div
                           key={num}
-                          className="flex items-center text-6xl font-semibold h-[72px]"
+                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
                         >
                           {num}
                         </div>
                       ))}
                     </div>
                   </div>
-                  <span className="text-orange-600 font-bold text-6xl ml-1">
+                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
                     +
                   </span>
                 </div>
-                <p className="mt-4 text-base">Creators on Platform</p>
+                <p className="mt-2 text-xs sm:text-base">
+                  Creators on Platform
+                </p>
               </div>
 
               {/* Divider */}
-              <div className="border-l border-gray-500 h-20 mx-8"></div>
+              <div className="border-l-2 border sm:border-solid border-gray-500 h-12 sm:h-20"></div>
 
               {/* Campaigns */}
-              <div className="flex flex-col items-start px-8">
+              <div className="flex flex-col items-center sm:items-start px-2 sm:px-8">
                 <div className="flex items-center">
-                  <div className="overflow-hidden h-[72px]">
+                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
                     <div
                       className="flex flex-col transition-transform duration-300 ease-in-out"
                       style={{
                         transform: `translateY(-${
-                          Math.min(step, campaignNumbers.length - 1) * 72
+                          Math.min(step, campaignNumbers.length - 1) *
+                          (window.innerWidth < 640 ? 48 : 72)
                         }px)`,
                       }}
                     >
                       {campaignNumbers.map((num) => (
                         <div
                           key={num}
-                          className="flex items-center text-6xl font-semibold h-[72px]"
+                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
                         >
                           {num}
                         </div>
                       ))}
                     </div>
                   </div>
-                  <span className="text-orange-600 font-bold text-6xl ml-1">
+                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
                     +
                   </span>
                 </div>
-                <p className="mt-4 text-base">Campaigns Delivered</p>
+                <p className="mt-2 text-xs sm:text-base">Campaigns Delivered</p>
               </div>
 
               {/* Divider */}
-              <div className="border-l border-gray-500 h-20 mx-8"></div>
+              <div className="border-l-2 border sm:border-solid border-gray-500 h-12 sm:h-20"></div>
 
               {/* Views */}
-              <div className="flex flex-col items-start px-8">
+              <div className="flex flex-col items-center sm:items-start px-2 sm:px-8">
                 <div className="flex items-center">
-                  <div className="overflow-hidden h-[72px]">
+                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
                     <div
                       className="flex flex-col transition-transform duration-300 ease-in-out"
                       style={{
                         transform: `translateY(-${
-                          Math.min(step, viewNumbers.length - 1) * 72
+                          Math.min(step, viewNumbers.length - 1) *
+                          (window.innerWidth < 640 ? 48 : 72)
                         }px)`,
                       }}
                     >
                       {viewNumbers.map((num) => (
                         <div
                           key={num}
-                          className="flex items-center text-6xl font-semibold h-[72px]"
+                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
                         >
                           {num}M
                         </div>
                       ))}
                     </div>
                   </div>
-                  <span className="text-orange-600 font-bold text-6xl ml-1">
+                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
                     +
                   </span>
                 </div>
-                <p className="mt-4 text-base">Views Generated</p>
+                <p className="mt-2 text-xs sm:text-base">Views Generated</p>
               </div>
             </div>
           </div>
         </section>
+
         {/* Epic Stats Section */}
         {/* <section className="py-20 md:py-32 relative">
           <div className="container mx-auto px-4">

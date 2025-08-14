@@ -161,7 +161,7 @@ export default function AboutPage() {
 
             {/* Massive Gaming Title */}
             <h1
-              className="text-4xl flex justify-center gap-x-3 md:text-6xl lg:text-7xl mb-6 leading-tight slide-up"
+              className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl flex flex-wrap justify-center gap-x-2 sm:gap-x-3 text-center mb-7 leading-tight slide-up"
               style={{ animationDelay: "1s" }}
             >
               <span
@@ -192,7 +192,7 @@ export default function AboutPage() {
 
             {/* Strategic Subtitle */}
             <p
-              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+              className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
               Game Of Creators connects brands with creators through contests,

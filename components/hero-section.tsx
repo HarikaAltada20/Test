@@ -14,6 +14,12 @@ import {
   Sparkles,
   Crown,
   Rocket,
+  Star,
+ 
+  Palette,
+  Camera,
+  Heart,
+  
 } from "lucide-react";
 import SocialPairPng from "@/public/images/social_pair.png";
 import Testimonials from "./Testimonials";
@@ -161,20 +167,44 @@ export function HeroSection() {
 
         {/* Main Hero Content */}
 
-        <section className="relative flex flex-col items-center justify-center min-h-screen text-center text-white overflow-hidden">
+        <section className="relative flex flex-col items-center justify-center py-16 text-center text-white overflow-hidden">
           {/* Background Circles */}
+
+          <div className="inset-0 z-10 pointer-events-none">
+            <Sparkles className="absolute top-20 left-10 h-6 w-6 text-amber-400/30 animate-pulse" />
+            <Camera
+              className="absolute top-32 right-20 h-5 w-5 text-violet-400/40 animate-bounce"
+              style={{ animationDelay: "1s" }}
+            />
+            <Star
+              className="absolute top-40 left-1/4 h-4 w-4 text-purple-400/30 animate-pulse"
+              style={{ animationDelay: "2s" }}
+            />
+            <Heart
+              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
+              style={{ animationDelay: "0.5s" }}
+            />
+            <Palette
+              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
+              style={{ animationDelay: "1.5s" }}
+            />
+            <Trophy
+              className="absolute bottom-32 right-12 h-5 w-5 text-amber-400/40 animate-bounce"
+              style={{ animationDelay: "0.8s" }}
+            />
+          </div>
           <div
-            className={`absolute w-[500px] h-[500px] border-[2px] border-purple-500/20 rounded-full`}
+            className={`absolute w-[600px] h-[600px] border-[2px] border-purple-500/20 rounded-full`}
           ></div>
           <div
-            className={`absolute w-[700px] h-[700px] border-[2px] border-purple-500/20 rounded-full`}
+            className={`absolute w-[800px] h-[800px] border-[2px] border-purple-500/20 rounded-full`}
           ></div>
           <div
-            className={`absolute w-[900px] h-[900px] border-[2px] border-purple-500/20 rounded-full`}
+            className={`absolute w-[1000px] h-[1000px] border-[2px] border-purple-500/20 rounded-full`}
           ></div>
 
           {/* Revolving arc */}
-          <div className="absolute w-[700px] h-[700px] rounded-full animate-spin-slow">
+          <div className="absolute w-[800px] h-[800px] rounded-full animate-spin-slow">
             <div
               className={`absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-500`}
               style={{
@@ -182,7 +212,7 @@ export function HeroSection() {
               }}
             ></div>
           </div>
-          <div className="absolute w-[900px] h-[900px] rounded-full animate-spin-slow-reverse">
+          <div className="absolute w-[1000px] h-[1000px] rounded-full animate-spin-slow-reverse">
             <div
               className={`absolute inset-0 rounded-full border-[3px] border-transparent border-t-purple-500`}
               style={{
@@ -336,7 +366,7 @@ export function HeroSection() {
           </div>
         </section>
 
-        <div className="absolute bottom-[80px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
+        <div className="absolute bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
           <div className="scroll-track">
             {[
               "./images/434ce5e441255007a5349fd85232df9726062927.png",
@@ -432,25 +462,25 @@ export function HeroSection() {
                     Step {steps[activeIndex].step}
                   </div>
                 </div>
-                 <div className="mt-10">
-                {/* Title */}
-                <h3 className="text-3xl font-semibold mb-4 text-left">
-                  {steps[activeIndex].title}
-                </h3>
+                <div className="mt-10">
+                  {/* Title */}
+                  <h3 className="text-3xl font-semibold mb-4 text-left">
+                    {steps[activeIndex].title}
+                  </h3>
 
-                {/* Description */}
-                <p className="text-gray-300 text-xl mb-10 text-left">
-                  {steps[activeIndex].description}
-                </p>
+                  {/* Description */}
+                  <p className="text-gray-300 text-xl mb-10 text-left">
+                    {steps[activeIndex].description}
+                  </p>
 
-                {/* Button */}
-                <a
-                  href="#"
-                  className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-full inline-flex items-center gap-2 self-start"
-                >
-                  Start Now
-                  <ArrowRight className="w-4 h-4" />
-                </a>
+                  {/* Button */}
+                  <a
+                    href="#"
+                    className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-full inline-flex items-center gap-2 self-start"
+                  >
+                    Start Now
+                    <ArrowRight className="w-4 h-4" />
+                  </a>
                 </div>
               </div>
             </div>
@@ -492,28 +522,48 @@ export function HeroSection() {
             {/* Grid */}
             <div className="grid md:grid-cols-4 gap-6">
               {/* Row 1 col 1 */}
-              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center">
-                <h3 className="text-2xl font-semibold mb-2">
+              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
+                {/* Image overlay for hover */}
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/5b9ccb0130cdd4c8b6a76dccd99f879f41ba8fe2.png')",
+                  }}
+                ></div>
+
+                {/* Dark overlay */}
+                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+                <h3 className="text-2xl font-semibold mb-2 relative z-10">
                   Authentic Content
                 </h3>
-                <p className="text-gray-400 text-lg">
+                <p className="text-gray-400 text-lg relative z-10">
                   Generate genuine, viral-worthy content that your audience will
                   love and share.
                 </p>
               </div>
-              <div className="col-span-2 border border-gray-700 rounded-xl overflow-hidden flex items-center p-6">
-                {/* Text content */}
-                <div className="flex-1">
-                  <h3 className="text-2xl font-semibold mb-2 relative">
+
+              {/* Row 1 col 2 */}
+              <div className="col-span-2 border border-gray-700 rounded-xl overflow-hidden flex items-center p-6 relative group">
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/477657f97d63845e03dfc9060e1005e8d8d651df.jpg')",
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+                <div className="flex-1 relative z-10">
+                  <h3 className="text-2xl font-semibold mb-2">
                     Easy Management
                   </h3>
-                  <p className="text-gray-300 text-lg relative">
+                  <p className="text-gray-300 text-lg">
                     Manage all your campaigns from one intuitive, game-like
                     dashboard interface.
                   </p>
                 </div>
-
-                {/* Image with dark overlay */}
                 <div className="relative w-[200px] h-[200px] flex-shrink-0">
                   <Image
                     src="./images/d89d9bee1e10b09fcd186437a0416305e50d4ceb.png"
@@ -521,14 +571,21 @@ export function HeroSection() {
                     fill
                     className="object-contain"
                   />
-                  {/* Overlay only on image */}
-                  <div className="absolute inset-0 bg-[#000825]/70"></div>
+                  <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
                 </div>
               </div>
 
-              {/* Tall card spanning two rows */}
-              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center row-span-2 text-center relative overflow-hidden">
-                {/* Image with dark overlay */}
+              {/* Row 1 col 3 - Tall card */}
+              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center row-span-2 text-center relative overflow-hidden group">
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/5ce917bc44f4c6db1590e3478c916a367eacfe8a.png')",
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
                 <div className="relative w-[250px] h-[250px] mb-6">
                   <Image
                     src="./images/18f55d54e6459d19dfda25395eb428c1d064fd93.png"
@@ -536,10 +593,8 @@ export function HeroSection() {
                     fill
                     className="object-contain"
                   />
-                  <div className="absolute inset-0 bg-[#000825]/40"></div>
+                  <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
                 </div>
-
-                {/* Text content */}
                 <h3 className="text-2xl font-semibold mb-2 relative z-10">
                   Real-Time Analytics
                 </h3>
@@ -549,29 +604,45 @@ export function HeroSection() {
                 </p>
               </div>
 
-              {/* Row 2 col 1 - Cost Effective with icon */}
-              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center">
-                <Rocket className="text-white mb-4" size={26} />
-                <h3 className="text-xl font-semibold mb-2">Cost Effective</h3>
-                <p className="text-gray-400 text-lg">
+              {/* Row 2 col 1 */}
+              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative group">
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/55970240f7b24d6eff2af2d8d8537bd017058e58.png')",
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+                <Rocket className="text-white mb-4 relative z-10" size={26} />
+                <h3 className="text-xl font-semibold mb-2 relative z-10">
+                  Cost Effective
+                </h3>
+                <p className="text-gray-400 text-lg relative z-10">
                   Get 10x better ROI compared to traditional advertising. Every
                   dollar counts!
                 </p>
               </div>
+
               {/* Row 2 col 2 */}
-              <div className="col-span-2 border border-gray-700 rounded-xl p-4 flex flex-row justify-center items-center text-center">
-                {/* Text content */}
-                <div className="flex-1 pr-4">
-                  <h3 className="text-xl font-semibold mb-2 relative z-10">
-                    Targeted Reach
-                  </h3>
-                  <p className="text-gray-400 text-lg relative z-10">
+              <div className="col-span-2 border border-gray-700 rounded-xl p-4 flex flex-row justify-center items-center text-center relative overflow-hidden group">
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/2a6d9ad13dd40e9b3b4f90b35cf0f9324af8dda7.png')",
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+                <div className="flex-1 pr-4 relative z-10">
+                  <h3 className="text-xl font-semibold mb-2">Targeted Reach</h3>
+                  <p className="text-gray-400 text-lg">
                     Connect with creators, whose audience perfectly match your
                     ideal customers.
                   </p>
                 </div>
-
-                {/* Image with dark overlay */}
                 <div className="relative w-[250px] h-[250px] flex-shrink-0">
                   <Image
                     src="./images/0045df9e9f7db84c983cc6c5675c55189fa040a2.png"
@@ -579,23 +650,46 @@ export function HeroSection() {
                     fill
                     className="object-contain"
                   />
-                  <div className="absolute inset-0 bg-[#000825]/70"></div>
+                  <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
                 </div>
               </div>
 
-              <div className="col-span-2 border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center">
-                <Gamepad2 className="text-white mb-4" size={26} />
-                <h3 className="text-xl font-semibold mb-2">Gaming Dashboard</h3>
-                <p className="text-gray-400 text-lg">
+              {/* Row 2 col 3 */}
+              <div className="col-span-2 border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative group">
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/c90e07a57a2d08340f7c0d3c57b1fde4a6f0f9cd.jpg')",
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+                <Gamepad2 className="text-white mb-4 relative z-10" size={26} />
+                <h3 className="text-xl font-semibold mb-2 relative z-10">
+                  Gaming Dashboard
+                </h3>
+                <p className="text-gray-400 text-lg relative z-10">
                   Level up your campaigns with our intuitive interface.
                 </p>
               </div>
 
-              {/* Row 3 col 2 - 24/7 Support */}
-              <div className="col-span-2 border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center">
-                <Headset className="text-white mb-4" size={26} />
-                <h3 className="text-xl font-semibold mb-2">24/7 Support</h3>
-                <p className="text-gray-400 text-lg">
+              {/* Row 3 col 2 */}
+              <div className="col-span-2 border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative group">
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                  style={{
+                    backgroundImage:
+                      "url('./images/f1dc449ff317e5ede74929b2af2d4ef5b82c298f.png')",
+                  }}
+                ></div>
+                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+                <Headset className="text-white mb-4 relative z-10" size={26} />
+                <h3 className="text-xl font-semibold mb-2 relative z-10">
+                  24/7 Support
+                </h3>
+                <p className="text-gray-400 text-lg relative z-10">
                   Our gaming experts are always ready to help you win big!
                 </p>
               </div>

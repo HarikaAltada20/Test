@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -14,6 +14,7 @@ import {
   Sparkles,
   Camera,
   Palette,
+  ArrowRight,
   Heart,
   Crown,
   Calendar,
@@ -49,7 +50,8 @@ import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { useRouter } from "next/navigation";
 import SocialPairPng from "@/public/images/social_pair.png";
-
+import startdemo from "@/public/images/startdemo.png";
+import FAQ from "@/components/FAQ";
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
   maxActiveContests: number;
@@ -103,7 +105,28 @@ const RotatingTagline = () => {
     </p>
   );
 };
-
+const plans = [
+  {
+    title: "Lifetime Access to Winning Content",
+    description:
+      "Keep all the winning content from contest to use in your campaigns forever.",
+  },
+  {
+    title: "Organic Content Validation",
+    description:
+      "Test and validate your content with real, engaged audiences to find what works best.",
+  },
+  {
+    title: "Authentic Creator Network",
+    description:
+      "Access to our growing community of verified creators across all platforms.",
+  },
+  {
+    title: "Secure Payment Processing",
+    description:
+      "Safe and secure payment handling for all contest prizes and platform fees.",
+  },
+];
 export default function PricingClient() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
     "monthly"
@@ -113,7 +136,8 @@ export default function PricingClient() {
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const supabase = createClient(); // Initialize Supabase client
   const router = useRouter();
-
+  const storyRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
   // State for fetched plans, loading, and error
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
     SubscriptionPlan[]
@@ -121,6 +145,25 @@ export default function PricingClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const handleToggle = () => {
+    setBillingCycle((prev) => (prev === "monthly" ? "yearly" : "monthly"));
+  };
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+        }
+      },
+      { threshold: 0.4 }
+    );
+
+    if (storyRef.current) observer.observe(storyRef.current);
+
+    return () => {
+      if (storyRef.current) observer.unobserve(storyRef.current);
+    };
+  }, []);
   // Check for authenticated user
   useEffect(() => {
     const checkUser = async () => {
@@ -153,32 +196,36 @@ export default function PricingClient() {
     checkUser();
   }, [supabase]);
 
-    // Load subscription plans from constants (new system)
-    useEffect(() => {
-        const loadSubscriptionPlans = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                // Import plans from constants (new subscription system)
-                const { subscriptionPlans } = await import('@/constants/subscriptionPlans');
-                console.log('🔍 Subscription Plans:', subscriptionPlans);
-                // Convert to the format expected by the UI
-                const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map((plan) => ({
-                    id: plan.id, // Now real Stripe product ID
-                    name: plan.name,
-                    displayName: plan.displayName,
-                    price: plan.price, // Already in cents
-                    features: {
-                        maxActiveContests: plan.features.maxActiveContests,
-                        minContestBudget: plan.features.minContestBudget,
-                        maxWinnersPerContest: plan.features.maxWinnersPerContest,
-                        commissionPercentage: plan.features.commissionPercentage,
-                        contestTypes: plan.features.contestTypes,
-                        analytics: plan.features.analytics,
-                        support: plan.features.support,
-                        description: plan.features.description,
-                    },
-                }));
+  // Load subscription plans from constants (new system)
+  useEffect(() => {
+    const loadSubscriptionPlans = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Import plans from constants (new subscription system)
+        const { subscriptionPlans } = await import(
+          "@/constants/subscriptionPlans"
+        );
+        console.log("🔍 Subscription Plans:", subscriptionPlans);
+        // Convert to the format expected by the UI
+        const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map(
+          (plan) => ({
+            id: plan.id, // Now real Stripe product ID
+            name: plan.name,
+            displayName: plan.displayName,
+            price: plan.price, // Already in cents
+            features: {
+              maxActiveContests: plan.features.maxActiveContests,
+              minContestBudget: plan.features.minContestBudget,
+              maxWinnersPerContest: plan.features.maxWinnersPerContest,
+              commissionPercentage: plan.features.commissionPercentage,
+              contestTypes: plan.features.contestTypes,
+              analytics: plan.features.analytics,
+              support: plan.features.support,
+              description: plan.features.description,
+            },
+          })
+        );
 
         setDbSubscriptionPlans(mappedPlans);
       } catch (error: any) {
@@ -319,7 +366,7 @@ export default function PricingClient() {
   // Show creator message if logged in as creator
   if (user && userType === "creator") {
     return (
-      <div className="container mx-auto py-8 px-4">
+      <div className="container mx-auto py-8 px-4 ">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-8">
             <div className="mx-auto p-4 rounded-full bg-blue-100 w-fit mb-4">
@@ -417,7 +464,7 @@ export default function PricingClient() {
   }
 
   return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
+    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       {/* Hero Section */}
       <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
         {/* Strategic Background Elements */}
@@ -451,9 +498,9 @@ export default function PricingClient() {
 
         <div className="container mx-auto px-4 text-center relative z-10">
           {/* Premium Badge */}
-          <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-600/20 to-white-600/20 backdrop-blur-sm border border-amber-400/30 rounded-full px-6 py-3 mb-8 shadow-xl shadow-amber-500/20">
-            <Sparkles className="h-5 w-5 text-white" />
-            <span className="text-sm font-semibold bg-white bg-clip-text text-transparent">
+          <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
+            <Crown className="h-5 w-5 text-white" />
+            <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
               #1 Gamified Creator Marketing Platform
             </span>
           </div>
@@ -476,7 +523,7 @@ export default function PricingClient() {
 
           {/* Massive Gaming Title */}
           <h1
-            className="text-4xl flex justify-center gap-x-3 md:text-6xl lg:text-7xl mb-6 leading-tight slide-up"
+            className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up"
             style={{ animationDelay: "1s" }}
           >
             <span
@@ -550,7 +597,7 @@ export default function PricingClient() {
               </p>
 
               {/* Not logged in message */}
-              {!user && (
+              {/* {!user && (
                 <Alert className="mt-6 max-w-2xl mx-auto">
                   <Info className="h-4 w-4" />
                   <AlertDescription className="flex items-center justify-between">
@@ -569,28 +616,53 @@ export default function PricingClient() {
                     </Button>
                   </AlertDescription>
                 </Alert>
-              )}
+              )} */}
 
               <div className="mt-6 flex justify-center">
-                <Tabs
-                  defaultValue="monthly"
-                  value={billingCycle}
-                  onValueChange={handleBillingCycleChange}
-                  className="w-fit"
-                >
-                  <TabsList className="grid w-[280px] grid-cols-2">
-                    <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                    <TabsTrigger value="yearly">
-                      Yearly
-                      <Badge
-                        variant="outline"
-                        className="ml-2 bg-green-100 text-green-800 border-green-200 text-xs"
-                      >
-                        Save 20%
-                      </Badge>
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                <div className="flex items-center gap-4  px-4 py-2 rounded-full">
+                  {/* Monthly label */}
+                  <span
+                    className={`cursor-pointer text-lg font-medium transition-colors ${
+                      billingCycle === "monthly"
+                        ? "text-white"
+                        : "text-gray-400"
+                    }`}
+                    onClick={() => setBillingCycle("monthly")}
+                  >
+                    Monthly Subscription
+                  </span>
+
+                  {/* Toggle switch */}
+                  <button
+                    onClick={handleToggle}
+                    className={`relative w-14 h-7 rounded-full transition-colors ${
+                      billingCycle === "monthly"
+                        ? "bg-gray-600"
+                        : "bg-purple-500"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 text-lg left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                        billingCycle === "yearly"
+                          ? "translate-x-7"
+                          : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+
+                  {/* Yearly label with badge */}
+                  <span
+                    className={`cursor-pointer text-lg font-medium flex items-center gap-1 transition-colors ${
+                      billingCycle === "yearly" ? "text-white" : "text-gray-400"
+                    }`}
+                    onClick={() => setBillingCycle("yearly")}
+                  >
+                    Yearly Subscription
+                    <span className="ml-1 bg-green-200 text-green-800 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                      Save 20% now!
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -617,13 +689,15 @@ export default function PricingClient() {
                   const isMostPopular = plan.name.toUpperCase() === "BUILDER";
                   const isFree = plan.price === 0;
                   return (
-                    <Card
+                    <div
                       key={plan.id}
-                      className={`relative flex flex-col w-full max-w-sm mx-auto hover:shadow-lg hover:scale-105 transition ${
+                      className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6
+                      ${
                         isMostPopular
-                          ? "border-purple-500 shadow-lg"
-                          : "border-gray-200"
-                      }`}
+                          ? "border-2 border-purple-500 shadow-xl"
+                          : "border border-gray-700 shadow-sm"
+                      }
+                      bg-gradient-to-b from-purple-900/10 to-purple-900/3`}
                     >
                       {isMostPopular && (
                         <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
@@ -740,12 +814,12 @@ export default function PricingClient() {
                       </CardContent>
                       <div className="flex items-end justify-center flex-grow">
                         <Button
-                          className={`w-full text-sm mt-6 ${
+                          className={`w-full mt-6 text-sm font-medium rounded-full ${
                             isFree
-                              ? ""
+                              ? "bg-purple-600 text-white hover:bg-purple-700"
                               : isMostPopular
-                              ? "bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700"
-                              : ""
+                              ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                              : "bg-purple-700 text-white hover:bg-purple-800"
                           }`}
                           asChild
                         >
@@ -754,7 +828,7 @@ export default function PricingClient() {
                           </Link>
                         </Button>
                       </div>
-                    </Card>
+                    </div>
                   );
                 })}
               </div>
@@ -764,7 +838,7 @@ export default function PricingClient() {
       </div>
 
       {/* All Plans Include Section */}
-      <div className="my-16 px-4">
+      {/* <div className="my-16 px-4">
         <h3 className="text-xl font-semibold text-center mb-10">
           What's Included in Every Plan
         </h3>
@@ -828,10 +902,127 @@ export default function PricingClient() {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
+      <section>
+        <div className="bg-[#0b0e26] text-white py-16 px-6">
+          <div className="max-w-[1200px] mx-auto text-center">
+            <h2 className="text:3xl md:text-4xl font-semibold transition-all duration-700 mb-4 ease-out transform ">
+              What's Included in{" "}
+              <span
+                style={{
+                  background:
+                    "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+
+                  display: "inline",
+                }}
+              >
+                Every Plan
+              </span>
+            </h2>
+            <p className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
+              Essential Elements for Your Influencer Marketing Strategy
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-12 mb-14">
+              {plans.map((value, index) => (
+                <div
+                  key={index}
+                  className="flex items-start gap-4 rounded-xl p-9 hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer" // gradient border wrapper
+                >
+                  <div
+                    className="rounded-full p-5 flex items-center justify-center"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                    }}
+                  >
+                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-2xl font-bold">{value.title}</h3>
+                    <p className="text-gray-300 text-xl mt-5">
+                      {value.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-16" ref={storyRef}>
+        <div className="bg-[#040921] flex justify-center items-center py-12 px-4">
+          <div className="relative  rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 shadow-lg max-w-7xl w-full border border-gray-600">
+            {/* Purple Glow in Background */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-purple-500/20 to-transparent blur-2xl pointer-events-none"></div>
+
+            {/* Text Section */}
+            <div className="flex-1 relative z-10">
+              <h2
+                className={`text-4xl md:text-5xl ${visible ? "slide-up" : ""}`}
+                style={{ animationDelay: "0.5s" }}
+              >
+                Not sure which<span className="text-purple-400"> plan </span>is
+                right for you?
+              </h2>
+              <p
+                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                  visible ? "slide-left" : ""
+                }`}
+                style={{ animationDelay: "1s" }}
+              >
+                Book a demo with{" "}
+                <span className="font-semibold text-purple-300">Vishesh,</span>{" "}
+                Founder of Game Of Creators
+              </p>
+              <p className="text-base md:text-xl leading-relaxed text-gray-300 mt-4">
+                Join hundreds of businesses driving success with Game Of
+                Creators! Book your free consultation today to get all your
+                questions answered and start launching impactful campaigns.
+              </p>
+
+              <button
+                className="rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"
+                style={{
+                  background:
+                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                }}
+              >
+                <a
+                  href="https://calendly.com/guptavishesh2/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 justify-center"
+                >
+                  Book a Demo
+                  <ArrowRight className="h-5 w-5" />
+                </a>
+              </button>
+            </div>
+
+            {/* Image Section */}
+            <div
+              className={`flex-1 h-[350px] flex justify-center relative z-10 ${
+                visible ? "slide-right" : ""
+              }`}
+              style={{ animationDelay: "1.5s" }}
+            >
+              <Image
+                src={startdemo}
+                alt="Phone Illustration"
+                className="max-w-[350px] w-full"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
       {/* Book a Demo Section */}
-      <div id="demo" className="my-16 scroll-mt-20">
+      {/* <div id="demo" className="my-16 scroll-mt-20">
         <div className="flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-rose-50 p-8 rounded-xl border border-purple-100 max-w-2xl mx-auto text-center">
           <h2 className="text-2xl md:text-3xl font-bold mb-3">
             Not sure which plan is right for you?
@@ -860,10 +1051,10 @@ export default function PricingClient() {
             </a>
           </Button>
         </div>
-      </div>
+      </div> */}
 
       {/* FAQ Section */}
-      <div className="mb-16">
+      {/* <div className="mb-16">
         <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
           Frequently Asked Questions
         </h2>
@@ -881,7 +1072,9 @@ export default function PricingClient() {
             ))}
           </Accordion>
         </div>
-      </div>
+      </div> */}
+
+      <FAQ />
     </div>
   );
 }

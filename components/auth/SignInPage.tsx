@@ -1,165 +1,207 @@
 "use client";
 
-import { useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { useToast } from "@/hooks/use-toast"
-import { TOAST_DURATION_SHORT, TOAST_DURATION_MEDIUM } from "@/constants/subscriptionPlans"
-import { Mail, Loader2, Lock, Eye, EyeOff, Crown, Trophy, Star, Sparkles, Shield, Gamepad2 } from "lucide-react"
-import Link from "next/link"
-import { FcGoogle } from "react-icons/fc"
-import { useRouter } from 'next/navigation'
-import Image from "next/image"
-import logo from "@/public/images/gold_logo_vertical.svg"
+import { useState } from "react";
+import { createClient } from "@/utils/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import {
+  TOAST_DURATION_SHORT,
+  TOAST_DURATION_MEDIUM,
+} from "@/constants/subscriptionPlans";
+import {
+  Mail,
+  Loader2,
+  Lock,
+  Eye,
+  EyeOff,
+  Crown,
+  Trophy,
+  Star,
+  Sparkles,
+  Shield,
+  Gamepad2,
+} from "lucide-react";
+import Link from "next/link";
+import { FcGoogle } from "react-icons/fc";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import logo from "@/public/images/gold_logo_horizontal.svg";
+import { FaFacebookF, FaInstagram } from "react-icons/fa";
 
 export default function SignInPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const { toast } = useToast()
-  const router = useRouter()
-  const supabase = createClient()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+  const router = useRouter();
+  const supabase = createClient();
 
   // Handle email/password sign-in
   const handleEmailSignIn = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setIsLoading(true)
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
 
     if (!email || !password) {
-      setError('Please enter both email and password')
-      setIsLoading(false)
-      return
+      setError("Please enter both email and password");
+      setIsLoading(false);
+      return;
     }
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password: password,
-      })
+      const { data, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password: password,
+        });
 
       if (signInError) {
-        throw signInError
+        throw signInError;
       }
 
       if (!data.user) {
-        throw new Error('Sign in failed - no user data returned')
+        throw new Error("Sign in failed - no user data returned");
       }
 
       // Record login IP
       try {
-        const userAgent = typeof window !== 'undefined' ? navigator.userAgent : '';
-        await fetch('/api/login-ip', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: data.user.id, user_agent: userAgent }),
+        const userAgent =
+          typeof window !== "undefined" ? navigator.userAgent : "";
+        await fetch("/api/login-ip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: data.user.id,
+            user_agent: userAgent,
+          }),
         });
       } catch (err) {
-        console.warn('Failed to record login IP:', err);
+        console.warn("Failed to record login IP:", err);
       }
 
       toast({
-        title: `Welcome back, ${data.user?.user_metadata?.full_name || data.user?.email || 'User'}!`,
+        title: `Welcome back, ${
+          data.user?.user_metadata?.full_name || data.user?.email || "User"
+        }!`,
         description: "You have successfully signed in.",
         duration: TOAST_DURATION_SHORT,
-      })
+      });
 
       // Navigate to dashboard and refresh to update layout with new auth state
-      router.push('/dashboard')
-      router.refresh()
-
+      router.push("/dashboard");
+      router.refresh();
     } catch (err: any) {
-      console.error('Email sign-in error:', err)
-      let errorMessage = 'Failed to sign in. Please try again.'
+      console.error("Email sign-in error:", err);
+      let errorMessage = "Failed to sign in. Please try again.";
 
-      if (err.message?.includes('Invalid login credentials')) {
-        errorMessage = 'Invalid email or password. Please check your credentials.'
-      } else if (err.message?.includes('Email not confirmed')) {
-        errorMessage = 'Please verify your email address before signing in.'
+      if (err.message?.includes("Invalid login credentials")) {
+        errorMessage =
+          "Invalid email or password. Please check your credentials.";
+      } else if (err.message?.includes("Email not confirmed")) {
+        errorMessage = "Please verify your email address before signing in.";
       }
 
-      setError(errorMessage)
+      setError(errorMessage);
       toast({
         variant: "destructive",
         title: "Access Denied",
         description: errorMessage,
         duration: TOAST_DURATION_MEDIUM,
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   // Handle Google OAuth sign-in
   const handleGoogleSignIn = async () => {
-    setError(null)
-    setIsGoogleLoading(true)
+    setError(null);
+    setIsGoogleLoading(true);
 
     try {
       const { data, error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          }
-        }
-      })
+            access_type: "offline",
+            prompt: "consent",
+          },
+        },
+      });
 
       if (signInError) {
-        throw signInError
+        throw signInError;
       }
 
       // OAuth redirect will handle the rest
     } catch (err: any) {
-      console.error("Google sign-in error:", err)
-      setError(err.message || "Failed to sign in with Google")
+      console.error("Google sign-in error:", err);
+      setError(err.message || "Failed to sign in with Google");
       toast({
         variant: "destructive",
         title: "Google Access Failed",
-        description: err.message || "Failed to sign in with Google. Please try again.",
+        description:
+          err.message || "Failed to sign in with Google. Please try again.",
         duration: TOAST_DURATION_MEDIUM,
-      })
-      setIsGoogleLoading(false)
+      });
+      setIsGoogleLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden relative">
+    <div className="min-h-screen bg-[#000825] overflow-hidden relative">
       {/* Enhanced Background Elements - Gamified */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(139,92,246,0.15),transparent)]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(236,72,153,0.15),transparent)]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_40%_40%,rgba(59,130,246,0.1),transparent)]"></div>
-
-      {/* Precision Grid Pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
 
       {/* Floating Gaming Elements */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-20 left-10 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg rotate-45 opacity-60 animate-pulse"></div>
-        <div className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60 animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60 animate-pulse" style={{ animationDelay: '4s' }}></div>
-        <Trophy className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60 animate-bounce" style={{ animationDelay: '1s' }} />
-        <Star className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60 animate-pulse" style={{ animationDelay: '3s' }} />
-        <Shield className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60 animate-bounce" style={{ animationDelay: '5s' }} />
-        <Gamepad2 className="absolute bottom-20 right-20 h-6 w-6 text-violet-400/60 animate-pulse" style={{ animationDelay: '2.5s' }} />
+        <div
+          className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60 animate-pulse"
+          style={{ animationDelay: "2s" }}
+        ></div>
+        <div
+          className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60 animate-pulse"
+          style={{ animationDelay: "4s" }}
+        ></div>
+        <Trophy
+          className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60 animate-bounce"
+          style={{ animationDelay: "1s" }}
+        />
+        <Star
+          className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60 animate-pulse"
+          style={{ animationDelay: "3s" }}
+        />
+        <Shield
+          className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60 animate-bounce"
+          style={{ animationDelay: "5s" }}
+        />
+        <Gamepad2
+          className="absolute bottom-20 right-20 h-6 w-6 text-violet-400/60 animate-pulse"
+          style={{ animationDelay: "2.5s" }}
+        />
       </div>
 
       <div className="relative z-20 flex items-center justify-center min-h-screen p-4">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           {/* Premium Logo */}
-          <div className="text-center mb-8">
+          <div className="text-center">
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-violet-600/20 to-purple-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="relative bg-gradient-to-br from-slate-800/60 to-slate-700/60 p-4 rounded-2xl border border-violet-400/20 backdrop-blur-md shadow-xl shadow-violet-500/10">
-                <Image src={logo} alt="Game of Creators" width={200} height={50} className="mx-auto" />
+              <div className="absolute inset-0 transition-opacity duration-500"></div>
+              <div className="relative  p-4 ">
+                <Image
+                  src={logo}
+                  alt="Game of Creators"
+                  width={200}
+                  height={70}
+                  className="mx-auto"
+                />
               </div>
             </div>
           </div>
@@ -167,35 +209,25 @@ export default function SignInPage() {
           {/* Enhanced Gaming Container */}
           <div className="relative group">
             {/* Gaming Glow Effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity duration-500"></div>
+            <div className="absolute inset-0 transition-opacity duration-500"></div>
 
-            <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-700/60 backdrop-blur-md p-8 rounded-2xl border border-violet-400/30 shadow-2xl shadow-violet-500/20">
+            <div className="relative p-8">
               {/* Gaming Header */}
               <div className="mb-8 text-center">
-                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 backdrop-blur-sm border border-emerald-400/30 rounded-full px-4 py-2 mb-4 shadow-xl shadow-emerald-500/20">
-                  <Shield className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs font-semibold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                    SECURE ACCESS
-                  </span>
-                </div>
-                <h1 className="text-4xl md:text-5xl font-black text-white drop-shadow-2xl mb-4">
-                  <span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                    Welcome
-                  </span>{" "}
-                  <span className="text-white">Back</span>{" "}
-                  <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
-                    Champion
-                  </span>
+                <h1 className="text-3xl md:text-4xl font-black text-white drop-shadow-2xl mb-4">
+                  Welcome Back Champion
                 </h1>
-                <p className="text-slate-300 leading-relaxed">
-                  🏆 Enter your credentials to access the Game Of Creators arena
+                <p className="text-slate-300 text-md leading-relaxed">
+                  Enter your credentials to access the Game Of Creators arena
                 </p>
               </div>
 
               <form onSubmit={handleEmailSignIn} className="space-y-6">
                 {/* Email Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300 font-medium">Email Address</Label>
+                  <Label htmlFor="email" className="text-slate-300 font-medium">
+                    Email Address
+                  </Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -204,7 +236,7 @@ export default function SignInPage() {
                       placeholder="Enter your email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12 bg-slate-900/70 border-slate-600/50 placeholder:text-slate-500 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
+                      className="pl-10 h-12 bg-[#000825] border-slate-600/50 placeholder:text-slate-400 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -213,7 +245,12 @@ export default function SignInPage() {
 
                 {/* Password Field */}
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-300 font-medium">Password</Label>
+                  <Label
+                    htmlFor="password"
+                    className="text-slate-300 font-medium"
+                  >
+                    Password
+                  </Label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
@@ -222,7 +259,7 @@ export default function SignInPage() {
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-10 pr-12 h-12 bg-slate-900/70 border-slate-600/50 placeholder:text-slate-500 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
+                      className="pl-10 pr-12 h-12 bg-[#000825]  border-slate-600/50 placeholder:text-slate-400 text-white focus:border-emerald-500 focus:ring-emerald-500 rounded-xl"
                       required
                       disabled={isLoading || isGoogleLoading}
                     />
@@ -231,7 +268,11 @@ export default function SignInPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -240,7 +281,7 @@ export default function SignInPage() {
                 <div className="flex justify-end">
                   <Link
                     href="/auth/forgot-password"
-                    className="text-sm text-violet-400 hover:text-violet-300 underline transition-colors"
+                    className="text-md text-violet-400 hover:text-violet-300 transition-colors"
                   >
                     Forgot password?
                   </Link>
@@ -256,7 +297,11 @@ export default function SignInPage() {
                 {/* Gaming Sign In Button */}
                 <Button
                   type="submit"
-                  className="group relative w-full bg-gradient-to-r from-emerald-600 via-cyan-600 to-blue-600 hover:from-emerald-500 hover:via-cyan-500 hover:to-blue-500 text-white font-bold px-8 py-4 text-lg rounded-xl shadow-2xl shadow-emerald-500/40 hover:shadow-emerald-500/60 transition-all duration-300 hover:scale-105 border border-emerald-400/30 overflow-hidden"
+                  className="group relative w-full text-white font-bold px-8 py-6 text-lg rounded-3xl transition-all duration-300 overflow-hidden"
+                  style={{
+                    background:
+                      "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                  }}
                   disabled={isLoading || isGoogleLoading}
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -skew-x-12 -translate-x-full transition-transform duration-700 group-hover:translate-x-full"></div>
@@ -267,49 +312,50 @@ export default function SignInPage() {
                     </>
                   ) : (
                     <>
-                      <Shield className="mr-2 h-5 w-5" />
                       <span className="relative z-10">Enter Arena</span>
-                      <Crown className="ml-2 h-5 w-5" />
                     </>
                   )}
                 </Button>
               </form>
-
+             
               {/* Divider */}
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <Separator className="w-full bg-slate-600/50" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-gradient-to-br from-slate-800/80 to-slate-700/60 px-4 text-slate-400 font-medium">OR</span>
-                </div>
+              <div className="flex items-center my-6">
+                <hr className="flex-1 border-gray-600" />
+                <span className="px-3 text-gray-400">Or Continue with</span>
+                <hr className="flex-1 border-gray-600" />
               </div>
+              <div className="flex justify-center gap-4">
+                {/* Google Sign In Button */}
+                <button
+                  onClick={handleGoogleSignIn}
+                  
+                  className="flex items-center text-md justify-center gap-2 p-2 rounded-md bg-white w-full max-w-xs text-gray-700 hover:bg-gray-100 transition"
+                  disabled={isLoading || isGoogleLoading}
+                >
+                  {isGoogleLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      <span>Connecting...</span>
+                    </>
+                  ) : (
+                    <>
+                       <FcGoogle size={20} className="mr-1" /> 
+                      <span>Continue with Google</span>
+                    </>
+                  )}
+                </button>
 
-              {/* Google Sign In Button */}
-              <Button
-                onClick={handleGoogleSignIn}
-                variant="outline"
-                className="group relative w-full bg-slate-900/50 border-2 border-slate-600/50 text-white hover:text-white hover:bg-slate-800/70 hover:border-violet-400/50 backdrop-blur-sm font-bold px-8 py-4 text-lg rounded-xl transition-all duration-300 hover:scale-105"
-                disabled={isLoading || isGoogleLoading}
-              >
-                {isGoogleLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    <span>Connecting...</span>
-                  </>
-                ) : (
-                  <>
-                    <FcGoogle className="mr-3 h-6 w-6" />
-                    <span>Continue with Google</span>
-                    <Sparkles className="ml-3 h-5 w-5 text-violet-400" />
-                  </>
-                )}
-              </Button>
-
+                <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 w-12 text-white hover:bg-blue-700 transition">
+                  <FaFacebookF size={18} />
+                </button>
+                <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-500 w-12 text-white hover:opacity-90 transition">
+                  <FaInstagram size={18} />
+                </button>
+              </div>
               {/* Sign Up Link */}
               <div className="mt-8 text-center">
                 <p className="text-slate-400">
-                  New to the arena?{' '}
+                  New to the arena?{" "}
                   <Link
                     href="/auth/signup"
                     className="font-semibold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent hover:from-violet-300 hover:to-purple-300 transition-all"
@@ -323,5 +369,5 @@ export default function SignInPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

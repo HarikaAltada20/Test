@@ -113,7 +113,7 @@ export function Nav({
 
       <div className="relative">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-20 items-center justify-around">
+          <div className="flex h-20 items-center justify-between md:justify-around">
             {/* Enhanced Logo Section */}
             <div className="flex items-center">
               <Link
@@ -148,10 +148,10 @@ export function Nav({
                   href="/brands"
                   className={cn(
                     "group relative px-6 py-3 text-lg font-semibold transition-all duration-300 rounded-xl",
-                    "text-slate-300 hover:text-white",
+                    "text-slate-300 ",
                     pathname === "/brands"
-                      ? "text-white bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-400/30 shadow-lg shadow-violet-500/20"
-                      : "hover:bg-gradient-to-r hover:from-violet-600/10 hover:to-purple-600/10 hover:border-violet-400/20 border border-transparent"
+                      ? "text-purple-500"
+                      : "hover:text-purple-400"
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -316,7 +316,7 @@ export function Nav({
                     <Button
                       variant="outline"
                       className={cn(
-                        "px-6 py-1.5 text-md rounded-full backdrop-blur-sm transition-all duration-300",
+                        "hidden md:flex px-6 py-1.5 text-md rounded-full backdrop-blur-sm transition-all duration-300",
                         pathname === "/creators"
                           ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
                           : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
@@ -331,7 +331,7 @@ export function Nav({
                 
                     <Button
                       className={cn(
-                        "px-6 py-1.5 text-md rounded-full transition-all duration-300 relative overflow-hidden", // added relative + overflow-hidden
+                        "hidden md:flex px-6 py-1.5 text-md rounded-full transition-all duration-300 relative overflow-hidden", // added relative + overflow-hidden
                         pathname === "/creators"
                           ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
                           : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
