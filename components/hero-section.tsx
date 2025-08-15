@@ -507,14 +507,20 @@ export function HeroSection() {
                     {steps[activeIndex].description}
                   </p>
 
-                  {/* Button */}
-                  <a
-                    href="#"
-                    className="bg-purple-600 hover:bg-purple-700 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full inline-flex items-center gap-2 self-start text-sm sm:text-base"
+                
+                  <button
+                   
+                    className="px-5 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
+              //      
+                    style={{
+                      background:
+                        "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                    }}
                   >
+                     <div className="scan-line"></div>
                     Start Now
                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
@@ -532,7 +538,9 @@ export function HeroSection() {
               ))}
             </div>
           </div>
-        </section>
+        </section> 
+        
+        {/* Reasons to Select Us */}
 
         <section ref={chooseRef} className="text-white py-20">
           <div className="max-w-[1250px] mx-auto px-4">
