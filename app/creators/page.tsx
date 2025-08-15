@@ -9,6 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import NumbersSection from "@/components/NumberSection";
 import {
   ArrowRight,
   Star,
@@ -131,9 +132,6 @@ export default function CreatorsPage() {
   const [step, setStep] = useState(0);
   const [animate, setAnimate] = useState(false);
 
-  const creatorsNumbers = [3000, 4000, 5000, 6000, 7000];
-  const campaignNumbers = [100, 200, 300, 400, 500, 600];
-  const viewNumbers = [40, 50, 60, 70, 80];
   const animationRef = useRef<HTMLDivElement>(null);
   const [isAnimated, setIsAnimated] = useState(false);
   const howItWorksRef = useRef<HTMLDivElement>(null);
@@ -141,76 +139,42 @@ export default function CreatorsPage() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsAnimated(true);
+      (entries, observerInstance) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            // Section animation
+            if (entry.target === sectionRef.current) {
+              setAnimate(true);
+              observerInstance.unobserve(entry.target);
+            }
 
-          observer.disconnect();
-        }
+            // Animation block
+            if (entry.target === animationRef.current) {
+              setIsAnimated(true);
+              observerInstance.unobserve(entry.target);
+            }
+
+            // How it works section
+            if (entry.target === howItWorksRef.current) {
+              setHowItWorksAnimated(true);
+              observerInstance.unobserve(entry.target);
+            }
+          }
+        });
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 } // Use lower threshold to ensure all trigger
     );
 
-    if (animationRef.current) {
-      observer.observe(animationRef.current);
-    }
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    if (animationRef.current) observer.observe(animationRef.current);
+    if (howItWorksRef.current) observer.observe(howItWorksRef.current);
 
-    return () => observer.disconnect();
+    return () => {
+      if (sectionRef.current) observer.unobserve(sectionRef.current);
+      if (animationRef.current) observer.unobserve(animationRef.current);
+      if (howItWorksRef.current) observer.unobserve(howItWorksRef.current);
+    };
   }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHowItWorksAnimated(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    if (howItWorksRef.current) {
-      observer.observe(howItWorksRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  const maxSteps =
-    Math.max(
-      creatorsNumbers.length,
-      campaignNumbers.length,
-      viewNumbers.length
-    ) - 1;
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setAnimate(true);
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (animate && step < maxSteps) {
-      const timeout = setTimeout(() => {
-        setStep((prev) => prev + 1);
-      }, 500);
-      return () => clearTimeout(timeout);
-    }
-  }, [animate, step, maxSteps]);
-
-  const getNumber = (arr: number[], i: number) =>
-    arr[Math.min(i, arr.length - 1)];
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -229,7 +193,7 @@ export default function CreatorsPage() {
 
           {/* Floating Creative Elements */}
           <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
             <Sparkles
               className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
               style={{ animationDelay: "1s" }}
@@ -512,109 +476,23 @@ export default function CreatorsPage() {
           </div>
         </section>
 
-        <section className="py-16" ref={sectionRef}>
-          <div className="container mx-auto max-w-6xl px-4">
-            <div className="flex justify-center items-center text-white text-center gap-4 sm:gap-8 overflow-x-auto">
-              {/* Creators */}
-              <div className="flex flex-col items-center sm:items-start px-2 sm:px-8">
-                <div className="flex items-center">
-                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
-                    <div
-                      className="flex flex-col transition-transform duration-300 ease-in-out"
-                      style={{
-                        transform: `translateY(-${
-                          Math.min(step, creatorsNumbers.length - 1) *
-                          (window.innerWidth < 640 ? 48 : 72)
-                        }px)`,
-                      }}
-                    >
-                      {creatorsNumbers.map((num) => (
-                        <div
-                          key={num}
-                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
-                        >
-                          {num}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
-                    +
-                  </span>
-                </div>
-                <p className="mt-2 text-xs sm:text-base">
-                  Creators on Platform
-                </p>
-              </div>
-
-              {/* Divider */}
-              <div className="border-l-2 border sm:border-solid border-gray-500 h-12 sm:h-20"></div>
-
-              {/* Campaigns */}
-              <div className="flex flex-col items-center sm:items-start px-2 sm:px-8">
-                <div className="flex items-center">
-                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
-                    <div
-                      className="flex flex-col transition-transform duration-300 ease-in-out"
-                      style={{
-                        transform: `translateY(-${
-                          Math.min(step, campaignNumbers.length - 1) *
-                          (window.innerWidth < 640 ? 48 : 72)
-                        }px)`,
-                      }}
-                    >
-                      {campaignNumbers.map((num) => (
-                        <div
-                          key={num}
-                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
-                        >
-                          {num}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
-                    +
-                  </span>
-                </div>
-                <p className="mt-2 text-xs sm:text-base">Campaigns Delivered</p>
-              </div>
-
-              {/* Divider */}
-              <div className="border-l-2 border sm:border-solid border-gray-500 h-12 sm:h-20"></div>
-
-              {/* Views */}
-              <div className="flex flex-col items-center sm:items-start px-2 sm:px-8">
-                <div className="flex items-center">
-                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
-                    <div
-                      className="flex flex-col transition-transform duration-300 ease-in-out"
-                      style={{
-                        transform: `translateY(-${
-                          Math.min(step, viewNumbers.length - 1) *
-                          (window.innerWidth < 640 ? 48 : 72)
-                        }px)`,
-                      }}
-                    >
-                      {viewNumbers.map((num) => (
-                        <div
-                          key={num}
-                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
-                        >
-                          {num}M
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
-                    +
-                  </span>
-                </div>
-                <p className="mt-2 text-xs sm:text-base">Views Generated</p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <NumbersSection
+          items={[
+            {
+              numbers: [3000, 4000, 5000, 6000, 7000],
+              label: "Creators on Platform",
+            },
+            {
+              numbers: [100, 200, 300, 400, 500, 600],
+              label: "Campaigns Delivered",
+            },
+            {
+              numbers: [40, 50, 60, 70, 80],
+              label: "Views Generated",
+              suffix: "M",
+            },
+          ]}
+        />
 
         {/* Epic Stats Section */}
         {/* <section className="py-20 md:py-32 relative">

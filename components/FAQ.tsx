@@ -34,7 +34,7 @@ const homeFaqs = [
     id: "faq-home-4",
     question: "How do you ensure content quality?",
     answer:
-      "We're the only platform that gamifies creator marketing with contests, leaderboards, and achievement systems. Plus, we guarantee results or your money back!",
+      "All our creators go through a rigorous vetting process. Plus, our AI-powered matching system ensures you only work with creators who align with your brand values.",
   },
 ];
 const creatorFaqs = [

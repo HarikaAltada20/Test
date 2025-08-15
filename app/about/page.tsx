@@ -63,44 +63,40 @@ export default function AboutPage() {
     const observer = new IntersectionObserver(
       ([entry], observerInstance) => {
         if (entry.isIntersecting) {
+          // How It Works section
           if (entry.target === howItWorksRef.current) {
             setShowHowItWorks(true);
-            observerInstance.unobserve(entry.target); // unobserve after trigger
+            observerInstance.unobserve(entry.target);
           }
+  
+          // Values section
           if (entry.target === valuesRef.current) {
             setShowValues(true);
             observerInstance.unobserve(entry.target);
           }
+  
+          // Story section
+          if (entry.target === storyRef.current) {
+            setVisible(true);
+            observerInstance.unobserve(entry.target);
+          }
         }
       },
-      { threshold: 0.4 }
+      { threshold: 0.3 } // Use the lower threshold to cover both cases
     );
-
+  
+    // Observe all refs if they exist
     if (howItWorksRef.current) observer.observe(howItWorksRef.current);
     if (valuesRef.current) observer.observe(valuesRef.current);
-
+    if (storyRef.current) observer.observe(storyRef.current);
+  
     return () => {
       if (howItWorksRef.current) observer.unobserve(howItWorksRef.current);
       if (valuesRef.current) observer.unobserve(valuesRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    if (storyRef.current) observer.observe(storyRef.current);
-
-    return () => {
       if (storyRef.current) observer.unobserve(storyRef.current);
     };
   }, []);
+  
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">

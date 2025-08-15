@@ -19,38 +19,39 @@ import {
   Users,
 } from "lucide-react";
 import CtcBanner from "@/components/CtcBanner";
+import NumbersSection from "@/components/NumberSection";
 import Testimonials from "@/components/Testimonials";
 import BrandLaunchContestButton from "@/components/BrandLaunchContestButton";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - reuse from creators page
 import SocialPairPng from "@/public/images/social_pair.png";
 
-const faqItemsBrands = [
-  {
-    id: "faq-brand-1",
-    question: "How do I create a contest for creators?",
-    answer:
-      "Our platform makes it easy. Simply define your campaign brief, set your prize pool, specify the type of content you're looking for (e.g., youtube videos, Instagram Reels), and launch. Creators in our network will then be able to see and participate in your contest.",
-  },
-  {
-    id: "faq-brand-2",
-    question: "How do I ensure content quality and brand alignment?",
-    answer:
-      "You provide a detailed brief outlining your brand guidelines, key messages, and content expectations. You can review submissions and provide feedback before selecting winners. Many brands also use contests to discover creators for longer-term collaborations.",
-  },
-  {
-    id: "faq-brand-3",
-    question: "What kind of results can I expect from creator contests?",
-    answer:
-      "Results vary, but brands typically receive a diverse range of authentic content pieces at a fraction of traditional production costs. This content can be used for social media, ads, and other marketing channels, often leading to increased engagement, brand awareness, and reach.",
-  },
-  {
-    id: "faq-brand-4",
-    question: "How are creators paid and how much does it cost?",
-    answer:
-      "You set the prize pool for your contest. Payments to winning creators are handled securely through our platform. Our pricing is transparent, typically involving a platform fee on top of the prize money you allocate for creators.",
-  },
-];
+// const faqItemsBrands = [
+//   {
+//     id: "faq-brand-1",
+//     question: "How do I create a contest for creators?",
+//     answer:
+//       "Our platform makes it easy. Simply define your campaign brief, set your prize pool, specify the type of content you're looking for (e.g., youtube videos, Instagram Reels), and launch. Creators in our network will then be able to see and participate in your contest.",
+//   },
+//   {
+//     id: "faq-brand-2",
+//     question: "How do I ensure content quality and brand alignment?",
+//     answer:
+//       "You provide a detailed brief outlining your brand guidelines, key messages, and content expectations. You can review submissions and provide feedback before selecting winners. Many brands also use contests to discover creators for longer-term collaborations.",
+//   },
+//   {
+//     id: "faq-brand-3",
+//     question: "What kind of results can I expect from creator contests?",
+//     answer:
+//       "Results vary, but brands typically receive a diverse range of authentic content pieces at a fraction of traditional production costs. This content can be used for social media, ads, and other marketing channels, often leading to increased engagement, brand awareness, and reach.",
+//   },
+//   {
+//     id: "faq-brand-4",
+//     question: "How are creators paid and how much does it cost?",
+//     answer:
+//       "You set the prize pool for your contest. Payments to winning creators are handled securely through our platform. Our pricing is transparent, typically involving a platform fee on top of the prize money you allocate for creators.",
+//   },
+// ];
 const Brandsteps = [
   {
     number: "1",
@@ -81,9 +82,9 @@ const Brandsteps = [
   },
 ];
 const images: string[] = [
-  "./images/Rectangle 2724.png",
-  "./images/Property 1=Rectangle 2725.png",
-  "./images/Property 1=Rectangle 2726.png",
+  "./images/f51c4c5af9b9b5ab2e591a2decd387ff602702a8.png",
+  "./images/Property 1=Rectangle 2725 (1).png",
+  "./images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.png",
 ];
 export default function BrandsPage() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
@@ -94,9 +95,6 @@ export default function BrandsPage() {
   const [step, setStep] = useState(0);
   const [animate, setAnimate] = useState(false);
 
-  const creatorsNumbers = [3000, 4000, 5000, 6000, 7000];
-  const campaignNumbers = [100, 200, 300, 400, 500, 600];
-  const viewNumbers = [40, 50, 60, 70, 80];
   const animationRef = useRef<HTMLDivElement>(null);
   const [isAnimated, setIsAnimated] = useState(false);
   const howItWorksRef = useRef<HTMLDivElement>(null);
@@ -104,72 +102,39 @@ export default function BrandsPage() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsAnimated(true);
+      (entries, observerInstance) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (entry.target === animationRef.current) {
+              setIsAnimated(true);
+              observerInstance.unobserve(entry.target);
+            }
 
-          observer.disconnect();
-        }
+            if (entry.target === howItWorksRef.current) {
+              setHowItWorksAnimated(true);
+              observerInstance.unobserve(entry.target);
+            }
+
+            if (entry.target === sectionRef.current) {
+              setAnimate(true);
+              observerInstance.unobserve(entry.target);
+            }
+          }
+        });
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 } // Adjust if you want different triggers
     );
 
-    if (animationRef.current) {
-      observer.observe(animationRef.current);
-    }
+    if (animationRef.current) observer.observe(animationRef.current);
+    if (howItWorksRef.current) observer.observe(howItWorksRef.current);
+    if (sectionRef.current) observer.observe(sectionRef.current);
 
-    return () => observer.disconnect();
+    return () => {
+      if (animationRef.current) observer.unobserve(animationRef.current);
+      if (howItWorksRef.current) observer.unobserve(howItWorksRef.current);
+      if (sectionRef.current) observer.unobserve(sectionRef.current);
+    };
   }, []);
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHowItWorksAnimated(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    if (howItWorksRef.current) {
-      observer.observe(howItWorksRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  const maxSteps =
-    Math.max(
-      creatorsNumbers.length,
-      campaignNumbers.length,
-      viewNumbers.length
-    ) - 1;
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setAnimate(true);
-        }
-      },
-      { threshold: 0.5 }
-    );
-
-    if (sectionRef.current) {
-      observer.observe(sectionRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (animate && step < maxSteps) {
-      const timeout = setTimeout(() => {
-        setStep((prev) => prev + 1);
-      }, 500);
-      return () => clearTimeout(timeout);
-    }
-  }, [animate, step, maxSteps]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -190,7 +155,7 @@ export default function BrandsPage() {
 
           {/* Floating Creative Elements */}
           <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
             <Sparkles
               className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
               style={{ animationDelay: "1s" }}
@@ -494,109 +459,23 @@ export default function BrandsPage() {
           </div>
         </section>
 
-        <section className="py-16" ref={sectionRef}>
-          <div className="container mx-auto max-w-6xl px-4">
-            <div className="flex justify-center items-center text-white text-center gap-4 sm:gap-8 overflow-x-auto">
-              {/* Creators */}
-              <div className="flex flex-col items-center px-2 sm:px-8">
-                <div className="flex items-center">
-                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
-                    <div
-                      className="flex flex-col transition-transform duration-300 ease-in-out"
-                      style={{
-                        transform: `translateY(-${
-                          Math.min(step, creatorsNumbers.length - 1) *
-                          (window.innerWidth < 640 ? 48 : 72)
-                        }px)`,
-                      }}
-                    >
-                      {creatorsNumbers.map((num) => (
-                        <div
-                          key={num}
-                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
-                        >
-                          {num}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
-                    +
-                  </span>
-                </div>
-                <p className="mt-2 text-xs sm:text-base">
-                  Creators on Platform
-                </p>
-              </div>
-
-              {/* Divider */}
-              <div className="border-l-2 border border-gray-500 h-12 sm:h-20"></div>
-
-              {/* Campaigns */}
-              <div className="flex flex-col items-center px-2 sm:px-8">
-                <div className="flex items-center">
-                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
-                    <div
-                      className="flex flex-col transition-transform duration-300 ease-in-out"
-                      style={{
-                        transform: `translateY(-${
-                          Math.min(step, campaignNumbers.length - 1) *
-                          (window.innerWidth < 640 ? 48 : 72)
-                        }px)`,
-                      }}
-                    >
-                      {campaignNumbers.map((num) => (
-                        <div
-                          key={num}
-                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
-                        >
-                          {num}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
-                    +
-                  </span>
-                </div>
-                <p className="mt-2 text-xs sm:text-base">Campaigns Delivered</p>
-              </div>
-
-              {/* Divider */}
-              <div className="border-l-2 border border-gray-500 h-12 sm:h-20"></div>
-
-              {/* Views */}
-              <div className="flex flex-col items-center px-2 sm:px-8">
-                <div className="flex items-center">
-                  <div className="overflow-hidden h-[48px] sm:h-[72px]">
-                    <div
-                      className="flex flex-col transition-transform duration-300 ease-in-out"
-                      style={{
-                        transform: `translateY(-${
-                          Math.min(step, viewNumbers.length - 1) *
-                          (window.innerWidth < 640 ? 48 : 72)
-                        }px)`,
-                      }}
-                    >
-                      {viewNumbers.map((num) => (
-                        <div
-                          key={num}
-                          className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
-                        >
-                          {num}M
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
-                    +
-                  </span>
-                </div>
-                <p className="mt-2 text-xs sm:text-base">Views Generated</p>
-              </div>
-            </div>
-          </div>
-        </section>
+        <NumbersSection
+          items={[
+            {
+              numbers: [3000, 4000, 5000, 6000, 7000],
+              label: "Creators on Platform",
+            },
+            {
+              numbers: [100, 200, 300, 400, 500, 600],
+              label: "Campaigns Delivered",
+            },
+            {
+              numbers: [40, 50, 60, 70, 80],
+              label: "Views Generated",
+              suffix: "M",
+            },
+          ]}
+        />
 
         {/* Epic Stats Section */}
         {/* <section className="py-20 md:py-32 relative">

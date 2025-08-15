@@ -23,6 +23,7 @@ import SocialPairPng from "@/public/images/social_pair.png";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
 import CtcBanner from "./CtcBanner";
+import NumbersSection from "./NumberSection";
 const steps = [
   {
     step: 1,
@@ -51,48 +52,48 @@ const steps = [
     icon: <Sparkles className="w-6 h-6 text-white" />,
   },
 ];
-const features = [
-  {
-    title: "Authentic Content",
-    description:
-      "Generate genuine, viral-worthy content that your audience will love and share.",
-    icon: "/images/authentic-icon.png", // replace with your icon
-  },
-  {
-    title: "Easy Management",
-    description:
-      "Manage all your campaigns from one intuitive, game-like dashboard interface.",
-    icon: "/images/calendar-icon.png",
-  },
-  {
-    title: "Real-Time Analytics",
-    description:
-      "Track every view, like, and conversion with our advanced analytics dashboard.",
-    icon: "/images/pie-icon.png",
-  },
-  {
-    title: "Cost Effective",
-    description:
-      "Get10x better ROI compared to traditional advertising. Every dollar counts!",
-    icon: "/images/cost-icon.png",
-  },
-  {
-    title: "Targeted Reach",
-    description:
-      "Connect with creators, whose audience perfectly match your ideal customers.",
-    icon: "/images/target-icon.png",
-  },
-  {
-    title: "Gaming Dashboard",
-    description: "Level up your campaigns with our intuitive interface.",
-    icon: "/images/game-icon.png",
-  },
-  {
-    title: "24/7 Support",
-    description: "Our gaming experts are always ready to help you win big!",
-    icon: "/images/support-icon.png",
-  },
-];
+// const features = [
+//   {
+//     title: "Authentic Content",
+//     description:
+//       "Generate genuine, viral-worthy content that your audience will love and share.",
+//     icon: "/images/authentic-icon.png", // replace with your icon
+//   },
+//   {
+//     title: "Easy Management",
+//     description:
+//       "Manage all your campaigns from one intuitive, game-like dashboard interface.",
+//     icon: "/images/calendar-icon.png",
+//   },
+//   {
+//     title: "Real-Time Analytics",
+//     description:
+//       "Track every view, like, and conversion with our advanced analytics dashboard.",
+//     icon: "/images/pie-icon.png",
+//   },
+//   {
+//     title: "Cost Effective",
+//     description:
+//       "Get10x better ROI compared to traditional advertising. Every dollar counts!",
+//     icon: "/images/cost-icon.png",
+//   },
+//   {
+//     title: "Targeted Reach",
+//     description:
+//       "Connect with creators, whose audience perfectly match your ideal customers.",
+//     icon: "/images/target-icon.png",
+//   },
+//   {
+//     title: "Gaming Dashboard",
+//     description: "Level up your campaigns with our intuitive interface.",
+//     icon: "/images/game-icon.png",
+//   },
+//   {
+//     title: "24/7 Support",
+//     description: "Our gaming experts are always ready to help you win big!",
+//     icon: "/images/support-icon.png",
+//   },
+// ];
 
 export function HeroSection() {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -305,7 +306,7 @@ export function HeroSection() {
                 passHref
                 className="relative z-10 flex items-center gap-2"
               >
-                 <div className="scan-line"></div>
+                <div className="scan-line"></div>
                 <Crown className="h-5 w-5" />
                 I'm a Brand
                 <ArrowRight className="h-5 w-5" />
@@ -318,14 +319,13 @@ export function HeroSection() {
                 passHref
                 className="relative z-10 flex items-center gap-2"
               >
-                 <div className="scan-line"></div>
+                <div className="scan-line"></div>
                 <Sparkles className="h-5 w-5" />
                 I'm a Creator
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </button>
           </div>
-         
         </section>
 
         <section className="relative h-[200px] md:h-[400px] z-10 overflow-hidden">
@@ -392,7 +392,6 @@ export function HeroSection() {
         </section>
 
         <div className="absolute bottom-[50px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
-          
           <div className="scroll-track">
             {[
               "./images/434ce5e441255007a5349fd85232df9726062927.png",
@@ -738,6 +737,25 @@ export function HeroSection() {
             </div>
           </div>
         </section>
+
+        <NumbersSection
+          items={[
+            {
+              numbers: [100, 200, 300, 400, 500],
+              label: "Active Creators",
+            },
+            {
+              numbers: ["$0.5", "$1.5", "$2.5", "$3.5", "$4.5", "$5.5"],
+              label: "Rewards Paid",
+              suffix: "M",
+            },
+            {
+              numbers: ["$60", "$70", "$80", "$90", "$100"],
+              label: "View Generated",
+              suffix: "M",
+            },
+          ]}
+        />
 
         <Testimonials />
         <FAQ />
