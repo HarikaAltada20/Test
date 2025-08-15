@@ -185,59 +185,7 @@ export default function PricingClient() {
         "Branded contest landing pages",
     ];
 
-    // FAQ items from the FAQ data
-    const faqItems = [
-        {
-            question: "How are the creator payouts / prizes structured?",
-            answer:
-                "You control how the prize pool is split. For example: 3 winners: $500 / $300 / $200, or 5 winners: $400 / $250 / $150 / $100 / $100. You define this upfront in your contest brief, and creators compete to win based on real engagement.",
-        },
-        {
-            question: "What if my contest gets no views?",
-            answer:
-                "Creators are incentivized to promote their content because views = prizes. This means they actively push their posts to friends, followers, and beyond to maximize reach. It's like having a motivated marketing team built in. If results fall short, we can help you optimize your brief or strategy for next time—at no extra cost.",
-        },
-        {
-            question: "How many creators are on Game Of Creators?",
-            answer:
-                "We have a fast-growing network of 5,000+ active creators across various niches. When you launch a contest, it goes live to all eligible creators through our dashboard and email system—ensuring visibility and participation.",
-        },
-        {
-            question: "How much should I run a contest for?",
-            answer:
-                "It depends on your goal: $1,000–$2,000 for a range of quality UGC entries, $500+ for niche campaigns or specific messaging, higher payouts attract creators with larger audiences. We'll help you structure it based on your goals—whether that's more entries, more reach, or better-quality content.",
-        },
-        {
-            question: "Do I own the content?",
-            answer:
-                "Yes, once a contest ends and winners are announced, you get full rights to download and repurpose all winning content for your brand's marketing use—including ads, social posts, website use, etc. Non-winning content may still be available upon request or with creator permission, depending on your use case.",
-        },
-        {
-            question: "How do you help me find my content-market fit?",
-            answer:
-                "We help you test different content styles and creator personalities to see what resonates with your audience. This process of testing various approaches helps you discover the most effective way to present your product or service to your target market.",
-        },
-        {
-            question: "How do I know the views are real?",
-            answer:
-                "All content links are public, and we provide platform-specific analytics that you can verify. You can see actual engagement metrics from the platforms where the content is posted.",
-        },
-        {
-            question: "What type of creators are on the platform?",
-            answer:
-                "Our platform hosts a diverse range of creators across different niches including lifestyle, tech, beauty, fitness, food, gaming, and more. We have creators with followings ranging from micro-influencers to those with larger audiences, ensuring you can find the perfect match for your brand's voice and target audience.",
-        },
-        {
-            question: "How long does a typical contest run?",
-            answer:
-                "Most contests run for 7-14 days, which gives creators enough time to develop quality content while maintaining momentum and excitement. However, you have flexibility to set shorter or longer timeframes depending on your specific goals and campaign urgency.",
-        },
-        {
-            question: "Can I run multiple contests simultaneously?",
-            answer:
-                "Yes! Depending on your subscription plan, you can run multiple contests at the same time. This is perfect for testing different content approaches, targeting various audience segments, or launching campaigns across multiple products simultaneously.",
-        },
-    ];
+
 
     // Company logos (placeholders - should be replaced with actual logos)
     const companyLogos = [
@@ -662,22 +610,7 @@ export default function PricingClient() {
                 </div>
             </div>
 
-            {/* FAQ Section */}
-            <div className="mb-16">
-                <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
-                    Frequently Asked Questions
-                </h2>
-                <div className="max-w-3xl mx-auto">
-                    <Accordion type="single" collapsible className="w-full">
-                        {faqItems.map((item, index) => (
-                            <AccordionItem key={index} value={`item-${index}`}>
-                                <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
-                                <AccordionContent className="text-gray-600">{item.answer}</AccordionContent>
-                            </AccordionItem>
-                        ))}
-                    </Accordion>
-                </div>
-            </div>
+
 
         </div>
     );

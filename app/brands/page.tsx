@@ -11,27 +11,63 @@ import SocialPairPng from "@/public/images/social_pair.png"
 const faqItemsBrands = [
   {
     id: "faq-brand-1",
-    question: "How do I create a contest for creators?",
+    question: "What are contests? And How does it work?",
     answer:
-      "Our platform makes it easy. Simply define your campaign brief, set your prize pool, specify the type of content you're looking for (e.g., youtube videos, Instagram Reels), and launch. Creators in our network will then be able to see and participate in your contest.",
+      "There are <strong>two types of contests</strong> on Game of Creators: <strong>Leaderboard</strong> and <strong>CPM-based contests</strong>. These contests allow brands to crowdsource a large volume of creator content quickly by launching a competitive campaign.<br><br><strong>How it works:</strong><br>• You set a total prize pool, define your brief and rules<br>• Creators submit videos posted organically on their own YouTube or Instagram accounts<br>• At the end of the contest (typically lasting 3-28 days, set by you), creators with the most views win and split the prize money based on your payout structure<br>• Plus, you own all the winning content, giving you a library of performance-tested videos for paid ads<br><br>It's the fastest way to test multiple hooks, formats, and creators all at once and get viral marketing with hundreds of creators.",
   },
   {
     id: "faq-brand-2",
-    question: "How do I ensure content quality and brand alignment?",
+    question: "How are the contest payouts/prizes structured?",
     answer:
-      "You provide a detailed brief outlining your brand guidelines, key messages, and content expectations. You can review submissions and provide feedback before selecting winners. Many brands also use contests to discover creators for longer-term collaborations.",
+      "You have <strong>full control</strong> over how the prize pool is distributed among winners. Prizes are awarded based on organic views, and you can structure payouts to align with your campaign goals.<br><br><strong>Example:</strong> On a $1,000 contest, you could have 10 winners at $100 each, or 40 winners with this prize distribution:<br><br>• <strong>1st Place:</strong> $300 (A strong, attractive top prize)<br>• <strong>2nd Place:</strong> $150<br>• <strong>3rd Place:</strong> $75<br>• <strong>4th-10th Place</strong> (7 winners): $25 each ($175 total)<br>• <strong>11th-40th Place</strong> (30 winners): $10 each ($300 total)<br><br>The prize pool and distribution are set before your contest goes live, ensuring clarity and consistency in payouts.",
   },
   {
     id: "faq-brand-3",
-    question: "What kind of results can I expect from creator contests?",
+    question: "What if my contest gets no views?",
     answer:
-      "Results vary, but brands typically receive a diverse range of authentic content pieces at a fraction of traditional production costs. This content can be used for social media, ads, and other marketing channels, often leading to increased engagement, brand awareness, and reach.",
+      "Game of Creators operates on a <strong>supply-and-demand model</strong>, ensuring that your contest won't go unnoticed. With a large network of eager creators, there's always someone ready to compete for your prize pool.<br><br>The prize pool creates an incentive for submissions, which generate views as creators post organically to their audiences. If engagement is lower than expected, we are here to help refine your brief or strategy to maximize participation and results.",
   },
   {
     id: "faq-brand-4",
-    question: "How are creators paid and how much does it cost?",
+    question: "How much should I run a contest for?",
     answer:
-      "You set the prize pool for your contest. Payments to winning creators are handled securely through our platform. Our pricing is transparent, typically involving a platform fee on top of the prize money you allocate for creators.",
+      "The ideal budget depends on your campaign goals:<br><br><strong>Optimizing for Paid Ads:</strong> Allocate more winners with smaller prizes for a diverse range of content.<br><br><strong>Maximizing Organic Reach:</strong> Offer fewer but larger payouts to attract top-tier creators for viral, organic reach.<br><br>We recommend starting with at least <strong>$1,000</strong>, but contests can begin with as little as <strong>$50</strong>. There is no upper limit.",
+  },
+  {
+    id: "faq-brand-5",
+    question: "How do I track conversions?",
+    answer:
+      "To track conversions effectively, Game of Creators tracks views and engagement on the organic content posted by influencers:<br><br><strong>View and Engagement Metrics:</strong> After the contest launches, creators post content on their Instagram or YouTube accounts. You can track the views, likes, shares, and other engagement metrics to evaluate each post's performance.<br><br><strong>Custom Call-to-Actions (CTAs):</strong> You can require creators to include a CTA in their content, such as visiting your website or downloading your app, making it easier to connect content performance with measurable outcomes.",
+  },
+  {
+    id: "faq-brand-6",
+    question: "Do I own the winning content?",
+    answer:
+      "<strong>Yes, you own the winning content outright and forever.</strong> This means you have full rights to repost, edit, or use it across any platform, including in paid ads.",
+  },
+  {
+    id: "faq-brand-7",
+    question: "How can Game of Creators help me find content-market fit?",
+    answer:
+      "By running a contest, you gain access to diverse content from creators, helping you quickly identify which content formats resonate with your audience. You'll also discover top-performing creators who can become long-term partners.<br><br>Game of Creators accelerates your path to content-market fit by streamlining testing, learning, and scaling what works for your brand.",
+  },
+  {
+    id: "faq-brand-8",
+    question: "How do I know views are real?",
+    answer:
+      "Game of Creators is a <strong>YouTube and Instagram-approved platform</strong>, with access to their APIs. This ensures all views and engagement metrics come directly from verified data, providing accurate and trustworthy analytics.<br><br>Any creator attempting to manipulate metrics will be removed from the platform, ensuring transparency and quality results for your campaigns.",
+  },
+  {
+    id: "faq-brand-9",
+    question: "Where will the videos be posted?",
+    answer:
+      "Videos will be posted directly on the creators' <strong>organic YouTube and Instagram accounts</strong>, ensuring they reach genuine audiences in an authentic way. This approach maximizes exposure and leverages the creators' established following for better results.",
+  },
+  {
+    id: "faq-brand-10",
+    question: "How are creators paid?",
+    answer:
+      "Game of Creators handles all creator payments seamlessly for you. Once the contest ends and winners are determined based on organic views, we distribute the prize money directly to the winning creators' wallets.<br><br>From there, they can request a withdrawal at any time through their preferred payment method—<strong>Crypto, Bank Transfer, or UPI</strong>. The only condition is that the payout must be at least <strong>$20</strong>.<br><br>This ensures a smooth process, so you don't have to worry about managing individual payments or logistics.",
   },
 ]
 
@@ -366,9 +402,11 @@ export default function BrandsPage() {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="text-slate-300 text-lg leading-relaxed px-8 pb-6">
-                        <div className="pl-12">
-                          {item.answer}
-                        </div>
+                        <div className="pl-12"
+                          dangerouslySetInnerHTML={{
+                            __html: item.answer
+                          }}
+                        />
                       </AccordionContent>
                     </div>
                   </AccordionItem>

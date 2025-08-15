@@ -537,34 +537,76 @@ export function HeroSection() {
           <div className="space-y-6">
             {[
               {
-                q: "What makes Game Of Creators different from other platforms?",
-                a: "We're the only platform that gamifies creator marketing with contests, leaderboards, and achievement systems. Plus, we guarantee results or your money back!"
+                q: "What is Game of Creators?",
+                a: "<strong>Game of Creators democratizes brand deals</strong> by allowing any creator—even those with zero followers—to participate in contests and earn money based purely on <strong>performance and views</strong>.<br><br><strong>For brands,</strong> this system is a game-changer: a single contest can inspire <strong>hundreds to thousands of creators</strong> to generate viral marketing content for your product. You get <strong>widespread promotion</strong> and a <strong>huge variety of content</strong>, yet you only reward the <strong>best-performing creators</strong>, ensuring you pay just for the most impactful results."
               },
               {
-                q: "How quickly can I launch my first contest?",
-                a: "You can create and launch your first contest in under 5 minutes! Our streamlined process gets you from idea to viral campaign faster than any competitor."
+                q: "Game of Creators is for whom?",
+                a: "<strong>Brands:</strong> Especially B2C Brands looking to promote their products or services.<br><br><strong>Creators:</strong> Content creators of all sizes who are looking to earn brand deals but have struggled due to low followers. Now, performance and views are what matter, not follower count."
               },
               {
-                q: "Do you guarantee results?",
-                a: "Yes! We're so confident in our platform that we offer performance guarantees. If your campaign doesn't meet the agreed metrics, we'll refund your investment."
+                q: "What are the key features of Game of Creators?",
+                a: "<strong>🎯 Organic Content at Scale:</strong> Generate high-quality, diverse content without manual sourcing<br><br><strong>💰 Only Pay for Top Performing Content:</strong> Pay for content that drives results<br><br><strong>🚀 Creator Outreach Hassle-Free:</strong> Creators come to you<br><br><strong>⚖️ Supply and Demand Platform:</strong> Creators compete, ensuring top ideas rise to the top<br><br><strong>📈 Scale Winners:</strong> Scale top-performing content into paid campaigns<br><br><strong>🌍 Democratized Brand Deals:</strong> Success is based on creativity and performance<br><br><strong>🎨 Creator Freedom of Choice:</strong> Creators choose which brands to work with"
               },
               {
-                q: "What types of creators are on your platform?",
-                a: "We have 50,000+ verified creators across every niche - gaming, lifestyle, tech, fashion, fitness, food, and more. From micro-influencers to mega creators!"
+                q: "How does someone participate or sign up for Game of Creators?",
+                a: "<strong>1. Sign up</strong> by registering on the platform and choosing whether you are a <strong>brand</strong> or a <strong>creator</strong>.<br><br><strong>2. For Brands:</strong> Create & launch a contest for viral marketing<br><br><strong>3. For Creators:</strong> Browse available contests, participate, and get paid based on your performance"
               },
               {
-                q: "How do you ensure content quality?",
-                a: "All our creators go through a rigorous vetting process. Plus, our AI-powered matching system ensures you only work with creators who align with your brand values."
+                q: "What are the main benefits for participants?",
+                a: "<strong>🎯 Full Control:</strong> Choose which brands to promote<br><br><strong>🔍 Full Transparency:</strong> Access to leaderboard rankings, views, and payment details<br><br><strong>🚀 Performance-Based:</strong> Your followers no longer limit your opportunities—performance and views are what matter"
               },
+              {
+                q: "How long does the event or contest last?",
+                a: "Contests typically last between 3 to 28 days, depending on the brand's selection."
+              },
+              {
+                q: "What are the prizes or rewards for the winners?",
+                a: "<strong>🏆 Leaderboard-based contests:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based contests:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits."
+              },
+              {
+                q: "What kind of support is available to participants?",
+                a: "<strong>Brands provide a complete contest brief</strong> including:<br>• Required resources<br>• Inspirational links<br>• Detailed guidance<br><br><strong>Need help?</strong> You can always reach out for assistance or clarification!"
+              },
+              {
+                q: "What happens if a participant misses a deadline?",
+                a: "Content must be submitted during the live contest period. Submissions must be posted on YouTube or Instagram and linked to the contest within two hours of posting. Late submissions won't be accepted."
+              },
+              {
+                q: "How are participants judged or evaluated?",
+                a: "Judging is based purely on views. Participants must follow the contest's brief, rules, and guidelines to be eligible for payment."
+              },
+              {
+                q: "How can participants track their progress?",
+                a: "Creators can track all their submissions in My submissions section and see their ranking of each contest they participated by visiting that contest leaderboard section."
+              },
+              {
+                q: "Can participants submit multiple entries?",
+                a: "No, participants can only submit one entry per contest."
+              },
+              {
+                q: "Will there be networking opportunities?",
+                a: "Yes, creators can join our community channels and follow us on social media for networking and engagement."
+              },
+              {
+                q: "How are winners or top creators announced?",
+                a: "Winners are announced after the contest ends and after a verification process based on views and rankings."
+              }
             ].map((faqItem, index) => (
               <details key={index} className="group bg-gradient-to-br from-slate-800/80 to-slate-700/80 p-6 rounded-2xl border border-purple-500/20 hover:border-purple-500/60 transition-all duration-500 backdrop-blur-sm">
                 <summary className="font-bold text-lg text-white cursor-pointer list-none flex justify-between items-center group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 group-hover:bg-clip-text transition-all duration-300">
                   {faqItem.q}
                   <ChevronDown className="h-5 w-5 text-slate-400 group-open:rotate-180 transition-transform duration-300 group-open:text-purple-400" />
                 </summary>
-                <p className="text-slate-300 mt-4 pt-4 border-t border-slate-700/50 leading-relaxed">
-                  {faqItem.a}
-                </p>
+                <div className="text-slate-300 mt-4 pt-4 border-t border-slate-700/50 leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: faqItem.a
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/\n\n/g, '</p><p>')
+                      .replace(/\n• /g, '</p><p>• ')
+                      .replace(/\n/g, '<br>')
+                  }}
+                />
               </details>
             ))}
           </div>

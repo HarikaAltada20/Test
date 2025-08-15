@@ -11,27 +11,87 @@ import SocialPairPng from "@/public/images/social_pair.png"
 const faqItems = [
   {
     id: "faq-1",
-    question: "What platforms do you support for content creation?",
+    question: "What is Game of Creators?",
     answer:
-      "We support a wide range of platforms including Instagram Reels, YouTube Shorts, as well as long-form videos for YouTube, podcasts, and interviews. Every piece of content is tailored for optimal quality and performance on its intended platform.",
+      "Game of Creators is the easiest way for creators to get paid for making content for brands—without the hassle of pitching or contracts. Simply join the contests of your choice, compete for cash prizes, and get paid based on your performance and views. Followers are no longer a limitation to earn from brand deals—Game of Creators is democratizing brand deals for creators like you.",
   },
   {
     id: "faq-2",
-    question: "How does the contest and collaboration process work?",
+    question: "How do I make money on Game of Creators?",
     answer:
-      "Brands post briefs for their campaigns or contests. Creators can browse these opportunities, submit their content, and get selected based on quality and engagement. Payments and collaborations are managed through our secure platform.",
+      "Participate in contests by posting content on your social media. Compete for organic views, and the top performers will win cash prizes.<br><br><strong>Leaderboard contests:</strong> Your ranking matters based on your views.<br><br><strong>CPM contests:</strong> Your views determine your earnings, regardless of your rank.",
   },
   {
     id: "faq-3",
-    question: "How do I get paid?",
+    question: "Do you have paid opportunities for my specific niche?",
     answer:
-      "Payments for winning contests or completing collaborations are processed securely through our platform. You can link your preferred payment method to receive your earnings directly.",
+      "Yes! Game of Creators offers a wide range of contests across various niches, including health & fitness, fashion, gaming, finance, and more. Whatever your niche, there's an opportunity for you to participate!",
   },
   {
     id: "faq-4",
-    question: "Are there any fees to join as a creator?",
+    question: "How much money can I make?",
     answer:
-      "Joining Game Of Creators is completely free for creators. We believe in empowering you to monetize your skills without upfront costs. We may take a small platform fee from brand payments on successful collaborations.",
+      "Earnings vary by opportunity. Some creators make hundreds to thousands of dollars per contest or deal. The more you create, the more you can earn—there's no limit to how much you can make!",
+  },
+  {
+    id: "faq-5",
+    question: "How do I get paid?",
+    answer:
+      "You can choose how you want to receive your earnings: <strong>Crypto, Bank Transfer, or UPI</strong>. It's your choice!",
+  },
+  {
+    id: "faq-6",
+    question: "Is Game of Creators free to use?",
+    answer:
+      "Yes! Game of Creators is completely free to join and participate in. There are no hidden fees or upfront costs.",
+  },
+  {
+    id: "faq-7",
+    question: "How do I get started?",
+    answer:
+      "Simply register as a creator, browse the available opportunities, and participate in the contest that resonates with you. If you win, you get paid based on your performance!",
+  },
+  {
+    id: "faq-8",
+    question: "Can I participate in multiple contests at once?",
+    answer:
+      "Yes, you can participate in as many contests as you like. Each contest will have its own set of rules and guidelines, so make sure to review them before submitting your content.",
+  },
+  {
+    id: "faq-9",
+    question: "What types of content can I submit?",
+    answer:
+      "The type of content you submit depends on the contest you're participating in. Brands provide a brief and guidelines for each contest, which will specify the type of content required. Be sure to follow those instructions to ensure your submission is eligible.",
+  },
+  {
+    id: "faq-10",
+    question: "What happens if my content is rejected?",
+    answer:
+      "If your content is rejected, you will not be eligible for payment. Rejection happens only when you miss contest rules or miss community guidelines.",
+  },
+  {
+    id: "faq-11",
+    question: "Do I need any special equipment to participate?",
+    answer:
+      "No special equipment is required to participate, but high-quality content tends to perform better. Ensure your videos are clear, engaging, and aligned with the contest brief.",
+  },
+  {
+    id: "faq-12",
+    question: "How do I know if I've won?",
+    answer:
+      "After the contest ends, winners will be announced based on their views and performance. You can track your progress through the leaderboard, and if you're a winner, you will receive your payout according to the contest's structure.",
+  },
+  {
+    id: "faq-13",
+    question: "What if I miss the contest submission deadline?",
+    answer:
+      "Late submissions are not accepted. Ensure you submit your content within the contest's live period and submit your link to the contest page within two hours of posting on YouTube or Instagram.",
+  },
+  {
+    id: "faq-14",
+    question: "How are views counted for CPM contests?",
+    answer:
+      "In CPM-based contests, views are tracked directly from your organic YouTube or Instagram posts. You earn money based on how many views your content receives and based on min max views criteria, regardless of ranking.",
   },
 ]
 
@@ -392,9 +452,11 @@ export default function CreatorsPage() {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="text-slate-300 text-lg leading-relaxed px-8 pb-6">
-                        <div className="pl-12">
-                          {item.answer}
-                        </div>
+                        <div className="pl-12"
+                          dangerouslySetInnerHTML={{
+                            __html: item.answer
+                          }}
+                        />
                       </AccordionContent>
                     </div>
                   </AccordionItem>
