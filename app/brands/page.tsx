@@ -190,13 +190,13 @@ export default function BrandsPage() {
 
           {/* Floating Creative Elements */}
           <div className="inset-0 z-10 pointer-events-none">
-            <Sparkles className="absolute top-20 left-10 h-6 w-6 text-amber-400/30 animate-pulse" />
-            <Camera
-              className="absolute top-32 right-20 h-5 w-5 text-violet-400/40 animate-bounce"
+          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+            <Sparkles
+              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
               style={{ animationDelay: "1s" }}
             />
             <Star
-              className="absolute top-40 left-1/4 h-4 w-4 text-purple-400/30 animate-pulse"
+              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
               style={{ animationDelay: "2s" }}
             />
             <Heart
@@ -208,7 +208,7 @@ export default function BrandsPage() {
               style={{ animationDelay: "1.5s" }}
             />
             <Trophy
-              className="absolute bottom-32 right-12 h-5 w-5 text-amber-400/40 animate-bounce"
+              className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
               style={{ animationDelay: "0.8s" }}
             />
           </div>

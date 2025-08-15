@@ -15,11 +15,9 @@ import {
   Crown,
   Rocket,
   Star,
- 
   Palette,
   Camera,
   Heart,
-  
 } from "lucide-react";
 import SocialPairPng from "@/public/images/social_pair.png";
 import Testimonials from "./Testimonials";
@@ -106,6 +104,30 @@ export function HeroSection() {
   const sectionRef = useRef<HTMLDivElement>(null);
 
   const [step, setStep] = useState(0);
+  const worksRef = useRef<HTMLDivElement>(null);
+  const chooseRef = useRef<HTMLDivElement>(null);
+
+  const [worksVisible, setWorksVisible] = useState(false);
+  const [chooseVisible, setChooseVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (entry.target === worksRef.current) setWorksVisible(true);
+            if (entry.target === chooseRef.current) setChooseVisible(true);
+          }
+        });
+      },
+      { threshold: 0.3 }
+    );
+
+    if (worksRef.current) observer.observe(worksRef.current);
+    if (chooseRef.current) observer.observe(chooseRef.current);
+
+    return () => observer.disconnect();
+  }, []);
   const maxSteps =
     Math.max(
       creatorsNumbers.length,
@@ -171,13 +193,13 @@ export function HeroSection() {
           {/* Background Circles */}
 
           <div className="inset-0 z-10 pointer-events-none">
-            <Sparkles className="absolute top-20 left-10 h-6 w-6 text-amber-400/30 animate-pulse" />
-            <Camera
-              className="absolute top-32 right-20 h-5 w-5 text-violet-400/40 animate-bounce"
+            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+            <Sparkles
+              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
               style={{ animationDelay: "1s" }}
             />
             <Star
-              className="absolute top-40 left-1/4 h-4 w-4 text-purple-400/30 animate-pulse"
+              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
               style={{ animationDelay: "2s" }}
             />
             <Heart
@@ -189,7 +211,7 @@ export function HeroSection() {
               style={{ animationDelay: "1.5s" }}
             />
             <Trophy
-              className="absolute bottom-32 right-12 h-5 w-5 text-amber-400/40 animate-bounce"
+              className="absolute bottom-32 right-12 h-9 w-9 text-amber-400/40 animate-bounce"
               style={{ animationDelay: "0.8s" }}
             />
           </div>
@@ -303,7 +325,7 @@ export function HeroSection() {
           </div>
         </section>
 
-        <section className="relative h-[400px] z-10 overflow-hidden">
+        <section className="relative h-[200px] md:h-[400px] z-10 overflow-hidden">
           {/* Semi-circle background */}
           <div
             className="absolute top-0 left-0 w-full flex flex-col text-center"
@@ -318,14 +340,14 @@ export function HeroSection() {
               backdropFilter: "blur(34.2px)",
             }}
           >
-            <div className="mt-[100px]">
-              <h2 className="text-white text-5xl font-bold">
+            <div className="mt-[50px] md:mt-[100px]">
+              <h2 className="text-white text-lg md:text-5xl font-bold">
                 <span className="text-purple-400">Creative</span>{" "}
                 <span className="text-orange-400">Showcase</span>
               </h2>
 
               <div className="flex items-center justify-center mt-4 gap-3">
-                <span className="text-gray-300 text-lg font-medium">
+                <span className="text-gray-300 text-md md:text-lg font-medium">
                   Join 50,000+ Active Creators
                 </span>
 
@@ -366,7 +388,7 @@ export function HeroSection() {
           </div>
         </section>
 
-        <div className="absolute bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
+        <div className="absolute bottom-[50px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
           <div className="scroll-track">
             {[
               "./images/434ce5e441255007a5349fd85232df9726062927.png",
@@ -391,7 +413,7 @@ export function HeroSection() {
               .map((src, idx) => (
                 <div
                   key={idx}
-                  className="relative w-[150px] h-[250px] rounded-[40%] overflow-hidden shadow-lg mx-5"
+                  className="relative w-[80px] h-[150px] md:w-[150px] md:h-[250px] rounded-[40%] overflow-hidden shadow-lg mx-5"
                   style={{
                     clipPath: "ellipse(50% 50% at 50% 50%)",
                   }}
@@ -416,32 +438,40 @@ export function HeroSection() {
           </div>
         </div>
 
-        <section className="text-white">
+        <section ref={worksRef} className="text-white px-4 py-0 md:py-16">
           <div className="max-w-7xl mx-auto text-center">
             {/* Tagline */}
-            <div className="flex justify-center mb-4">
-              <span className="bg-[#2C3247] text-lg px-4 py-2 rounded-full flex items-center gap-2">
-                <Rocket className="w-4 h-4 text-purple-400" />
+            <div className="flex justify-center mb-5">
+              <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
+                <Rocket className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
                 Enhance your Marketing skills
               </span>
             </div>
 
             {/* Title */}
-            <h2 className="text-center text-5xl font-semibold mb-2">
+            <h2
+              className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4  leading-snug ${
+                worksVisible ? "slide-up" : "opacity-0"
+              }`}
+            >
               How <span className="text-purple-400">Game</span> of{" "}
               <span className="text-orange-400">Creators</span> Works
             </h2>
 
             {/* Subtitle */}
-            <p className="text-center text-xl text-gray-300 max-w-2xl mx-auto mb-12">
+            <p
+              className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${
+                worksVisible ? "slide-left" : "opacity-0"
+              }`}
+            >
               Three simple steps to launch your viral marketing campaign and
               dominate the game
             </p>
 
             {/* Active Step */}
-            <div className="flex flex-col md:flex-row h-[350px] max-w-7xl mx-auto rounded-lg overflow-hidden">
+            <div className="flex flex-col md:flex-row max-w-7xl md:h-[350px] mx-auto rounded-lg overflow-hidden">
               {/* Image */}
-              <div className="w-full md:w-[700px] h-[700px] md:h-auto relative">
+              <div className="w-full md:w-1/2 relative aspect-square md:aspect-auto md:h-auto">
                 <Image
                   src={steps[activeIndex].image}
                   alt={steps[activeIndex].title}
@@ -451,47 +481,48 @@ export function HeroSection() {
               </div>
 
               {/* Content */}
-              <div className="w-full md:w-[700px] bg-[#11133a] p-8 flex flex-col justify-start relative text-left">
+              <div className="w-full md:w-1/2 bg-[#11133a] p-6 sm:p-8 flex flex-col justify-start relative text-left">
                 {/* Step Indicator */}
-                <div className="flex mb-6 items-center justify-between">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-full border-2 border-white/60 bg-transparent">
+                <div className="flex mb-4 sm:mb-6 items-center justify-between">
+                  <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
                     {steps[activeIndex].icon}
                   </div>
 
-                  <div className="relative px-4 py-1 rounded-full text-sm font-semibold text-white border-2 border-white/60">
+                  <div className="relative px-3 py-0.5 sm:px-4 sm:py-1 rounded-full text-xs sm:text-sm font-semibold text-white border-2 border-white/60">
                     Step {steps[activeIndex].step}
                   </div>
                 </div>
-                <div className="mt-10">
+
+                <div className="mt-6 sm:mt-10">
                   {/* Title */}
-                  <h3 className="text-3xl font-semibold mb-4 text-left">
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-semibold mb-3 sm:mb-4 text-left">
                     {steps[activeIndex].title}
                   </h3>
 
                   {/* Description */}
-                  <p className="text-gray-300 text-xl mb-10 text-left">
+                  <p className="text-gray-300 text-base sm:text-lg md:text-xl mb-6 sm:mb-10 text-left">
                     {steps[activeIndex].description}
                   </p>
 
                   {/* Button */}
                   <a
                     href="#"
-                    className="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-full inline-flex items-center gap-2 self-start"
+                    className="bg-purple-600 hover:bg-purple-700 px-4 sm:px-6 py-1.5 sm:py-2 rounded-full inline-flex items-center gap-2 self-start text-sm sm:text-base"
                   >
                     Start Now
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                   </a>
                 </div>
               </div>
             </div>
 
             {/* Dots Navigation */}
-            <div className="flex justify-center mt-8 gap-2">
+            <div className="flex justify-center mt-6 sm:mt-8 gap-2">
               {steps.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setActiveIndex(index)}
-                  className={`w-3 h-3 rounded-full transition-colors ${
+                  className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${
                     activeIndex === index ? "bg-purple-600" : "bg-gray-600"
                   }`}
                 ></button>
@@ -500,30 +531,37 @@ export function HeroSection() {
           </div>
         </section>
 
-        <section className="text-white py-20">
+        <section   ref={chooseRef} className="text-white py-20">
           <div className="max-w-[1250px] mx-auto px-4">
             {/* Tagline */}
             <div className="text-center mb-12">
-              <button className="bg-[#2C3247] text-lg px-4 py-1 rounded-full mb-6">
+              <button className="bg-[#2C3247] text-base sm:text-lg px-4 py-1 rounded-full mb-6">
                 Reasons to Select Us
               </button>
-              <h2 className="text-3xl md:text-5xl font-bold mb-4">
+              <h2
+                className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
+                  chooseVisible ? "slide-up" : "opacity-0"
+                }`}
+              >
                 Why Choose{" "}
                 <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
                   Game of Creators
                 </span>
               </h2>
-              <p className="text-gray-300 text-xl">
+              <p
+                className={`text-gray-300 text-base sm:text-lg md:text-xl ${
+                  chooseVisible ? "slide-left" : "opacity-0"
+                }`}
+              >
                 We're not just a platform – we're your competitive advantage in
                 the creator economy.
               </p>
             </div>
 
             {/* Grid */}
-            <div className="grid md:grid-cols-4 gap-6">
-              {/* Row 1 col 1 */}
-              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
-                {/* Image overlay for hover */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* 1 */}
+              <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -531,21 +569,19 @@ export function HeroSection() {
                       "url('./images/5b9ccb0130cdd4c8b6a76dccd99f879f41ba8fe2.png')",
                   }}
                 ></div>
-
-                {/* Dark overlay */}
                 <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
 
-                <h3 className="text-2xl font-semibold mb-2 relative z-10">
+                <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
                   Authentic Content
                 </h3>
-                <p className="text-gray-400 text-lg relative z-10">
+                <p className="text-gray-400 text-base sm:text-lg relative z-10">
                   Generate genuine, viral-worthy content that your audience will
                   love and share.
                 </p>
               </div>
 
-              {/* Row 1 col 2 */}
-              <div className="col-span-2 border border-gray-700 rounded-xl overflow-hidden flex items-center p-6 relative group">
+              {/* 2 */}
+              <div className="sm:col-span-2 border border-gray-700 rounded-xl overflow-hidden flex flex-col sm:flex-row items-center p-4 sm:p-6 relative group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -555,16 +591,16 @@ export function HeroSection() {
                 ></div>
                 <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
 
-                <div className="flex-1 relative z-10">
-                  <h3 className="text-2xl font-semibold mb-2">
+                <div className="flex-1 relative z-10 mb-4 sm:mb-0 sm:pr-4">
+                  <h3 className="text-xl sm:text-2xl font-semibold mb-2">
                     Easy Management
                   </h3>
-                  <p className="text-gray-300 text-lg">
+                  <p className="text-gray-300 text-base sm:text-lg">
                     Manage all your campaigns from one intuitive, game-like
                     dashboard interface.
                   </p>
                 </div>
-                <div className="relative w-[200px] h-[200px] flex-shrink-0">
+                <div className="relative w-32 h-32 sm:w-40 sm:h-40 lg:w-[200px] lg:h-[200px] flex-shrink-0">
                   <Image
                     src="./images/d89d9bee1e10b09fcd186437a0416305e50d4ceb.png"
                     alt="Calendar"
@@ -575,8 +611,8 @@ export function HeroSection() {
                 </div>
               </div>
 
-              {/* Row 1 col 3 - Tall card */}
-              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center row-span-2 text-center relative overflow-hidden group">
+              {/* 3 */}
+              <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center sm:row-span-2 text-center relative overflow-hidden group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -586,7 +622,7 @@ export function HeroSection() {
                 ></div>
                 <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
 
-                <div className="relative w-[250px] h-[250px] mb-6">
+                <div className="relative w-40 h-40 sm:w-48 sm:h-48 lg:w-[250px] lg:h-[250px] mb-6">
                   <Image
                     src="./images/18f55d54e6459d19dfda25395eb428c1d064fd93.png"
                     alt="Pie Chart"
@@ -595,17 +631,17 @@ export function HeroSection() {
                   />
                   <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
                 </div>
-                <h3 className="text-2xl font-semibold mb-2 relative z-10">
+                <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
                   Real-Time Analytics
                 </h3>
-                <p className="text-gray-400 text-lg relative z-10">
+                <p className="text-gray-400 text-base sm:text-lg relative z-10">
                   Track every view, like, and conversion with our advanced
                   analytics dashboard.
                 </p>
               </div>
 
-              {/* Row 2 col 1 */}
-              <div className="border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative group">
+              {/* 4 */}
+              <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -616,17 +652,17 @@ export function HeroSection() {
                 <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
 
                 <Rocket className="text-white mb-4 relative z-10" size={26} />
-                <h3 className="text-xl font-semibold mb-2 relative z-10">
+                <h3 className="text-lg sm:text-xl font-semibold mb-2 relative z-10">
                   Cost Effective
                 </h3>
-                <p className="text-gray-400 text-lg relative z-10">
+                <p className="text-gray-400 text-base sm:text-lg relative z-10">
                   Get 10x better ROI compared to traditional advertising. Every
                   dollar counts!
                 </p>
               </div>
 
-              {/* Row 2 col 2 */}
-              <div className="col-span-2 border border-gray-700 rounded-xl p-4 flex flex-row justify-center items-center text-center relative overflow-hidden group">
+              {/* 5 */}
+              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-4 flex flex-col sm:flex-row justify-center items-center text-center relative overflow-hidden group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -636,14 +672,16 @@ export function HeroSection() {
                 ></div>
                 <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
 
-                <div className="flex-1 pr-4 relative z-10">
-                  <h3 className="text-xl font-semibold mb-2">Targeted Reach</h3>
-                  <p className="text-gray-400 text-lg">
+                <div className="flex-1 mb-4 sm:mb-0 sm:pr-4 relative z-10">
+                  <h3 className="text-lg sm:text-xl font-semibold mb-2">
+                    Targeted Reach
+                  </h3>
+                  <p className="text-gray-400 text-base sm:text-lg">
                     Connect with creators, whose audience perfectly match your
                     ideal customers.
                   </p>
                 </div>
-                <div className="relative w-[250px] h-[250px] flex-shrink-0">
+                <div className="relative w-40 h-40 sm:w-48 sm:h-48 lg:w-[250px] lg:h-[250px] flex-shrink-0">
                   <Image
                     src="./images/0045df9e9f7db84c983cc6c5675c55189fa040a2.png"
                     alt="Target"
@@ -654,8 +692,8 @@ export function HeroSection() {
                 </div>
               </div>
 
-              {/* Row 2 col 3 */}
-              <div className="col-span-2 border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative group">
+              {/* 6 */}
+              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -666,16 +704,16 @@ export function HeroSection() {
                 <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
 
                 <Gamepad2 className="text-white mb-4 relative z-10" size={26} />
-                <h3 className="text-xl font-semibold mb-2 relative z-10">
+                <h3 className="text-lg sm:text-xl font-semibold mb-2 relative z-10">
                   Gaming Dashboard
                 </h3>
-                <p className="text-gray-400 text-lg relative z-10">
+                <p className="text-gray-400 text-base sm:text-lg relative z-10">
                   Level up your campaigns with our intuitive interface.
                 </p>
               </div>
 
-              {/* Row 3 col 2 */}
-              <div className="col-span-2 border border-gray-700 rounded-xl p-8 flex flex-col justify-center items-center text-center relative group">
+              {/* 7 */}
+              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -686,10 +724,10 @@ export function HeroSection() {
                 <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
 
                 <Headset className="text-white mb-4 relative z-10" size={26} />
-                <h3 className="text-xl font-semibold mb-2 relative z-10">
+                <h3 className="text-lg sm:text-xl font-semibold mb-2 relative z-10">
                   24/7 Support
                 </h3>
-                <p className="text-gray-400 text-lg relative z-10">
+                <p className="text-gray-400 text-base sm:text-lg relative z-10">
                   Our gaming experts are always ready to help you win big!
                 </p>
               </div>

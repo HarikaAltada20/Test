@@ -32,18 +32,9 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  EnhancedTabs as Tabs,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
-} from "@/components/ui/enhanced-tabs";
+
 import { Separator } from "@/components/ui/separator";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+
 import { createClient } from "@/utils/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -132,6 +123,11 @@ export default function PricingClient() {
     "monthly"
   );
   const [user, setUser] = useState<any>(null);
+  const section1Ref = useRef<HTMLDivElement>(null);
+  const section2Ref = useRef<HTMLDivElement>(null);
+  const [section1Visible, setSection1Visible] = useState(false);
+  const [section2Visible, setSection2Visible] = useState(false);
+
   const [userType, setUserType] = useState<string | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const supabase = createClient(); // Initialize Supabase client
@@ -148,6 +144,7 @@ export default function PricingClient() {
   const handleToggle = () => {
     setBillingCycle((prev) => (prev === "monthly" ? "yearly" : "monthly"));
   };
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -155,7 +152,7 @@ export default function PricingClient() {
           setVisible(true);
         }
       },
-      { threshold: 0.4 }
+      { threshold: 0.3 }
     );
 
     if (storyRef.current) observer.observe(storyRef.current);
@@ -164,6 +161,31 @@ export default function PricingClient() {
       if (storyRef.current) observer.unobserve(storyRef.current);
     };
   }, []);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry], observerInstance) => {
+        if (entry.isIntersecting) {
+          if (entry.target === section1Ref.current) {
+            setSection1Visible(true);
+          }
+          if (entry.target === section2Ref.current) {
+            setSection2Visible(true);
+          }
+          observerInstance.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.3 }
+    );
+
+    if (section1Ref.current) observer.observe(section1Ref.current);
+    if (section2Ref.current) observer.observe(section2Ref.current);
+
+    return () => {
+      if (section1Ref.current) observer.unobserve(section1Ref.current);
+      if (section2Ref.current) observer.unobserve(section2Ref.current);
+    };
+  }, []);
+
   // Check for authenticated user
   useEffect(() => {
     const checkUser = async () => {
@@ -351,17 +373,17 @@ export default function PricingClient() {
   };
 
   // Show loading state while checking user authentication
-  if (isLoadingUser) {
-    return (
-      <div className="container mx-auto py-8 px-4">
-        <div className="text-center py-8">
-          <div className="animate-pulse">
-            <p className="text-gray-600">Loading...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // if (isLoadingUser) {
+  //   return (
+  //     <div className="container mx-auto py-8 px-4">
+  //       <div className="text-center py-8">
+  //         <div className="animate-pulse">
+  //           <p className="text-gray-600">Loading...</p>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // Show creator message if logged in as creator
   if (user && userType === "creator") {
@@ -471,27 +493,27 @@ export default function PricingClient() {
 
         {/* Floating Creative Elements */}
         <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-6 w-6 text-amber-400/30 animate-pulse" />
-          <Camera
-            className="absolute top-32 right-20 h-5 w-5 text-violet-400/40 animate-bounce"
-            style={{ animationDelay: "1s" }}
-          />
-          <Star
-            className="absolute top-40 left-1/4 h-4 w-4 text-purple-400/30 animate-pulse"
-            style={{ animationDelay: "2s" }}
-          />
-          <Heart
-            className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
-            style={{ animationDelay: "0.5s" }}
-          />
-          <Palette
-            className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
-            style={{ animationDelay: "1.5s" }}
-          />
-          <Trophy
-            className="absolute bottom-32 right-12 h-5 w-5 text-amber-400/40 animate-bounce"
-            style={{ animationDelay: "0.8s" }}
-          />
+        <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+            <Sparkles
+              className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
+              style={{ animationDelay: "1s" }}
+            />
+            <Star
+              className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
+              style={{ animationDelay: "2s" }}
+            />
+            <Heart
+              className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
+              style={{ animationDelay: "0.5s" }}
+            />
+            <Palette
+              className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
+              style={{ animationDelay: "1.5s" }}
+            />
+            <Trophy
+              className="absolute bottom-32 right-20 h-9 w-9 text-amber-400/40 animate-bounce"
+              style={{ animationDelay: "0.8s" }}
+            />
         </div>
         {/* Orange Ellipse Background Glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1100px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
@@ -579,7 +601,7 @@ export default function PricingClient() {
           </div>
         ) : (
           <>
-            <div className="text-center mt-10 mb-10">
+            <div ref={section1Ref} className="text-center mt-10 mb-10">
               {/* Header with Image */}
               <div className="flex items-center justify-center gap-2 bg-[#121230] inline-flex px-4 py-2 rounded-full mb-4">
                 <img
@@ -589,10 +611,18 @@ export default function PricingClient() {
                 />
                 <span className="text-sm">Select the ideal payment plan</span>
               </div>
-              <h2 className="text-4xl font-bold mb-2">
+              <h2
+                className={`text-3xl md:text-5xl font-bold mb-4 ${
+                  section1Visible ? "slide-up" : "opacity-0"
+                }`}
+              >
                 Choose Your Game <span className="text-purple-400">Plan</span>
               </h2>
-              <p className="text-gray-300 mb-8">
+              <p
+                className={`${
+                  section1Visible ? "slide-left" : "opacity-0"
+                } text-gray-300 text-lg md:text-xl mb-8`}
+              >
                 Select the perfect plan to start winning with creator contests
               </p>
 
@@ -658,7 +688,7 @@ export default function PricingClient() {
                     onClick={() => setBillingCycle("yearly")}
                   >
                     Yearly Subscription
-                    <span className="ml-1 bg-green-200 text-green-800 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                    <span className="hidden sm:block ml-1 border border-gray-300 text-gray-300 text-[10px] px-2 py-0.5 rounded-full font-semibold">
                       Save 20% now!
                     </span>
                   </span>
@@ -904,10 +934,14 @@ export default function PricingClient() {
         </div>
       </div> */}
 
-      <section>
+      <section ref={section2Ref}>
         <div className="bg-[#0b0e26] text-white py-16 px-6">
           <div className="max-w-[1200px] mx-auto text-center">
-            <h2 className="text:3xl md:text-4xl font-semibold transition-all duration-700 mb-4 ease-out transform ">
+            <h2
+              className={`text:3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${
+                section2Visible ? "slide-up" : "opacity-0"
+              }`}
+            >
               What's Included in{" "}
               <span
                 style={{
@@ -923,7 +957,11 @@ export default function PricingClient() {
                 Every Plan
               </span>
             </h2>
-            <p className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
+            <p
+              className={`${
+                section2Visible ? "slide-left" : "opacity-0"
+              } text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
+            >
               Essential Elements for Your Influencer Marketing Strategy
             </p>
 
@@ -980,7 +1018,12 @@ export default function PricingClient() {
                 <span className="font-semibold text-purple-300">Vishesh,</span>{" "}
                 Founder of Game Of Creators
               </p>
-              <p className="text-base md:text-xl leading-relaxed text-gray-300 mt-4">
+              <p
+                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
+                  visible ? "slide-left" : ""
+                }`}
+                style={{ animationDelay: "1.5s" }}
+              >
                 Join hundreds of businesses driving success with Game Of
                 Creators! Book your free consultation today to get all your
                 questions answered and start launching impactful campaigns.
@@ -1006,12 +1049,7 @@ export default function PricingClient() {
             </div>
 
             {/* Image Section */}
-            <div
-              className={`flex-1 h-[350px] flex justify-center relative z-10 ${
-                visible ? "slide-right" : ""
-              }`}
-              style={{ animationDelay: "1.5s" }}
-            >
+            <div className="flex-1 h-[350px] flex justify-center relative z-10">
               <Image
                 src={startdemo}
                 alt="Phone Illustration"
