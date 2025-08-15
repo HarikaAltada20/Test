@@ -10,14 +10,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-.scroll-container {
+.scroll-container-testimonials {
   display: flex;
   overflow: hidden;
   width: 100%;
   position: relative;
 }
 
-.scroll-track {
+.scroll-track-testimonials {
   display: flex;
   animation: scroll-horizontal 20s linear infinite;
 }
@@ -31,6 +31,42 @@ body {
   }
 }
 
+.scroll-container {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+.scroll-track {
+  display: flex;
+  white-space: nowrap;
+}
+
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes scroll-right {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-scroll-left {
+  animation: scroll-left 30s linear infinite;
+}
+
+.animate-scroll-right {
+  animation: scroll-right 30s linear infinite;
+}
 
 
 
@@ -177,33 +213,7 @@ body {
   }
 }
 
-/* Right infinite loop */
-@keyframes scrollRightSeamless {
-  0% {
-    transform: translateX(-50%);
-  }
-  100% {
-    transform: translateX(0%);
-  }
-}
 
-/* Left infinite loop */
-@keyframes scrollLeftSeamless {
-  0% {
-    transform: translateX(0%);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.scroll-right-seamless {
-  animation: scrollRightSeamless 12s linear infinite;
-}
-
-.scroll-left-seamless {
-  animation: scrollLeftSeamless 12s linear infinite;
-}
 
 @layer utilities {
   .text-balance {

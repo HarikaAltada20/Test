@@ -290,15 +290,13 @@ const {
       {/* Rows */}
       <div className="mt-12 space-y-8">
         {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="overflow-hidden relative">
+          <div key={rowIndex} className="overflow-hidden relative overflow-hidden scroll-container-testimonials">
             <div
-              className={`flex justify-center gap-6 scroll-row ${
-                rowIndex % 2 === 0
-                  ? "scroll-right-seamless"
-                  : "scroll-left-seamless"
+              className={`flex justify-center gap-6 scroll-track-testimonials ${
+                rowIndex % 2 === 0 ? "animate-scroll-left" : "animate-scroll-right"
               }`}
             >
-              {[...row, ...row].map((t, i) => (
+               {[...row, ...row].map((t, i) => (
                 <div
                   key={i}
                   className="p-8 rounded-xl border border-gray-700 flex-shrink-0 w-[500px]"
