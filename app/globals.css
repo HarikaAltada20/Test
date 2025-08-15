@@ -106,10 +106,17 @@ body {
     font-size: 14px; /* Reduced from default 16px (87.5% of original) */
   }
   
-  /* Reduce default spacing and sizing */
-  .dashboard-container {
-    zoom: 0.85; /* Scale down dashboard content to 85% */
+  /* Remove any dark mode classes that might be applied */
+  .dark,
+  [data-theme="dark"],
+  [data-mode="dark"] {
+    color-scheme: light !important;
   }
+  
+  /* Dashboard zoom control - now handled dynamically by compact mode toggle */
+  /* .dashboard-container {
+    zoom: 0.85;
+  } */
   
   /* Ensure sidebar takes full height despite zoom */
   .dashboard-container aside {

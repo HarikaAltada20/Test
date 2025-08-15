@@ -1338,23 +1338,40 @@ export default function ContestDetailClient({
                                 {/* Render inspiration links if present */}
                                 {Array.isArray(currentContest.inspiration_links) &&
                                     currentContest.inspiration_links.length > 0 && (
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                                                <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                                Inspiration Links
-                                            </h3>
-                                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl p-4">
-                                                <div className="space-y-3">
-                                                    {currentContest.inspiration_links.map((item, idx) => (
-                                                        <div key={idx} className="flex items-center gap-3">
-                                                            <ExternalLink className="w-6 h-6 text-purple-500" />
-                                                            <div className="flex-1">
-                                                                <a href={item.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline break-all">{item.url}</a>
-                                                                <div className="text-xs text-gray-500 mt-1">{item.description}</div>
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                                                    <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                                </div>
+                                                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Inspiration Links</h3>
+                                            </div>
+
+                                            <div className="grid gap-4">
+                                                {currentContest.inspiration_links.map((item, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200"
+                                                    >
+                                                        <div className="flex items-start gap-4">
+                                                            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex-shrink-0">
+                                                                <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <a
+                                                                    href={item.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
+                                                                >
+                                                                    {item.url}
+                                                                </a>
+                                                                <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                                                    {item.description}
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     )}
@@ -1362,94 +1379,82 @@ export default function ContestDetailClient({
                                 {currentContest.resources &&
                                     ((Array.isArray(currentContest.resources) && currentContest.resources.length > 0) ||
                                         (typeof currentContest.resources === 'object' && Object.keys(currentContest.resources).length > 0)) && (
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                                                <Lightbulb className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                                Resources
-                                            </h3>
-                                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
-                                                <div className="space-y-3">
-                                                    {(Array.isArray(currentContest.resources) ? currentContest.resources :
-                                                        Object.entries(currentContest.resources).map(([description, url]) => ({ url, description, type: 'external' }))
-                                                    ).map((resource, idx) => {
-                                                        const isImage = resource.url.startsWith('data:image') || /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(resource.url);
-                                                        const isPdf = /\.pdf$/i.test(resource.url);
-                                                        const isVideo = /\.(mp4|mov|avi|webm)$/i.test(resource.url);
-                                                        const isInternal = resource.type === "internal";
-                                                        return (
-                                                            <Card
-                                                                key={idx}
-                                                                className="bg-white dark:bg-slate-800/50 border border-green-200 dark:border-green-700/30 hover:shadow-md transition-all duration-300"
-                                                            >
-                                                                <CardContent className="p-4">
-                                                                    <div className="flex items-center justify-between">
-                                                                        <div className="flex items-center gap-3">
-                                                                            {isInternal && isImage && !isPdf ? (
-                                                                                <img src={resource.url} alt={resource.description} className="w-10 h-10 object-cover rounded" />
-                                                                            ) : isInternal && isPdf ? (
-                                                                                <span className="inline-block">
-                                                                                    <svg width="32" height="32" fill="none" viewBox="0 0 40 40">
-                                                                                        <rect width="40" height="40" rx="8" fill="#F87171" />
-                                                                                        <path d="M12 8h16v24H12V8z" fill="#fff" />
-                                                                                        <path d="M14 12h12M14 16h12M14 20h8" stroke="#F87171" strokeWidth="1" />
-                                                                                        <text x="20" y="28" textAnchor="middle" fill="#F87171" fontSize="8" fontWeight="bold">PDF</text>
-                                                                                    </svg>
-                                                                                </span>
-                                                                            ) : isInternal && isVideo ? (
-                                                                                <span className="inline-block">
-                                                                                    <svg width="32" height="32" fill="none" viewBox="0 0 40 40">
-                                                                                        <rect width="40" height="40" rx="8" fill="#38BDF8" />
-                                                                                        <rect x="10" y="12" width="20" height="16" rx="2" fill="#fff" />
-                                                                                        <path d="M16 16l6 4-6 4V16z" fill="#38BDF8" />
-                                                                                        <circle cx="32" cy="14" r="3" fill="#FF4444" />
-                                                                                    </svg>
-                                                                                </span>
-                                                                            ) : isInternal && !isImage && !isPdf && !isVideo ? (
-                                                                                <span className="inline-block">
-                                                                                    <svg width="32" height="32" fill="none" viewBox="0 0 40 40">
-                                                                                        <rect width="40" height="40" rx="8" fill="#10B981" />
-                                                                                        <rect x="10" y="8" width="18" height="24" rx="1" fill="#fff" />
-                                                                                        <rect x="12" y="10" width="14" height="2" fill="#10B981" />
-                                                                                        <rect x="12" y="14" width="14" height="1" fill="#10B981" />
-                                                                                        <rect x="12" y="17" width="14" height="1" fill="#10B981" />
-                                                                                        <rect x="12" y="20" width="10" height="1" fill="#10B981" />
-                                                                                        <rect x="12" y="23" width="12" height="1" fill="#10B981" />
-                                                                                        <rect x="12" y="26" width="8" height="1" fill="#10B981" />
-                                                                                    </svg>
-                                                                                </span>
-                                                                            ) : (
-                                                                                <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
-                                                                                    <ExternalLink className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                                                                </div>
-                                                                            )}
-                                                                            <div>
-                                                                                <span className="font-semibold text-green-900 dark:text-green-100">{resource.description}</span>
-                                                                                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                                                                    {resource.type === "external" ? "External Link" : "Uploaded File"}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            asChild
-                                                                            className="text-green-600 hover:text-green-800 hover:bg-green-100 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-800/20 flex-shrink-0 font-medium"
-                                                                        >
-                                                                            <a
-                                                                                href={resource.url}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                            >
-                                                                                <ExternalLink className="h-4 w-4 mr-1" />
-                                                                                {isPdf ? "Open PDF" : isVideo ? "Play Video" : isImage ? "View Image" : "View Resource"}
-                                                                            </a>
-                                                                        </Button>
-                                                                    </div>
-                                                                </CardContent>
-                                                            </Card>
-                                                        );
-                                                    })}
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                                                    <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                                                 </div>
+                                                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Resources</h3>
+                                            </div>
+
+                                            <div className="grid gap-4">
+                                                {(Array.isArray(currentContest.resources) ? currentContest.resources :
+                                                    Object.entries(currentContest.resources).map(([description, url]) => ({ url, description, type: 'external' }))
+                                                ).map((resource, idx) => {
+                                                    const isImage = resource.url.startsWith('data:image') || /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(resource.url);
+                                                    const isPdf = /\.pdf$/i.test(resource.url);
+                                                    const isVideo = /\.(mp4|mov|avi|webm)$/i.test(resource.url);
+                                                    const isInternal = resource.type === "internal";
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200"
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-4">
+                                                                    {isInternal && isImage && !isPdf ? (
+                                                                        <img src={resource.url} alt={resource.description} className="w-12 h-12 object-cover rounded-lg border border-gray-200 dark:border-gray-600" />
+                                                                    ) : isInternal && isPdf ? (
+                                                                        <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center border border-red-200 dark:border-red-700">
+                                                                            <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                                                            </svg>
+                                                                        </div>
+                                                                    ) : isInternal && isVideo ? (
+                                                                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center border border-blue-200 dark:border-blue-700">
+                                                                            <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                                                                            </svg>
+                                                                        </div>
+                                                                    ) : isInternal && !isImage && !isPdf && !isVideo ? (
+                                                                        <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center border border-green-200 dark:border-green-700">
+                                                                            <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                                                            </svg>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-600">
+                                                                            <ExternalLink className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="min-w-0">
+                                                                        <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                                                                            {resource.description}
+                                                                        </h4>
+                                                                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                                                                            {resource.type === "external" ? "External Link" : "Uploaded File"}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    asChild
+                                                                    className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+                                                                >
+                                                                    <a
+                                                                        href={resource.url}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                    >
+                                                                        <ExternalLink className="w-4 h-4 mr-2" />
+                                                                        {isPdf ? "Open PDF" : isVideo ? "Play Video" : isImage ? "View Image" : "View Resource"}
+                                                                    </a>
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     )}
