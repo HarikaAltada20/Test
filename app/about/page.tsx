@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Star, Trophy, Palette, Camera, Heart, Sparkles } from "lucide-react";
 import SocialPairPng from "@/public/images/social_pair.png";
-import { Check } from "lucide-react";
+import { Check,Crown } from "lucide-react";
 import phoneIllustration from "@/public/images/phoneIllustration.png";
 
 const howItWorksData = [
@@ -136,9 +136,9 @@ export default function AboutPage() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
-              <Sparkles className="h-5 w-5 text-white" />
-              <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
+            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
+              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
                 #1 Gamified Creator Marketing Platform
               </span>
             </div>

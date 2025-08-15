@@ -305,6 +305,7 @@ export function HeroSection() {
                 passHref
                 className="relative z-10 flex items-center gap-2"
               >
+                 <div className="scan-line"></div>
                 <Crown className="h-5 w-5" />
                 I'm a Brand
                 <ArrowRight className="h-5 w-5" />
@@ -317,12 +318,14 @@ export function HeroSection() {
                 passHref
                 className="relative z-10 flex items-center gap-2"
               >
+                 <div className="scan-line"></div>
                 <Sparkles className="h-5 w-5" />
                 I'm a Creator
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </button>
           </div>
+         
         </section>
 
         <section className="relative h-[200px] md:h-[400px] z-10 overflow-hidden">
@@ -389,6 +392,7 @@ export function HeroSection() {
         </section>
 
         <div className="absolute bottom-[50px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
+          
           <div className="scroll-track">
             {[
               "./images/434ce5e441255007a5349fd85232df9726062927.png",
@@ -531,7 +535,7 @@ export function HeroSection() {
           </div>
         </section>
 
-        <section   ref={chooseRef} className="text-white py-20">
+        <section ref={chooseRef} className="text-white py-20">
           <div className="max-w-[1250px] mx-auto px-4">
             {/* Tagline */}
             <div className="text-center mb-12">

@@ -143,7 +143,7 @@ export function Nav({
 
             {/* Center Navigation - Desktop */}
             <div className="hidden md:flex items-center space-x-2">
-              <nav className="flex items-center space-x-1">
+              <nav className="flex items-center md:ml-20 space-x-1">
                 <Link
                   href="/brands"
                   className={cn(
@@ -479,7 +479,7 @@ export function Nav({
 
                         <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
                           <Link href="/auth/signup">
-                            <Zap className="mr-2 h-4 w-4" />
+                            {/* <Zap className="mr-2 h-4 w-4" /> */}
                             Get Started
                           </Link>
                         </Button>

@@ -520,12 +520,12 @@ export default function PricingClient() {
 
         <div className="container mx-auto px-4 text-center relative z-10">
           {/* Premium Badge */}
-          <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-6 py-3 mb-8">
-            <Crown className="h-5 w-5 text-white" />
-            <span className="text-lg font-semibold bg-white bg-clip-text text-transparent">
-              #1 Gamified Creator Marketing Platform
-            </span>
-          </div>
+          <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
+              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+                #1 Gamified Creator Marketing Platform
+              </span>
+            </div>
 
           {/* Enhanced Social Icons */}
           <div className="flex justify-center mb-8">
@@ -844,15 +844,14 @@ export default function PricingClient() {
                       </CardContent>
                       <div className="flex items-end justify-center flex-grow">
                         <Button
-                          className={`w-full mt-6 text-sm font-medium rounded-full ${
-                            isFree
-                              ? "bg-purple-600 text-white hover:bg-purple-700"
-                              : isMostPopular
-                              ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
-                              : "bg-purple-700 text-white hover:bg-purple-800"
-                          }`}
+                         className="w-full rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-5 text-lg overflow-hidden"
+                         style={{
+                           background:
+                             "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                         }}
                           asChild
                         >
+                           <div className="scan-line"></div>
                           <Link href={`/signup?plan=${String(plan.id)}`}>
                             {isFree ? "Start Free" : "Subscribe"}
                           </Link>
@@ -1036,6 +1035,7 @@ export default function PricingClient() {
                     "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                 }}
               >
+                  <div className="scan-line"></div>
                 <a
                   href="https://calendly.com/guptavishesh2/30min"
                   target="_blank"

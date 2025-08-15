@@ -69,7 +69,7 @@ export function Footer() {
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`p-3 rounded-full bg-[#161C34] border border-gray-700 text-gray-400 transition-all duration-300 hover:bg-gradient-to-r hover:from-[#FDC155] hover:to-[#FF652D] hover:text-black hover:shadow-lg ${hoverColor}`}
+                className={`p-3 rounded-full bg-[#161C34] border border-gray-700 text-gray-400 transition-all duration-300 ${hoverColor}`}
                 aria-label={`Link to ${href}`}
               >
                 <Icon className="h-5 w-5" />
@@ -178,7 +178,7 @@ export function Footer() {
       <hr className="border-gray-700 my-10 max-w-[1250px] mx-auto" />
 
       {/* Bottom Section */}
-      <div className="max-w-[1250px] mx-auto flex justify-between items-center px-8">
+      <div className="max-w-[1250px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 px-4 sm:px-6 md:px-8 text-center md:text-left">
         <p className="text-sm text-gray-400">
           © {new Date().getFullYear()} Game Of Creators. All rights reserved.
         </p>
