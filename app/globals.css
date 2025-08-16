@@ -32,14 +32,15 @@ body {
 }
 
 .scroll-container {
-  position: relative;
+  display: flex;
   overflow: hidden;
   width: 100%;
+  position: relative;
 }
 
 .scroll-track {
   display: flex;
-  white-space: nowrap;
+  animation: scroll-horizontal 20s linear infinite;
 }
 
 @keyframes scroll-left {

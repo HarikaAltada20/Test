@@ -1092,7 +1092,7 @@ export default function PricingClient() {
       </div> */}
 
             {/* FAQ Section */}
-            <div className="mb-16">
+            {/* <div className="mb-16">
                 <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
                     Frequently Asked Questions
                 </h2>
@@ -1106,7 +1106,7 @@ export default function PricingClient() {
                         ))}
                     </Accordion>
                 </div>
-            </div>
+            </div> */}
 
       <FAQ />
     </div>
