@@ -608,7 +608,9 @@ export default function CreatorsPage() {
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="text-slate-300 text-lg leading-relaxed px-8 pb-6">
-                        <div className="pl-12">{item.answer}</div>
+                        <div className="pl-12">
+                          {item.answer}
+                        </div>
                       </AccordionContent>
                     </div>
                   </AccordionItem>

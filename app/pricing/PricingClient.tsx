@@ -1091,26 +1091,22 @@ export default function PricingClient() {
         </div>
       </div> */}
 
-      {/* FAQ Section */}
-      {/* <div className="mb-16">
-        <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
-          Frequently Asked Questions
-        </h2>
-        <div className="max-w-3xl mx-auto">
-          <Accordion type="single" collapsible className="w-full">
-            {faqItems.map((item, index) => (
-              <AccordionItem key={index} value={`item-${index}`}>
-                <AccordionTrigger className="text-left">
-                  {item.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-gray-600">
-                  {item.answer}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </div>
-      </div> */}
+            {/* FAQ Section */}
+            <div className="mb-16">
+                <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
+                    Frequently Asked Questions
+                </h2>
+                <div className="max-w-3xl mx-auto">
+                    <Accordion type="single" collapsible className="w-full">
+                        {faqItems.map((item, index) => (
+                            <AccordionItem key={index} value={`item-${index}`}>
+                                <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
+                                <AccordionContent className="text-gray-600">{item.answer}</AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                </div>
+            </div>
 
       <FAQ />
     </div>
