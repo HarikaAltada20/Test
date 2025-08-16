@@ -359,8 +359,12 @@ function DashboardContent({
     }
 
     const savedColorfulMode = localStorage.getItem('dashboard-colorful-mode');
-    if (savedColorfulMode) {
+    if (savedColorfulMode !== null) {
       setIsColorfulMode(savedColorfulMode === 'true');
+    } else {
+      // Set colorful mode to false by default if no preference is saved
+      setIsColorfulMode(false);
+      localStorage.setItem('dashboard-colorful-mode', 'false');
     }
 
     // Load compact mode preference
@@ -1735,37 +1739,35 @@ function DashboardContent({
                               </div>
                             </div> */}
 
-                            {/* Colorful Mode Toggle - COMMENTED OUT FOR SIMPLICITY */}
-                            {/* {currentMode === 'light' && (
-                              <div
-                                className="flex items-center justify-between p-4 rounded-xl border"
-                                style={{
-                                  backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                  borderColor: `rgba(${theme.primary}, 0.2)`,
-                                }}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                                    style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
-                                  >
-                                    <Contrast className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                            {/* Colorful Mode Toggle */}
+                            <div
+                              className="flex items-center justify-between p-4 rounded-xl border"
+                              style={{
+                                backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
+                                borderColor: `rgba(${theme.primary}, 0.2)`,
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-10 h-10 rounded-lg flex items-center justify-center"
+                                  style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
+                                >
+                                  <Contrast className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                </div>
+                                <div>
+                                  <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
+                                    Colorful Mode
                                   </div>
-                                  <div>
-                                    <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
-                                      Colorful Mode
-                                    </div>
-                                    <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
-                                      Enable vibrant theme colors
-                                    </div>
+                                  <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
+                                    Enable vibrant theme colors
                                   </div>
                                 </div>
-                                <Switch
-                                  checked={isColorfulMode}
-                                  onCheckedChange={toggleColorfulMode}
-                                />
                               </div>
-                            )} */}
+                              <Switch
+                                checked={isColorfulMode}
+                                onCheckedChange={toggleColorfulMode}
+                              />
+                            </div>
 
                             {/* Full Screen Toggle - KEPT FOR SIMPLICITY */}
                             {isFullscreenClient && isFullscreenSupported && (
