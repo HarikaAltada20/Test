@@ -4,21 +4,21 @@ export default function PrivacyPolicyPage() {
       className="min-h-screen text-white border-b border-[#A87313]"
       style={{ backgroundColor: "#000825" }}
     >
-      
       <div className="container mx-auto px-2 py-12 max-w-[1250px]">
         {/* Header */}
         <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold whitespace-nowrap slide-up" 
-          style={{ animationDelay: "1s" }}>
+          <h1
+            className="text-4xl md:text-5xl font-bold whitespace-nowrap slide-up"
+            style={{ animationDelay: "1s" }}
+          >
             <span
-            
               style={{
                 background:
                   "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
-               
+
                 display: "inline",
               }}
             >
@@ -28,7 +28,7 @@ export default function PrivacyPolicyPage() {
           </h1>
 
           <p className="text-slate-300 mt-4 text-lg">
-            Last Updated: {new Date().toLocaleDateString()}
+            Last Updated: {new Date("2025-08-01").toLocaleDateString("en-GB")}
           </p>
         </div>
 
@@ -159,7 +159,7 @@ export default function PrivacyPolicyPage() {
               practices, please contact us at:
             </p>
             <div className="pl-4 text-lg">
-              <p>Email: support@examplecreators.com</p>
+              <p>Email: support@gameofcreators.com</p>
               <p>
                 Address: 4647 Wildomar Dr, Los Angeles, California 90068, US
               </p>

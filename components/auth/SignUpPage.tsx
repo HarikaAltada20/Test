@@ -298,12 +298,12 @@ export default function SignUpPage() {
                     </>
                   )}
                 </button>
-                <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 w-12 text-white hover:bg-blue-700 transition">
+                {/* <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-blue-600 w-12 text-white hover:bg-blue-700 transition">
                   <FaFacebookF size={18} />
                 </button>
                 <button className="flex items-center justify-center gap-2 p-2 rounded-md bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-500 w-12 text-white hover:opacity-90 transition">
                   <FaInstagram size={18} />
-                </button>
+                </button> */}
               </div>
               {/* Sign In Link */}
               <div className="mt-8 text-center">

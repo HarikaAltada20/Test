@@ -282,29 +282,15 @@ const brandFaqs = [
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const [animate, setAnimate] = useState(false);
-  const faqHeaderRef = useRef<HTMLDivElement>(null);
+  const faqTriggerRef = useRef<HTMLButtonElement>(null); // 👈 track the button
   const pathname = usePathname();
 
-  // const faqs = pathname.includes("brands") ? brandFaqs : creatorFaqs;
-
-  // const faqs =
-  //   pathname === "/pricing"
-  //     ? pricingFaqs
-  //     : pathname.includes("brands")
-  //     ? brandFaqs
-  //     : pathname === "/"
-  //     ? homeFaqs
-  //     : creatorFaqs;
-
-
-   const faqs =
+  const faqs =
     pathname.includes("brands")
       ? brandFaqs
       : pathname === "/"
       ? homeFaqs
       : creatorFaqs;
-
-
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -314,16 +300,16 @@ export default function FAQ() {
           observer.disconnect();
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.5 } // trigger when at least 50% of button is visible
     );
 
-    if (faqHeaderRef.current) {
-      observer.observe(faqHeaderRef.current);
+    if (faqTriggerRef.current) {
+      observer.observe(faqTriggerRef.current);
     }
 
     return () => {
-      if (faqHeaderRef.current) {
-        observer.unobserve(faqHeaderRef.current);
+      if (faqTriggerRef.current) {
+        observer.unobserve(faqTriggerRef.current);
       }
     };
   }, []);
@@ -331,84 +317,93 @@ export default function FAQ() {
   const toggleFAQ = (index: number) => {
     setOpenIndex(openIndex === index ? null : index);
   };
+
   return (
-    <section className="py-16 px-4 mb-10 text-white" ref={faqHeaderRef}>
-    <div className="max-w-5xl mx-auto text-center">
-      {/* Top Tag */}
-      <button className="px-5 py-2 bg-[#2C3247] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
-        <Users className="text-white h-5 w-5" />
-        <span className="text-white">Have inquiries?</span>
-      </button>
-
-      {/* Gradient Title */}
-      <h2
-        className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
-          animate ? "slide-up" : "hide-before-animate"
-        }`}
-        style={{ animationDelay: "0.2s" }}
-      >
-        <span
-          className="bg-clip-text text-transparent"
-          style={{
-            backgroundImage:
-              "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
-          }}
+    <section className="py-16 px-4 mb-10 text-white">
+      <div className="max-w-5xl mx-auto text-center">
+        {/* Top Tag */}
+        <button
+          ref={faqTriggerRef} // 👈 attach observer here
+          className="px-5 py-2 bg-[#2C3247] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2"
         >
-          Frequently
-        </span>
-        <span className="text-white">Asked</span>
-        <span
-          className="bg-clip-text text-transparent"
-          style={{
-            backgroundImage:
-              "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-          }}
+          <Users className="text-white h-5 w-5" />
+          <span className="text-white">Have inquiries?</span>
+        </button>
+
+        {/* Gradient Title */}
+        <h2
+          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
+            animate ? "slide-up" : "hide-before-animate"
+          }`}
+          style={{ animationDelay: "0.2s" }}
         >
-          Questions
-        </span>
-      </h2>
+          <span
+            className="bg-clip-text text-transparent"
+            style={{
+              backgroundImage:
+                "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
+            }}
+          >
+            Frequently
+          </span>
+          <span className="text-white">Asked</span>
+          <span
+            className="bg-clip-text text-transparent"
+            style={{
+              backgroundImage:
+                "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+            }}
+          >
+            Questions
+          </span>
+        </h2>
 
-      <p
-        className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
-          animate ? "slide-left" : "hide-before-animate"
-        }`}
-        style={{ animationDelay: "1s" }}
-      >
-        Here are some frequently asked questions
-      </p>
+        <p
+          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
+            animate ? "slide-left" : "hide-before-animate"
+          }`}
+          style={{ animationDelay: "1s" }}
+        >
+          Here are some frequently asked questions
+        </p>
 
-      {/* FAQ List */}
-      <div className="mt-10 space-y-7">
-        {faqs.map((faq, index) => (
-          <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
-            <button
-              onClick={() => toggleFAQ(index)}
-              className={`w-full flex justify-between items-center px-6 py-6 
-                ${
-                  pathname.includes("brands") || pathname === "/pricing" || pathname === "/"
-                    ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
-                    : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
-                } 
-                hover:bg-[#1A1B35] transition-colors`}
+        {/* FAQ List */}
+        <div className="mt-10 space-y-7">
+          {faqs.map((faq, index) => (
+            <div
+              key={index}
+              className="border border-gray-700 rounded-lg overflow-hidden"
             >
-              <span className="text-left text-xl">{faq.question}</span>
-              <FaChevronDown
-                className={`transition-transform ${
-                  openIndex === index ? "rotate-180" : ""
-                }`}
-              />
-            </button>
+              <button
+                onClick={() => toggleFAQ(index)}
+                className={`w-full flex justify-between items-center px-6 py-6 
+                  ${
+                    pathname.includes("brands") ||
+                    pathname === "/pricing" ||
+                    pathname === "/"
+                      ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
+                      : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
+                  } 
+                  hover:bg-[#1A1B35] transition-colors`}
+              >
+                <span className="text-left text-xl">{faq.question}</span>
+                <FaChevronDown
+                  className={`transition-transform ${
+                    openIndex === index ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
 
-            {openIndex === index && (
-              <div
-                className="text-left text-md  md:text-lg pt-4 px-4 pb-4 text-gray-400 leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: faq.answer }}
-              />
-            )}
-          </div>
-        ))}
+              {openIndex === index && (
+                <div
+                  className="text-left text-md md:text-lg pt-4 px-4 pb-4 text-gray-400 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: faq.answer }}
+                />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
   );
 }

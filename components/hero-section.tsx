@@ -102,9 +102,8 @@ export function HeroSection() {
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
-
   const [worksVisible, setWorksVisible] = useState(false);
-  const [chooseVisible, setChooseVisible] = useState(false);
+  // const [chooseVisible, setChooseVisible] = useState(false);
   const [reasonsVisible, setReasonsVisible] = useState(false);
 
   const worksRef = useRef<HTMLDivElement>(null);
@@ -117,17 +116,17 @@ export function HeroSection() {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             if (entry.target === worksRef.current) setWorksVisible(true);
-            if (entry.target === chooseRef.current) setChooseVisible(true);
-            if (entry.target === reasonsRef.current) setReasonsVisible(true); 
+            // if (entry.target === chooseRef.current) setChooseVisible(true);
+            if (entry.target === reasonsRef.current) setReasonsVisible(true);
           }
         });
       },
-      { threshold: 0.5 }
+      { threshold: 0.1 }
     );
 
     if (worksRef.current) observer.observe(worksRef.current);
-    if (chooseRef.current) observer.observe(chooseRef.current);
-    if (reasonsRef.current) observer.observe(reasonsRef.current); 
+    // if (chooseRef.current) observer.observe(chooseRef.current);
+    if (reasonsRef.current) observer.observe(reasonsRef.current);
 
     return () => observer.disconnect();
   }, []);
@@ -138,7 +137,7 @@ export function HeroSection() {
           setAnimate(true);
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 }
     );
 
     if (sectionRef.current) {
@@ -152,7 +151,6 @@ export function HeroSection() {
     <div className="relative min-h-screen bg-[#000825] text-white overflow-hidden">
       {/* Refined Background Elements - More Subtle */}
       <div className="relative z-20">
-   
         {/* Main Hero Content */}
 
         <section className="relative flex flex-col items-center justify-center py-16 text-center text-white overflow-hidden">
@@ -294,14 +292,14 @@ export function HeroSection() {
         </section>
 
         <section
-          className="relative h-[200px] md:h-[400px] z-10 overflow-hidden"
-          ref={chooseRef}
+          className="relative h-[250px] sm:h-[300px] md:h-[400px] lg:h-[500px] z-10 overflow-hidden"
+          ref={sectionRef}
         >
           {/* Semi-circle background */}
           <div
             className="absolute top-0 left-0 w-full flex flex-col text-center"
             style={{
-              height: "50vw",
+              height: "50vw", // scales with screen width
               borderTopLeftRadius: "50vw",
               borderTopRightRadius: "50vw",
               background:
@@ -311,20 +309,20 @@ export function HeroSection() {
               backdropFilter: "blur(34.2px)",
             }}
           >
-            <div className="mt-[50px] md:mt-[100px]">
+            <div className="mt-8 sm:mt-14 md:mt-20 lg:mt-40">
               <h2
-                className={`text-white text-lg md:text-5xl font-bold ${
-                  chooseVisible ? "slide-up" : "opacity-0"
+                className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${
+                  animate ? "slide-up" : "opacity-0"
                 }`}
               >
                 <span className="text-purple-400">Creative</span>{" "}
                 <span className="text-orange-400">Showcase</span>
               </h2>
 
-              <div className="flex items-center justify-center mt-4 gap-3">
+              <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-3 sm:gap-5 flex-wrap">
                 <span
-                  className={`text-gray-300 text-md md:text-lg font-medium ${
-                    chooseVisible ? "slide-left" : "opacity-0"
+                  className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
+                    animate ? "slide-left" : "opacity-0"
                   }`}
                   style={{ animationDelay: "0.3s" }}
                 >
@@ -333,52 +331,41 @@ export function HeroSection() {
 
                 {/* Avatar Stack */}
                 <div
-                  className={`flex -space-x-3 ${
-                    chooseVisible ? "slide-up" : "opacity-0"
+                  className={`flex -space-x-2 sm:-space-x-3 ${
+                    animate ? "slide-up" : "opacity-0"
                   }`}
                   style={{ animationDelay: "0.6s" }}
                 >
-                  <img
-                    src="./images/434ce5e441255007a5349fd85232df9726062927.png"
-                    alt="Creator 1"
-                    className="w-10 h-10 rounded-full border-2 border-gray-500"
-                  />
-                  <img
-                    src="./images/028df62b75a0a5e07e3025b313d8b74cda06d987.png"
-                    alt="Creator 2"
-                    className="w-10 h-10 rounded-full border-2 border-gray-500"
-                  />
-                  <img
-                    src="./images/f3a549313a8c77a542d9239fdd18733c34787a69.png"
-                    alt="Creator 3"
-                    className="w-10 h-10 rounded-full border-2 border-gray-500"
-                  />
-                  <img
-                    src="./images/f0c4aef454fceee8af51bb454a70238d17ad978a.png"
-                    alt="Creator 4"
-                    className="w-10 h-10 rounded-full border-2 border-gray-500"
-                  />
-                  <img
-                    src="./images/776584be4e29200a5a72df8ebba39153a4aa21b6.png"
-                    alt="Creator 5"
-                    className="w-10 h-10 rounded-full border-2 border-gray-500"
-                  />
+                  {[
+                    "434ce5e441255007a5349fd85232df9726062927.png",
+                    "028df62b75a0a5e07e3025b313d8b74cda06d987.png",
+                    "f3a549313a8c77a542d9239fdd18733c34787a69.png",
+                    "f0c4aef454fceee8af51bb454a70238d17ad978a.png",
+                    "776584be4e29200a5a72df8ebba39153a4aa21b6.png",
+                  ].map((img, idx) => (
+                    <img
+                      key={idx}
+                      src={`./images/${img}`}
+                      alt={`Creator ${idx + 1}`}
+                      className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-full border-2 border-gray-500"
+                    />
+                  ))}
                 </div>
 
-                <span
-                  className={`text-gray-300 text-lg font-medium ${
+                {/* <span
+                  className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
                     chooseVisible ? "slide-right" : "opacity-0"
                   }`}
                   style={{ animationDelay: "1.2s" }}
                 >
                   3000+ Active Creators
-                </span>
+                </span> */}
               </div>
             </div>
           </div>
         </section>
 
-        <div className="absolute bottom-[50px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
+        <div className="absolute bottom-[80px] lg:bottom-[90px] left-1/2 -translate-x-1/2 z-20 w-full scroll-container">
           <div className="scroll-track">
             {[
               "./images/434ce5e441255007a5349fd85232df9726062927.png",
@@ -530,7 +517,7 @@ export function HeroSection() {
 
         {/* Reasons to Select Us */}
 
-        <section  ref={reasonsRef}  className="text-white py-20">
+        <section ref={reasonsRef} className="text-white py-20">
           <div className="max-w-[1250px] mx-auto px-4">
             {/* Tagline */}
             <div className="text-center mb-12">

@@ -21,7 +21,7 @@ export function Footer() {
 
   return (
     <footer className="relative w-full bg-[#000825] text-white py-10 px-8 overflow-hidden">
-      <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-wrap justify-between gap-16">
+      <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-nowrap max-[1000px]:flex-wrap justify-between gap-16  max-[1000px]:gap-16 max-[1180px]:gap-8">
         {/* Logo & Description */}
         <div className="flex flex-col max-w-xl space-y-6">
           <Link href="/" className="inline-block">
@@ -79,7 +79,12 @@ export function Footer() {
         </div>
 
         {/* Navigation Sections */}
-        <div className="flex flex-wrap gap-16 text-lg text-gray-300">
+        <div
+          className="  flex text-lg text-gray-300
+    gap-16
+    max-[1180px]:gap-8
+    max-[1000px]:flex-wrap max-[1000px]:gap-16"
+        >
           {/* For Brands */}
           <nav>
             <h3 className="font-semibold text-xl mb-6 text-white">
@@ -187,7 +192,7 @@ export function Footer() {
           className="flex relative items-center gap-2 overflow-hidden bg-gradient-to-r from-[#7B40EC] to-[#A351D8] px-6 py-2 rounded-full text-white hover:scale-105 transition-transform duration-300"
           aria-label="Back to top"
         >
-           <div className="scan-line"></div>
+          <div className="scan-line"></div>
           Back to Top
           <ArrowUp className="h-4 w-4" />
         </button>

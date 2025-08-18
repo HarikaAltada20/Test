@@ -721,7 +721,7 @@ export default function PricingClient() {
                   return (
                     <div
                       key={plan.id}
-                      className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6
+                      className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition 
                       ${
                         isMostPopular
                           ? "border-2 border-purple-500 shadow-xl"

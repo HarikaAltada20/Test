@@ -23,62 +23,63 @@ import {
   Gift,
   Sparkles,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import CtcBanner from "@/components/CtcBanner";
 import Testimonials from "../../components/Testimonials";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - replace with actual path if different
 import SocialPairPng from "@/public/images/social_pair.png";
 
-const creatorTestimonials = [
-  {
-    stars: 5,
-    quote:
-      "Finally, a platform that truly understands the creator economy. The opportunities are diverse, and the community is incredibly supportive.",
-    name: "Aisha Khan",
-    title: "Travel Vlogger & Influencer",
-    avatar: "/images/avatar_placeholder.png",
-  },
-  {
-    stars: 5,
-    quote:
-      "As a new creator, Game Of Creators gave me the exposure I needed. I landed my first paid collaboration within a month of joining!",
-    name: "Chloe Dubois",
-    title: "Lifestyle Content Creator",
-    avatar: "/images/avatar_placeholder.png",
-  },
-  {
-    stars: 5,
-    quote:
-      "The platform is intuitive, and the support team is always responsive. It made managing multiple brand deals so much simpler.",
-    name: "Kenji Tanaka",
-    title: "Gaming Streamer & YouTuber",
-    avatar: "/images/avatar_placeholder.png",
-  },
-  {
-    stars: 4,
-    quote:
-      "Game Of Creators helped me turn my passion into a full-time income. The contest format pushes me to create my best work every time.",
-    name: "Marcus Rivera",
-    title: "Fitness Influencer & Coach",
-    avatar: "/images/avatar_placeholder.png",
-  },
-  {
-    stars: 5,
-    quote:
-      "The quality of brands on this platform is incredible. I've worked with some amazing companies and built lasting relationships.",
-    name: "Sophie Williams",
-    title: "Beauty Content Creator",
-    avatar: "/images/avatar_placeholder.png",
-  },
-  {
-    stars: 5,
-    quote:
-      "From zero followers to 100K in 8 months thanks to the exposure from brand collaborations. This platform changed my life!",
-    name: "Alex Thompson",
-    title: "Tech Reviewer & YouTuber",
-    avatar: "/images/avatar_placeholder.png",
-  },
-];
+// const creatorTestimonials = [
+//   {
+//     stars: 5,
+//     quote:
+//       "Finally, a platform that truly understands the creator economy. The opportunities are diverse, and the community is incredibly supportive.",
+//     name: "Aisha Khan",
+//     title: "Travel Vlogger & Influencer",
+//     avatar: "/images/avatar_placeholder.png",
+//   },
+//   {
+//     stars: 5,
+//     quote:
+//       "As a new creator, Game Of Creators gave me the exposure I needed. I landed my first paid collaboration within a month of joining!",
+//     name: "Chloe Dubois",
+//     title: "Lifestyle Content Creator",
+//     avatar: "/images/avatar_placeholder.png",
+//   },
+//   {
+//     stars: 5,
+//     quote:
+//       "The platform is intuitive, and the support team is always responsive. It made managing multiple brand deals so much simpler.",
+//     name: "Kenji Tanaka",
+//     title: "Gaming Streamer & YouTuber",
+//     avatar: "/images/avatar_placeholder.png",
+//   },
+//   {
+//     stars: 4,
+//     quote:
+//       "Game Of Creators helped me turn my passion into a full-time income. The contest format pushes me to create my best work every time.",
+//     name: "Marcus Rivera",
+//     title: "Fitness Influencer & Coach",
+//     avatar: "/images/avatar_placeholder.png",
+//   },
+//   {
+//     stars: 5,
+//     quote:
+//       "The quality of brands on this platform is incredible. I've worked with some amazing companies and built lasting relationships.",
+//     name: "Sophie Williams",
+//     title: "Beauty Content Creator",
+//     avatar: "/images/avatar_placeholder.png",
+//   },
+//   {
+//     stars: 5,
+//     quote:
+//       "From zero followers to 100K in 8 months thanks to the exposure from brand collaborations. This platform changed my life!",
+//     name: "Alex Thompson",
+//     title: "Tech Reviewer & YouTuber",
+//     avatar: "/images/avatar_placeholder.png",
+//   },
+// ];
 const creatorsteps = [
   {
     number: "1",
@@ -290,7 +291,7 @@ export default function CreatorsPage() {
 
             {/* Epic CTA Button */}
             <div className="flex justify-center items-center mb-12">
-              <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-3 text-lg overflow-hidden">
+              <Button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-6 text-lg overflow-hidden">
                 <div className="scan-line"></div>
                 <Link
                   href="/auth/signup"
@@ -303,7 +304,7 @@ export default function CreatorsPage() {
                   <span>Get Started</span>
                   <ArrowRight className="h-5 w-5" />
                 </Link>
-              </button>
+              </Button>
             </div>
           </div>
         </section>
@@ -313,7 +314,7 @@ export default function CreatorsPage() {
           <div className="max-w-[1200px] mx-auto px-4 text-center">
             {/* Heading */}
             <h2
-              className={`text-lg md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
                 isAnimated ? "slide-up" : "hide-before-animate"
               }`}
               style={{ animationDelay: "0.2s" }}

@@ -25,6 +25,7 @@ import BrandLaunchContestButton from "@/components/BrandLaunchContestButton";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - reuse from creators page
 import SocialPairPng from "@/public/images/social_pair.png";
+import BrandGetStartedButton from "@/components/BrandGetStartedButton";
 
 // const faqItemsBrands = [
 //   {
@@ -263,12 +264,13 @@ export default function BrandsPage() {
           </div>
 
           <div className="flex justify-center items-center mb-12">
-            <button
+            {/* <button
               className="rounded-3xl relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"
               style={{
                 background:
                   "linear-gradient(90deg, #4C238B 0%, #7F39EC 50%, #4C238B 100%)",
               }}
+              
             >
               <div className="scan-line"></div>
               <Link
@@ -279,7 +281,8 @@ export default function BrandsPage() {
                 <span>Get Started</span>
                 <ArrowRight className="h-5 w-5" />
               </Link>
-            </button>
+            </button> */}
+            <BrandGetStartedButton/>
           </div>
         </section>
 
