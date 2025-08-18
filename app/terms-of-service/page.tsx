@@ -12,7 +12,7 @@ export default function TermsOfServicePage() {
         <div className="text-white">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-4xl font-bold mb-2">
+            <h1 className="text-4xl font-bold mb-2 slide-up" style={{ animationDelay: "1s" }}>
               <span className="text-purple-300">Terms</span> of <span className="text-purple-300">Service</span>
             </h1>
             <p className="text-lg">Last Updated: 7/23/2025</p>

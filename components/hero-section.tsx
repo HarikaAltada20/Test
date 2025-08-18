@@ -97,19 +97,19 @@ const steps = [
 
 export function HeroSection() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const creatorsNumbers = [100, 200, 300, 400, 500];
-  const campaignNumbers = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
-  const viewNumbers = [60, 70, 80, 90, 100];
+
   const [animate, setAnimate] = useState(false);
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
-  const [step, setStep] = useState(0);
-  const worksRef = useRef<HTMLDivElement>(null);
-  const chooseRef = useRef<HTMLDivElement>(null);
 
   const [worksVisible, setWorksVisible] = useState(false);
   const [chooseVisible, setChooseVisible] = useState(false);
+  const [reasonsVisible, setReasonsVisible] = useState(false);
+
+  const worksRef = useRef<HTMLDivElement>(null);
+  const chooseRef = useRef<HTMLDivElement>(null);
+  const reasonsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -118,24 +118,19 @@ export function HeroSection() {
           if (entry.isIntersecting) {
             if (entry.target === worksRef.current) setWorksVisible(true);
             if (entry.target === chooseRef.current) setChooseVisible(true);
+            if (entry.target === reasonsRef.current) setReasonsVisible(true); 
           }
         });
       },
-      { threshold: 0.3 }
+      { threshold: 0.5 }
     );
 
     if (worksRef.current) observer.observe(worksRef.current);
     if (chooseRef.current) observer.observe(chooseRef.current);
+    if (reasonsRef.current) observer.observe(reasonsRef.current); 
 
     return () => observer.disconnect();
   }, []);
-  const maxSteps =
-    Math.max(
-      creatorsNumbers.length,
-      campaignNumbers.length,
-      viewNumbers.length
-    ) - 1;
-
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -153,41 +148,11 @@ export function HeroSection() {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (animate && step < maxSteps) {
-      const timeout = setTimeout(() => {
-        setStep((prev) => prev + 1);
-      }, 500);
-      return () => clearTimeout(timeout);
-    }
-  }, [animate, step, maxSteps]);
-
   return (
     <div className="relative min-h-screen bg-[#000825] text-white overflow-hidden">
       {/* Refined Background Elements - More Subtle */}
       <div className="relative z-20">
-        {/* Floating Gaming Elements */}
-        {/* <div className="absolute inset-0 pointer-events-none">
-        <FloatingElement delay={0}>
-          <div className="absolute top-20 left-10 w-8 h-8 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-lg rotate-45 opacity-60"></div>
-        </FloatingElement>
-        <FloatingElement delay={2}>
-          <div className="absolute top-40 right-20 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full opacity-60"></div>
-        </FloatingElement>
-        <FloatingElement delay={4}>
-          <div className="absolute bottom-60 left-20 w-4 h-4 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full opacity-60"></div>
-        </FloatingElement>
-        <FloatingElement delay={1}>
-          <Trophy className="absolute top-32 right-10 h-6 w-6 text-yellow-400/60" />
-        </FloatingElement>
-        <FloatingElement delay={3}>
-          <Star className="absolute bottom-40 right-40 h-5 w-5 text-pink-400/60" />
-        </FloatingElement>
-        <FloatingElement delay={5}>
-          <Sparkles className="absolute top-60 left-40 h-7 w-7 text-cyan-400/60" />
-        </FloatingElement>
-      </div> */}
-
+   
         {/* Main Hero Content */}
 
         <section className="relative flex flex-col items-center justify-center py-16 text-center text-white overflow-hidden">
@@ -328,7 +293,10 @@ export function HeroSection() {
           </div>
         </section>
 
-        <section className="relative h-[200px] md:h-[400px] z-10 overflow-hidden">
+        <section
+          className="relative h-[200px] md:h-[400px] z-10 overflow-hidden"
+          ref={chooseRef}
+        >
           {/* Semi-circle background */}
           <div
             className="absolute top-0 left-0 w-full flex flex-col text-center"
@@ -344,18 +312,32 @@ export function HeroSection() {
             }}
           >
             <div className="mt-[50px] md:mt-[100px]">
-              <h2 className="text-white text-lg md:text-5xl font-bold">
+              <h2
+                className={`text-white text-lg md:text-5xl font-bold ${
+                  chooseVisible ? "slide-up" : "opacity-0"
+                }`}
+              >
                 <span className="text-purple-400">Creative</span>{" "}
                 <span className="text-orange-400">Showcase</span>
               </h2>
 
               <div className="flex items-center justify-center mt-4 gap-3">
-                <span className="text-gray-300 text-md md:text-lg font-medium">
+                <span
+                  className={`text-gray-300 text-md md:text-lg font-medium ${
+                    chooseVisible ? "slide-left" : "opacity-0"
+                  }`}
+                  style={{ animationDelay: "0.3s" }}
+                >
                   Join 50,000+ Active Creators
                 </span>
 
                 {/* Avatar Stack */}
-                <div className="flex -space-x-3">
+                <div
+                  className={`flex -space-x-3 ${
+                    chooseVisible ? "slide-up" : "opacity-0"
+                  }`}
+                  style={{ animationDelay: "0.6s" }}
+                >
                   <img
                     src="./images/434ce5e441255007a5349fd85232df9726062927.png"
                     alt="Creator 1"
@@ -383,7 +365,12 @@ export function HeroSection() {
                   />
                 </div>
 
-                <span className="text-gray-300 text-lg font-medium">
+                <span
+                  className={`text-gray-300 text-lg font-medium ${
+                    chooseVisible ? "slide-right" : "opacity-0"
+                  }`}
+                  style={{ animationDelay: "1.2s" }}
+                >
                   3000+ Active Creators
                 </span>
               </div>
@@ -446,7 +433,11 @@ export function HeroSection() {
             {/* Tagline */}
             <div className="flex justify-center mb-5">
               <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
-                <Rocket className="w-3 h-3 sm:w-4 sm:h-4 text-purple-400" />
+                <img
+                  src="./images/streamline-sharp_user-work-laptop-wifi.png"
+                  alt="icon"
+                  className="w-5 h-5 sm:w-6 sm:h-6"
+                />
                 Enhance your Marketing skills
               </span>
             </div>
@@ -472,26 +463,26 @@ export function HeroSection() {
             </p>
 
             {/* Active Step */}
-            <div className="flex flex-col md:flex-row max-w-7xl md:h-[350px] mx-auto rounded-lg overflow-hidden">
+            <div className="flex flex-col md:flex-row max-w-7xl md:h-[350px] mx-auto">
               {/* Image */}
-              <div className="w-full md:w-1/2 relative aspect-square md:aspect-auto md:h-auto">
+              <div className="w-full md:w-1/2  relative aspect-square md:aspect-auto md:h-auto">
                 <Image
                   src={steps[activeIndex].image}
                   alt={steps[activeIndex].title}
                   fill
-                  className="object-cover"
+                  className="object-cover rounded-xl"
                 />
               </div>
 
               {/* Content */}
-              <div className="w-full md:w-1/2 bg-[#11133a] p-6 sm:p-8 flex flex-col justify-start relative text-left">
+              <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600  md:h-[350px] sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
                 {/* Step Indicator */}
                 <div className="flex mb-4 sm:mb-6 items-center justify-between">
                   <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
                     {steps[activeIndex].icon}
                   </div>
 
-                  <div className="relative px-3 py-0.5 sm:px-4 sm:py-1 rounded-full text-xs sm:text-sm font-semibold text-white border-2 border-white/60">
+                  <div className="relative px-3 py-0.5 sm:px-5 sm:py-1 rounded-full text-md sm:text-lg font-semibold text-white border-2 border-white/60">
                     Step {steps[activeIndex].step}
                   </div>
                 </div>
@@ -507,17 +498,14 @@ export function HeroSection() {
                     {steps[activeIndex].description}
                   </p>
 
-                
                   <button
-                   
                     className="px-5 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
-              //      
                     style={{
                       background:
                         "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                     }}
                   >
-                     <div className="scan-line"></div>
+                    <div className="scan-line"></div>
                     Start Now
                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                   </button>
@@ -538,20 +526,31 @@ export function HeroSection() {
               ))}
             </div>
           </div>
-        </section> 
-        
+        </section>
+
         {/* Reasons to Select Us */}
 
-        <section ref={chooseRef} className="text-white py-20">
+        <section  ref={reasonsRef}  className="text-white py-20">
           <div className="max-w-[1250px] mx-auto px-4">
             {/* Tagline */}
             <div className="text-center mb-12">
-              <button className="bg-[#2C3247] text-base sm:text-lg px-4 py-1 rounded-full mb-6">
+              <div className="flex justify-center mb-5">
+                <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
+                  <img
+                    src="./images/tabler_award.png"
+                    alt="icon"
+                    className="w-5 h-5"
+                  />
+                  Reasons to Select Us
+                </span>
+              </div>
+
+              {/* <button className="bg-[#2C3247] text-base sm:text-lg px-4 py-1 rounded-full mb-6">
                 Reasons to Select Us
-              </button>
+              </button> */}
               <h2
                 className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
-                  chooseVisible ? "slide-up" : "opacity-0"
+                  reasonsVisible ? "slide-up" : "opacity-0"
                 }`}
               >
                 Why Choose{" "}
@@ -561,7 +560,7 @@ export function HeroSection() {
               </h2>
               <p
                 className={`text-gray-300 text-base sm:text-lg md:text-xl ${
-                  chooseVisible ? "slide-left" : "opacity-0"
+                  reasonsVisible ? "slide-left" : "opacity-0"
                 }`}
               >
                 We're not just a platform – we're your competitive advantage in
@@ -704,7 +703,7 @@ export function HeroSection() {
               </div>
 
               {/* 6 */}
-              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
+              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -712,19 +711,19 @@ export function HeroSection() {
                       "url('./images/c90e07a57a2d08340f7c0d3c57b1fde4a6f0f9cd.jpg')",
                   }}
                 ></div>
-                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+                {/* <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div> */}
 
-                <Gamepad2 className="text-white mb-4 relative z-10" size={26} />
-                <h3 className="text-lg sm:text-xl font-semibold mb-2 relative z-10">
+                <Gamepad2 className="text-white mb-4 relative z-10" size={30} />
+                <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
                   Gaming Dashboard
                 </h3>
-                <p className="text-gray-400 text-base sm:text-lg relative z-10">
+                <p className="text-gray-400 text-base text-md md:text-xl relative z-10">
                   Level up your campaigns with our intuitive interface.
                 </p>
               </div>
 
               {/* 7 */}
-              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
+              <div className="sm:col-span-2 border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
                 <div
                   className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                   style={{
@@ -732,13 +731,13 @@ export function HeroSection() {
                       "url('./images/f1dc449ff317e5ede74929b2af2d4ef5b82c298f.png')",
                   }}
                 ></div>
-                <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+                {/* <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div> */}
 
-                <Headset className="text-white mb-4 relative z-10" size={26} />
-                <h3 className="text-lg sm:text-xl font-semibold mb-2 relative z-10">
+                <Headset className="text-white mb-4 relative z-10" size={30} />
+                <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
                   24/7 Support
                 </h3>
-                <p className="text-gray-400 text-base sm:text-lg relative z-10">
+                <p className="text-gray-400 text-base text-md md:text-xl relative z-10">
                   Our gaming experts are always ready to help you win big!
                 </p>
               </div>

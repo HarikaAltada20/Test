@@ -184,9 +184,10 @@ export function Footer() {
         </p>
         <button
           onClick={scrollToTop}
-          className="flex items-center gap-2 bg-gradient-to-r from-[#7B40EC] to-[#A351D8] px-6 py-2 rounded-full text-white hover:scale-105 transition-transform duration-300"
+          className="flex relative items-center gap-2 overflow-hidden bg-gradient-to-r from-[#7B40EC] to-[#A351D8] px-6 py-2 rounded-full text-white hover:scale-105 transition-transform duration-300"
           aria-label="Back to top"
         >
+           <div className="scan-line"></div>
           Back to Top
           <ArrowUp className="h-4 w-4" />
         </button>

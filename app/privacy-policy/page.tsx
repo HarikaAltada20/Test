@@ -4,10 +4,12 @@ export default function PrivacyPolicyPage() {
       className="min-h-screen text-white border-b border-[#A87313]"
       style={{ backgroundColor: "#000825" }}
     >
+      
       <div className="container mx-auto px-2 py-12 max-w-[1250px]">
         {/* Header */}
         <div className="mb-12">
-          <span className="text-5xl font-bold whitespace-nowrap">
+          <h1 className="text-4xl md:text-5xl font-bold whitespace-nowrap slide-up" 
+          style={{ animationDelay: "1s" }}>
             <span
             
               style={{
@@ -23,7 +25,7 @@ export default function PrivacyPolicyPage() {
               Privacy&nbsp;
             </span>
             <span className="text-white">Policy</span>
-          </span>
+          </h1>
 
           <p className="text-slate-300 mt-4 text-lg">
             Last Updated: {new Date().toLocaleDateString()}

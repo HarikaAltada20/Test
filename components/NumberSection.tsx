@@ -44,9 +44,10 @@ export default function NumbersSection({ items }: NumbersSectionProps) {
   return (
     <section className="py-16" ref={sectionRef}>
       <div className="container mx-auto max-w-6xl px-4">
-        <div className="flex justify-center items-center text-white text-center gap-4 sm:gap-8 overflow-x-auto">
+       
+        <div className="flex justify-center items-center text-white text-center gap-6 sm:gap-8 overflow-hidden">
           {items.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-4">
+            <div key={idx} className="flex items-center gap-4 flex-shrink">
               <NumberBlock
                 numbers={item.numbers}
                 step={step}
@@ -73,8 +74,13 @@ function NumberBlock({
   label: string;
   suffix?: string;
 }) {
+  const itemHeight = {
+    base: 48,
+    sm: 72, 
+  };
+
   return (
-    <div className="flex flex-col items-center px-2 sm:px-8">
+    <div className="flex flex-col items-center px-2 sm:px-6 md:px-8 flex-shrink">
       <div className="flex items-center">
         <div className="overflow-hidden h-[48px] sm:h-[72px]">
           <div
@@ -83,15 +89,15 @@ function NumberBlock({
               transform: `translateY(-${
                 Math.min(step, numbers.length - 1) *
                 (typeof window !== "undefined" && window.innerWidth < 640
-                  ? 48
-                  : 72)
+                  ? itemHeight.base
+                  : itemHeight.sm)
               }px)`,
             }}
           >
             {numbers.map((num, i) => (
               <div
                 key={i}
-                className="flex items-center text-3xl sm:text-6xl font-semibold h-[48px] sm:h-[72px]"
+                className="flex items-center text-2xl sm:text-4xl md:text-6xl font-semibold h-[48px] sm:h-[72px]"
               >
                 {num}
                 {suffix}
@@ -99,17 +105,21 @@ function NumberBlock({
             ))}
           </div>
         </div>
-        <span className="text-orange-600 font-bold text-3xl sm:text-6xl ml-1">
+        <span className="text-orange-600 bg-clip-text text-transparent font-bold text-2xl sm:text-4xl md:text-6xl ml-1"
+              style={{
+                backgroundImage:
+                  "linear-gradient(179.07deg, #FDC155 31.08%, #FF652D 68.39%)",
+              }}>
           +
         </span>
       </div>
-      <p className="mt-2 text-xs sm:text-base">{label}</p>
+      <p className="mt-2 text-xs sm:text-sm md:text-base">{label}</p>
     </div>
   );
 }
 
 function Divider() {
   return (
-    <div className="border-l-2 border border-gray-500 h-12 sm:h-20"></div>
+    <div className="border-l-2 border border-gray-500 h-10 sm:h-14 md:h-20"></div>
   );
 }
