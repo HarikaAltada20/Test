@@ -42,7 +42,7 @@ import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { useRouter } from "next/navigation";
 import SocialPairPng from "@/public/images/social_pair.png";
 import startdemo from "@/public/images/startdemo.png";
-import FAQ from "@/components/FAQ";
+// import FAQ from "@/components/FAQ";
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
   maxActiveContests: number;
@@ -152,7 +152,7 @@ export default function PricingClient() {
           setVisible(true);
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.5 }
     );
 
     if (storyRef.current) observer.observe(storyRef.current);
@@ -1108,7 +1108,7 @@ export default function PricingClient() {
                 </div>
             </div> */}
 
-      <FAQ />
+      {/* <FAQ /> */}
     </div>
   );
 }
