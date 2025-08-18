@@ -27,26 +27,26 @@ import NumbersSection from "./NumberSection";
 const steps = [
   {
     step: 1,
-    title: "Create a contest",
+    title: "Brands Create a Contest",
     description:
-      "Set up your epic campaign with budget, requirements, and creative challenges for creators to conquer.",
+      "Share your vision. Describe your product, set the rules, and offer a prize. Decide how you want creators to promote your brand or product.",
     image: "./images/da37f744f2ba86471c20ded62e5befaccbcabd69.png",
     icon: <Trophy className="w-6 h-6 text-white" />,
   },
   {
     step: 2,
-    title: "Review Applications",
+    title: "Open to Everyone",
     description:
-      "Creators complete for your contest! Review their profiles and select the champions that match your brand.",
+      "Creators of all follower counts can join any contest that inspires them. Pick a challenge, show your creativity, and stand out!",
 
     image: "./images/4cb24974041cac85c7df83d9aaf0e54514c37f92.png",
     icon: <Users className="w-6 h-6 text-white" />,
   },
   {
     step: 3,
-    title: "Review Applications",
+    title: "Win, Track, and Own Results",
     description:
-      "Watch your campaign go viral! Monitor real-time performance metrics and celebrate your success.",
+      "Creators get paid. Brands get results. Creators win prize money. brands track results and own the winning content.",
 
     image: "./images/f4d15163b849dc0a3621c67aba3032911859d498.png",
     icon: <Sparkles className="w-6 h-6 text-white" />,

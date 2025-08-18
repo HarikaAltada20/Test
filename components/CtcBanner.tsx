@@ -83,7 +83,7 @@ export default function CtcBanner() {
       </div>
 
       {/* Tagline */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-[#2C3148] rounded-full text-lg z-10">
+      <div className="flex items-center mt-3 md:mt-0 gap-2 px-4 py-2 bg-[#2C3148] rounded-full text-lg z-10">
         <Rocket className="w-4 h-4" />
         <span>
           {isHome

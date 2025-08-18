@@ -216,34 +216,34 @@ const config = {
 
 export default function Testimonials() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const [isAnimated, setIsAnimated] = useState(false);
+  const headingRef = useRef<HTMLDivElement>(null);
+  const [headingAnimated, setHeadingAnimated] = useState(false);
   const pathname = usePathname();
 
   const key = (pathname in config ? pathname : "default") as keyof typeof config;
 
-const {
-  testimonials,
-  button,
-  gradientText,
-  headingWord,
-  description,
-  blurColor,
-  iconSrc,
-} = config[key];
-
+  const {
+    testimonials,
+    button,
+    gradientText,
+    headingWord,
+    description,
+    blurColor,
+    iconSrc,
+  } = config[key];
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setIsAnimated(true);
+          setHeadingAnimated(true);
           observer.disconnect();
         }
       },
       { threshold: 0.3 }
     );
 
-    if (sectionRef.current) observer.observe(sectionRef.current);
+    if (headingRef.current) observer.observe(headingRef.current);
     return () => observer.disconnect();
   }, []);
 
@@ -257,14 +257,14 @@ const {
   return (
     <section className="text-white py-20 px-6" ref={sectionRef}>
       {/* Heading */}
-      <div className="text-center max-w-3xl mx-auto">
+      <div className="text-center max-w-3xl mx-auto" ref={headingRef}>
         <button className="bg-[#2C3247] text-white py-1 px-4 rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
           <ButtonIcon size={16} />
           <span>{button.text}</span>
         </button>
         <h2
           className={`text-3xl md:text-5xl font-bold mb-7 ${
-            isAnimated ? "slide-up" : "hide-before-animate"
+            headingAnimated ? "slide-up" : "hide-before-animate"
           }`}
           style={{ animationDelay: "0.2s" }}
         >
@@ -279,7 +279,7 @@ const {
         </h2>
         <p
           className={`text-xl text-gray-300 ${
-            isAnimated ? "slide-left" : "hide-before-animate"
+            headingAnimated ? "slide-left" : "hide-before-animate"
           }`}
           style={{ animationDelay: "1s" }}
         >
