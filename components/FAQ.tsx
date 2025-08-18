@@ -8,85 +8,221 @@ import { FaChevronDown } from "react-icons/fa";
 const homeFaqs = [
   {
     id: "faq-home-1",
-    question: "What makes Game of Creators different from other platforms?",
-    answer:
-      "We have 50,000+ verified creators across every niche - gaming, lifestyle, tech, fashion, fitness, food, and more. From micro-influencers to mega creators!",
+    question: "What is Game of Creators?",
+    answer: `<strong>Game of Creators democratizes brand deals</strong> by allowing any creator—even those with zero followers—to participate in contests and earn money based purely on <strong>performance and views</strong>.<br><br><strong>For brands,</strong> this system is a game-changer: a single contest can inspire <strong>hundreds to thousands of creators</strong> to generate viral marketing content for your product. You get <strong>widespread promotion</strong> and a <strong>huge variety of content</strong>, yet you only reward the <strong>best-performing creators</strong>, ensuring you pay just for the most impactful results.`
   },
   {
     id: "faq-home-2",
-    question: "Do you guarantee results?",
-    answer:
-      "Yes! We're so confident in our platform that we offer performance guarantees. If your campaign doesn't meet the agreed metrics, we'll refund your investment.",
+    question: "Game of Creators is for whom?",
+    answer: `<strong>Brands:</strong> Especially B2C Brands looking to promote their products or services.<br><br><strong>Creators:</strong> Content creators of all sizes who are looking to earn brand deals but have struggled due to low followers. Now, performance and views are what matter, not follower count.`
   },
   {
     id: "faq-home-3",
-    question: "How quickly can I launch my first content?",
-    answer:
-      "You can create and launch your first contest in under 5 minutes! Our streamlined process gets you from idea to viral campaign faster than any competitor.",
+    question: "What are the key features of Game of Creators?",
+    answer: `<strong>🎯 Organic Content at Scale:</strong> Generate high-quality, diverse content without manual sourcing<br><br><strong>💰 Only Pay for Top Performing Content:</strong> Pay for content that drives results<br><br><strong>🚀 Creator Outreach Hassle-Free:</strong> Creators come to you<br><br><strong>⚖️ Supply and Demand Platform:</strong> Creators compete, ensuring top ideas rise to the top<br><br><strong>📈 Scale Winners:</strong> Scale top-performing content into paid campaigns<br><br><strong>🌍 Democratized Brand Deals:</strong> Success is based on creativity and performance<br><br><strong>🎨 Creator Freedom of Choice:</strong> Creators choose which brands to work with`
   },
   {
     id: "faq-home-4",
-    question: "What makes Game of Creators different from other platforms?",
-    answer:
-      "We're the only platform that gamifies creator marketing with contests, leaderboards, and achievement systems. Plus, we guarantee results or your money back!",
+    question: "How does someone participate or sign up for Game of Creators?",
+    answer: `<strong>1. Sign up</strong> by registering on the platform and choosing whether you are a <strong>brand</strong> or a <strong>creator</strong>.<br><br><strong>2. For Brands:</strong> Create & launch a contest for viral marketing<br><br><strong>3. For Creators:</strong> Browse available contests, participate, and get paid based on your performance`
   },
   {
-    id: "faq-home-4",
-    question: "How do you ensure content quality?",
-    answer:
-      "All our creators go through a rigorous vetting process. Plus, our AI-powered matching system ensures you only work with creators who align with your brand values.",
+    id: "faq-home-5",
+    question: "What are the main benefits for participants?",
+    answer: `<strong>🎯 Full Control:</strong> Choose which brands to promote<br><br><strong>🔍 Full Transparency:</strong> Access to leaderboard rankings, views, and payment details<br><br><strong>🚀 Performance-Based:</strong> Your followers no longer limit your opportunities—performance and views are what matter`
   },
+  {
+    id: "faq-home-6",
+    question: "How long does the event or contest last?",
+    answer: "Contests typically last between 3 to 28 days, depending on the brand's selection."
+  },
+  {
+    id: "faq-home-7",
+    question: "What are the prizes or rewards for the winners?",
+    answer: `<strong>🏆 Leaderboard-based contests:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based contests:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.`
+  },
+  {
+    id: "faq-home-8",
+    question: "What kind of support is available to participants?",
+    answer: `<strong>Brands provide a complete contest brief</strong> including:<br>• Required resources<br>• Inspirational links<br>• Detailed guidance<br><br><strong>Need help?</strong> You can always reach out for assistance or clarification!`
+  },
+  {
+    id: "faq-home-9",
+    question: "What happens if a participant misses a deadline?",
+    answer: "Content must be submitted during the live contest period. Submissions must be posted on YouTube or Instagram and linked to the contest within two hours of posting. Late submissions won't be accepted."
+  },
+  {
+    id: "faq-home-10",
+    question: "How are participants judged or evaluated?",
+    answer: "Judging is based purely on views. Participants must follow the contest's brief, rules, and guidelines to be eligible for payment."
+  },
+  {
+    id: "faq-home-11",
+    question: "How can participants track their progress?",
+    answer: "Creators can track all their submissions in My submissions section and see their ranking of each contest they participated by visiting that contest leaderboard section."
+  },
+  {
+    id: "faq-home-12",
+    question: "Can participants submit multiple entries?",
+    answer: "No, participants can only submit one entry per contest."
+  },
+  {
+    id: "faq-home-13",
+    question: "Will there be networking opportunities?",
+    answer: "Yes, creators can join our community channels and follow us on social media for networking and engagement."
+  },
+  {
+    id: "faq-home-14",
+    question: "How are winners or top creators announced?",
+    answer: "Winners are announced after the contest ends and after a verification process based on views and rankings."
+  }
 ];
 const creatorFaqs = [
   {
     id: "faq-1",
-    question: "What platforms do you support for content creation?",
+    question: "What is Game of Creators?",
     answer:
-      "We support a wide range of platforms including Instagram Reels, YouTube Shorts, as well as long-form videos for YouTube, podcasts, and interviews. Every piece of content is tailored for optimal quality and performance on its intended platform.",
+      "Game of Creators is the easiest way for creators to get paid for making content for brands—without the hassle of pitching or contracts. Simply join the contests of your choice, compete for cash prizes, and get paid based on your performance and views. Followers are no longer a limitation to earn from brand deals—Game of Creators is democratizing brand deals for creators like you.",
   },
   {
     id: "faq-2",
-    question: "How does the contest and collaboration process work?",
+    question: "How do I make money on Game of Creators?",
     answer:
-      "Brands post briefs for their campaigns or contests. Creators can browse these opportunities, submit their content, and get selected based on quality and engagement. Payments and collaborations are managed through our secure platform.",
+      "Participate in contests by posting content on your social media. Compete for organic views, and the top performers will win cash prizes.<br><br><strong>Leaderboard contests:</strong> Your ranking matters based on your views.<br><br><strong>CPM contests:</strong> Your views determine your earnings, regardless of your rank.",
   },
   {
     id: "faq-3",
-    question: "How do I get paid?",
+    question: "Do you have paid opportunities for my specific niche?",
     answer:
-      "Payments for winning contests or completing collaborations are processed securely through our platform. You can link your preferred payment method to receive your earnings directly.",
+      "Yes! Game of Creators offers a wide range of contests across various niches, including health & fitness, fashion, gaming, finance, and more. Whatever your niche, there's an opportunity for you to participate!",
   },
   {
     id: "faq-4",
-    question: "Are there any fees to join as a creator?",
+    question: "How much money can I make?",
     answer:
-      "Joining Game Of Creators is completely free for creators. We believe in empowering you to monetize your skills without upfront costs. We may take a small platform fee from brand payments on successful collaborations.",
+      "Earnings vary by opportunity. Some creators make hundreds to thousands of dollars per contest or deal. The more you create, the more you can earn—there's no limit to how much you can make!",
+  },
+  {
+    id: "faq-5",
+    question: "How do I get paid?",
+    answer:
+      "You can choose how you want to receive your earnings: <strong>Crypto, Bank Transfer, or UPI</strong>. It's your choice!",
+  },
+  {
+    id: "faq-6",
+    question: "Is Game of Creators free to use?",
+    answer:
+      "Yes! Game of Creators is completely free to join and participate in. There are no hidden fees or upfront costs.",
+  },
+  {
+    id: "faq-7",
+    question: "How do I get started?",
+    answer:
+      "Simply register as a creator, browse the available opportunities, and participate in the contest that resonates with you. If you win, you get paid based on your performance!",
+  },
+  {
+    id: "faq-8",
+    question: "Can I participate in multiple contests at once?",
+    answer:
+      "Yes, you can participate in as many contests as you like. Each contest will have its own set of rules and guidelines, so make sure to review them before submitting your content.",
+  },
+  {
+    id: "faq-9",
+    question: "What types of content can I submit?",
+    answer:
+      "The type of content you submit depends on the contest you're participating in. Brands provide a brief and guidelines for each contest, which will specify the type of content required. Be sure to follow those instructions to ensure your submission is eligible.",
+  },
+  {
+    id: "faq-10",
+    question: "What happens if my content is rejected?",
+    answer:
+      "If your content is rejected, you will not be eligible for payment. Rejection happens only when you miss contest rules or miss community guidelines.",
+  },
+  {
+    id: "faq-11",
+    question: "Do I need any special equipment to participate?",
+    answer:
+      "No special equipment is required to participate, but high-quality content tends to perform better. Ensure your videos are clear, engaging, and aligned with the contest brief.",
+  },
+  {
+    id: "faq-12",
+    question: "How do I know if I've won?",
+    answer:
+      "After the contest ends, winners will be announced based on their views and performance. You can track your progress through the leaderboard, and if you're a winner, you will receive your payout according to the contest's structure.",
+  },
+  {
+    id: "faq-13",
+    question: "What if I miss the contest submission deadline?",
+    answer:
+      "Late submissions are not accepted. Ensure you submit your content within the contest's live period and submit your link to the contest page within two hours of posting on YouTube or Instagram.",
+  },
+  {
+    id: "faq-14",
+    question: "How are views counted for CPM contests?",
+    answer:
+      "In CPM-based contests, views are tracked directly from your organic YouTube or Instagram posts. You earn money based on how many views your content receives and based on min max views criteria, regardless of ranking.",
   },
 ];
 const brandFaqs = [
   {
     id: "faq-brand-1",
-    question: "How do I create a contest for creators?",
+    question: "What are contests? And How does it work?",
     answer:
-      "Our platform makes it easy. Simply define your campaign brief, set your prize pool, specify the type of content you're looking for (e.g., youtube videos, Instagram Reels), and launch. Creators in our network will then be able to see and participate in your contest.",
+      "There are <strong>two types of contests</strong> on Game of Creators: <strong>Leaderboard</strong> and <strong>CPM-based contests</strong>. These contests allow brands to crowdsource a large volume of creator content quickly by launching a competitive campaign.<br><br><strong>How it works:</strong><br>• You set a total prize pool, define your brief and rules<br>• Creators submit videos posted organically on their own YouTube or Instagram accounts<br>• At the end of the contest (typically lasting 3-28 days, set by you), creators with the most views win and split the prize money based on your payout structure<br>• Plus, you own all the winning content, giving you a library of performance-tested videos for paid ads<br><br>It's the fastest way to test multiple hooks, formats, and creators all at once and get viral marketing with hundreds of creators.",
   },
   {
     id: "faq-brand-2",
-    question: "How do I ensure content quality and brand alignment?",
+    question: "How are the contest payouts/prizes structured?",
     answer:
-      "You provide a detailed brief outlining your brand guidelines, key messages, and content expectations. You can review submissions and provide feedback before selecting winners. Many brands also use contests to discover creators for longer-term collaborations.",
+      "You have <strong>full control</strong> over how the prize pool is distributed among winners. Prizes are awarded based on organic views, and you can structure payouts to align with your campaign goals.<br><br><strong>Example:</strong> On a $1,000 contest, you could have 10 winners at $100 each, or 40 winners with this prize distribution:<br><br>• <strong>1st Place:</strong> $300 (A strong, attractive top prize)<br>• <strong>2nd Place:</strong> $150<br>• <strong>3rd Place:</strong> $75<br>• <strong>4th-10th Place</strong> (7 winners): $25 each ($175 total)<br>• <strong>11th-40th Place</strong> (30 winners): $10 each ($300 total)<br><br>The prize pool and distribution are set before your contest goes live, ensuring clarity and consistency in payouts.",
   },
   {
     id: "faq-brand-3",
-    question: "What kind of results can I expect from creator contests?",
+    question: "What if my contest gets no views?",
     answer:
-      "Results vary, but brands typically receive a diverse range of authentic content pieces at a fraction of traditional production costs. This content can be used for social media, ads, and other marketing channels, often leading to increased engagement, brand awareness, and reach.",
+      "Game of Creators operates on a <strong>supply-and-demand model</strong>, ensuring that your contest won't go unnoticed. With a large network of eager creators, there's always someone ready to compete for your prize pool.<br><br>The prize pool creates an incentive for submissions, which generate views as creators post organically to their audiences. If engagement is lower than expected, we are here to help refine your brief or strategy to maximize participation and results.",
   },
   {
     id: "faq-brand-4",
-    question: "How are creators paid and how much does it cost?",
+    question: "How much should I run a contest for?",
     answer:
-      "You set the prize pool for your contest. Payments to winning creators are handled securely through our platform. Our pricing is transparent, typically involving a platform fee on top of the prize money you allocate for creators.",
+      "The ideal budget depends on your campaign goals:<br><br><strong>Optimizing for Paid Ads:</strong> Allocate more winners with smaller prizes for a diverse range of content.<br><br><strong>Maximizing Organic Reach:</strong> Offer fewer but larger payouts to attract top-tier creators for viral, organic reach.<br><br>We recommend starting with at least <strong>$1,000</strong>, but contests can begin with as little as <strong>$50</strong>. There is no upper limit.",
+  },
+  {
+    id: "faq-brand-5",
+    question: "How do I track conversions?",
+    answer:
+      "To track conversions effectively, Game of Creators tracks views and engagement on the organic content posted by influencers:<br><br><strong>View and Engagement Metrics:</strong> After the contest launches, creators post content on their Instagram or YouTube accounts. You can track the views, likes, shares, and other engagement metrics to evaluate each post's performance.<br><br><strong>Custom Call-to-Actions (CTAs):</strong> You can require creators to include a CTA in their content, such as visiting your website or downloading your app, making it easier to connect content performance with measurable outcomes.",
+  },
+  {
+    id: "faq-brand-6",
+    question: "Do I own the winning content?",
+    answer:
+      "<strong>Yes, you own the winning content outright and forever.</strong> This means you have full rights to repost, edit, or use it across any platform, including in paid ads.",
+  },
+  {
+    id: "faq-brand-7",
+    question: "How can Game of Creators help me find content-market fit?",
+    answer:
+      "By running a contest, you gain access to diverse content from creators, helping you quickly identify which content formats resonate with your audience. You'll also discover top-performing creators who can become long-term partners.<br><br>Game of Creators accelerates your path to content-market fit by streamlining testing, learning, and scaling what works for your brand.",
+  },
+  {
+    id: "faq-brand-8",
+    question: "How do I know views are real?",
+    answer:
+      "Game of Creators is a <strong>YouTube and Instagram-approved platform</strong>, with access to their APIs. This ensures all views and engagement metrics come directly from verified data, providing accurate and trustworthy analytics.<br><br>Any creator attempting to manipulate metrics will be removed from the platform, ensuring transparency and quality results for your campaigns.",
+  },
+  {
+    id: "faq-brand-9",
+    question: "Where will the videos be posted?",
+    answer:
+      "Videos will be posted directly on the creators' <strong>organic YouTube and Instagram accounts</strong>, ensuring they reach genuine audiences in an authentic way. This approach maximizes exposure and leverages the creators' established following for better results.",
+  },
+  {
+    id: "faq-brand-10",
+    question: "How are creators paid?",
+    answer:
+      "Game of Creators handles all creator payments seamlessly for you. Once the contest ends and winners are determined based on organic views, we distribute the prize money directly to the winning creators' wallets.<br><br>From there, they can request a withdrawal at any time through their preferred payment method—<strong>Crypto, Bank Transfer, or UPI</strong>. The only condition is that the payout must be at least <strong>$20</strong>.<br><br>This ensures a smooth process, so you don't have to worry about managing individual payments or logistics.",
   },
 ];
 
@@ -186,84 +322,82 @@ export default function FAQ() {
   };
   return (
     <section className="py-16 px-4 mb-10 text-white" ref={faqHeaderRef}>
-      <div className="max-w-5xl mx-auto text-center">
-        {/* Top Tag */}
-        <button className="px-5 py-2 bg-[#2C3247] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
-          <Users className="text-white h-5 w-5" /> {/* user icon in yellow */}
-          <span className="text-white">Have inquiries?</span>
-        </button>
+    <div className="max-w-5xl mx-auto text-center">
+      {/* Top Tag */}
+      <button className="px-5 py-2 bg-[#2C3247] rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
+        <Users className="text-white h-5 w-5" />
+        <span className="text-white">Have inquiries?</span>
+      </button>
 
-        {/* Gradient Title */}
-        <h2
-          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
-            animate ? "slide-up" : "hide-before-animate"
-          }`}
-          style={{ animationDelay: "0.2s" }}
+      {/* Gradient Title */}
+      <h2
+        className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
+          animate ? "slide-up" : "hide-before-animate"
+        }`}
+        style={{ animationDelay: "0.2s" }}
+      >
+        <span
+          className="bg-clip-text text-transparent"
+          style={{
+            backgroundImage:
+              "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
+          }}
         >
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
-            }}
-          >
-            Frequently
-          </span>
-          <span className="text-white">Asked</span>
-          <span
-            className="bg-clip-text text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
-            }}
-          >
-            Questions
-          </span>
-        </h2>
-
-        <p
-          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
-            animate ? "slide-left" : "hide-before-animate"
-          }`}
-          style={{ animationDelay: "1s" }}
+          Frequently
+        </span>
+        <span className="text-white">Asked</span>
+        <span
+          className="bg-clip-text text-transparent"
+          style={{
+            backgroundImage:
+              "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
+          }}
         >
-          Here are some frequently asked questions
-        </p>
+          Questions
+        </span>
+      </h2>
 
-        {/* FAQ List */}
-        <div className="mt-10 space-y-7">
-          {faqs.map((faq, index) => (
-            <div
-              key={index}
-              className="border border-gray-700 rounded-lg overflow-hidden"
+      <p
+        className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
+          animate ? "slide-left" : "hide-before-animate"
+        }`}
+        style={{ animationDelay: "1s" }}
+      >
+        Here are some frequently asked questions
+      </p>
+
+      {/* FAQ List */}
+      <div className="mt-10 space-y-7">
+        {faqs.map((faq, index) => (
+          <div key={index} className="border border-gray-700 rounded-lg overflow-hidden">
+            <button
+              onClick={() => toggleFAQ(index)}
+              className={`w-full flex justify-between items-center px-6 py-6 
+                ${
+                  pathname.includes("brands") || pathname === "/pricing" || pathname === "/"
+                    ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
+                    : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
+                } 
+                hover:bg-[#1A1B35] transition-colors`}
             >
-              <button
-                onClick={() => toggleFAQ(index)}
-                className={`w-full flex justify-between items-center px-6 py-6 
-    ${
-      pathname.includes("brands") || pathname === "/pricing" || pathname === "/"
-        ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
-        : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
-    } 
-    hover:bg-[#1A1B35] transition-colors`}
-              >
-                <span className="text-left text-xl">{faq.question}</span>
-                <FaChevronDown
-                  className={`transition-transform ${
-                    openIndex === index ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
+              <span className="text-left text-xl">{faq.question}</span>
+              <FaChevronDown
+                className={`transition-transform ${
+                  openIndex === index ? "rotate-180" : ""
+                }`}
+              />
+            </button>
 
-              {openIndex === index && (
-                <div className="text-left text-md pt-4 px-4 pb-4 text-gray-400">
-                  {faq.answer}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+            {openIndex === index && (
+              <div
+                className="text-left text-md  md:text-lg pt-4 px-4 pb-4 text-gray-400 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: faq.answer }}
+              />
+            )}
+          </div>
+        ))}
       </div>
-    </section>
+    </div>
+  </section>
   );
 }
