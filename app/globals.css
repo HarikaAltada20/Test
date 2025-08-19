@@ -336,3 +336,24 @@ body {
 }
 
 
+
+
+
+/* Hide arrows below 1000px */
+@media (max-width: 999px) {
+  .arrow-btn {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1000px) and (max-width: 1100px) {
+  .custom-max-w {
+    max-width: 850px !important;
+  }
+}
+
+@media (min-width: 1100px) and (max-width: 1250px) {
+  .custom-max-w {
+    max-width: 950px !important;
+  }
+}

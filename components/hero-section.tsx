@@ -21,6 +21,7 @@ import {
   Heart,
 } from "lucide-react";
 import SocialPairPng from "@/public/images/social_pair.png";
+import { useSwipeable } from "react-swipeable";
 import Testimonials from "./Testimonials";
 import FAQ from "./FAQ";
 import CtcBanner from "./CtcBanner";
@@ -111,7 +112,6 @@ export function HeroSection() {
   const chooseRef = useRef<HTMLDivElement>(null);
   const reasonsRef = useRef<HTMLDivElement>(null);
 
-
   const handlePrev = () => {
     setActiveIndex((prev) => (prev === 0 ? steps.length - 1 : prev - 1));
   };
@@ -124,11 +124,10 @@ export function HeroSection() {
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveIndex((prev) => (prev === steps.length - 1 ? 0 : prev + 1));
-    }, 2000);
+    }, 6000);
 
     return () => clearInterval(interval);
   }, [steps.length]);
-
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -166,6 +165,13 @@ export function HeroSection() {
 
     return () => observer.disconnect();
   }, []);
+  const handlers = useSwipeable({
+    onSwipedLeft: () => handleNext(),
+    onSwipedRight: () => handlePrev(),
+    trackTouch: true,
+    trackMouse: false,
+    touchEventOptions: { passive: false }, // 👈 replaces preventDefaultTouchmoveEvent
+  });
 
   return (
     <div className="relative min-h-screen bg-[#000825] text-white overflow-hidden">
@@ -310,6 +316,7 @@ export function HeroSection() {
             </button>
           </div>
         </section>
+        {/* <div className="ellipse-design"></div> */}
 
         <section
           className="relative h-[250px] sm:h-[300px] md:h-[400px] lg:h-[500px] z-10 overflow-hidden"
@@ -439,7 +446,7 @@ export function HeroSection() {
           ref={worksRef}
           className="text-white px-8 py-0 md:py-16 relative"
         >
-          <div className="max-w-7xl mx-auto text-center relative">
+          <div className="max-w-7xl custom-max-w mx-auto text-center relative">
             {/* Tagline */}
             <div className="flex justify-center mb-5">
               <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
@@ -473,11 +480,11 @@ export function HeroSection() {
             </p>
 
             {/* Active Step */}
-            <div className="flex flex-col md:flex-row max-w-7xl md:h-[350px] mx-auto relative">
+            <div  {...handlers} className="flex flex-col gap-1 md:flex-row max-w-[1250px] md:h-[360px] mx-auto relative">
               {/* Left Arrow */}
               <button
                 onClick={handlePrev}
-                className="hidden md:flex absolute -left-20 top-1/2 -translate-y-1/2 border-2 p-3 rounded-full transition"
+                className="hidden md:flex absolute arrow-btn -left-20 top-1/2 -translate-y-1/2 border-2 p-3 rounded-full transition"
               >
                 <ArrowLeft className="w-7 h-7 text-white" />
               </button>
@@ -493,7 +500,7 @@ export function HeroSection() {
               </div>
 
               {/* Content */}
-              <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 md:h-[350px] sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
+              <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 md:h-[360px] sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
                 {/* Step Indicator */}
                 <div className="flex mb-4 sm:mb-6 items-center justify-between">
                   <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
@@ -533,14 +540,14 @@ export function HeroSection() {
               {/* Right Arrow */}
               <button
                 onClick={handleNext}
-                className="hidden md:flex absolute -right-20 top-1/2 -translate-y-1/2 border-2 p-3 rounded-full transition"
+                className="hidden md:flex absolute arrow-btn -right-20 top-1/2 -translate-y-1/2 border-2 p-3 rounded-full transition"
               >
                 <ArrowRight className="w-7 h-7 text-white" />
               </button>
             </div>
 
             {/* Dots Navigation */}
-            <div className="flex justify-center mt-6 sm:mt-8 gap-2">
+            <div className="flex justify-center mt-6 sm:mt-10 gap-2">
               {steps.map((_, index) => (
                 <button
                   key={index}

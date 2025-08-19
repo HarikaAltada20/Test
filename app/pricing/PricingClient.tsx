@@ -20,6 +20,7 @@ import {
   Calendar,
   AlertTriangle,
   Building2,
+  Loader2,
   UserCheck,
 } from "lucide-react";
 import {
@@ -152,7 +153,7 @@ export default function PricingClient() {
           setVisible(true);
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.3 }
     );
 
     if (storyRef.current) observer.observe(storyRef.current);
@@ -375,11 +376,10 @@ export default function PricingClient() {
   // Show loading state while checking user authentication
   // if (isLoadingUser) {
   //   return (
-  //     <div className="container mx-auto py-8 px-4">
-  //       <div className="text-center py-8">
-  //         <div className="animate-pulse">
-  //           <p className="text-gray-600">Loading...</p>
-  //         </div>
+  //     <div className="container min-h-screen bg-[#000825] flex items-center justify-center">
+  //       <div className="flex items-center space-x-2">
+  //         <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+  //         <p className="text-gray-300 text-lg">Loading...</p>
   //       </div>
   //     </div>
   //   );
@@ -388,9 +388,8 @@ export default function PricingClient() {
   // Show creator message if logged in as creator
   if (user && userType === "creator") {
     return (
-      <div className="container mx-auto py-8 px-4 ">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-8">
+      <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+        {/* <div className="text-center mb-8">
             <div className="mx-auto p-4 rounded-full bg-blue-100 w-fit mb-4">
               <UserCheck className="h-8 w-8 text-blue-600" />
             </div>
@@ -401,99 +400,13 @@ export default function PricingClient() {
               This pricing page is designed for brands and advertisers who want
               to launch creator contests.
             </p>
-          </div>
+          </div> */}
+        <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
+          {/* Strategic Background Elements */}
 
-          <Alert className="mb-8">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>For Creators:</strong> You don't need a subscription to
-              participate in contests. Simply browse available opportunities and
-              submit your content to win prizes!
-            </AlertDescription>
-          </Alert>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-yellow-600" />
-                  How It Works for Creators
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Browse available contests</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Submit your content</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">
-                    Win prizes based on performance
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">No subscription required</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-purple-600" />
-                  For Brands & Advertisers
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Launch creator contests</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Access to 5,000+ creators</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Full content ownership</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Subscription plans available</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="text-center">
-            <Button
-              asChild
-              className="bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-700 hover:to-rose-700"
-            >
-              <Link href="/dashboard/opportunities">
-                Browse Available Contests
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
-      {/* Hero Section */}
-      <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
-        {/* Strategic Background Elements */}
-
-        {/* Floating Creative Elements */}
-        <div className="inset-0 z-10 pointer-events-none">
-        <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+          {/* Floating Creative Elements */}
+          <div className="inset-0 z-10 pointer-events-none">
+            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
             <Sparkles
               className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
               style={{ animationDelay: "1s" }}
@@ -514,6 +427,200 @@ export default function PricingClient() {
               className="absolute bottom-32 right-20 h-9 w-9 text-amber-400/40 animate-bounce"
               style={{ animationDelay: "0.8s" }}
             />
+          </div>
+          {/* Orange Ellipse Background Glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1100px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
+
+          <div className="container mx-auto px-4 text-center relative z-10">
+            {/* Premium Badge */}
+            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
+              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+                #1 Gamified Creator Marketing Platform
+              </span>
+            </div>
+
+            {/* Enhanced Social Icons */}
+            <div className="flex justify-center mb-8">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="relative">
+                  <Image
+                    src={SocialPairPng}
+                    alt="Social Media Icons"
+                    width={150}
+                    height={40}
+                    className="relative z-10"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Massive Gaming Title */}
+            <h1
+              className="text-3xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl flex flex-wrap justify-center gap-x-2 gap-y-1 mb-6 leading-tight text-center slide-up"
+              style={{ animationDelay: "1s" }}
+            >
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                Creator Account
+              </span>
+
+              <span
+                className="font-semibold text-white drop-shadow-2xl"
+                style={{ fontFamily: "Montserrat, sans-serif" }}
+              >
+                <span className="relative">
+                  <span
+                    className="bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #7F39EC 34.91%, #BC83FA 78.79%)",
+                    }}
+                  >
+                    Detected
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
+                </span>
+              </span>
+            </h1>
+
+            {/* Strategic Subtitle */}
+            <p
+              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
+              style={{ animationDelay: "2s" }}
+            >
+              This pricing page is designed for brands and advertisers who want
+              to launch creator contests.
+            </p>
+          </div>
+        </section>
+
+        <Alert className="max-w-7xl mx-auto border border-yellow-400 bg-yellow-500/20 text-yellow-500 rounded-md shadow-sm">
+          <AlertTriangle className="h-5 w-5" color="#facc15" />
+          <AlertDescription className="mt-[2px] text-md">
+            <strong>For Creators:</strong> You don't need a subscription to
+            participate in contests. Simply browse available opportunities and
+            submit your content to win prizes!
+          </AlertDescription>
+        </Alert>
+
+        <div className="max-w-[1250px] py-12 mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <Card className="bg-[#000825] rounded-2xl text-white hover:bg-[#B16FF43D] hover:shadow-lg hover:scale-105 transition border-2 border-[#7F39EC] hover:border-2 hover:border-[#7F39EC] cursor-pointer">
+            <CardHeader className="mb-2">
+              <CardTitle className="flex items-center gap-3">
+                <div className="rounded-full p-2 border flex items-center justify-center">
+                  <Trophy className="h-6 w-6 text-white" />
+                </div>
+                How It Works for Creators
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {[
+                "Browse available contests",
+                "Submit your content",
+                "Win prizes based on performance",
+                "No subscription required",
+              ].map((text, idx) => (
+                <div key={idx} className="flex items-center gap-3">
+                  <div
+                    className="rounded-full p-3 flex items-center justify-center"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                    }}
+                  >
+                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <span className="text-lg">{text}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-[#000825] rounded-2xl text-white hover:bg-[#B16FF43D] border-2 border-[#7F39EC] hover:shadow-lg hover:scale-105 transition hover:border-2 hover:border-[#7F39EC] cursor-pointer">
+            <CardHeader className="mb-2">
+              <CardTitle className="flex items-center gap-3">
+                <div className="rounded-full p-2 border flex items-center justify-center">
+                  <Building2 className="h-6 w-6 text-white" />
+                </div>
+                For Brands & Advertisers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {[
+                "Launch creator contests",
+                "Access to 5,000+ creators",
+                "Full content ownership",
+                "Subscription plans available",
+              ].map((text, idx) => (
+                <div key={idx} className="flex items-center gap-3">
+                  <div
+                    className="rounded-full p-3 flex items-center justify-center"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                    }}
+                  >
+                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                  <span className="text-lg">{text}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="pb-16 text-center">
+          <Button
+            asChild
+            className="rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-6 text-lg overflow-hidden"
+            style={{
+              background:
+                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+            }}
+          >
+            <div className="scan-line"></div>
+            <Link href="/dashboard/opportunities">
+              Browse Available Contests
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
+      {/* Hero Section */}
+      <section className="pt-20 pb-16 md:pt-28 md:pb-24 relative overflow-hidden">
+        {/* Strategic Background Elements */}
+
+        {/* Floating Creative Elements */}
+        <div className="inset-0 z-10 pointer-events-none">
+          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+          <Sparkles
+            className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
+            style={{ animationDelay: "1s" }}
+          />
+          <Star
+            className="absolute top-40 left-1/4 h-9 w-9 text-purple-400/30 animate-pulse"
+            style={{ animationDelay: "2s" }}
+          />
+          <Heart
+            className="absolute top-60 right-1/3 h-5 w-5 text-pink-400/40 animate-bounce"
+            style={{ animationDelay: "0.5s" }}
+          />
+          <Palette
+            className="absolute bottom-40 left-16 h-6 w-6 text-indigo-400/30 animate-pulse"
+            style={{ animationDelay: "1.5s" }}
+          />
+          <Trophy
+            className="absolute bottom-32 right-20 h-9 w-9 text-amber-400/40 animate-bounce"
+            style={{ animationDelay: "0.8s" }}
+          />
         </div>
         {/* Orange Ellipse Background Glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%] w-[1100px] h-[500px] rounded-full blur-3xl opacity-50 pointer-events-none bg-blue-ellipse"></div>
@@ -521,11 +628,11 @@ export default function PricingClient() {
         <div className="container mx-auto px-4 text-center relative z-10">
           {/* Premium Badge */}
           <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
-                #1 Gamified Creator Marketing Platform
-              </span>
-            </div>
+            <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+              #1 Gamified Creator Marketing Platform
+            </span>
+          </div>
 
           {/* Enhanced Social Icons */}
           <div className="flex justify-center mb-8">
@@ -588,12 +695,38 @@ export default function PricingClient() {
       <div id="pricing" className="scroll-mt-20 px-4">
         {/* Show subscription management for authenticated advertisers */}
         {user && userType === "advertiser" ? (
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
+          <div className="mx-auto">
+            <div className="text-center pt-16 md:pt-28 mb-12">
+              {/* <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
                 Manage Your Subscription
               </h2>
               <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                Upgrade, downgrade, or manage your current subscription plan
+              </p> */}
+
+              <h2
+                className="text:3xl slide-up md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform"
+                style={{ animationDelay: "1s" }}
+              >
+                Manage Your{" "}
+                <span
+                  style={{
+                    background:
+                      "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+
+                    display: "inline",
+                  }}
+                >
+                  Subscription
+                </span>
+              </h2>
+              <p
+                className="text-lg slide-left md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg"
+                style={{ animationDelay: "1.5s" }}
+              >
                 Upgrade, downgrade, or manage your current subscription plan
               </p>
             </div>
@@ -844,14 +977,14 @@ export default function PricingClient() {
                       </CardContent>
                       <div className="flex items-end justify-center flex-grow">
                         <Button
-                         className="w-full rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-5 text-lg overflow-hidden"
-                         style={{
-                           background:
-                             "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                         }}
+                          className="w-full rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-5 text-lg overflow-hidden"
+                          style={{
+                            background:
+                              "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                          }}
                           asChild
                         >
-                           <div className="scan-line"></div>
+                          <div className="scan-line"></div>
                           <Link href={`/signup?plan=${String(plan.id)}`}>
                             {isFree ? "Start Free" : "Subscribe"}
                           </Link>
@@ -1035,7 +1168,7 @@ export default function PricingClient() {
                     "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                 }}
               >
-                  <div className="scan-line"></div>
+                <div className="scan-line"></div>
                 <a
                   href="https://calendly.com/guptavishesh2/30min"
                   target="_blank"
@@ -1091,8 +1224,8 @@ export default function PricingClient() {
         </div>
       </div> */}
 
-            {/* FAQ Section */}
-            {/* <div className="mb-16">
+      {/* FAQ Section */}
+      {/* <div className="mb-16">
                 <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">
                     Frequently Asked Questions
                 </h2>
