@@ -21,7 +21,7 @@ export function Footer() {
 
   return (
     <footer className="relative w-full bg-[#000825] text-white py-10 px-8 overflow-hidden">
-      <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-nowrap max-[1000px]:flex-wrap justify-between gap-16  max-[1000px]:gap-16 max-[1180px]:gap-8">
+      <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-nowrap max-[700px]:flex-wrap justify-between gap-16  max-[1000px]:gap-16 max-[1180px]:gap-8">
         {/* Logo & Description */}
         <div className="flex flex-col max-w-xl space-y-6">
           <Link href="/" className="inline-block">

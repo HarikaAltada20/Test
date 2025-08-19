@@ -415,7 +415,7 @@ export function HeroSection() {
           </div>
         </div>
 
-        <section ref={worksRef} className="text-white px-4 py-0 md:py-16">
+        <section ref={worksRef} className="text-white px-8 py-0 md:py-16">
           <div className="max-w-7xl mx-auto text-center">
             {/* Tagline */}
             <div className="flex justify-center mb-5">
@@ -517,8 +517,8 @@ export function HeroSection() {
 
         {/* Reasons to Select Us */}
 
-        <section ref={reasonsRef} className="text-white py-20">
-          <div className="max-w-[1250px] mx-auto px-4">
+        <section ref={reasonsRef} className="text-white px-10 py-20">
+          <div className="max-w-[1250px] mx-auto">
             {/* Tagline */}
             <div className="text-center mb-12">
               <div className="flex justify-center mb-5">

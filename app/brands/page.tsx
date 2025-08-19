@@ -445,7 +445,7 @@ export default function BrandsPage() {
               </div>
 
               {/* Image */}
-              <div className="relative w-full h-64 sm:h-96 md:h-[600px] lg:w-[580px] lg:h-[900px] rounded-xl overflow-hidden">
+              <div className="relative w-full h-64 sm:h-96 md:h-[600px] lg:h-[900px] rounded-xl overflow-hidden">
                 <Image
                   key={currentIndex}
                   src={images[currentIndex]}
