@@ -7,6 +7,7 @@ import Link from "next/link";
 
 import {
   ArrowRight,
+  ArrowLeft,
   Trophy,
   Users,
   Gamepad2,
@@ -109,6 +110,25 @@ export function HeroSection() {
   const worksRef = useRef<HTMLDivElement>(null);
   const chooseRef = useRef<HTMLDivElement>(null);
   const reasonsRef = useRef<HTMLDivElement>(null);
+
+
+  const handlePrev = () => {
+    setActiveIndex((prev) => (prev === 0 ? steps.length - 1 : prev - 1));
+  };
+
+  const handleNext = () => {
+    setActiveIndex((prev) => (prev === steps.length - 1 ? 0 : prev + 1));
+  };
+
+  // ✅ Auto infinite scroll every 4s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveIndex((prev) => (prev === steps.length - 1 ? 0 : prev + 1));
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [steps.length]);
+
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -415,8 +435,11 @@ export function HeroSection() {
           </div>
         </div>
 
-        <section ref={worksRef} className="text-white px-8 py-0 md:py-16">
-          <div className="max-w-7xl mx-auto text-center">
+        <section
+          ref={worksRef}
+          className="text-white px-8 py-0 md:py-16 relative"
+        >
+          <div className="max-w-7xl mx-auto text-center relative">
             {/* Tagline */}
             <div className="flex justify-center mb-5">
               <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
@@ -431,7 +454,7 @@ export function HeroSection() {
 
             {/* Title */}
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4  leading-snug ${
+              className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${
                 worksVisible ? "slide-up" : "opacity-0"
               }`}
             >
@@ -450,9 +473,17 @@ export function HeroSection() {
             </p>
 
             {/* Active Step */}
-            <div className="flex flex-col md:flex-row max-w-7xl md:h-[350px] mx-auto">
+            <div className="flex flex-col md:flex-row max-w-7xl md:h-[350px] mx-auto relative">
+              {/* Left Arrow */}
+              <button
+                onClick={handlePrev}
+                className="hidden md:flex absolute -left-20 top-1/2 -translate-y-1/2 border-2 p-3 rounded-full transition"
+              >
+                <ArrowLeft className="w-7 h-7 text-white" />
+              </button>
+
               {/* Image */}
-              <div className="w-full md:w-1/2  relative aspect-square md:aspect-auto md:h-auto">
+              <div className="w-full md:w-1/2 relative aspect-square md:aspect-auto md:h-auto">
                 <Image
                   src={steps[activeIndex].image}
                   alt={steps[activeIndex].title}
@@ -462,7 +493,7 @@ export function HeroSection() {
               </div>
 
               {/* Content */}
-              <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600  md:h-[350px] sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
+              <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 md:h-[350px] sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
                 {/* Step Indicator */}
                 <div className="flex mb-4 sm:mb-6 items-center justify-between">
                   <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
@@ -498,6 +529,14 @@ export function HeroSection() {
                   </button>
                 </div>
               </div>
+
+              {/* Right Arrow */}
+              <button
+                onClick={handleNext}
+                className="hidden md:flex absolute -right-20 top-1/2 -translate-y-1/2 border-2 p-3 rounded-full transition"
+              >
+                <ArrowRight className="w-7 h-7 text-white" />
+              </button>
             </div>
 
             {/* Dots Navigation */}
