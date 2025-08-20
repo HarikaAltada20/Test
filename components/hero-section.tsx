@@ -480,7 +480,10 @@ export function HeroSection() {
             </p>
 
             {/* Active Step */}
-            <div  {...handlers} className="flex flex-col gap-1 md:flex-row max-w-[1250px] md:h-[360px] mx-auto relative">
+            <div
+              {...handlers}
+              className="flex flex-col gap-1 md:flex-row max-w-[1250px] md:h-[360px] mx-auto relative"
+            >
               {/* Left Arrow */}
               <button
                 onClick={handlePrev}
@@ -530,9 +533,11 @@ export function HeroSection() {
                         "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                     }}
                   >
-                    <div className="scan-line"></div>
-                    Start Now
-                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                    <Link href="/dashboard" className="flex items-center gap-2 relative z-10">
+                      <div className="scan-line"></div>
+                      Start Now
+                      <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                    </Link>
                   </button>
                 </div>
               </div>
