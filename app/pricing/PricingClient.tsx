@@ -155,37 +155,48 @@ export default function PricingClient() {
       },
       { threshold: 0.3 }
     );
-
+  
     if (storyRef.current) observer.observe(storyRef.current);
-
+  
     return () => {
       if (storyRef.current) observer.unobserve(storyRef.current);
     };
-  }, []);
+  }, [isLoadingUser, isLoading]);
+  
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry], observerInstance) => {
+      ([entry]) => {
         if (entry.isIntersecting) {
-          if (entry.target === section1Ref.current) {
-            setSection1Visible(true);
-          }
-          if (entry.target === section2Ref.current) {
-            setSection2Visible(true);
-          }
-          observerInstance.unobserve(entry.target);
+          setSection1Visible(true);
         }
       },
       { threshold: 0.3 }
     );
-
+  
     if (section1Ref.current) observer.observe(section1Ref.current);
-    if (section2Ref.current) observer.observe(section2Ref.current);
-
+  
     return () => {
       if (section1Ref.current) observer.unobserve(section1Ref.current);
+    };
+  }, [isLoadingUser, isLoading]);
+  
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setSection2Visible(true);
+        }
+      },
+      { threshold: 0.3 }
+    );
+  
+    if (section2Ref.current) observer.observe(section2Ref.current);
+  
+    return () => {
       if (section2Ref.current) observer.unobserve(section2Ref.current);
     };
-  }, []);
+  }, [isLoadingUser, isLoading]);
+  
 
   // Check for authenticated user
   useEffect(() => {
@@ -374,16 +385,16 @@ export default function PricingClient() {
   };
 
   // Show loading state while checking user authentication
-  // if (isLoadingUser) {
-  //   return (
-  //     <div className="container min-h-screen bg-[#000825] flex items-center justify-center">
-  //       <div className="flex items-center space-x-2">
-  //         <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
-  //         <p className="text-gray-300 text-lg">Loading...</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
+  if (isLoadingUser) {
+    return (
+      <div className="container min-h-screen bg-[#000825] flex items-center justify-center">
+        <div className="flex items-center space-x-2">
+          <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
+          <p className="text-gray-300 text-lg">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show creator message if logged in as creator
   if (user && userType === "creator") {
@@ -705,7 +716,7 @@ export default function PricingClient() {
               </p> */}
 
               <h2
-                className="text:3xl slide-up md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform"
+                className="text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform"
                 style={{ animationDelay: "1s" }}
               >
                 Manage Your{" "}
@@ -1070,7 +1081,7 @@ export default function PricingClient() {
         <div className="bg-[#0b0e26] text-white py-16 px-6">
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
-              className={`text:3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${
+              className={`text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${
                 section2Visible ? "slide-up" : "opacity-0"
               }`}
             >

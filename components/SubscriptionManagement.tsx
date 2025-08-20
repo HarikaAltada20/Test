@@ -1037,7 +1037,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
 
       {/* Available Plans */}
       <div className="space-y-6">
-        <div>
+       
           {/* <h2 className="text-2xl font-bold mb-2">Available Plans</h2>
           <p className="text-gray-600">
             {!currentPlan && !currentSubscription
@@ -1045,7 +1045,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
               : "Choose the plan that best fits your needs"}
           </p> */}
           <div className="max-w-[1200px] pt-16 mx-auto text-center">
-            <h2 className="text:3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform">
+            <h2 className="text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform">
               Available{" "}
               <span
                 style={{
@@ -1066,7 +1066,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
                 : "Choose the plan that best fits your needs"}
             </p>
-          </div>
+          
         </div>
         {/* New User Info */}
         {!currentPlan && !currentSubscription && (
