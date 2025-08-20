@@ -5,66 +5,63 @@ import Image from "next/image";
 
 export default function ContactPage() {
   const images = [
-    "./images/Component 347.png",
+    "/images/Component 347.png",
     "/images/Property 1=Frame 2147207675.png",
-    "./images/Property 1=Frame 2147207676.png",
+    "/images/Property 1=Frame 2147207676.png",
   ];
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fade, setFade] = useState(true);
 
+  // form state
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    message: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
+
   useEffect(() => {
     const interval = setInterval(() => {
-    
-     
-        setCurrentIndex((prev) => (prev + 1) % images.length);
-        setFade(true); // fade in new image
-
-    }, 3000); // change every 3 sec
+      setCurrentIndex((prev) => (prev + 1) % images.length);
+      setFade(true);
+    }, 3000);
     return () => clearInterval(interval);
   }, [images.length]);
-  
-  return (
-    // <div className="min-h-[60vh] flex flex-col items-center justify-center bg-gradient-to-b from-white to-slate-50 py-16 px-4">
-    //   <div className="text-center mb-8">
-    //     <h1 className="text-4xl font-bold mb-2">Contact Us</h1>
-    //     <p className="text-lg text-gray-500">We'd love to hear from you! Reach out and our team will get back to you soon.</p>
-    //   </div>
-    //   <div className="bg-white/80 backdrop-blur-md rounded-2xl shadow-xl p-8 flex flex-col md:flex-row gap-10 items-center max-w-2xl w-full">
-    //     <div className="flex flex-col items-center gap-8 w-full">
-    //       <div className="flex items-center gap-4 w-full justify-center">
-    //         <span className="bg-primary/10 p-4 rounded-full">
-    //           <Mail className="h-8 w-8 text-primary" />
-    //         </span>
-    //         <div className="text-left">
-    //           <h3 className="font-semibold text-lg">Email Us</h3>
-    //           <a href="mailto:hello@gameofcreators.com" className="text-primary underline text-base font-medium">hello@gameofcreators.com</a>
-    //           <p className="text-xs text-gray-500 mt-1">We aim to respond within 24 hours</p>
-    //         </div>
-    //       </div>
-    //       <div className="flex items-center gap-4 w-full justify-center">
-    //         <span className="bg-primary/10 p-4 rounded-full">
-    //           <MapPin className="h-8 w-8 text-primary" />
-    //         </span>
-    //         <div className="text-left">
-    //           <h3 className="font-semibold text-lg">Office Location</h3>
-    //           <p className="text-base text-gray-700">
-    //             6425 Weidlake Dr,<br />
-    //             Los Angeles, California 90068, US
-    //           </p>
-    //         </div>
-    //       </div>
-    //     </div>
-    //   </div>
-    //   <div className="mt-8">
-    //     <a href="mailto:hello@gameofcreators.com">
-    //       <button className="px-6 py-3 rounded-lg bg-gradient-to-r from-purple-600 to-rose-600 text-white font-semibold shadow hover:scale-105 transition">
-    //         Email Us Now
-    //       </button>
-    //     </a>
-    //   </div>
-    // </div>
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setStatus("");
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setStatus("✅ Message sent successfully!");
+        setFormData({ name: "", email: "", phone: "", message: "" });
+      } else {
+        setStatus("❌ Failed: " + data.error);
+      }
+    } catch (err) {
+      setStatus("❌ Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
     <section className="bg-[#050A30] text-white py-16 px-6 border-b border-[#A87313]">
       <div className="max-w-[1200px] mx-auto grid md:grid-cols-2 gap-20 items-start">
         {/* Left Section */}
@@ -102,14 +99,6 @@ export default function ContactPage() {
 
           {/* Image */}
           <div className="rounded-xl mt-3 overflow-hidden">
-            {/* <Image
-              src="./images/Component 347.png"
-              alt="Contact"
-              width={500}
-              height={300}
-              className="w-full h-full object-cover"
-            /> */}
-
             <Image
               src={images[currentIndex]}
               alt="Contact"
@@ -130,33 +119,47 @@ export default function ContactPage() {
             back to you soon.
           </p>
 
-          <form className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <input
               type="text"
+              name="name"
               placeholder="Enter the Name"
+              value={formData.name}
+              onChange={handleChange}
               className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
             />
             <input
               type="email"
+              name="email"
               placeholder="Enter the Email"
+              value={formData.email}
+              onChange={handleChange}
               className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
             />
             <input
               type="tel"
+              name="phone"
               placeholder="Enter the Mobile Number"
+              value={formData.phone}
+              onChange={handleChange}
               className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
             />
             <textarea
+              name="message"
               placeholder="Enter your Message"
               rows={6}
+              value={formData.message}
+              onChange={handleChange}
               className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
             ></textarea>
             <button
               type="submit"
+              disabled={loading}
               className="w-full py-3 rounded-full bg-gradient-to-r from-[#7F39EC] to-[#B16FF4] font-semibold text-white"
             >
-              Submit
+              {loading ? "Sending..." : "Submit"}
             </button>
+            {status && <p className="text-sm mt-2">{status}</p>}
           </form>
         </div>
       </div>

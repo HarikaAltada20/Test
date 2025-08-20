@@ -707,7 +707,7 @@ export default function PricingClient() {
         {/* Show subscription management for authenticated advertisers */}
         {user && userType === "advertiser" ? (
           <div className="mx-auto">
-            <div className="text-center pt-16 md:pt-28 mb-12">
+            <div className="text-center pt-16 mb-12">
               {/* <h2 className="text-2xl md:text-4xl font-bold tracking-tight mb-3">
                 Manage Your Subscription
               </h2>
@@ -716,7 +716,7 @@ export default function PricingClient() {
               </p> */}
 
               <h2
-                className="text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform"
+                className="text-3xl md:text-5xl slide-up font-semibold transition-all duration-700 mb-4 ease-out transform"
                 style={{ animationDelay: "1s" }}
               >
                 Manage Your{" "}
