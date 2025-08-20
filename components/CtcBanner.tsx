@@ -89,16 +89,15 @@ export default function CtcBanner() {
           {isHome
             ? "Ready to go viral?"
             : isBrands
-            ? "Ready to go viral?"
-            : "Ready to go viral?"}
+              ? "Ready to go viral?"
+              : "Ready to get paid?"}
         </span>
       </div>
 
       {/* Main Heading */}
       <h1
-        className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${
-          inView ? "slide-up" : "opacity-0 translate-y-10"
-        }`}
+        className={`mt-6 text-3xl md:text-5xl font-bold z-10 ${inView ? "slide-up" : "opacity-0 translate-y-10"
+          }`}
       >
         {isHome
           ? "Join the "
@@ -110,23 +109,22 @@ export default function CtcBanner() {
           {isCreators
             ? "Creativity"
             : isHome
-            ? "Creator Revolutions "
-            : "Content Strategy"}
+              ? "Creator Revolutions "
+              : "Content Strategy"}
         </span>
         ?
       </h1>
 
       {/* Subtitle */}
       <p
-        className={`mt-4 max-w-2xl text-xl text-gray-200 z-10 ${
-          inView ? "slide-left" : "opacity-0 translate-x-10"
-        }`}
+        className={`mt-4 max-w-2xl text-xl text-gray-200 z-10 ${inView ? "slide-left" : "opacity-0 translate-x-10"
+          }`}
       >
         {isHome
           ? "50,000+ creators, 1000+ brands, millions of viral moments. Your turn to dominate!"
           : isCreators
-          ? "Join thousands of creators and brands. Sign up today and unlock your potential!"
-          : "Launch your first contest today and witness the power of creator-generated content."}
+            ? "Join thousands of creators and brands. Sign up today and unlock your potential!"
+            : "Launch your first contest today and witness the power of creator-generated content."}
       </p>
 
       {/* CTA Button */}
@@ -139,19 +137,31 @@ export default function CtcBanner() {
           <Link
             href="/auth/signup"
             className="relative z-10 flex items-center gap-2"
+            onClick={() => {
+              // Store user role based on current page
+              if (isHome) {
+                // For home page, don't set a specific role - let user choose
+                localStorage.removeItem('signupRole');
+              } else if (isCreators) {
+                localStorage.setItem('signupRole', 'creator');
+              } else {
+                // For brands page
+                localStorage.setItem('signupRole', 'brand');
+              }
+            }}
           >
             <Rocket className="w-4 h-4" />
             {isHome
-              ? "Start your Campaign"
-              : isCreators
               ? "Join Game Of Creators"
-              : "Launch a contest"}
+              : isCreators
+                ? "Participate in a Contest"
+                : "Launch a Contest"}
             <ArrowRight className="h-5 w-5" />
           </Link>
         </button>
       </div>
 
-        {/* Feature Buttons for Home */}
+      {/* Feature Buttons for Home */}
       {isHome && (
         <div className="flex flex-wrap justify-center gap-6 mt-12 z-10">
           <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
@@ -164,7 +174,7 @@ export default function CtcBanner() {
             <CheckCircle className="w-4 h-4" /> Guaranteed Results
           </div>
           <div className="flex items-center gap-2 px-4 py-2 border border-white rounded-full">
-            <Globe className="w-4 h-4" /> Global Research
+            <Globe className="w-4 h-4" /> Global Reach
           </div>
         </div>
       )}

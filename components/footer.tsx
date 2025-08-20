@@ -166,10 +166,10 @@ export function Footer() {
                 <Mail className="h-5 w-5 text-[#FDC155]" />
                 <span>support@gameofcreators.com</span>
               </li>
-              <li className="flex items-center space-x-3">
+              {/* <li className="flex items-center space-x-3">
                 <Phone className="h-5 w-5 text-[#FDC155]" />
                 <span>+1 (555) 123-4567</span>
-              </li>
+              </li> */}
               <li className="flex items-center space-x-3">
                 <MapPin className="h-5 w-5 text-[#FDC155]" />
                 <span>San Francisco, CA</span>

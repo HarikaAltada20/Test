@@ -135,14 +135,14 @@ export default function ContactPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-4">
+            {/* <div className="flex items-center gap-4">
               <Phone className="text-white" />
               <p className="text-lg">+91-9876543210</p>
-            </div>
+            </div> */}
 
             <div className="flex items-center gap-4">
               <Mail className="text-white" />
-              <p className="text-lg">hello@gameofcreators.com</p>
+              <p className="text-lg">support@gameofcreators.com</p>
             </div>
           </div>
 
@@ -153,9 +153,8 @@ export default function ContactPage() {
               alt="Contact"
               width={500}
               height={300}
-              className={`w-full h-full object-cover transition-opacity duration-500 ${
-                fade ? "opacity-100" : "opacity-0"
-              }`}
+              className={`w-full h-full object-cover transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
+                }`}
             />
           </div>
         </div>

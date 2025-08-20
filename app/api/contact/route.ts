@@ -36,8 +36,10 @@ export async function POST(req: NextRequest) {
     let emailData;
     try {
       emailData = await resend.emails.send({
-        from: "onboarding@resend.dev", // ✅ use this only for sandbox mode
-        to: "altadahari7799@gmail.com", // ✅ must be the same email as Resend account in sandbox
+        // from: "noreply@gameofcreators.com", // ✅ Production: use your verified domain
+        from: "onboarding@resend.dev",
+        // to: "contact@gameofcreators.com", // ✅ Production: your business email
+        to: "visheeshgupta@gmail.com",
         subject: `⚡Game of Creators | Support Request from - ${name}`,
         html: `
         <!DOCTYPE html>

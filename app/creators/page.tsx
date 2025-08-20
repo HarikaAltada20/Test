@@ -3,12 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+
 import NumbersSection from "@/components/NumberSection";
 import {
   ArrowRight,
@@ -221,9 +216,9 @@ export default function CreatorsPage() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+            <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
+              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
+              <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
                 #1 Gamified Creator Marketing Platform
               </span>
             </div>
@@ -296,6 +291,9 @@ export default function CreatorsPage() {
                 <Link
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
+                  onClick={() => {
+                    localStorage.setItem('signupRole', 'creator');
+                  }}
                 >
                   {/* Overlay gradient for animation */}
                   <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-orange-700 opacity-0"></div>
@@ -314,9 +312,8 @@ export default function CreatorsPage() {
           <div className="max-w-[1200px] mx-auto px-4 text-center">
             {/* Heading */}
             <h2
-              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.2s" }}
             >
               Why Join as a{" "}
@@ -325,9 +322,8 @@ export default function CreatorsPage() {
               </span>
             </h2>
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "1s" }}
             >
               Unlock your creative potential and monetise your passion
@@ -404,9 +400,8 @@ export default function CreatorsPage() {
         <section className="py-16 px-4 text-white" ref={howItWorksRef}>
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -434,10 +429,10 @@ export default function CreatorsPage() {
                             index === 0
                               ? "150px"
                               : index === 1
-                              ? "180px"
-                              : index === 2
-                              ? "180px"
-                              : "40px",
+                                ? "180px"
+                                : index === 2
+                                  ? "180px"
+                                  : "40px",
                         }}
                       />
                     )}
@@ -467,9 +462,8 @@ export default function CreatorsPage() {
                   alt={`Step Image ${currentIndex + 1}`}
                   layout="fill"
                   objectFit="cover"
-                  className={`rounded-xl transition-opacity duration-500 ${
-                    fade ? "opacity-100" : "opacity-0"
-                  }`}
+                  className={`rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
+                    }`}
                   priority={true}
                 />
               </div>

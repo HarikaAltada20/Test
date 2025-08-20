@@ -21,7 +21,6 @@ import {
 import CtcBanner from "@/components/CtcBanner";
 import NumbersSection from "@/components/NumberSection";
 import Testimonials from "@/components/Testimonials";
-import BrandLaunchContestButton from "@/components/BrandLaunchContestButton";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - reuse from creators page
 import SocialPairPng from "@/public/images/social_pair.png";
@@ -183,9 +182,9 @@ export default function BrandsPage() {
 
           <div className="container mx-auto px-4 text-center relative z-10">
             {/* Premium Badge */}
-            <div className="inline-flex items-center gap-2 bg-[#FFFFFF1A] rounded-full px-4 py-2 sm:px-6 sm:py-3 mb-8 flex-wrap">
-              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-              <span className="text-base sm:text-lg font-semibold bg-white bg-clip-text text-transparent text-center">
+            <div className="inline-grid grid-cols-[auto_1fr] items-center gap-2 bg-[#FFFFFF1A] rounded-full px-3 py-1.5 sm:px-6 sm:py-3 mb-8 max-w-[92vw] sm:max-w-none mx-auto">
+              <Crown className="h-4 w-4 sm:h-5 sm:w-5 text-white shrink-0" />
+              <span className="text-xs sm:text-lg font-semibold bg-white bg-clip-text text-transparent leading-tight whitespace-normal text-left">
                 #1 Gamified Creator Marketing Platform
               </span>
             </div>
@@ -282,7 +281,7 @@ export default function BrandsPage() {
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </button> */}
-            <BrandGetStartedButton/>
+            <BrandGetStartedButton />
           </div>
         </section>
 
@@ -292,9 +291,8 @@ export default function BrandsPage() {
             {/* Heading */}
 
             <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
+                }`}
             >
               <span className="text-white">Why Brands Choose </span>
               <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
@@ -307,9 +305,8 @@ export default function BrandsPage() {
             </h1>
 
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "1s" }}
             >
               Simple Steps to Launch your Influencer Marketing Campaign
@@ -386,9 +383,8 @@ export default function BrandsPage() {
         <section className="py-16 px-4 text-white" ref={howItWorksRef}>
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -419,10 +415,10 @@ export default function BrandsPage() {
                             index === 0
                               ? "250px"
                               : index === 1
-                              ? "250px"
-                              : index === 2
-                              ? "180px"
-                              : "40px",
+                                ? "250px"
+                                : index === 2
+                                  ? "180px"
+                                  : "40px",
                         }}
                       />
                     )}
@@ -452,9 +448,8 @@ export default function BrandsPage() {
                   alt={`Step Image ${currentIndex + 1}`}
                   layout="fill"
                   objectFit="cover"
-                  className={`sm:object-cover rounded-xl transition-opacity duration-500 ${
-                    fade ? "opacity-100" : "opacity-0"
-                  }`}
+                  className={`sm:object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
+                    }`}
                   priority
                 />
               </div>
