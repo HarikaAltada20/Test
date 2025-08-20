@@ -2,6 +2,7 @@
 import { MapPin, Phone, Mail } from "lucide-react";
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ContactPage() {
   const images = [
@@ -12,7 +13,7 @@ export default function ContactPage() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [fade, setFade] = useState(true);
-
+  const { toast } = useToast();
   // form state
   const [formData, setFormData] = useState({
     name: "",
@@ -20,6 +21,7 @@ export default function ContactPage() {
     phone: "",
     message: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -31,14 +33,43 @@ export default function ContactPage() {
     return () => clearInterval(interval);
   }, [images.length]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: "" }); // clear error on typing
+  };
+
+  // validation function
+  const validate = () => {
+    let newErrors: Record<string, string> = {};
+    if (!formData.name.trim()) newErrors.name = "Name is required";
+
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Enter a valid email address";
+    }
+
+    if (!formData.phone.trim()) {
+      newErrors.phone = "Phone number is required";
+    } else if (!/^\+?[0-9]{10,15}$/.test(formData.phone)) {
+      newErrors.phone = "Enter a valid phone number";
+    }
+
+    if (!formData.message.trim()) newErrors.message = "Message is required";
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setStatus("");
+
+    if (!validate()) return; // stop if validation fails
+
+    setLoading(true);
 
     try {
       const res = await fetch("/api/contact", {
@@ -49,13 +80,31 @@ export default function ContactPage() {
 
       const data = await res.json();
       if (res.ok) {
-        setStatus("✅ Message sent successfully!");
+        const successMsg = "✅ Message sent successfully!";
+        setStatus(successMsg);
+        toast({
+          title: "Success",
+          description: successMsg,
+          variant: "default",
+        });
         setFormData({ name: "", email: "", phone: "", message: "" });
       } else {
-        setStatus("❌ Failed: " + data.error);
+        const errorMsg = "❌ Failed: " + data.error;
+        setStatus(errorMsg);
+        toast({
+          title: "Error",
+          description: errorMsg,
+          variant: "destructive",
+        });
       }
     } catch (err) {
-      setStatus("❌ Something went wrong.");
+      const errorMsg = "❌ Something went wrong.";
+      setStatus(errorMsg);
+      toast({
+        title: "Error",
+        description: errorMsg,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -120,38 +169,62 @@ export default function ContactPage() {
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            <input
-              type="text"
-              name="name"
-              placeholder="Enter the Name"
-              value={formData.name}
-              onChange={handleChange}
-              className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
-            />
-            <input
-              type="email"
-              name="email"
-              placeholder="Enter the Email"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
-            />
-            <input
-              type="tel"
-              name="phone"
-              placeholder="Enter the Mobile Number"
-              value={formData.phone}
-              onChange={handleChange}
-              className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
-            />
-            <textarea
-              name="message"
-              placeholder="Enter your Message"
-              rows={6}
-              value={formData.message}
-              onChange={handleChange}
-              className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
-            ></textarea>
+            <div>
+              <input
+                type="text"
+                name="name"
+                placeholder="Enter the Name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+              />
+              {errors.name && (
+                <p className="text-red-400 mt-2 text-sm">{errors.name}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                type="email"
+                name="email"
+                placeholder="Enter the Email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+              />
+              {errors.email && (
+                <p className="text-red-400 mt-2 text-sm">{errors.email}</p>
+              )}
+            </div>
+
+            <div>
+              <input
+                type="tel"
+                name="phone"
+                placeholder="Enter the Mobile Number"
+                value={formData.phone}
+                onChange={handleChange}
+                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+              />
+              {errors.phone && (
+                <p className="text-red-400 mt-2 text-sm">{errors.phone}</p>
+              )}
+            </div>
+
+            <div>
+              <textarea
+                name="message"
+                placeholder="Enter your Message"
+                rows={6}
+                value={formData.message}
+                onChange={handleChange}
+                className="w-full p-4 rounded-md bg-transparent border border-gray-400 text-white focus:outline-none"
+              ></textarea>
+              {errors.message && (
+                <p className="text-red-400 mt-2 text-sm">{errors.message}</p>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -159,7 +232,7 @@ export default function ContactPage() {
             >
               {loading ? "Sending..." : "Submit"}
             </button>
-            {status && <p className="text-sm mt-2">{status}</p>}
+            {/* {status && <p className="text-sm mt-2">{status}</p>} */}
           </form>
         </div>
       </div>
