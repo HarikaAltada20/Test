@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
     let emailData;
     try {
       emailData = await resend.emails.send({
-        // from: "noreply@gameofcreators.com", // ✅ Production: use your verified domain
-        from: "onboarding@resend.dev",
-        // to: "contact@gameofcreators.com", // ✅ Production: your business email
-        to: "visheeshgupta@gmail.com",
+        from: "noreply@gameofcreators.com", // ✅ Production: use your verified domain
+        // from: "onboarding@resend.dev",
+        to: "contact@gameofcreators.com", // ✅ Production: your business email
+        // to: "visheeshgupta@gmail.com",
         subject: `⚡Game of Creators | Support Request from - ${name}`,
         html: `
         <!DOCTYPE html>
