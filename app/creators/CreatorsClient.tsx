@@ -471,7 +471,7 @@ export default function CreatorsClient() {
           </div>
         </section>
 
-        <NumbersSection
+        {/* <NumbersSection
           items={[
             {
               numbers: [3000, 4000, 5000, 6000, 7000],
@@ -487,7 +487,7 @@ export default function CreatorsClient() {
               suffix: "M",
             },
           ]}
-        />
+        /> */}
 
         {/* Epic Stats Section */}
         {/* <section className="py-20 md:py-32 relative">
