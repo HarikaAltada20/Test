@@ -1,3 +1,4 @@
+"use client"
 import Image from "next/image";
 import { Crown, Sparkles, Users } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
