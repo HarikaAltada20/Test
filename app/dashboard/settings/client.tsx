@@ -16,7 +16,7 @@ import { Bell, LogOut, Mail, ExternalLink, RefreshCw, Eye, EyeOff } from "lucide
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from 'dayjs';
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import { useToast } from "@/hooks/use-toast";
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
@@ -66,6 +66,10 @@ export default function SettingsPage({
   user: UserResponse["data"]["user"];
 }) {
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // State declarations
   const [profile, setProfile] = useState<
     CreatorProfile | AdvertiserProfile | null
   >(null);
@@ -92,7 +96,130 @@ export default function SettingsPage({
   const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<{
+    type: 'youtube' | 'instagram';
+    message: string;
+    details?: string;
+    code?: 'no_channel' | 'generic';
+  } | null>(null);
 
+  // Handle URL error parameters
+  useEffect(() => {
+    const error = searchParams.get('error');
+    const message = searchParams.get('message');
+    const success = searchParams.get('success');
+    const platform = searchParams.get('platform');
+
+    if (error === 'youtube_connection_failed') {
+      if (message === 'No+channel+found') {
+        setConnectionError({
+          type: 'youtube',
+          message: 'YouTube Connection Failed',
+          details: 'No channel found. Create your YouTube channel first, then try connecting your YouTube account again.',
+          code: 'no_channel'
+        });
+      } else {
+        // Handle other YouTube connection errors
+        setConnectionError({
+          type: 'youtube',
+          message: 'YouTube Connection Failed',
+          details: message ? decodeURIComponent(message) : 'An error occurred while connecting your YouTube account. Please try again.'
+        });
+      }
+
+      toast({
+        title: "YouTube Connection Failed",
+        description: message ? decodeURIComponent(message) : "An error occurred while connecting your YouTube account.",
+        variant: "destructive",
+        duration: 10000, // Show for 10 seconds to ensure user sees it
+      });
+
+      // Clear the error from URL to prevent showing it again on refresh
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('error');
+      newUrl.searchParams.delete('message');
+      router.replace(newUrl.pathname);
+    }
+
+    // Handle success parameters
+    // Pattern A: success=true&platform=youtube|instagram
+    if (success === 'true' && platform) {
+      const platformName = platform === 'youtube' ? 'YouTube' : 'Instagram';
+
+      toast({
+        title: `${platformName} Connected Successfully`,
+        description: `Your ${platformName} account has been connected successfully.`,
+        variant: 'default',
+        duration: 5000,
+      });
+
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('success');
+      newUrl.searchParams.delete('platform');
+      router.replace(newUrl.pathname);
+    }
+
+    // Pattern B: success=youtube_connected | instagram_connected
+    if (success === 'youtube_connected' || success === 'instagram_connected') {
+      const platformName = success === 'youtube_connected' ? 'YouTube' : 'Instagram';
+
+      toast({
+        title: `${platformName} Connected Successfully`,
+        description: `Your ${platformName} account has been connected successfully.`,
+        variant: 'default',
+        duration: 5000,
+      });
+
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('success');
+      router.replace(newUrl.pathname);
+    }
+  }, [searchParams, toast, router]);
+
+  // Function declarations
+  const refreshInstagramToken = async (currentToken: string, userId: string, currentProfile: CreatorProfile) => {
+    try {
+      const refreshRes = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`);
+      const newData = await refreshRes.json();
+
+      if (!refreshRes.ok || newData.error) {
+        throw new Error(newData.error?.message || 'Failed to refresh Instagram token');
+      }
+
+      const updatedInstagramAccount = {
+        ...(currentProfile.instagram_account || {}),
+        access_token: newData.access_token,
+        token_expiry: dayjs().add(59, 'days').toISOString(), // Refreshed token is also valid for 60 days
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: updateError } = await supabase
+        .from('creator_profiles')
+        .update({
+          instagram_account: updatedInstagramAccount,
+        })
+        .eq('id', userId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setProfile(prev => prev ? { ...prev, instagram_account: updatedInstagramAccount as SocialAccount } : null);
+      console.log('Instagram token refreshed successfully');
+      // Optionally show a success message to the user, though this can be silent
+
+    } catch (err: any) {
+      console.error('Error refreshing Instagram token:', err);
+      // Handle token refresh error, e.g., notify user, attempt disconnect, or ask to re-authenticate
+      // For now, we'll log the error. Depending on the error type (e.g. token revoked), 
+      // you might want to nullify the instagram_account or prompt for re-login.
+      toast({
+        title: "Error",
+        description: `Failed to refresh Instagram token: ${err.message}. Please try reconnecting your account.`,
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -256,6 +383,26 @@ export default function SettingsPage({
     }
   };
 
+
+
+
+
+
+
+
+
+  const clearConnectionError = () => {
+    setConnectionError(null);
+
+    // Show a success message when error is dismissed
+    toast({
+      title: "Error Dismissed",
+      description: "You can try connecting your account again when you're ready.",
+      variant: "default",
+      duration: 3000,
+    });
+  };
+
   const handleNotificationChange = async (
     type: "email" | "push",
     value: boolean
@@ -273,39 +420,9 @@ export default function SettingsPage({
     }
   };
 
-  const disconnectAccount = async (platform: "youtube" | "instagram") => {
-    try {
-      const { error } = await supabase
-        .from("creator_profiles")
-        .update({
-          [`${platform}_account`]: null,
-        })
-        .eq("id", user?.id);
 
-      if (error) throw error;
 
-      setProfile((prev) =>
-        prev
-          ? {
-            ...prev,
-            [`${platform}_account`]: null,
-          }
-          : null
-      );
 
-      toast({
-        title: "Success",
-        description: `${platform.charAt(0).toUpperCase() + platform.slice(1)} account disconnected`,
-        variant: "default",
-      });
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message || `Failed to disconnect ${platform} account`,
-        variant: "destructive",
-      });
-    }
-  };
 
   const updateCompanyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -382,50 +499,6 @@ export default function SettingsPage({
     }
   };
 
-  const refreshInstagramToken = async (currentToken: string, userId: string, currentProfile: CreatorProfile) => {
-    try {
-      const refreshRes = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`);
-      const newData = await refreshRes.json();
-
-      if (!refreshRes.ok || newData.error) {
-        throw new Error(newData.error?.message || 'Failed to refresh Instagram token');
-      }
-
-      const updatedInstagramAccount = {
-        ...(currentProfile.instagram_account || {}),
-        access_token: newData.access_token,
-        token_expiry: dayjs().add(59, 'days').toISOString(), // Refreshed token is also valid for 60 days
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error: updateError } = await supabase
-        .from('creator_profiles')
-        .update({
-          instagram_account: updatedInstagramAccount,
-        })
-        .eq('id', userId);
-
-      if (updateError) {
-        throw updateError;
-      }
-
-      setProfile(prev => prev ? { ...prev, instagram_account: updatedInstagramAccount as SocialAccount } : null);
-      console.log('Instagram token refreshed successfully');
-      // Optionally show a success message to the user, though this can be silent
-
-    } catch (err: any) {
-      console.error('Error refreshing Instagram token:', err);
-      // Handle token refresh error, e.g., notify user, attempt disconnect, or ask to re-authenticate
-      // For now, we'll log the error. Depending on the error type (e.g. token revoked), 
-      // you might want to nullify the instagram_account or prompt for re-login.
-      toast({
-        title: "Error",
-        description: `Failed to refresh Instagram token: ${err.message}. Please try reconnecting your account.`,
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleYouTubeConnect = () => {
     setIsLoadingYouTube(true);
     try {
@@ -437,7 +510,7 @@ export default function SettingsPage({
           description: "Connection timed out. Please try again.",
           variant: "destructive",
         });
-      }, API_TIMEOUT_MEDIUM);
+      }, API_TIMEOUT_LONG);
 
       window.location.href = '/api/youtube/auth';
     } catch (err: any) {
@@ -719,6 +792,72 @@ export default function SettingsPage({
           Manage your account settings and preferences
         </p>
       </div>
+
+      {/* Connection Error Alert */}
+      {connectionError && (
+        <Alert variant="destructive" className="border-red-500 bg-red-50">
+          <AlertDescription className="text-red-800">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                {connectionError.type === 'youtube' ? (
+                  <SiYoutube className="h-5 w-5 text-red-600" />
+                ) : (
+                  <SiInstagram className="h-5 w-5 text-red-600" />
+                )}
+              </div>
+              <div>
+                <p className="font-semibold mb-2">{connectionError.message}</p>
+                <p className="text-sm mb-3">
+                  {connectionError.details}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearConnectionError}
+                    className="text-red-700 border-red-300 hover:bg-red-100"
+                  >
+                    Dismiss
+                  </Button>
+                  {connectionError.type === 'youtube' && (connectionError.code === 'no_channel' || (connectionError.details?.toLowerCase().includes('no channel') ?? false)) && (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open('https://www.youtube.com/channel_switcher', '_blank')}
+                          className="text-red-700 border-red-300 hover:bg-red-100"
+                        >
+                          Create YouTube Channel
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open('https://support.google.com/youtube/answer/1646861?hl=en', '_blank')}
+                          className="text-red-700 border-red-300 hover:bg-red-100"
+                        >
+                          Learn How
+                        </Button>
+                      </div>
+                      <p className="text-xs text-red-600 mt-2">
+                        💡 Tip: You can also create a channel by uploading your first video to YouTube. After creating your channel, return here to connect it.
+                      </p>
+                      <div className="text-xs text-red-600">
+                        <p className="mb-1">📚 Additional Resources:</p>
+                        <ul className="list-disc list-inside space-y-1 ml-2">
+                          <li>Make sure you're signed into the correct Google account</li>
+                          <li>Ensure your YouTube account has a channel (not just a personal account)</li>
+                          <li>Try refreshing the page after creating your channel</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Connected Accounts - Only for Creators */}
       {userType === "creator" && (
