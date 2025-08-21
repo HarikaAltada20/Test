@@ -17,7 +17,7 @@ import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
+
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 
@@ -36,7 +36,7 @@ function DashboardPage() {
   const [userCoins, setUserCoins] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
-  const [showGuidelines, setShowGuidelines] = useState(false);
+
   const [showModal, setShowModal] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
 
@@ -191,9 +191,6 @@ function DashboardPage() {
             console.error("Error fetching creator profile:", profileError);
           } else {
             setProfile(creatorProfile);
-            if (creatorProfile.has_seen_guidelines === false) {
-              setShowGuidelines(true);
-            }
           }
 
           const { data: submissions, error: submissionsError } = await supabase
@@ -237,26 +234,7 @@ function DashboardPage() {
     };
   }, [user, isAuthLoading, isAuthenticated, supabase, router]);
 
-  // Block dashboard if guidelines not seen
-  if (profile && profile.has_seen_guidelines === false) {
-    return (
-      <>
-        <CreatorGuidelinesModal
-          open={showGuidelines}
-          onComplete={async () => {
-            setShowGuidelines(false);
-            // Update in DB
-            await supabase
-              .from("creator_profiles")
-              .update({ has_seen_guidelines: true })
-              .eq("id", user.id);
-            setProfile({ ...profile, has_seen_guidelines: true });
-          }}
-        />
-        {/* Optionally, a blur or overlay can be added here to block interaction */}
-      </>
-    );
-  }
+  // Guidelines check moved to opportunities page for creators
 
   if (isAuthLoading || isFetchingData) {
     return (

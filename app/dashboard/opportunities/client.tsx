@@ -12,6 +12,7 @@ import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 
 // Define types for filters and sorting
 type StatusFilterType = 'all' | 'live' | 'upcoming';
@@ -31,6 +32,9 @@ export default function OpportunitiesPage({
 }) {
   const [availableContests, setAvailableContests] = useState<any[]>([]);
   const [isFetchingData, setIsFetchingData] = useState(true);
+  const [showGuidelines, setShowGuidelines] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [hasCheckedGuidelines, setHasCheckedGuidelines] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -40,6 +44,17 @@ export default function OpportunitiesPage({
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>('all');
   const [sortOption, setSortOption] = useState<SortOptionType>('start_date_desc');
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
+
+  // Cache invalidation on user change
+  useEffect(() => {
+    if (user) {
+      const guidelinesCacheKey = `guidelines_${user.id}`;
+      const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
+      // Clear any existing cache when user changes
+      localStorage.removeItem(guidelinesCacheKey);
+      localStorage.removeItem(guidelinesTimestampKey);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -73,6 +88,50 @@ export default function OpportunitiesPage({
           );
           router.push("/dashboard/contests");
           return;
+        }
+
+        // Smart guidelines check with caching
+        const guidelinesCacheKey = `guidelines_${currentUser.id}`;
+        const guidelinesTimestampKey = `guidelines_timestamp_${currentUser.id}`;
+        const cachedGuidelines = localStorage.getItem(guidelinesCacheKey);
+        const cachedTimestamp = localStorage.getItem(guidelinesTimestampKey);
+
+        // Check if cache is still valid (24 hours)
+        const isCacheValid = cachedTimestamp &&
+          (Date.now() - parseInt(cachedTimestamp)) < (24 * 60 * 60 * 1000);
+
+        if (cachedGuidelines === 'true' && isCacheValid) {
+          // User has seen guidelines - no need to query database
+          setProfile({ has_seen_guidelines: true });
+          setHasCheckedGuidelines(true);
+        } else if (cachedGuidelines === 'false' && isCacheValid) {
+          // User hasn't seen guidelines - show modal
+          setProfile({ has_seen_guidelines: false });
+          setShowGuidelines(true);
+          setHasCheckedGuidelines(true);
+        } else {
+          // No cache - query database once
+          const { data: creatorProfile, error: profileError } = await supabase
+            .from("creator_profiles")
+            .select("has_seen_guidelines")
+            .eq("id", currentUser.id)
+            .single();
+
+          if (profileError) {
+            console.error("Error fetching creator profile:", profileError);
+            // Fallback: assume guidelines not seen
+            setProfile({ has_seen_guidelines: false });
+            setShowGuidelines(true);
+          } else {
+            setProfile(creatorProfile);
+            // Cache the result with timestamp
+            localStorage.setItem(guidelinesCacheKey, creatorProfile.has_seen_guidelines.toString());
+            localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
+            if (creatorProfile.has_seen_guidelines === false) {
+              setShowGuidelines(true);
+            }
+          }
+          setHasCheckedGuidelines(true);
         }
 
         const { data: contests, error: contestError } = await supabase
@@ -207,6 +266,33 @@ export default function OpportunitiesPage({
           You need to be logged in to view opportunities.
         </p>
       </div>
+    );
+  }
+
+  // Block opportunities if guidelines not seen
+  if (profile && profile.has_seen_guidelines === false) {
+    return (
+      <>
+        <CreatorGuidelinesModal
+          open={showGuidelines}
+          onComplete={async () => {
+            setShowGuidelines(false);
+            // Update in DB
+            await supabase
+              .from("creator_profiles")
+              .update({ has_seen_guidelines: true })
+              .eq("id", user.id);
+            setProfile({ ...profile, has_seen_guidelines: true });
+
+            // Update cache
+            const guidelinesCacheKey = `guidelines_${user.id}`;
+            const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
+            localStorage.setItem(guidelinesCacheKey, 'true');
+            localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
+          }}
+        />
+        {/* Optionally, a blur or overlay can be added here to block interaction */}
+      </>
     );
   }
 
