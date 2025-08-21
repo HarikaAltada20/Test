@@ -1,198 +1,205 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import Image from "next/image"
-import { Twitter, Linkedin, Instagram, Youtube, Mail, Phone, MapPin, ArrowUp } from "lucide-react"
+import Link from "next/link";
+import Image from "next/image";
+import {
+  Twitter,
+  Linkedin,
+  Instagram,
+  Youtube,
+  Mail,
+  Phone,
+  MapPin,
+  ArrowUp,
+} from "lucide-react";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 
 export function Footer() {
-    const scrollToTop = () => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    return (
-        <footer className="relative w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 overflow-hidden">
-            {/* Animated background elements */}
-            <div className="absolute inset-0 bg-gradient-to-r from-rose-500/5 via-purple-500/5 to-blue-500/5"></div>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(236,72,153,0.1),transparent)] opacity-70"></div>
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(147,51,234,0.1),transparent)] opacity-70"></div>
-
-            {/* Top gradient line */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-rose-500/50 to-transparent"></div>
-
-            <div className="relative container px-6 md:px-8 mx-auto">
-                {/* Main footer content */}
-                <div className="py-16 lg:py-20">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-16">
-                        {/* Brand section */}
-                        <div className="lg:col-span-1 space-y-6">
-                            <div className="group">
-                                <Link href="/" className="inline-block">
-                                    <div className="relative p-4 rounded-2xl bg-gradient-to-br from-slate-800/50 to-slate-700/30 border border-slate-600/30 backdrop-blur-sm hover:from-slate-700/60 hover:to-slate-600/40 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-rose-500/10">
-                                        <Image
-                                            src={logo}
-                                            alt="Game Of Creators Logo"
-                                            width={140}
-                                            height={40}
-                                            className="transition-all duration-300 group-hover:brightness-110"
-                                        />
-                                    </div>
-                                </Link>
-                            </div>
-                            <p className="text-slate-300 leading-relaxed text-sm max-w-sm">
-                                The ultimate platform connecting brands with creators for authentic, viral marketing campaigns that drive real results.
-                            </p>
-
-                            {/* Social links */}
-                            <div className="flex gap-3">
-                                {[
-                                    { icon: Twitter, href: "https://x.com/gameofcreators", color: "hover:text-blue-400 hover:shadow-blue-400/20" },
-                                    { icon: Instagram, href: "https://www.instagram.com/try_gameofcreators/", color: "hover:text-pink-400 hover:shadow-pink-400/20" },
-                                    { icon: Linkedin, href: "https://www.linkedin.com/company/game-of-creators/about/", color: "hover:text-blue-500 hover:shadow-blue-500/20" },
-                                    { icon: Youtube, href: "https://www.youtube.com/@gameofcreators", color: "hover:text-red-400 hover:shadow-red-400/20" }
-                                ].map(({ icon: Icon, href, color }, index) => (
-                                    <Link
-                                        key={index}
-                                        href={href}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className={`group p-3 rounded-xl bg-slate-800/50 border border-slate-600/30 text-slate-400 transition-all duration-300 hover:bg-slate-700/60 hover:border-slate-500/50 hover:scale-110 hover:shadow-lg ${color}`}
-                                    >
-                                        <Icon className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" />
-                                    </Link>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* For Brands */}
-                        <div className="space-y-6">
-                            <h3 className="text-lg font-semibold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
-                                For Brands
-                            </h3>
-                            <ul className="space-y-4">
-                                {[
-                                    { name: "How it Works", href: "/brands" },
-                                    { name: "Pricing", href: "/pricing" }
-                                ].map((link, index) => (
-                                    <li key={index}>
-                                        <Link
-                                            href={link.href}
-                                            className="group inline-flex items-center text-sm text-slate-300 hover:text-white transition-all duration-300 hover:translate-x-1"
-                                        >
-                                            <span className="relative">
-                                                {link.name}
-                                                <span className="absolute bottom-0 left-0 w-0 h-px bg-gradient-to-r from-rose-400 to-pink-400 transition-all duration-300 group-hover:w-full"></span>
-                                            </span>
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        {/* For Creators */}
-                        <div className="space-y-6">
-                            <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                                For Creators
-                            </h3>
-                            <ul className="space-y-4">
-                                {[
-                                    { name: "Join as Creator", href: "/creators" },
-                                    { name: "Find Opportunities", href: "/dashboard/opportunities" }
-                                ].map((link, index) => (
-                                    <li key={index}>
-                                        <Link
-                                            href={link.href}
-                                            className="group inline-flex items-center text-sm text-slate-300 hover:text-white transition-all duration-300 hover:translate-x-1"
-                                        >
-                                            <span className="relative">
-                                                {link.name}
-                                                <span className="absolute bottom-0 left-0 w-0 h-px bg-gradient-to-r from-purple-400 to-blue-400 transition-all duration-300 group-hover:w-full"></span>
-                                            </span>
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-
-                        {/* Company & Contact */}
-                        <div className="space-y-6">
-                            <h3 className="text-lg font-semibold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                                Company
-                            </h3>
-                            <ul className="space-y-4">
-                                {[
-                                    { name: "About Us", href: "/about" },
-                                    { name: "Contact", href: "/contact" },
-                                    { name: "Privacy Policy", href: "/privacy-policy" },
-                                    { name: "Terms of Service", href: "/terms-of-service" }
-                                ].map((link, index) => (
-                                    <li key={index}>
-                                        <Link
-                                            href={link.href}
-                                            className="group inline-flex items-center text-sm text-slate-300 hover:text-white transition-all duration-300 hover:translate-x-1"
-                                        >
-                                            <span className="relative">
-                                                {link.name}
-                                                <span className="absolute bottom-0 left-0 w-0 h-px bg-gradient-to-r from-blue-400 to-cyan-400 transition-all duration-300 group-hover:w-full"></span>
-                                            </span>
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-
-                            {/* Contact info */}
-                            <div className="space-y-3 pt-4 border-t border-slate-700/50">
-                                <div className="flex items-center gap-3 text-sm text-slate-400">
-                                    <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-600/30">
-                                        <Mail className="h-3 w-3" />
-                                    </div>
-                                    <span>support@gameofcreators.com</span>
-                                </div>
-                                {/* <div className="flex items-center gap-3 text-sm text-slate-400">
-                                    <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-600/30">
-                                        <Phone className="h-3 w-3" />
-                                    </div>
-                                    <span>+1 (555) 123-4567</span>
-                                </div> */}
-                                <div className="flex items-center gap-3 text-sm text-slate-400">
-                                    <div className="p-2 rounded-lg bg-slate-800/50 border border-slate-600/30">
-                                        <MapPin className="h-3 w-3" />
-                                    </div>
-                                    <span>San Francisco, CA</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Bottom section */}
-                <div className="py-8 border-t border-slate-700/50">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                        <div className="flex items-center gap-6">
-                            <p className="text-sm text-slate-400">
-                                © {new Date().getFullYear()} Game Of Creators. All rights reserved.
-                            </p>
-                            <div className="flex items-center gap-4">
-                                <span className="text-xs text-slate-500">Made with</span>
-                                <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-pink-500 rounded-full animate-pulse"></div>
-                                <span className="text-xs text-slate-500">in San Francisco</span>
-                            </div>
-                        </div>
-
-                        {/* Back to top button */}
-                        <button
-                            onClick={scrollToTop}
-                            className="group flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-600/30 text-slate-400 text-sm rounded-xl hover:bg-slate-700/60 hover:text-white hover:border-slate-500/50 transition-all duration-300 hover:scale-105"
-                        >
-                            <span>Back to top</span>
-                            <ArrowUp className="h-3 w-3 transition-transform duration-300 group-hover:-translate-y-1" />
-                        </button>
-                    </div>
-                </div>
+  return (
+    <footer className="relative w-full bg-[#000825] text-white py-10 px-8 overflow-hidden">
+      <div className="relative max-w-[1250px] pt-20 mx-auto flex flex-nowrap max-[700px]:flex-wrap justify-between gap-16  max-[1000px]:gap-16 max-[1180px]:gap-8">
+        {/* Logo & Description */}
+        <div className="flex flex-col max-w-xl space-y-6">
+          <Link href="/" className="inline-block">
+            <div className="h-150">
+              <Image
+                src={logo}
+                alt="Game Of Creators Logo"
+                width={100}
+                height={50}
+                className="w-[200px] h-[70px] max-w-full max-h-full transition-all duration-300 group-hover:brightness-110"
+              />
             </div>
+          </Link>
+          <p className="text-lg text-gray-300 max-w-[350px]">
+            The ultimate platform connecting brands with creators for authentic,
+            viral marketing campaigns that drive real results.
+          </p>
 
-            {/* Bottom gradient line */}
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
-        </footer>
-    )
-} 
+          {/* Social Icons */}
+          <div className="flex space-x-4 text-gray-300">
+            {[
+              {
+                icon: Twitter,
+                href: "https://x.com/gameofcreators",
+                hoverColor: "hover:text-blue-400 hover:shadow-blue-400/20",
+              },
+              {
+                icon: Instagram,
+                href: "https://www.instagram.com/try_gameofcreators/",
+                hoverColor: "hover:text-pink-400 hover:shadow-pink-400/20",
+              },
+              {
+                icon: Linkedin,
+                href: "https://www.linkedin.com/company/game-of-creators/about/",
+                hoverColor: "hover:text-blue-500 hover:shadow-blue-500/20",
+              },
+              {
+                icon: Youtube,
+                href: "https://www.youtube.com/@gameofcreators",
+                hoverColor: "hover:text-red-400 hover:shadow-red-400/20",
+              },
+            ].map(({ icon: Icon, href, hoverColor }, idx) => (
+              <Link
+                key={idx}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`p-3 rounded-full bg-[#161C34] border border-gray-700 text-gray-400 transition-all duration-300 ${hoverColor}`}
+                aria-label={`Link to ${href}`}
+              >
+                <Icon className="h-5 w-5" />
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Navigation Sections */}
+        <div
+          className="  flex text-lg text-gray-300
+    gap-16
+    max-[1180px]:gap-8
+    max-[1000px]:flex-wrap max-[1000px]:gap-16"
+        >
+          {/* For Brands */}
+          <nav>
+            <h3 className="font-semibold text-xl mb-6 text-white">
+              For Brands
+            </h3>
+            <ul className="space-y-3">
+              {[
+                { name: "How it Works", href: "/brands" },
+                { name: "Pricing", href: "/pricing" },
+                { name: "Success Stories", href: "#" },
+              ].map(({ name, href }, idx) => (
+                <li key={idx}>
+                  <Link
+                    href={href}
+                    className="hover:underline hover:text-white transition-colors duration-200"
+                  >
+                    {name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* For Creators */}
+          <nav>
+            <h3 className="font-semibold text-xl mb-6 text-white">
+              For Creators
+            </h3>
+            <ul className="space-y-3">
+              {[
+                { name: "Join as Creator", href: "/creators" },
+                {
+                  name: "Find Opportunities",
+                  href: "/dashboard/opportunities",
+                },
+                { name: "Creator Guidelines", href: "#" },
+              ].map(({ name, href }, idx) => (
+                <li key={idx}>
+                  <Link
+                    href={href}
+                    className="hover:underline hover:text-white transition-colors duration-200"
+                  >
+                    {name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Company */}
+          <nav>
+            <h3 className="font-semibold text-xl mb-6 text-white">Company</h3>
+            <ul className="space-y-3">
+              {[
+                { name: "About Us", href: "/about" },
+                { name: "Contact", href: "/contact" },
+                { name: "Privacy Policy", href: "/privacy-policy" },
+                { name: "Terms of Service", href: "/terms-of-service" },
+              ].map(({ name, href }, idx) => (
+                <li key={idx}>
+                  <Link
+                    href={href}
+                    className="hover:underline hover:text-white transition-colors duration-200"
+                  >
+                    {name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Contact Information */}
+          <div className="max-w-xs space-y-4 text-gray-300 text-lg">
+            <h3 className="font-semibold text-xl mb-6 text-white">
+              Contact Information
+            </h3>
+            <ul className="space-y-4">
+              <li className="flex items-center space-x-3">
+                <Mail className="h-5 w-5 text-[#FDC155]" />
+                <span>support@gameofcreators.com</span>
+              </li>
+              {/* <li className="flex items-center space-x-3">
+                <Phone className="h-5 w-5 text-[#FDC155]" />
+                <span>+1 (555) 123-4567</span>
+              </li> */}
+              <li className="flex items-center space-x-3">
+                <MapPin className="h-5 w-5 text-[#FDC155]" />
+                <span>San Francisco, CA</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <hr className="border-gray-700 my-10 max-w-[1250px] mx-auto" />
+
+      {/* Bottom Section */}
+      <div className="max-w-[1250px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4 px-4 sm:px-6 md:px-8 text-center md:text-left">
+        <p className="text-sm text-gray-400">
+          © {new Date().getFullYear()} Game Of Creators. All rights reserved.
+        </p>
+        <button
+          onClick={scrollToTop}
+          className="flex relative items-center gap-2 overflow-hidden bg-gradient-to-r from-[#7B40EC] to-[#A351D8] px-6 py-2 rounded-full text-white hover:scale-105 transition-transform duration-300"
+          aria-label="Back to top"
+        >
+          <div className="scan-line"></div>
+          Back to Top
+          <ArrowUp className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Bottom gradient line */}
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+    </footer>
+  );
+}

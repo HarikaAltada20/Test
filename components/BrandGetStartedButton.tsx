@@ -9,13 +9,18 @@ export default function BrandGetStartedButton() {
     return (
         <Button
             size="lg"
-            className="group relative bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:via-purple-500 hover:to-indigo-500 text-white font-bold px-12 py-4 rounded-xl shadow-2xl shadow-violet-500/40 hover:shadow-violet-500/60 transition-all duration-300 hover:scale-105 border border-violet-400/30 text-lg overflow-hidden"
+            className="rounded-3xl relative text-white text-white font-bold px-8 py-6 text-lg overflow-hidden"
+            style={{
+              background:
+                "linear-gradient(90deg, #4C238B 0%, #7F39EC 50%, #4C238B 100%)",
+            }}
             onClick={() => {
                 localStorage.setItem('signupRole', 'brand');
                 router.push('/auth/signup');
             }}
         >
-            <Crown className="mr-3 h-5 w-5" />
+             <div className="scan-line"></div>
+            <Crown className="mr-1 h-8 w-8" size={18} />
             <span className="relative z-10">Get Started</span>
             <ArrowRight className="ml-3 h-5 w-5 transition-transform group-hover:translate-x-1" />
         </Button>

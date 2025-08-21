@@ -1,21 +1,231 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
 
+.font-poppins {
+  font-family: "Poppins", sans-serif;
+}
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.scroll-container-testimonials {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+
+.scroll-track-testimonials {
+  display: flex;
+  animation: scroll-horizontal 30s linear infinite;
+}
+
+@keyframes scroll-horizontal {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.scroll-container {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  position: relative;
+}
+
+.scroll-track {
+  display: flex;
+  animation: scroll-horizontal 20s linear infinite;
+}
+
+@keyframes scroll-left {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes scroll-right {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+.animate-scroll-left {
+  animation: scroll-left 40s linear infinite;
+}
+
+.animate-scroll-right {
+  animation: scroll-right 40s linear infinite;
+}
+
+
+
+
+.hide-before-animate {
+  opacity: 0;
+}
+
+@keyframes slideUp {
+  0% {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.slide-up {
+  opacity: 0; /* Initially invisible */
+  animation: slideUp 0.7s ease-out forwards;
+  /* animation-delay: 0.2s; */
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-slow-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes slideFromLeft {
+  0% {
+    transform: translateX(-40px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes slideRight {
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-left {
+  opacity: 0;
+  animation: slideFromLeft 0.7s ease-out forwards;
+  animation-delay: 1s;
+}
+.slide-right {
+  opacity: 0;
+  animation: slideRight 0.8s ease-out forwards;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+.animate-spin-slow-reverse {
+  animation: spin-slow-reverse 20s linear infinite;
+}
+
+.bg-orange-ellipse {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(210, 65, 17, 0.8) 0%,
+    rgba(202, 96, 57, 0.489) 40%,
+    rgba(230, 59, 59, 0.3) 70%,
+    rgba(255, 132, 0, 0) 100%
+  );
+}
+
+.bg-blue-ellipse {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(45, 29, 101, 0.8) 0%,
+
+    rgba(69, 57, 202, 0.489) 40%,
+    rgba(5, 29, 211, 0.3) 70%,
+    rgba(255, 132, 0, 0) 100%
+  );
+}
+
+.gradient-text {
+  background: linear-gradient(173.88deg, #fdc155 69.65%, #ff652d 85.87%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
+
+/* Common row */
+.scroll-row {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.scan-line {
+  position: absolute;
+  width: 50%;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(255, 255, 255, 0.9),
+    transparent
+  );
+  transform: rotate(120deg);
+  top: -10%;
+  left: 0%;
+  animation: scan-diagonal 2s linear infinite;
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+@keyframes scan-diagonal {
+  0% {
+    top: -20%;
+    left: -20%;
+  }
+  100% {
+    top: 120%;
+    left: 120%;
+  }
+}
+
+
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
-  
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -100,7 +310,7 @@ body {
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* Global scaling to make the platform more compact - similar to 80% zoom */
   html {
     font-size: 14px; /* Reduced from default 16px (87.5% of original) */
@@ -122,5 +332,39 @@ body {
   .dashboard-container aside {
     height: 117.647vh !important; /* 100vh / 0.85 = 117.647vh */
     min-height: 117.647vh !important;
+  }
+}
+
+
+/* Vertical scroll for mobile */
+@keyframes scroll-vertical {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+.animate-scroll-vertical {
+  display: flex;
+  flex-direction: column;
+  animation: scroll-vertical 50s linear infinite;
+}
+
+
+
+/* Hide arrows below 1000px */
+@media (max-width: 999px) {
+  .arrow-btn {
+    display: none !important;
+  }
+}
+
+@media (min-width: 1000px) and (max-width: 1100px) {
+  .custom-max-w {
+    max-width: 850px !important;
+  }
+}
+
+@media (min-width: 1100px) and (max-width: 1250px) {
+  .custom-max-w {
+    max-width: 950px !important;
   }
 }
