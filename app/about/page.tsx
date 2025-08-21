@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Star, Trophy, Palette, Camera, Heart, Sparkles } from "lucide-react";
 import SocialPairPng from "@/public/images/social_pair.png";
-import { Check,Crown } from "lucide-react";
+import { Check, Crown } from "lucide-react";
 import phoneIllustration from "@/public/images/phoneIllustration.png";
 
 const howItWorksData = [
@@ -68,13 +68,13 @@ export default function AboutPage() {
             setShowHowItWorks(true);
             observerInstance.unobserve(entry.target);
           }
-  
+
           // Values section
           if (entry.target === valuesRef.current) {
             setShowValues(true);
             observerInstance.unobserve(entry.target);
           }
-  
+
           // Story section
           if (entry.target === storyRef.current) {
             setVisible(true);
@@ -84,19 +84,19 @@ export default function AboutPage() {
       },
       { threshold: 0.3 } // Use the lower threshold to cover both cases
     );
-  
+
     // Observe all refs if they exist
     if (howItWorksRef.current) observer.observe(howItWorksRef.current);
     if (valuesRef.current) observer.observe(valuesRef.current);
     if (storyRef.current) observer.observe(storyRef.current);
-  
+
     return () => {
       if (howItWorksRef.current) observer.unobserve(howItWorksRef.current);
       if (valuesRef.current) observer.unobserve(valuesRef.current);
       if (storyRef.current) observer.unobserve(storyRef.current);
     };
   }, []);
-  
+
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">
@@ -105,7 +105,7 @@ export default function AboutPage() {
 
           {/* Floating Creative Elements */}
           <div className="inset-0 z-10 pointer-events-none">
-          <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
+            <Sparkles className="absolute top-20 left-10 h-8 w-8 text-amber-400/30 animate-pulse" />
             <Sparkles
               className="absolute top-32 right-20 h-9 w-9 text-violet-400/40 animate-bounce"
               style={{ animationDelay: "1s" }}
@@ -213,14 +213,13 @@ export default function AboutPage() {
                   Our <span className="text-purple-400">Story</span>
                 </h2>
                 <p
-                  className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
-                    visible ? "slide-left" : ""
-                  }`}
+                  className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${visible ? "slide-left" : ""
+                    }`}
                   style={{ animationDelay: "1s" }}
                 >
                   Launched in{" "}
                   <span className="font-semibold text-purple-300">
-                    2023, Game Of Creators
+                    2024, Game Of Creators
                   </span>{" "}
                   addresses a key challenge: brands often struggle to produce
                   engaging content, while creators seek meaningful
@@ -232,9 +231,8 @@ export default function AboutPage() {
 
               {/* Image Section */}
               <div
-                className={`flex-1 h-[350px] flex justify-center relative z-10 ${
-                  visible ? "slide-right" : ""
-                }`}
+                className={`flex-1 h-[350px] flex justify-center relative z-10 ${visible ? "slide-right" : ""
+                  }`}
                 style={{ animationDelay: "1.5s" }}
               >
                 <Image
@@ -251,11 +249,10 @@ export default function AboutPage() {
           <div className="max-w-[1250px] mx-auto px-6">
             <h2
               ref={howItWorksRef}
-              className={`text-center text-3xl md:text-5xl font-bold mb-12 transition-all duration-700 ease-out transform ${
-                showHowItWorks
+              className={`text-center text-3xl md:text-5xl font-bold mb-12 transition-all duration-700 ease-out transform ${showHowItWorks
                   ? "translate-y-0 opacity-100"
                   : "translate-y-10 opacity-0"
-              }`}
+                }`}
             >
               How It{" "}
               <span
@@ -298,11 +295,10 @@ export default function AboutPage() {
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
               ref={valuesRef}
-              className={`text-5xl font-semibold transition-all duration-700 ease-out transform ${
-                showValues
+              className={`text-5xl font-semibold transition-all duration-700 ease-out transform ${showValues
                   ? "translate-y-0 opacity-100"
                   : "translate-y-10 opacity-0"
-              }`}
+                }`}
             >
               Our{" "}
               <span
