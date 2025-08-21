@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 const homeTestimonials = [
-{
+  {
     name: "Sophie Williams",
     role: "Beauty Content Creator",
     image: "./images/Ellipse 2355.png",
@@ -195,7 +195,7 @@ const config = {
     testimonials: brandsTestimonials,
     button: { text: "Our Brands", icon: Crown },
     gradientText: "linear-gradient(180deg, #7F39EC 33.29%, #B16FF4 81.2%)",
-    
+
     headingWord: "Brands",
     description:
       "Brands appreciate our platform for connecting them with top-tier talent and boosting campaigns.",
@@ -218,10 +218,12 @@ export default function Testimonials() {
   const sectionRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLDivElement>(null);
   const [headingAnimated, setHeadingAnimated] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const pathname = usePathname();
 
-  const key = (pathname in config ? pathname : "default") as keyof typeof config;
-
+  const key = (
+    pathname in config ? pathname : "default"
+  ) as keyof typeof config;
   const {
     testimonials,
     button,
@@ -242,20 +244,27 @@ export default function Testimonials() {
       },
       { threshold: 0.3 }
     );
-
     if (headingRef.current) observer.observe(headingRef.current);
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 600);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const ButtonIcon = button.icon;
+
+  // split into 2 rows for desktop
   const rows = [];
   for (let i = 0; i < testimonials.length; i += 4) {
     rows.push(testimonials.slice(i, i + 4));
   }
 
-  const ButtonIcon = button.icon;
-
   return (
-    <section className="text-white py-20 px-6" ref={sectionRef}>
+    <section className="text-white py-10 md:py-20 px-6" ref={sectionRef}>
       {/* Heading */}
       <div className="text-center max-w-3xl mx-auto" ref={headingRef}>
         <button className="bg-[#2C3247] text-white py-1 px-4 rounded-full text-lg mb-8 flex items-center justify-center mx-auto gap-2">
@@ -274,7 +283,7 @@ export default function Testimonials() {
             style={{ backgroundImage: gradientText }}
           >
             {headingWord}
-          </span>
+          </span>{" "}
           {pathname === "/" ? "are Saying" : "Say About Us"}
         </h2>
         <p
@@ -287,67 +296,111 @@ export default function Testimonials() {
         </p>
       </div>
 
-      {/* Rows */}
-      <div className="mt-12 space-y-8">
-        {rows.map((row, rowIndex) => (
-          <div key={rowIndex} className="overflow-hidden relative overflow-hidden scroll-container-testimonials">
-            <div
-              className={`flex justify-center gap-6 scroll-track-testimonials ${
-                rowIndex % 2 === 0 ? "animate-scroll-left" : "animate-scroll-right"
-              }`}
-            >
-               {[...row, ...row].map((t, i) => (
-                <div
-                  key={i}
-                  className="p-8 rounded-xl border border-gray-700 flex-shrink-0 w-[500px]"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    {/* Left: Quote + Name + Role */}
-                    <div className="flex flex-col">
-                      <div className="flex items-start gap-2">
-                        {/* Image with shade background */}
-                        <div className="relative w-8 h-8 flex-shrink-0">
-                          <div
-                            className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 
-                            w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
-                            style={{ backgroundColor: blurColor }}
-                          ></div>
-
-                          {/* Icon image */}
-                          <Image
-                            src={iconSrc}
-                            alt="quote"
-                            width={32}
-                            height={32}
-                            className="relative z-10 object-contain"
-                          />
-                        </div>
-
-                        {/* Quote text */}
-                        <p className="font-poppins ml-1 text-gray-200">{t.quote}</p>
+      {/* Testimonials */}
+      {isMobile ? (
+        <div className="mt-12 h-[550px] overflow-hidden relative">
+          <div className="flex flex-col animate-scroll-vertical">
+            {[...testimonials, ...testimonials].map((t, i) => (
+              <div
+                key={i}
+                className="p-6 rounded-xl border border-gray-700 mb-6 w-full max-w-md mx-auto"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex flex-col">
+                    <div className="flex items-start gap-2">
+                      <div className="relative w-8 h-8 flex-shrink-0">
+                        <div
+                          className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
+                          style={{ backgroundColor: blurColor }}
+                        ></div>
+                        <Image
+                          src={iconSrc}
+                          alt="quote"
+                          width={32}
+                          height={32}
+                          className="relative z-10 object-contain"
+                        />
                       </div>
-
-                      <div className="mt-6">
-                        <h4 className="font-bold">{t.name}</h4>
-                        <p className="text-sm text-gray-400">{t.role}</p>
-                      </div>
+                      <p className="font-poppins ml-1 text-gray-200">
+                        {t.quote}
+                      </p>
                     </div>
-
-                    {/* Right: Image */}
-                    <Image
-                      src={t.image}
-                      alt={t.name}
-                      width={60}
-                      height={60}
-                      className="rounded-full object-cover flex-shrink-0"
-                    />
+                    <div className="mt-4">
+                      <h4 className="font-bold">{t.name}</h4>
+                      <p className="text-sm text-gray-400">{t.role}</p>
+                    </div>
                   </div>
+                  <Image
+                    src={t.image}
+                    alt={t.name}
+                    width={50}
+                    height={50}
+                    className="rounded-full object-cover flex-shrink-0"
+                  />
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-12 space-y-8">
+          {rows.map((row, rowIndex) => (
+            <div
+              key={rowIndex}
+              className="overflow-hidden relative scroll-container-testimonials"
+            >
+              <div
+                className={`flex justify-center gap-6 ${
+                  rowIndex % 2 === 0
+                    ? "animate-scroll-left"
+                    : "animate-scroll-right"
+                }`}
+              >
+                {[...row, ...row].map((t, i) => (
+                  <div
+                    key={i}
+                    className="p-6 rounded-xl border border-gray-700 flex-shrink-0 w-[320px] sm:w-[400px] md:w-[500px] max-w-full mx-auto mb-6"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex flex-col">
+                        <div className="flex items-start gap-2">
+                          <div className="relative w-8 h-8 flex-shrink-0">
+                            <div
+                              className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full blur-lg opacity-30 pointer-events-none"
+                              style={{ backgroundColor: blurColor }}
+                            ></div>
+                            <Image
+                              src={iconSrc}
+                              alt="quote"
+                              width={32}
+                              height={32}
+                              className="relative z-10 object-contain"
+                            />
+                          </div>
+                          <p className="font-poppins ml-1 text-gray-200">
+                            {t.quote}
+                          </p>
+                        </div>
+                        <div className="mt-4">
+                          <h4 className="font-bold">{t.name}</h4>
+                          <p className="text-sm text-gray-400">{t.role}</p>
+                        </div>
+                      </div>
+                      <Image
+                        src={t.image}
+                        alt={t.name}
+                        width={50}
+                        height={50}
+                        className="rounded-full object-cover flex-shrink-0"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

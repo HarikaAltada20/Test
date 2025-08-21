@@ -19,7 +19,7 @@ body {
 
 .scroll-track-testimonials {
   display: flex;
-  animation: scroll-horizontal 20s linear infinite;
+  animation: scroll-horizontal 30s linear infinite;
 }
 
 @keyframes scroll-horizontal {
@@ -62,11 +62,11 @@ body {
 }
 
 .animate-scroll-left {
-  animation: scroll-left 30s linear infinite;
+  animation: scroll-left 40s linear infinite;
 }
 
 .animate-scroll-right {
-  animation: scroll-right 30s linear infinite;
+  animation: scroll-right 40s linear infinite;
 }
 
 
@@ -336,6 +336,17 @@ body {
 }
 
 
+/* Vertical scroll for mobile */
+@keyframes scroll-vertical {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+.animate-scroll-vertical {
+  display: flex;
+  flex-direction: column;
+  animation: scroll-vertical 50s linear infinite;
+}
 
 
 
