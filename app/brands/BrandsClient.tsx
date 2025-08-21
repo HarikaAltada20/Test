@@ -50,9 +50,9 @@ import BrandGetStartedButton from "@/components/BrandGetStartedButton";
 const Brandsteps = [
   {
     number: "1",
-    title: "Create your Contest",
+    title: "Create Your Contest",
     description:
-      "Define your brief, set your prize pool, and specify what kind of content you’re looking for.Our easy-to-use platform makes it simple to get started.",
+      "Set up your contest by defining your brief, rules, and prize pool. Choose between Leaderboard or CPM contest models based on your campaign goals. Our intuitive platform makes it easy to launch and attract the perfect creators for your brand.",
     icon: <Pen className="h-8 w-8" />,
     gradient: "from-violet-600 to-purple-600",
     color: "bg-[#7F39EC87] border-4 border-[#7F39EC]",
@@ -61,7 +61,7 @@ const Brandsteps = [
     number: "2",
     title: "Creators Submit Content",
     description:
-      "Our Network of creators will produce content based on your brief. You’ll receive submissions through our platform, where you can review and provide feedback.",
+      "Access a vibrant network of creators who will submit content based on your brief. You can review, provide feedback, and ensure the content aligns with your brand's vision.",
     icon: <Users className="h-8 w-8" />,
     gradient: "from-blue-600 to-indigo-600",
     color: "bg-[#444DE787] border-4 border-[#454DE5]",
@@ -70,7 +70,7 @@ const Brandsteps = [
     number: "3",
     title: "Reward Top Performers",
     description:
-      "Based on performance metrics and quality, reward the top creators. This incentives high-quality content and builds relationships with top- performing creators.",
+      "Reward creators based on their content's views, engagement, or ranking in the contest. Choose the model that works best for your objectives: Leaderboard-based contests: Creators are ranked by their views, and payouts are based on their ranking. This motivates creators to compete for the top spots, ensuring high-quality, impactful content for your brand. CPM-based contests: Creators earn based on the number of views their content receives, regardless of their ranking. Ideal for high-volume content generation, this model rewards creators purely for engagement through views, without the pressure of ranking.",
     icon: <Trophy className="h-8 w-8" />,
     gradient: "from-amber-600 to-orange-600",
     color: "bg-[#E75D0D8F] border-4 border-[#E65D09]",

@@ -78,18 +78,18 @@ import SocialPairPng from "@/public/images/social_pair.png";
 const creatorsteps = [
   {
     number: "1",
-    title: "Create Your Creator Profile",
+    title: "Sign Up & Connect Social Media",
     description:
-      "Sign up and build your profile showcasing your skills, previous work, and the platforms you create content for.",
+      "Simply sign up as a creator and connect your social media accounts (Instagram, YouTube, etc.) from which you want to participate in contests.",
     icon: <Users className="h-8 w-8" />,
     gradient: "from-violet-600 to-purple-600",
     color: "bg-[#7F39EC87] border-4 border-[#7F39EC]",
   },
   {
     number: "2",
-    title: "Browse Available Contests",
+    title: "Browse & Choose Contests",
     description:
-      "Explore contests from brands looking for content creators. Filter by platform, deadline, and prize amount to find the perfect opportunity.",
+      "Explore available contests from brands looking for creators. Filter opportunities based on prize pool, competition, end date, platform, and contest type to find the best match for you.",
     icon: <Target className="h-8 w-8" />,
     gradient: "from-blue-600 to-indigo-600",
     color: "bg-[#444DE787] border-4 border-[#454DE5]",
@@ -98,17 +98,17 @@ const creatorsteps = [
     number: "3",
     title: "Create & Submit Content",
     description:
-      "Produce content according to the brand's brief and submit it through our platform to be considered for prizes and future opportunities.",
+      "Once you've found the right contest, create content that aligns with the brand's brief and follows the contest rules. Post it on your social media, then submit the link through our platform.",
     icon: <Camera className="h-8 w-8" />,
     gradient: "from-amber-600 to-orange-600",
     color: "bg-[#E75D0D8F] border-4 border-[#E65D09]",
   },
   {
     number: "4",
-    title: "Get Rewarded",
+    title: "Get Paid Based on Performance",
     description:
-      "Win prizes based on your content's performance and quality. Build relationships with brands for ongoing collaborations.",
-    icon: <Gift className="h-8 w-8" />,
+      "Earn money based on how your content performs. For Leaderboard contests, you get paid based on your rank (determined by views). For CPM contests, you get paid purely based on the views your content generates.",
+    icon: <Trophy className="h-8 w-8" />,
     gradient: "from-emerald-600 to-teal-600",
     color: "bg-[#0C94825C] border-4 border-[#08947E]",
   },
