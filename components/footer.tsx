@@ -94,7 +94,7 @@ export function Footer() {
               {[
                 { name: "How it Works", href: "/brands" },
                 { name: "Pricing", href: "/pricing" },
-                { name: "Success Stories", href: "#" },
+                // { name: "Success Stories", href: "#" },
               ].map(({ name, href }, idx) => (
                 <li key={idx}>
                   <Link
@@ -116,11 +116,11 @@ export function Footer() {
             <ul className="space-y-3">
               {[
                 { name: "Join as Creator", href: "/creators" },
-                {
-                  name: "Find Opportunities",
-                  href: "/dashboard/opportunities",
-                },
-                { name: "Creator Guidelines", href: "#" },
+                // {
+                //   name: "Find Opportunities",
+                //   href: "/dashboard/opportunities",
+                // },
+                // { name: "Creator Guidelines", href: "#" },
               ].map(({ name, href }, idx) => (
                 <li key={idx}>
                   <Link
