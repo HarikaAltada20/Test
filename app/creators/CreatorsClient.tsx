@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 
-
 import NumbersSection from "@/components/NumberSection";
 import {
   ArrowRight,
@@ -292,7 +291,7 @@ export default function CreatorsClient() {
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
                   onClick={() => {
-                    localStorage.setItem('signupRole', 'creator');
+                    localStorage.setItem("signupRole", "creator");
                   }}
                 >
                   {/* Overlay gradient for animation */}
@@ -309,11 +308,12 @@ export default function CreatorsClient() {
 
         {/* Why Join as Creator - Gaming Style */}
         <section className="text-white py-16" ref={animationRef}>
-          <div className="max-w-[1200px] mx-auto px-4 text-center">
+          <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
             {/* Heading */}
             <h2
-              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.2s" }}
             >
               Why Join as a{" "}
@@ -322,8 +322,9 @@ export default function CreatorsClient() {
               </span>
             </h2>
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "1s" }}
             >
               Unlock your creative potential and monetise your passion
@@ -382,12 +383,12 @@ export default function CreatorsClient() {
                   </div>
 
                   {/* Title */}
-                  <h3 className="relative z-10 text-3xl mt-5 font-semibold mb-2">
+                  <h3 className="relative z-10 text-2xl md:text-3xl mt-5 font-semibold mb-2">
                     {item.title}
                   </h3>
 
                   {/* Description */}
-                  <p className="relative z-10 text-gray-300 mt-5 text-xl">
+                  <p className="relative z-10 text-gray-300 mt-5 text-lg lg:text-xl">
                     {item.description}
                   </p>
                 </div>
@@ -397,17 +398,21 @@ export default function CreatorsClient() {
         </section>
 
         {/* Gaming How It Works */}
-        <section className="py-16 px-4 text-white" ref={howItWorksRef}>
+        <section
+          className="py-16 px-4 md:px-16 xl:px-4 text-white"
+          ref={howItWorksRef}
+        >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
             </h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
+            <div className="grid lg:grid-cols-2 gap-10 items-start">
               {/* Steps */}
               <div className="space-y-[90px] relative z-10">
                 {creatorsteps.map((step, index) => (
@@ -422,17 +427,29 @@ export default function CreatorsClient() {
                     {/* Dotted line - hidden on small screens */}
                     {index < creatorsteps.length - 1 && (
                       <div
-                        className="absolute left-8 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0 hidden md:block"
+                        className="hidden lg:block absolute left-6 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
                         style={{
                           top: "90px",
                           height:
                             index === 0
-                              ? "150px"
+                              ? window.innerWidth < 1100
+                                ? "230px" // 1000–1099px
+                                : window.innerWidth < 1250
+                                ? "200px" // 1100–1249px
+                                : "180px" // ≥1250px
                               : index === 1
-                                ? "180px"
-                                : index === 2
-                                  ? "180px"
-                                  : "40px",
+                              ? window.innerWidth < 1100
+                                ? "200px" // 1000–1099px
+                                : window.innerWidth < 1250
+                                ? "200px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : index === 2
+                              ? window.innerWidth < 1100
+                                ? "230px" // 1000–1099px
+                                : window.innerWidth < 1250
+                                ? "200px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : "40px",
                         }}
                       />
                     )}
@@ -446,7 +463,7 @@ export default function CreatorsClient() {
                       <h3 className="font-bold text-xl md:text-3xl">
                         {step.title}
                       </h3>
-                      <p className="mt-4 text-base md:text-lg text-gray-300">
+                      <p className="mt-4 text-base text-md md:text-lg text-gray-300">
                         {step.description}
                       </p>
                     </div>
@@ -462,8 +479,9 @@ export default function CreatorsClient() {
                   alt={`Step Image ${currentIndex + 1}`}
                   layout="fill"
                   objectFit="cover"
-                  className={`rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                    }`}
+                  className={`rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
                   priority={true}
                 />
               </div>

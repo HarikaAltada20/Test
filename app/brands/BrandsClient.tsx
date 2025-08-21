@@ -282,12 +282,13 @@ export default function BrandsClient() {
 
         {/* Why Brands Choose - Gaming Style */}
         <section className="text-white py-16" ref={animationRef}>
-          <div className="max-w-[1200px] mx-auto px-4 text-center">
+          <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
             {/* Heading */}
 
             <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-up" : "hide-before-animate"
+              }`}
             >
               <span className="text-white">Why Brands Choose </span>
               <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
@@ -300,8 +301,9 @@ export default function BrandsClient() {
             </h1>
 
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
-                }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
+                isAnimated ? "slide-left" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "1s" }}
             >
               Simple Steps to Launch your Influencer Marketing Campaign
@@ -360,12 +362,12 @@ export default function BrandsClient() {
                   </div>
 
                   {/* Title */}
-                  <h3 className="relative z-10 text-3xl mt-5 font-semibold mb-2">
+                  <h3 className="relative z-10 text-2xl md:text-3xl mt-5 font-semibold mb-2">
                     {item.title}
                   </h3>
 
                   {/* Description */}
-                  <p className="relative z-10 text-gray-300 mt-5 text-xl">
+                  <p className="relative z-10 text-gray-300 mt-5 text-lg md:text-xl">
                     {item.description}
                   </p>
                 </div>
@@ -375,11 +377,12 @@ export default function BrandsClient() {
         </section>
         {/* Gaming How It Works */}
 
-        <section className="py-16 px-4 text-white" ref={howItWorksRef}>
+        <section className="py-16 px-4 md:px-16 xl:px-4 text-white" ref={howItWorksRef}>
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
-                }`}
+              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
+                howItWorksAnimated ? "slide-up" : "hide-before-animate"
+              }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -403,17 +406,29 @@ export default function BrandsClient() {
                     {/* Dotted line */}
                     {index < Brandsteps.length - 1 && (
                       <div
-                        className="hidden sm:block absolute left-6 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
+                        className="hidden lg:block absolute left-6 md:left-[45px] w-px border-l-2 border-dotted border-gray-500 z-0"
                         style={{
                           top: "90px",
                           height:
                             index === 0
-                              ? "250px"
+                              ? window.innerWidth < 1100
+                                ? "320px" // 1000–1099px
+                                : window.innerWidth < 1250
+                                ? "300px" // 1100–1249px
+                                : "266px" // ≥1250px
                               : index === 1
-                                ? "250px"
-                                : index === 2
-                                  ? "180px"
-                                  : "40px",
+                              ? window.innerWidth < 1100
+                                ? "270px" // 1000–1099px
+                                : window.innerWidth < 1250
+                                ? "280px" // 1100–1249px
+                                : "250px" // ≥1250px
+                              : index === 2
+                              ? window.innerWidth < 1100
+                                ? "300px" // 1000–1099px
+                                : window.innerWidth < 1250
+                                ? "270px" // 1100–1249px
+                                : "180px" // ≥1250px
+                              : "40px",
                         }}
                       />
                     )}
@@ -427,7 +442,7 @@ export default function BrandsClient() {
                       <h3 className="font-bold text-xl sm:text-2xl md:text-3xl">
                         {step.title}
                       </h3>
-                      <p className="mt-2 sm:mt-4 text-base sm:text-lg text-gray-300">
+                      <p className="mt-2 sm:mt-4 text-base text-md md:text-lg text-gray-300">
                         {step.description}
                       </p>
                     </div>
@@ -443,8 +458,9 @@ export default function BrandsClient() {
                   alt={`Step Image ${currentIndex + 1}`}
                   layout="fill"
                   objectFit="cover"
-                  className={`sm:object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
-                    }`}
+                  className={`sm:object-cover rounded-xl transition-opacity duration-500 ${
+                    fade ? "opacity-100" : "opacity-0"
+                  }`}
                   priority
                 />
               </div>
