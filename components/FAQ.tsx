@@ -162,6 +162,12 @@ const creatorFaqs = [
     answer:
       "In CPM-based contests, views are tracked directly from your organic YouTube or Instagram posts. You earn money based on how many views your content receives and based on min max views criteria, regardless of ranking.",
   },
+  {
+    id: "faq-15",
+    question: "Who owns the content I create if I win?",
+    answer:
+      "If you win a contest, both you, the creator, and the brand will have shared ownership of the content. You can use the content for your portfolio and social media (non-commercial use), while the brand can use it for marketing, advertising, and promotions.<br><br>This shared ownership model allows you to keep your work in your portfolio, while also allowing the brand to use the content for their commercial purposes.",
+  },
 ];
 const brandFaqs = [
   {
@@ -289,8 +295,8 @@ export default function FAQ() {
     pathname.includes("brands")
       ? brandFaqs
       : pathname === "/"
-      ? homeFaqs
-      : creatorFaqs;
+        ? homeFaqs
+        : creatorFaqs;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -332,9 +338,8 @@ export default function FAQ() {
 
         {/* Gradient Title */}
         <h2
-          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
-            animate ? "slide-up" : "hide-before-animate"
-          }`}
+          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${animate ? "slide-up" : "hide-before-animate"
+            }`}
           style={{ animationDelay: "0.2s" }}
         >
           <span
@@ -359,9 +364,8 @@ export default function FAQ() {
         </h2>
 
         <p
-          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
-            animate ? "slide-left" : "hide-before-animate"
-          }`}
+          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${animate ? "slide-left" : "hide-before-animate"
+            }`}
           style={{ animationDelay: "1s" }}
         >
           Here are some frequently asked questions
@@ -377,20 +381,18 @@ export default function FAQ() {
               <button
                 onClick={() => toggleFAQ(index)}
                 className={`w-full flex justify-between items-center px-6 py-6 
-                  ${
-                    pathname.includes("brands") ||
+                  ${pathname.includes("brands") ||
                     pathname === "/pricing" ||
                     pathname === "/"
-                      ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
-                      : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
+                    ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
+                    : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
                   } 
                   hover:bg-[#1A1B35] transition-colors`}
               >
                 <span className="text-left text-xl">{faq.question}</span>
                 <FaChevronDown
-                  className={`transition-transform ${
-                    openIndex === index ? "rotate-180" : ""
-                  }`}
+                  className={`transition-transform ${openIndex === index ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 

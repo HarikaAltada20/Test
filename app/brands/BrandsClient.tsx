@@ -213,7 +213,7 @@ export default function BrandsClient() {
                 className="font-semibold text-white drop-shadow-2xl"
                 style={{ fontFamily: "Montserrat, sans-serif" }}
               >
-                Make your Product go
+                Make your product go
               </span>
 
               <span
@@ -231,7 +231,7 @@ export default function BrandsClient() {
                       display: "inline",
                     }}
                   >
-                    Viral
+                    viral
                   </span>
                   <div className="absolute inset-0 bg-gradient-to-r from-amber-400/20 to-yellow-400/20 blur-3xl"></div>
                 </span>
