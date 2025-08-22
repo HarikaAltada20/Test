@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     siteName: "Game Of Creators",
     images: [
       {
-        url: "https://www.gameofcreators.com/goc.png",
+        url: "https://www.gameofcreators.com/goc_ogc.png",
         width: 1200,
         height: 630,
         alt: "Game Of Creators - Performance-based creator marketing platform where creators get paid based on views and ranking",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
     description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
-    images: ["https://www.gameofcreators.com/goc.png"],
+    images: ["https://www.gameofcreators.com/goc_ogc.png"],
     creator: "@gameofcreators",
   },
 }
