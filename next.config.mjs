@@ -30,6 +30,7 @@ const nextConfig = {
       { protocol: 'https', hostname: 'picsum.photos' },
       { protocol: 'https', hostname: 'i.ytimg.com' },
       { protocol: 'https', hostname: 'img.youtube.com' },
+      { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: '**.cdninstagram.com' },
       { protocol: 'https', hostname: '**.fbcdn.net' },
       { protocol: 'https', hostname: 'scontent.cdninstagram.com' },
