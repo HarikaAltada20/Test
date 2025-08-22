@@ -133,7 +133,7 @@ export function validateImageFile(file: File): { isValid: boolean; error?: strin
 
   // Check file extension
   const fileName = file.name.toLowerCase();
-  const validExtensions = ['.jpg', '.jpeg', '.jfif', '.png', '.gif', '.avif', '.bmp', '.tiff', '.svg'];
+  const validExtensions = ['.jpg', '.jpeg', '.jfif', '.png', '.gif', '.webp', '.avif', '.bmp', '.tiff', '.svg'];
   const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
   
   if (!hasValidExtension) {
