@@ -114,9 +114,9 @@ const creatorsteps = [
 ];
 
 const images: string[] = [
-  "./images/Rectangle 2724.png",
-  "./images/Property 1=Rectangle 2725.png",
-  "./images/Property 1=Rectangle 2726.png",
+  "./images/ce93873a8bcf3c08e216b5793f968f3722178789.png",
+  "./images/844d84fa7fc8646e15494703ec37e2d880bb59e5.png",
+  "./images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.png",
 ];
 export default function CreatorsClient() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);

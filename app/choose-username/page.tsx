@@ -823,7 +823,7 @@ export default function ChooseUsernamePage() {
 
   if (isLoadingProfile) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 dark:bg-gray-900 px-4 pt-4 pb-16">
+      <div className="flex min-h-screen items-center justify-center bg-[#000825] dark:bg-gray-900 px-4 pt-4 pb-16">
         <div className="w-full max-w-md text-center">
           <Loader2 className="h-12 w-12 mx-auto animate-spin text-slate-400 mb-4" />
           <p className="text-slate-300 text-lg">Loading your profile...</p>
