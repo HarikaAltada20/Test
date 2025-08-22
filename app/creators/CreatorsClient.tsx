@@ -22,7 +22,7 @@ import CtcBanner from "@/components/CtcBanner";
 import Testimonials from "../../components/Testimonials";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - replace with actual path if different
-import SocialPairPng from "@/public/images/social_pair.png";
+import socialPair from "@/public/images/social_pair.avif";
 
 // const creatorTestimonials = [
 //   {
@@ -114,13 +114,14 @@ const creatorsteps = [
 ];
 
 const images: string[] = [
-  "./images/ce93873a8bcf3c08e216b5793f968f3722178789.png",
-  "./images/844d84fa7fc8646e15494703ec37e2d880bb59e5.png",
-  "./images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.png",
+  "/images/ce93873a8bcf3c08e216b5793f968f3722178789.avif",
+  "/images/844d84fa7fc8646e15494703ec37e2d880bb59e5.avif",
+  "/images/fb3e50b77241ebb8e7cd1813fae1eecbe92b7432.avif",
 ];
 export default function CreatorsClient() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
+  const [windowWidth, setWindowWidth] = useState<number>(0);
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -180,6 +181,18 @@ export default function CreatorsClient() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    // Set initial width
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden border-b border-[#A87313]">
       <div className="relative z-20">
@@ -228,7 +241,7 @@ export default function CreatorsClient() {
                 <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <div className="relative">
                   <Image
-                    src={SocialPairPng}
+                    src={socialPair}
                     alt="Social Media Icons"
                     width={150}
                     height={40}
@@ -311,9 +324,8 @@ export default function CreatorsClient() {
           <div className="max-w-[1200px] mx-auto px-4 md:px-12 xl:px-4 text-center">
             {/* Heading */}
             <h2
-              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-3xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.2s" }}
             >
               Why Join as a{" "}
@@ -322,9 +334,8 @@ export default function CreatorsClient() {
               </span>
             </h2>
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "1s" }}
             >
               Unlock your creative potential and monetise your passion
@@ -337,7 +348,7 @@ export default function CreatorsClient() {
                     "Get paid for creating content for brands you love through contests and collaborations.",
                   number: "1",
                   image:
-                    "./images/c89a26089c94c4806f6c5d35d5a13d7b9b4abe4d.png", // first card image
+                    "/images/c89a26089c94c4806f6c5d35d5a13d7b9b4abe4d.avif", // first card image
                 },
                 {
                   title: "Build Your Portfolio",
@@ -345,7 +356,7 @@ export default function CreatorsClient() {
                     "Create professional content for recognized brands to showcase in your portfolio.",
                   number: "2",
                   image:
-                    "./images/6260ed20a17f3e1217628986a9525a3a5987b46f.png", // second card image
+                    "/images/6260ed20a17f3e1217628986a9525a3a5987b46f.avif", // second card image
                 },
                 {
                   title: "Grow Your Audience",
@@ -353,7 +364,7 @@ export default function CreatorsClient() {
                     "Gain exposure when brands share and promote your content to their followers.",
                   number: "3",
                   image:
-                    "./images/e8e9c22eb82571682f04cec79d2d2cb1276138fc.png", // third card image
+                    "/images/e8e9c22eb82571682f04cec79d2d2cb1276138fc.avif", // third card image
                 },
               ].map((item) => (
                 <div
@@ -404,9 +415,8 @@ export default function CreatorsClient() {
         >
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-center text-2xl md:text-4xl font-bold mb-[50px] ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -432,24 +442,24 @@ export default function CreatorsClient() {
                           top: "90px",
                           height:
                             index === 0
-                              ? window.innerWidth < 1100
+                              ? windowWidth < 1100
                                 ? "230px" // 1000–1099px
-                                : window.innerWidth < 1250
-                                ? "200px" // 1100–1249px
-                                : "180px" // ≥1250px
+                                : windowWidth < 1250
+                                  ? "200px" // 1100–1249px
+                                  : "180px" // ≥1250px
                               : index === 1
-                              ? window.innerWidth < 1100
-                                ? "200px" // 1000–1099px
-                                : window.innerWidth < 1250
-                                ? "200px" // 1100–1249px
-                                : "180px" // ≥1250px
-                              : index === 2
-                              ? window.innerWidth < 1100
-                                ? "230px" // 1000–1099px
-                                : window.innerWidth < 1250
-                                ? "200px" // 1100–1249px
-                                : "180px" // ≥1250px
-                              : "40px",
+                                ? windowWidth < 1100
+                                  ? "200px" // 1000–1099px
+                                  : windowWidth < 1250
+                                    ? "200px" // 1100–1249px
+                                    : "180px" // ≥1250px
+                                : index === 2
+                                  ? windowWidth < 1100
+                                    ? "230px" // 1000–1099px
+                                    : windowWidth < 1250
+                                      ? "200px" // 1100–1249px
+                                      : "180px" // ≥1250px
+                                  : "40px",
                         }}
                       />
                     )}
@@ -477,11 +487,9 @@ export default function CreatorsClient() {
                   key={currentIndex}
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
-                  layout="fill"
-                  objectFit="cover"
-                  className={`rounded-xl transition-opacity duration-500 ${
-                    fade ? "opacity-100" : "opacity-0"
-                  }`}
+                  fill
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
+                    }`}
                   priority={true}
                 />
               </div>

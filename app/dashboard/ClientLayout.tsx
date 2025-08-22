@@ -34,7 +34,7 @@ import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import Link from "next/link";
 import Image from "next/image";
 import logo from "@/public/images/gold_logo_horizontal.svg";
-import squareLogo from "@/public/images/goc_square.png";
+import squareLogo from "@/public/images/goc_square.avif";
 
 // Color Theme Configurations
 const colorThemes = {

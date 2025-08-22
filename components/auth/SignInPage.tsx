@@ -86,9 +86,8 @@ export default function SignInPage() {
       }
 
       toast({
-        title: `Welcome back, ${
-          data.user?.user_metadata?.full_name || data.user?.email || "User"
-        }!`,
+        title: `Welcome back, ${data.user?.user_metadata?.full_name || data.user?.email || "User"
+          }!`,
         description: "You have successfully signed in.",
         duration: TOAST_DURATION_SHORT,
       });
@@ -317,7 +316,7 @@ export default function SignInPage() {
                   )}
                 </Button>
               </form>
-             
+
               {/* Divider */}
               <div className="flex items-center my-6">
                 <hr className="flex-1 border-gray-600" />
@@ -328,7 +327,7 @@ export default function SignInPage() {
                 {/* Google Sign In Button */}
                 <button
                   onClick={handleGoogleSignIn}
-                  
+                  aria-label="Continue with Google"
                   className="flex items-center text-md justify-center gap-2 p-2 rounded-md bg-white w-full max-w-xs text-gray-700 hover:bg-gray-100 transition"
                   disabled={isLoading || isGoogleLoading}
                 >
@@ -339,7 +338,7 @@ export default function SignInPage() {
                     </>
                   ) : (
                     <>
-                       <FcGoogle size={20} className="mr-1" /> 
+                      <FcGoogle size={20} className="mr-1" />
                       <span>Continue with Google</span>
                     </>
                   )}

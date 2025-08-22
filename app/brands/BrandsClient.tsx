@@ -18,7 +18,7 @@ import NumbersSection from "@/components/NumberSection";
 import Testimonials from "@/components/Testimonials";
 import FAQ from "@/components/FAQ";
 // Placeholder for social icons image - reuse from creators page
-import SocialPairPng from "@/public/images/social_pair.png";
+import SocialPair from "@/public/images/social_pair.avif";
 import BrandGetStartedButton from "@/components/BrandGetStartedButton";
 
 // const faqItemsBrands = [
@@ -77,13 +77,14 @@ const Brandsteps = [
   },
 ];
 const images: string[] = [
-  "./images/f51c4c5af9b9b5ab2e591a2decd387ff602702a8.png",
-  "./images/Property 1=Rectangle 2725.png",
-  "./images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.png",
+  "/images/f51c4c5af9b9b5ab2e591a2decd387ff602702a8.avif",
+  "/images/Property 1=Rectangle 2725.avif",
+  "/images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.avif",
 ];
 export default function BrandsClient() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [fade, setFade] = useState<boolean>(true);
+  const [windowWidth, setWindowWidth] = useState<number>(0);
 
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -141,6 +142,18 @@ export default function BrandsClient() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    // Set initial width
+    handleResize();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#000825] text-white overflow-hidden">
       <div className="relative z-20">
@@ -190,7 +203,7 @@ export default function BrandsClient() {
                 <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <div className="relative">
                   <Image
-                    src={SocialPairPng}
+                    src={SocialPair}
                     alt="Social Media Icons"
                     width={150}
                     height={40}
@@ -286,9 +299,8 @@ export default function BrandsClient() {
             {/* Heading */}
 
             <h1
-              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-2xl md:text-5xl text-slate-300 max-w-4xl mx-auto mb-6 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-up" : "hide-before-animate"
+                }`}
             >
               <span className="text-white">Why Brands Choose </span>
               <span className="bg-gradient-to-r from-purple-500 to-purple-400 bg-clip-text text-transparent">
@@ -301,9 +313,8 @@ export default function BrandsClient() {
             </h1>
 
             <p
-              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${
-                isAnimated ? "slide-left" : "hide-before-animate"
-              }`}
+              className={`text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg ${isAnimated ? "slide-left" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "1s" }}
             >
               Simple Steps to Launch your Influencer Marketing Campaign
@@ -316,7 +327,7 @@ export default function BrandsClient() {
                     "Generate dozens of unique content pieces for a fraction of the cost of traditional production.",
                   number: "1",
                   image:
-                    "./images/64804a487ad8f0cf2e94705ec857e40cee3eae3f.png",
+                    "/images/64804a487ad8f0cf2e94705ec857e40cee3eae3f.avif",
                 },
                 {
                   title: "Authentic Creativity",
@@ -324,7 +335,7 @@ export default function BrandsClient() {
                     "Tap into creator’s authentic voices and unique perspectives to connect with audiences.",
                   number: "2",
                   image:
-                    "./images/b7d7011f7d816c367825ffaccca7846c99dbbfc7.png",
+                    "/images/b7d7011f7d816c367825ffaccca7846c99dbbfc7.avif",
                 },
                 {
                   title: "Performance Insights",
@@ -332,7 +343,7 @@ export default function BrandsClient() {
                     "See exactly how your content performs and identify winners to scale through paid ads.",
                   number: "3",
                   image:
-                    "./images/b4273c077c336d85dd75502201d73084ea5fba73.jpg",
+                    "/images/b4273c077c336d85dd75502201d73084ea5fba73.avif",
                 },
               ].map((item) => (
                 <div
@@ -380,9 +391,8 @@ export default function BrandsClient() {
         <section className="py-16 px-4 md:px-16 xl:px-4 text-white" ref={howItWorksRef}>
           <div className="container mx-auto max-w-[1250px]">
             <h2
-              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${
-                howItWorksAnimated ? "slide-up" : "hide-before-animate"
-              }`}
+              className={`text-center text-2xl sm:text-3xl md:text-4xl font-bold mb-10 ${howItWorksAnimated ? "slide-up" : "hide-before-animate"
+                }`}
               style={{ animationDelay: "0.1s" }}
             >
               How it works
@@ -411,24 +421,24 @@ export default function BrandsClient() {
                           top: "90px",
                           height:
                             index === 0
-                              ? window.innerWidth < 1100
+                              ? windowWidth < 1100
                                 ? "320px" // 1000–1099px
-                                : window.innerWidth < 1250
-                                ? "300px" // 1100–1249px
-                                : "266px" // ≥1250px
+                                : windowWidth < 1250
+                                  ? "300px" // 1100–1249px
+                                  : "266px" // ≥1250px
                               : index === 1
-                              ? window.innerWidth < 1100
-                                ? "270px" // 1000–1099px
-                                : window.innerWidth < 1250
-                                ? "280px" // 1100–1249px
-                                : "250px" // ≥1250px
-                              : index === 2
-                              ? window.innerWidth < 1100
-                                ? "300px" // 1000–1099px
-                                : window.innerWidth < 1250
-                                ? "270px" // 1100–1249px
-                                : "180px" // ≥1250px
-                              : "40px",
+                                ? windowWidth < 1100
+                                  ? "270px" // 1000–1099px
+                                  : windowWidth < 1250
+                                    ? "280px" // 1100–1249px
+                                    : "250px" // ≥1250px
+                                : index === 2
+                                  ? windowWidth < 1100
+                                    ? "300px" // 1000–1099px
+                                    : windowWidth < 1250
+                                      ? "270px" // 1100–1249px
+                                      : "180px" // ≥1250px
+                                  : "40px",
                         }}
                       />
                     )}
@@ -456,11 +466,9 @@ export default function BrandsClient() {
                   key={currentIndex}
                   src={images[currentIndex]}
                   alt={`Step Image ${currentIndex + 1}`}
-                  layout="fill"
-                  objectFit="cover"
-                  className={`sm:object-cover rounded-xl transition-opacity duration-500 ${
-                    fade ? "opacity-100" : "opacity-0"
-                  }`}
+                  fill
+                  className={`object-cover rounded-xl transition-opacity duration-500 ${fade ? "opacity-100" : "opacity-0"
+                    }`}
                   priority
                 />
               </div>

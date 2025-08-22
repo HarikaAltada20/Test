@@ -6,9 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function ContactPage() {
   const images = [
-    "/images/Component 347.png",
-    "/images/Property 1=Frame 2147207675.png",
-    "/images/Property 1=Frame 2147207676.png",
+    "/images/Component 347.avif",
+    "/images/Property 1=Frame 2147207675.avif",
+    "/images/Property 1=Frame 2147207676.avif",
   ];
 
   const [currentIndex, setCurrentIndex] = useState(0);

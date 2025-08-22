@@ -41,8 +41,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { useRouter } from "next/navigation";
-import SocialPairPng from "@/public/images/social_pair.png";
-import startdemo from "@/public/images/startdemo.png";
+import socialPair from "@/public/images/social_pair.avif";
+import startdemo from "@/public/images/startdemo.avif";
 // import FAQ from "@/components/FAQ";
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
@@ -89,9 +89,8 @@ const RotatingTagline = () => {
 
   return (
     <p
-      className={`text-lg md:text-xl text-gray-600 mb-6 transition-opacity duration-300 ${
-        isVisible ? "opacity-100" : "opacity-0"
-      }`}
+      className={`text-lg md:text-xl text-gray-600 mb-6 transition-opacity duration-300 ${isVisible ? "opacity-100" : "opacity-0"
+        }`}
     >
       {taglines[currentTagline]}
     </p>
@@ -155,14 +154,14 @@ export default function PricingClient() {
       },
       { threshold: 0.3 }
     );
-  
+
     if (storyRef.current) observer.observe(storyRef.current);
-  
+
     return () => {
       if (storyRef.current) observer.unobserve(storyRef.current);
     };
   }, [isLoadingUser, isLoading]);
-  
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -172,14 +171,14 @@ export default function PricingClient() {
       },
       { threshold: 0.3 }
     );
-  
+
     if (section1Ref.current) observer.observe(section1Ref.current);
-  
+
     return () => {
       if (section1Ref.current) observer.unobserve(section1Ref.current);
     };
   }, [isLoadingUser, isLoading]);
-  
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -189,14 +188,14 @@ export default function PricingClient() {
       },
       { threshold: 0.3 }
     );
-  
+
     if (section2Ref.current) observer.observe(section2Ref.current);
-  
+
     return () => {
       if (section2Ref.current) observer.unobserve(section2Ref.current);
     };
   }, [isLoadingUser, isLoading]);
-  
+
 
   // Check for authenticated user
   useEffect(() => {
@@ -457,7 +456,7 @@ export default function PricingClient() {
                 <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <div className="relative">
                   <Image
-                    src={SocialPairPng}
+                    src={socialPair}
                     alt="Social Media Icons"
                     width={150}
                     height={40}
@@ -651,7 +650,7 @@ export default function PricingClient() {
               <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
               <div className="relative">
                 <Image
-                  src={SocialPairPng}
+                  src={socialPair}
                   alt="Social Media Icons"
                   width={150}
                   height={40}
@@ -749,23 +748,21 @@ export default function PricingClient() {
               {/* Header with Image */}
               <div className="flex items-center justify-center gap-2 bg-[#121230] inline-flex px-4 py-2 rounded-full mb-4">
                 <img
-                  src="./images/Vector.png" // ← replace with your actual image path
+                  src="/images/Vector.png" // ← replace with your actual image path
                   alt="Payment Plan"
                   className="w-5 h-5"
                 />
                 <span className="text-sm">Select the ideal payment plan</span>
               </div>
               <h2
-                className={`text-3xl md:text-5xl font-bold mb-4 ${
-                  section1Visible ? "slide-up" : "opacity-0"
-                }`}
+                className={`text-3xl md:text-5xl font-bold mb-4 ${section1Visible ? "slide-up" : "opacity-0"
+                  }`}
               >
                 Choose Your Game <span className="text-purple-400">Plan</span>
               </h2>
               <p
-                className={`${
-                  section1Visible ? "slide-left" : "opacity-0"
-                } text-gray-300 text-lg md:text-xl mb-8`}
+                className={`${section1Visible ? "slide-left" : "opacity-0"
+                  } text-gray-300 text-lg md:text-xl mb-8`}
               >
                 Select the perfect plan to start winning with creator contests
               </p>
@@ -796,11 +793,10 @@ export default function PricingClient() {
                 <div className="flex items-center gap-4  px-4 py-2 rounded-full">
                   {/* Monthly label */}
                   <span
-                    className={`cursor-pointer text-lg font-medium transition-colors ${
-                      billingCycle === "monthly"
-                        ? "text-white"
-                        : "text-gray-400"
-                    }`}
+                    className={`cursor-pointer text-lg font-medium transition-colors ${billingCycle === "monthly"
+                      ? "text-white"
+                      : "text-gray-400"
+                      }`}
                     onClick={() => setBillingCycle("monthly")}
                   >
                     Monthly Subscription
@@ -809,26 +805,23 @@ export default function PricingClient() {
                   {/* Toggle switch */}
                   <button
                     onClick={handleToggle}
-                    className={`relative w-14 h-7 rounded-full transition-colors ${
-                      billingCycle === "monthly"
-                        ? "bg-gray-600"
-                        : "bg-purple-500"
-                    }`}
+                    className={`relative w-14 h-7 rounded-full transition-colors ${billingCycle === "monthly"
+                      ? "bg-gray-600"
+                      : "bg-purple-500"
+                      }`}
                   >
                     <span
-                      className={`absolute top-1 text-lg left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                        billingCycle === "yearly"
-                          ? "translate-x-7"
-                          : "translate-x-0"
-                      }`}
+                      className={`absolute top-1 text-lg left-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === "yearly"
+                        ? "translate-x-7"
+                        : "translate-x-0"
+                        }`}
                     />
                   </button>
 
                   {/* Yearly label with badge */}
                   <span
-                    className={`cursor-pointer text-lg font-medium flex items-center gap-1 transition-colors ${
-                      billingCycle === "yearly" ? "text-white" : "text-gray-400"
-                    }`}
+                    className={`cursor-pointer text-lg font-medium flex items-center gap-1 transition-colors ${billingCycle === "yearly" ? "text-white" : "text-gray-400"
+                      }`}
                     onClick={() => setBillingCycle("yearly")}
                   >
                     Yearly Subscription
@@ -866,11 +859,10 @@ export default function PricingClient() {
                     <div
                       key={plan.id}
                       className={`relative flex flex-col rounded-xl w-full max-w-sm mx-auto p-6 hover:shadow-lg hover:scale-105 transition 
-                      ${
-                        isMostPopular
+                      ${isMostPopular
                           ? "border-2 border-purple-500 shadow-xl"
                           : "border border-gray-700 shadow-sm"
-                      }
+                        }
                       bg-gradient-to-b from-purple-900/10 to-purple-900/3`}
                     >
                       {isMostPopular && (
@@ -964,10 +956,10 @@ export default function PricingClient() {
                               {plan.features.analytics === "basic"
                                 ? "Basic analytics & insights"
                                 : plan.features.analytics === "advanced"
-                                ? "Advanced analytics & reports"
-                                : plan.features.analytics === "comprehensive"
-                                ? "Comprehensive analytics dashboard"
-                                : plan.features.analytics}
+                                  ? "Advanced analytics & reports"
+                                  : plan.features.analytics === "comprehensive"
+                                    ? "Comprehensive analytics dashboard"
+                                    : plan.features.analytics}
                             </span>
                           </div>
                         )}
@@ -979,8 +971,8 @@ export default function PricingClient() {
                                 {plan.features.support === "priority"
                                   ? "Prioritized customer support"
                                   : plan.features.support === "premium"
-                                  ? "Premium 24/7 dedicated support"
-                                  : plan.features.support}
+                                    ? "Premium 24/7 dedicated support"
+                                    : plan.features.support}
                               </span>
                             </div>
                           )}
@@ -1081,9 +1073,8 @@ export default function PricingClient() {
         <div className="bg-[#0b0e26] text-white py-16 px-6">
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
-              className={`text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${
-                section2Visible ? "slide-up" : "opacity-0"
-              }`}
+              className={`text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform ${section2Visible ? "slide-up" : "opacity-0"
+                }`}
             >
               What's Included in{" "}
               <span
@@ -1101,9 +1092,8 @@ export default function PricingClient() {
               </span>
             </h2>
             <p
-              className={`${
-                section2Visible ? "slide-left" : "opacity-0"
-              } text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
+              className={`${section2Visible ? "slide-left" : "opacity-0"
+                } text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg`}
             >
               Essential Elements for Your Influencer Marketing Strategy
             </p>
@@ -1152,9 +1142,8 @@ export default function PricingClient() {
                 right for you?
               </h2>
               <p
-                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
-                  visible ? "slide-left" : ""
-                }`}
+                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${visible ? "slide-left" : ""
+                  }`}
                 style={{ animationDelay: "1s" }}
               >
                 Book a demo with{" "}
@@ -1162,9 +1151,8 @@ export default function PricingClient() {
                 Founder of Game Of Creators
               </p>
               <p
-                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${
-                  visible ? "slide-left" : ""
-                }`}
+                className={`text-base md:text-xl leading-relaxed text-gray-300 mt-4 ${visible ? "slide-left" : ""
+                  }`}
                 style={{ animationDelay: "1.5s" }}
               >
                 Join hundreds of businesses driving success with Game Of

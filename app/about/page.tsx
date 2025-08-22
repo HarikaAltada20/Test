@@ -3,30 +3,29 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Star, Trophy, Palette, Camera, Heart, Sparkles } from "lucide-react";
-import SocialPairPng from "@/public/images/social_pair.png";
+import socialMediaIcon from "@/public/images/social_pair.avif";
 import { Check, Crown } from "lucide-react";
-import phoneIllustration from "@/public/images/phoneIllustration.png";
+import phoneIllustration from "@/public/images/phoneIllustration.avif";
 
 const howItWorksData = [
   {
     title: "For Brands",
     description:
       "Launch a contest with clear guidelines, set prize pools, and watch as creators submit their best content featuring your products or services.",
-    image: "./images/rafiki.png",
+    image: "/images/rafiki.avif",
   },
   {
     title: "For Creators",
     description:
       "Browse available contests, create content for brands you're passionate about, and earn rewards when your content performs well.",
-    image: "./images/rafiki-2.png",
+    image: "/images/rafiki-2.avif",
   },
   {
     title: "The Results",
     description:
       "Brands receive authentic content at scale, while creators foster relationships and expand their audiences through collaborations.",
-    image: "./images/amico.png",
+    image: "/images/amico.avif",
   },
 ];
 const values = [
@@ -145,7 +144,7 @@ export default function AboutPage() {
                 <div className="absolute inset-0 bg-gradient-to-r from-amber-600/20 to-orange-600/20 rounded-2xl blur-xl opacity-60 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <div className="relative">
                   <Image
-                    src={SocialPairPng}
+                    src={socialMediaIcon}
                     alt="Social Media Icons"
                     width={150}
                     height={40}
@@ -250,8 +249,8 @@ export default function AboutPage() {
             <h2
               ref={howItWorksRef}
               className={`text-center text-3xl md:text-5xl font-bold mb-12 transition-all duration-700 ease-out transform ${showHowItWorks
-                  ? "translate-y-0 opacity-100"
-                  : "translate-y-10 opacity-0"
+                ? "translate-y-0 opacity-100"
+                : "translate-y-10 opacity-0"
                 }`}
             >
               How It{" "}
@@ -296,8 +295,8 @@ export default function AboutPage() {
             <h2
               ref={valuesRef}
               className={`text-5xl font-semibold transition-all duration-700 ease-out transform ${showValues
-                  ? "translate-y-0 opacity-100"
-                  : "translate-y-10 opacity-0"
+                ? "translate-y-0 opacity-100"
+                : "translate-y-10 opacity-0"
                 }`}
             >
               Our{" "}
