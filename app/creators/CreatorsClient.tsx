@@ -286,20 +286,20 @@ export default function CreatorsClient() {
               className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
-              Join Game Of Creators to find creative{" "}
+              Join{" "}
               <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
-                opportunities
+                Game of Creators
               </span>
-              , collaborate with brands, and get paid for your{" "}
+              {" "}and get paid based on{" "}
               <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                content
+                views or ranking
               </span>
+              {" "}— even if you have 0 followers
             </p>
 
-            {/* Epic CTA Button */}
-            <div className="flex justify-center items-center mb-12">
-              <Button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-6 text-lg overflow-hidden">
-                <div className="scan-line"></div>
+            {/* Call-to-Action Buttons */}
+            <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
+              <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
                 <Link
                   href="/auth/signup"
                   className="relative z-10 flex items-center gap-2"
@@ -307,17 +307,30 @@ export default function CreatorsClient() {
                     localStorage.setItem("signupRole", "creator");
                   }}
                 >
-                  {/* Overlay gradient for animation */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-orange-700 opacity-0"></div>
-
                   <Sparkles className="h-4 w-4" />
-                  <span>Get Started</span>
-                  <ArrowRight className="h-5 w-5" />
+                  <span>Get Started →</span>
                 </Link>
               </Button>
+
+              <Button
+                variant="outline"
+                className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-orange-400/50 hover:text-orange-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
+                asChild
+              >
+                <a href="https://youtu.be/DrW0UnbQgfQ?si=zqr9imnzt03jeEgE" target="_blank" rel="noopener noreferrer">
+                  Watch Demo
+                </a>
+              </Button>
+            </div>
+
+            {/* Social Proof */}
+            <div className="flex justify-center items-center text-base text-slate-300 mb-8">
+              <span className="font-medium">Trusted by 500+ creators and brands</span>
             </div>
           </div>
         </section>
+
+
 
         {/* Why Join as Creator - Gaming Style */}
         <section className="text-white py-16" ref={animationRef}>

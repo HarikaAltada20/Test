@@ -252,44 +252,39 @@ export default function BrandsClient() {
             </h1>
 
             {/* Strategic Subtitle */}
-            <div
-              className="text-center mb-16 text-2xl slide-left"
+            <p
+              className="text-lg md:text-2xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
-              <span className="text-white">Launch Strategic </span>
-              <span className="text-purple-500 font-bold">
-                creators contents
+              Launch strategic{" "}
+              <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
+                creator contests
               </span>
-              <span className="text-white">
-                {" "}
-                and achieve viral success with{" "}
+              {" "}and drive organic viral marketing with{" "}
+              <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
+                1000s of creators
               </span>
-              <span className="text-yellow-500 font-bold">guaranteed</span>
-              <br />
-              <span className="text-yellow-500 font-bold">results</span>
-            </div>
+              {" "}producing content that scales your brand's reach.
+            </p>
           </div>
 
-          <div className="flex justify-center items-center mb-12">
-            {/* <button
-              className="rounded-3xl relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"
-              style={{
-                background:
-                  "linear-gradient(90deg, #4C238B 0%, #7F39EC 50%, #4C238B 100%)",
-              }}
-              
-            >
-              <div className="scan-line"></div>
-              <Link
-                href="/auth/signup"
-                className="relative z-10 flex items-center gap-2"
-              >
-                <Crown className="h-5 w-5" />
-                <span>Get Started</span>
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-            </button> */}
+          {/* Call-to-Action Buttons */}
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
             <BrandGetStartedButton />
+
+            <Button
+              variant="outline"
+              className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-purple-400/50 hover:text-purple-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
+              asChild
+            >
+              <a href="https://youtu.be/hlQ1kXSmNvQ?si=wNjmnRgr43CNlPnx" target="_blank" rel="noopener noreferrer">
+                Watch Demo
+              </a>
+            </Button>
+          </div>
+          {/* Social Proof */}
+          <div className="flex justify-center items-center text-base text-slate-300 mb-8">
+            <span className="font-medium">Trusted by 500+ creators and brands</span>
           </div>
         </section>
 

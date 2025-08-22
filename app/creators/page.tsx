@@ -3,23 +3,23 @@ import { Metadata } from "next";
 import CreatorsClient from "./CreatorsClient";
 
 export const metadata: Metadata = {
-  title: "Game Of Creators - Join as a Creator & Collaborate with Top Brands",
+  title: "Best Platform to Get Paid Based on Views - Turn Your Creativity Into Income | Game Of Creators",
   description:
-    "Grow your influence and earn by collaborating with leading brands. Participate in gamified campaigns, showcase your creativity, and unlock new opportunities.",
+    "The best platform to get paid based on views and ranking. Join Game of Creators and earn money even with 0 followers! Top choice for creators seeking performance-based payments and fair compensation for quality content.",
   keywords:
-    "creators, influencer opportunities, brand collaborations, gamified campaigns, social media influencers, earn as creator",
+    "best platform to get paid based on views, best platform for creators to make money, get paid for views, creators make money, get paid for content, no followers required, performance based payments, creator contests, views based payment, ranking based payment, content creator platform, earn from creativity, best creator platform",
   openGraph: {
-    title: "Game Of Creators - Join as a Creator & Collaborate with Top Brands",
+    title: "Creators - Turn Your Creativity Into Income | Game Of Creators",
     description:
-      "Grow your influence and earn by collaborating with leading brands. Participate in gamified campaigns, showcase your creativity, and unlock new opportunities.",
+      "Join Game of Creators and get paid based on views or ranking - even with 0 followers! Participate in brand contests and earn money through performance-based payments.",
     type: "website",
     url: "https://gameofcreators.com/creators",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Game Of Creators - Join as a Creator & Collaborate with Top Brands",
+    title: "Creators - Turn Your Creativity Into Income | Game Of Creators",
     description:
-      "Grow your influence and earn by collaborating with leading brands. Participate in gamified campaigns, showcase your creativity, and unlock new opportunities.",
+      "Join Game of Creators and get paid based on views or ranking - even with 0 followers! Participate in brand contests and earn money through performance-based payments.",
   },
   alternates: {
     canonical: "https://gameofcreators.com/creators",
