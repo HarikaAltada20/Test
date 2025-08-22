@@ -78,7 +78,7 @@ const Brandsteps = [
 ];
 const images: string[] = [
   "./images/f51c4c5af9b9b5ab2e591a2decd387ff602702a8.png",
-  "./images/Property 1=Rectangle 2725 (1).png",
+  "./images/Property 1=Rectangle 2725.png",
   "./images/f96e2b44b8e51e5813eb9cc1fa2600d8249d865b.png",
 ];
 export default function BrandsClient() {
