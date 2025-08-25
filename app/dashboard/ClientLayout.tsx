@@ -7,7 +7,22 @@ import { Suspense, useState, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Settings, User, LogOut, ChevronRight, Moon, Sun, Contrast, RotateCcw, Maximize2, CreditCard, Maximize, Minimize } from "lucide-react";
+import {
+  Menu,
+  X,
+  Settings,
+  User,
+  LogOut,
+  ChevronRight,
+  Moon,
+  Sun,
+  Contrast,
+  RotateCcw,
+  Maximize2,
+  CreditCard,
+  Maximize,
+  Minimize,
+} from "lucide-react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -25,6 +40,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import ChatSuppport from "@/components/ChatSupport";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
@@ -170,27 +186,27 @@ function SimpleLoadingBar() {
         animation: loadingBar 1.5s ease-in-out;
         opacity: 0;
       }
-      
+
       .nav-loading.active {
         opacity: 1;
       }
-      
+
       @keyframes loadingBar {
-        0% { 
-          width: 0%; 
+        0% {
+          width: 0%;
           left: 0%;
         }
-        50% { 
-          width: 70%; 
+        50% {
+          width: 70%;
           left: 0%;
         }
-        100% { 
-          width: 100%; 
+        100% {
+          width: 100%;
           left: 0%;
         }
       }
     `}</style>
-  )
+  );
 }
 
 function DashboardContent({
@@ -209,25 +225,33 @@ function DashboardContent({
     isActive: boolean;
     subscriptionPlan: string | null;
   }>({
-    fullName: '',
-    profilePictureUrl: '',
+    fullName: "",
+    profilePictureUrl: "",
     isActive: true,
     subscriptionPlan: null,
   });
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
-
-  const userRole = user?.user_type as "advertiser" | "creator" | "admin" || null;
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const userRole =
+    (user?.user_type as "advertiser" | "creator" | "admin") || null;
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileSidebarOpen, setProfileSidebarOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<ThemeKey>('clean');
-  const [currentMode, setCurrentMode] = useState<ModeKey>('light');
-  const [currentPreset, setCurrentPreset] = useState<PresetKey>('clean-professional');
+  const [currentTheme, setCurrentTheme] = useState<ThemeKey>("clean");
+  const [currentMode, setCurrentMode] = useState<ModeKey>("light");
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentPreset, setCurrentPreset] =
+    useState<PresetKey>("clean-professional");
   const [isColorfulMode, setIsColorfulMode] = useState(false);
   const [isCompactMode, setIsCompactMode] = useState(false);
   const { logout } = useClientAuth();
-  const { isFullscreen, isSupported: isFullscreenSupported, isClient: isFullscreenClient, toggleFullscreen } = useFullscreen();
+  const {
+    isFullscreen,
+    isSupported: isFullscreenSupported,
+    isClient: isFullscreenClient,
+    toggleFullscreen,
+  } = useFullscreen();
 
   const handleSignOut = async () => {
     try {
@@ -240,38 +264,43 @@ function DashboardContent({
 
   // Handle checkout success - refresh subscription data with protection against infinite loops
   useEffect(() => {
-    const success = searchParams.get('success');
-    const sessionId = searchParams.get('session_id');
+    const success = searchParams.get("success");
+    const sessionId = searchParams.get("session_id");
 
-    if (success === 'true' && sessionId && user && !hasProcessedSuccess) {
-      console.log('🎉 Payment successful in dashboard, refreshing subscription data...');
+    if (success === "true" && sessionId && user && !hasProcessedSuccess) {
+      console.log(
+        "🎉 Payment successful in dashboard, refreshing subscription data..."
+      );
       setHasProcessedSuccess(true);
 
       // Clear URL parameters to prevent refresh loops
       const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState({}, "", newUrl);
 
       // Refresh subscription data after a short delay to allow webhook processing
       const refreshSubscriptionData = async () => {
         try {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           const supabase = createClient();
           const { data: advertiserProfile } = await supabase
-            .from('advertiser_profiles')
-            .select('subscription_info')
-            .eq('id', user.id)
+            .from("advertiser_profiles")
+            .select("subscription_info")
+            .eq("id", user.id)
             .single();
 
           if (advertiserProfile?.subscription_info?.product_id) {
-            setProfileData(prev => ({
+            setProfileData((prev) => ({
               ...prev,
-              subscriptionPlan: advertiserProfile.subscription_info.product_id
+              subscriptionPlan: advertiserProfile.subscription_info.product_id,
             }));
-            console.log('✅ Subscription data refreshed:', advertiserProfile.subscription_info.product_id);
+            console.log(
+              "✅ Subscription data refreshed:",
+              advertiserProfile.subscription_info.product_id
+            );
           }
         } catch (error) {
-          console.error('Error refreshing subscription data:', error);
+          console.error("Error refreshing subscription data:", error);
         }
       };
 
@@ -286,23 +315,24 @@ function DashboardContent({
 
       const supabase = createClient();
       const { data: profile } = await supabase
-        .from('users')
-        .select('full_name, profile_picture_url, is_active, user_type')
-        .eq('id', user.id)
+        .from("users")
+        .select("full_name, profile_picture_url, is_active, user_type")
+        .eq("id", user.id)
         .single();
 
       if (profile) {
         let subscriptionPlan: string | null = null;
 
         // Fetch subscription plan for advertisers
-        if (profile.user_type === 'advertiser') {
+        if (profile.user_type === "advertiser") {
           const { data: advertiserProfile } = await supabase
-            .from('advertiser_profiles')
-            .select('subscription_info')
-            .eq('id', user.id)
+            .from("advertiser_profiles")
+            .select("subscription_info")
+            .eq("id", user.id)
             .single();
 
-          subscriptionPlan = advertiserProfile?.subscription_info?.product_id || null;
+          subscriptionPlan =
+            advertiserProfile?.subscription_info?.product_id || null;
         }
 
         setProfileData({
@@ -318,59 +348,61 @@ function DashboardContent({
 
     // Listen for profile update events
     const handleProfileUpdate = () => {
-      console.log('🔄 Profile update event received, refreshing sidebar data...');
+      console.log(
+        "🔄 Profile update event received, refreshing sidebar data..."
+      );
       fetchProfileData();
     };
 
-    window.addEventListener('profile-updated', handleProfileUpdate);
+    window.addEventListener("profile-updated", handleProfileUpdate);
 
     return () => {
-      window.removeEventListener('profile-updated', handleProfileUpdate);
+      window.removeEventListener("profile-updated", handleProfileUpdate);
     };
   }, [user]);
 
   // Theme persistence and initialization
   useEffect(() => {
-    const savedPreset = localStorage.getItem('dashboard-preset') as PresetKey;
+    const savedPreset = localStorage.getItem("dashboard-preset") as PresetKey;
     if (savedPreset && presetConfigurations[savedPreset]) {
       setCurrentPreset(savedPreset);
       setCurrentMode(presetConfigurations[savedPreset].mode);
       setCurrentTheme(presetConfigurations[savedPreset].theme);
     } else {
       // Fallback to individual settings or defaults
-      const savedTheme = localStorage.getItem('dashboard-theme') as ThemeKey;
+      const savedTheme = localStorage.getItem("dashboard-theme") as ThemeKey;
       if (savedTheme && colorThemes[savedTheme]) {
         setCurrentTheme(savedTheme);
       } else {
-        setCurrentTheme('clean'); // Default to clean theme
+        setCurrentTheme("clean"); // Default to clean theme
       }
 
-      const savedMode = localStorage.getItem('dashboard-mode') as ModeKey;
+      const savedMode = localStorage.getItem("dashboard-mode") as ModeKey;
       if (savedMode && modeConfigurations[savedMode]) {
         setCurrentMode(savedMode);
       } else {
-        setCurrentMode('light'); // Default to light mode
+        setCurrentMode("light"); // Default to light mode
       }
 
       // Set default preset if no individual settings
       if (!savedTheme && !savedMode) {
-        setCurrentPreset('clean-professional');
+        setCurrentPreset("clean-professional");
       }
     }
 
-    const savedColorfulMode = localStorage.getItem('dashboard-colorful-mode');
+    const savedColorfulMode = localStorage.getItem("dashboard-colorful-mode");
     if (savedColorfulMode !== null) {
-      setIsColorfulMode(savedColorfulMode === 'true');
+      setIsColorfulMode(savedColorfulMode === "true");
     } else {
       // Set colorful mode to false by default if no preference is saved
       setIsColorfulMode(false);
-      localStorage.setItem('dashboard-colorful-mode', 'false');
+      localStorage.setItem("dashboard-colorful-mode", "false");
     }
 
     // Load compact mode preference
-    const savedCompactMode = localStorage.getItem('dashboard-compact-mode');
+    const savedCompactMode = localStorage.getItem("dashboard-compact-mode");
     if (savedCompactMode) {
-      setIsCompactMode(savedCompactMode === 'true');
+      setIsCompactMode(savedCompactMode === "true");
     }
   }, []);
 
@@ -380,38 +412,38 @@ function DashboardContent({
     setCurrentPreset(presetKey);
     setCurrentMode(preset.mode);
     setCurrentTheme(preset.theme);
-    localStorage.setItem('dashboard-preset', presetKey);
-    localStorage.removeItem('dashboard-theme'); // Clear individual settings
-    localStorage.removeItem('dashboard-mode');
+    localStorage.setItem("dashboard-preset", presetKey);
+    localStorage.removeItem("dashboard-theme"); // Clear individual settings
+    localStorage.removeItem("dashboard-mode");
   };
 
   // Theme switching function
   const switchTheme = (themeKey: ThemeKey) => {
     setCurrentTheme(themeKey);
-    localStorage.setItem('dashboard-theme', themeKey);
-    localStorage.removeItem('dashboard-preset'); // Clear preset when manually changing
+    localStorage.setItem("dashboard-theme", themeKey);
+    localStorage.removeItem("dashboard-preset"); // Clear preset when manually changing
   };
 
   // Mode switching function
   const switchMode = (modeKey: ModeKey) => {
     setCurrentMode(modeKey);
-    localStorage.setItem('dashboard-mode', modeKey);
-    localStorage.removeItem('dashboard-preset'); // Clear preset when manually changing
+    localStorage.setItem("dashboard-mode", modeKey);
+    localStorage.removeItem("dashboard-preset"); // Clear preset when manually changing
   };
 
   const toggleColorfulMode = (enabled: boolean) => {
     setIsColorfulMode(enabled);
-    localStorage.setItem('dashboard-colorful-mode', String(enabled));
+    localStorage.setItem("dashboard-colorful-mode", String(enabled));
   };
 
   const toggleCompactMode = (enabled: boolean) => {
     setIsCompactMode(enabled);
-    localStorage.setItem('dashboard-compact-mode', String(enabled));
+    localStorage.setItem("dashboard-compact-mode", String(enabled));
   };
 
   // Reset to default function
   const resetToDefault = () => {
-    switchPreset('clean-professional');
+    switchPreset("clean-professional");
   };
 
   // Get current theme and mode configurations
@@ -421,18 +453,18 @@ function DashboardContent({
   // Helper function to convert RGB to HSL for CSS custom properties
   const getThemeHSL = (themeKey: ThemeKey) => {
     switch (themeKey) {
-      case 'purple':
-        return '258.3 89.5% 66.3%'; // violet-500 in HSL
-      case 'clean':
-        return '215.4 16.3% 46.9%'; // slate-500 in HSL
-      case 'blue':
-        return '217.2 91.2% 59.8%'; // blue-500 in HSL
-      case 'green':
-        return '142.1 76.2% 36.3%'; // green-500 in HSL
-      case 'rose':
-        return '349.7 89.2% 60.2%'; // rose-500 in HSL
+      case "purple":
+        return "258.3 89.5% 66.3%"; // violet-500 in HSL
+      case "clean":
+        return "215.4 16.3% 46.9%"; // slate-500 in HSL
+      case "blue":
+        return "217.2 91.2% 59.8%"; // blue-500 in HSL
+      case "green":
+        return "142.1 76.2% 36.3%"; // green-500 in HSL
+      case "rose":
+        return "349.7 89.2% 60.2%"; // rose-500 in HSL
       default:
-        return '258.3 89.5% 66.3%';
+        return "258.3 89.5% 66.3%";
     }
   };
 
@@ -449,10 +481,12 @@ function DashboardContent({
     if (path.includes("/admin")) return "Admin";
 
     // Default fallback
-    const segments = path.split('/').filter(Boolean);
+    const segments = path.split("/").filter(Boolean);
     if (segments.length > 1) {
-      return segments[segments.length - 1].charAt(0).toUpperCase() +
-        segments[segments.length - 1].slice(1);
+      return (
+        segments[segments.length - 1].charAt(0).toUpperCase() +
+        segments[segments.length - 1].slice(1)
+      );
     }
     return "Overview";
   };
@@ -460,9 +494,16 @@ function DashboardContent({
   const currentPageTitle = getPageTitle(pathname);
 
   // Get user display info
-  const displayName = profileData.fullName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
+  const displayName =
+    profileData.fullName ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
   const displayEmail = user?.email || "";
-  const avatarSrc = profileData.profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
+  const avatarSrc =
+    profileData.profilePictureUrl ||
+    user?.user_metadata?.profile_picture_url ||
+    "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
 
   // Get subscription plan details
@@ -470,17 +511,26 @@ function DashboardContent({
     if (!profileData.subscriptionPlan || userRole !== "advertiser") {
       return subscriptionPlans[0]; // Default to EXPLORER plan
     }
-    return subscriptionPlans.find(plan => plan.id === profileData.subscriptionPlan) || subscriptionPlans[0];
+    return (
+      subscriptionPlans.find(
+        (plan) => plan.id === profileData.subscriptionPlan
+      ) || subscriptionPlans[0]
+    );
   };
 
   const currentPlan = getCurrentPlan();
 
   return (
-    <div className="bg-background" data-theme={currentMode} data-color-theme={currentTheme}>
+    <div
+      className="bg-background"
+      data-theme={currentMode}
+      data-color-theme={currentTheme}
+    >
       <SimpleLoadingBar />
 
-      {/* Dynamic CSS Custom Properties for Theme */}
-      <style jsx global>{`
+
+{/* Dynamic CSS Custom Properties for Theme */}
+<style jsx global>{`
         :root {
           --background: ${currentMode === 'light' ? '210 20% 98%' : '222.2 84% 4.9%'};
           --foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
@@ -513,681 +563,61 @@ function DashboardContent({
         }
       `}</style>
 
-      {/* Global Theme-Based Scrollbar Styles */}
-      <style jsx global>{`
-        /* Theme-based scrollbar for all elements */
-        * {
-          scrollbar-width: thin;
-          scrollbar-color: ${theme.scrollbar} rgba(${mode.background.secondary}, 0.1);
-        }
-        
-        /* Global text improvements for better readability */
-        h1, h2, h3, h4, h5, h6 {
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        p, span, div, label {
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        .text-muted-foreground {
-          color: hsl(var(--muted-foreground)) !important;
-        }
-        
-        /* Force all text to be visible */
-        * {
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Override specific muted text */
-        .text-muted-foreground,
-        .text-slate-400,
-        .text-slate-500,
-        .text-slate-600,
-        .text-gray-400,
-        .text-gray-500,
-        .text-gray-600 {
-          color: hsl(var(--muted-foreground)) !important;
-        }
-        
-        /* Form elements global styling */
-        input, textarea, select {
-          background-color: hsl(var(--background)) !important;
-          border-color: hsl(var(--border)) !important;
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Card global styling */
-        .card {
-          background-color: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-          border-color: hsl(var(--border)) !important;
-        }
-        
-        /* Ensure all divs and containers use proper backgrounds */
-        div[class*="bg-white"],
-        div[class*="bg-gray"],
-        div[class*="bg-slate"] {
-          background-color: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-        }
-        
-        /* Webkit scrollbar styling */
-        *::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        
-        *::-webkit-scrollbar-track {
-          background: rgba(${mode.background.secondary}, ${currentMode === 'light' ? '0.5' : '0.1'});
-          border-radius: 10px;
-        }
-        
-        *::-webkit-scrollbar-thumb {
-          background: ${theme.scrollbar};
-          border-radius: 10px;
-          transition: all 0.2s ease;
-        }
-        
-        *::-webkit-scrollbar-thumb:hover {
-          background: ${theme.scrollbarHover};
-        }
-        
-        *::-webkit-scrollbar-corner {
-          background: transparent;
-        }
-        
-        /* Sidebar specific scrollbar - always reserve space to prevent layout shift */
-        .sidebar-scrollbar,
-        .sidebar-scrollbar-hidden {
-          scrollbar-width: thin; /* Firefox - thin scrollbar */
-          scrollbar-gutter: stable; /* Always reserve space for scrollbar */
-        }
-        
-        .sidebar-scrollbar {
-          scrollbar-color: ${theme.sidebarScrollbar} transparent; /* Firefox - visible thumb */
-        }
-        
-        .sidebar-scrollbar-hidden {
-          scrollbar-color: transparent transparent; /* Firefox - hidden thumb */
-        }
-        
-        /* WebKit scrollbar styles */
-        .sidebar-scrollbar::-webkit-scrollbar,
-        .sidebar-scrollbar-hidden::-webkit-scrollbar {
-          width: 6px;
-          background: transparent; /* Always transparent track */
-        }
-        
-        .sidebar-scrollbar::-webkit-scrollbar-thumb {
-          background: ${theme.sidebarScrollbar};
-          border-radius: 3px;
-        }
-        
-        .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: ${theme.sidebarScrollbarHover};
-        }
-        
-        .sidebar-scrollbar-hidden::-webkit-scrollbar-thumb {
-          background: transparent; /* Hidden thumb */
-        }
-        
-        .sidebar-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
-          background: transparent; /* Keep hidden on hover */
-        }
-        
-        /* Global background and text colors */
-        body {
-          background-color: rgba(${mode.background.primary}, 1) !important;
-          color: rgba(${mode.text.primary}, 1) !important;
-        }
-        
-        /* Main content area styling */
-        .dashboard-main-content {
-          background-color: rgba(${mode.background.primary}, 1);
-          color: rgba(${mode.text.primary}, 1);
-        }
-        
-        /* Card and panel styling */
-        .dashboard-card {
-          background-color: rgba(${mode.background.secondary}, ${currentMode === 'light' ? '1' : '0.5'});
-          border-color: rgba(${mode.border}, ${currentMode === 'light' ? '1' : '0.2'});
-          color: rgba(${mode.text.primary}, 1);
-          box-shadow: ${currentMode === 'light' ? '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)' : 'none'};
-        }
-        
-        /* Enhanced styling for both modes */
-        
-        /* Light mode specific improvements */
-        ${currentMode === 'light' && !isColorfulMode ? `
-          /* Enhanced card shadows and backgrounds for better depth */
-          [data-theme="light"] .card,
-          [data-theme="light"] [data-card],
-          [data-theme="light"] div[class*="rounded-"],
-          [data-theme="light"] div[class*="border"] {
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-            background: linear-gradient(135deg, rgba(${mode.background.secondary}, 1) 0%, rgba(${mode.background.primary}, 1) 100%) !important;
-            border: 1px solid rgba(${mode.border}, 0.8) !important;
-          }
-          
-          /* Enhanced button styling */
-          [data-theme="light"] button,
-          [data-theme="light"] .btn {
-            box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
-            background: linear-gradient(135deg, rgba(${mode.background.secondary}, 1) 0%, rgba(${mode.background.primary}, 1) 100%);
-            border: 1px solid rgba(${mode.border}, 0.6);
-            transition: all 0.2s ease;
-          }
-          
-          [data-theme="light"] button:hover,
-          [data-theme="light"] .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
-          }
-          
-          /* Enhanced sidebar styling */
-          [data-theme="light"] .sidebar-container {
-            background: linear-gradient(180deg, rgba(${mode.background.primary}, 1) 0%, rgba(${mode.background.secondary}, 1) 100%);
-            border-right: 1px solid rgba(${mode.border}, 0.8);
-            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.08);
-          }
-          
-          /* Enhanced main content area */
-          [data-theme="light"] .dashboard-main-content {
-            background: linear-gradient(135deg, rgba(${mode.background.primary}, 1) 0%, rgba(${mode.background.secondary}, 0.3) 100%);
-          }
-          
-          /* Improved navigation items */
-          [data-theme="light"] .nav-item {
-            transition: all 0.2s ease;
-            border-radius: 8px;
-            margin: 2px 0;
-          }
-          
-          [data-theme="light"] .nav-item:hover {
-            background: linear-gradient(135deg, rgba(${mode.background.tertiary}, 0.8) 0%, rgba(${mode.background.secondary}, 0.8) 100%);
-            transform: translateX(2px);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-          }
-          
-          /* Fix sidebar text in light mode */
-          [data-theme="light"] .sidebar-content,
-          [data-theme="light"] .sidebar-content *,
-          [data-theme="light"] nav,
-          [data-theme="light"] nav *,
-          [data-theme="light"] aside,
-          [data-theme="light"] aside * {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix navigation text specifically */
-          [data-theme="light"] .navigation-item,
-          [data-theme="light"] .nav-link,
-          [data-theme="light"] .sidebar-link {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix muted text in light mode */
-          [data-theme="light"] .text-muted-foreground,
-          [data-theme="light"] .text-slate-300,
-          [data-theme="light"] .text-slate-400,
-          [data-theme="light"] .text-slate-500 {
-            color: rgba(${mode.text.muted}, 1) !important;
-          }
-          
-          /* Ensure all text is dark in light mode */
-          [data-theme="light"] *,
-          [data-theme="light"] h1,
-          [data-theme="light"] h2,
-          [data-theme="light"] h3,
-          [data-theme="light"] h4,
-          [data-theme="light"] h5,
-          [data-theme="light"] h6,
-          [data-theme="light"] p,
-          [data-theme="light"] span,
-          [data-theme="light"] div,
-          [data-theme="light"] label,
-          [data-theme="light"] td,
-          [data-theme="light"] th,
-          [data-theme="light"] li {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Form elements in light mode */
-          [data-theme="light"] input,
-          [data-theme="light"] textarea,
-          [data-theme="light"] select {
-            background-color: rgba(${mode.background.primary}, 1) !important;
-            border-color: rgba(${mode.border}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix card backgrounds in light mode */
-          [data-theme="light"] .card,
-          [data-theme="light"] .card-content,
-          [data-theme="light"] .card-header {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix table styling in light mode */
-          [data-theme="light"] table,
-          [data-theme="light"] thead,
-          [data-theme="light"] tbody,
-          [data-theme="light"] tr,
-          [data-theme="light"] td,
-          [data-theme="light"] th {
-            background-color: rgba(${mode.background.primary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix prose content in light mode */
-          [data-theme="light"] .prose,
-          [data-theme="light"] .prose *,
-          [data-theme="light"] .prose-sm,
-          [data-theme="light"] .prose-sm * {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-        ` : ''}
-        
-        /* Dark mode specific improvements */
-        ${currentMode === 'dark' ? `
-          /* Force all text to be visible in dark mode */
-          [data-theme="dark"] *,
-          [data-theme="dark"] h1,
-          [data-theme="dark"] h2,
-          [data-theme="dark"] h3,
-          [data-theme="dark"] h4,
-          [data-theme="dark"] h5,
-          [data-theme="dark"] h6,
-          [data-theme="dark"] p,
-          [data-theme="dark"] span,
-          [data-theme="dark"] div,
-          [data-theme="dark"] label,
-          [data-theme="dark"] td,
-          [data-theme="dark"] th,
-          [data-theme="dark"] li {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Better text contrast in dark mode */
-          [data-theme="dark"] .card,
-          [data-theme="dark"] .card *,
-          [data-theme="dark"] div[class*="bg-"],
-          [data-theme="dark"] div[class*="bg-"] * {
-            color: rgba(${mode.text.primary}, 1) !important;
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-          }
-          
-          /* Form elements in dark mode */
-          [data-theme="dark"] input,
-          [data-theme="dark"] textarea,
-          [data-theme="dark"] select,
-          [data-theme="dark"] .input {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-            border-color: rgba(${mode.border}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Better muted text in dark mode */
-          [data-theme="dark"] .text-muted-foreground,
-          [data-theme="dark"] .text-slate-400,
-          [data-theme="dark"] .text-slate-500,
-          [data-theme="dark"] .text-gray-400,
-          [data-theme="dark"] .text-gray-500 {
-            color: rgba(${mode.text.secondary}, 1) !important;
-          }
-          
-          /* Contest page specific improvements */
-          [data-theme="dark"] .contest-details,
-          [data-theme="dark"] .contest-card,
-          [data-theme="dark"] .contest-info {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Table and list improvements */
-          [data-theme="dark"] table,
-          [data-theme="dark"] table *,
-          [data-theme="dark"] .table,
-          [data-theme="dark"] .table *,
-          [data-theme="dark"] tbody,
-          [data-theme="dark"] tbody *,
-          [data-theme="dark"] tr,
-          [data-theme="dark"] tr *,
-          [data-theme="dark"] td,
-          [data-theme="dark"] th {
-            color: rgba(${mode.text.primary}, 1) !important;
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-          }
-          
-          /* Button text improvements */
-          [data-theme="dark"] .btn,
-          [data-theme="dark"] button {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix white/light backgrounds in dark mode */
-          [data-theme="dark"] div[class*="bg-white"],
-          [data-theme="dark"] div[class*="bg-gray-50"],
-          [data-theme="dark"] div[class*="bg-gray-100"],
-          [data-theme="dark"] div[class*="bg-slate-50"],
-          [data-theme="dark"] div[class*="bg-slate-100"] {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Specific contest page fixes */
-          [data-theme="dark"] .contest-brief,
-          [data-theme="dark"] .contest-description,
-          [data-theme="dark"] .contest-content {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix gray backgrounds in dark mode */
-          [data-theme="dark"] .bg-gray-50,
-          [data-theme="dark"] .bg-gray-100,
-          [data-theme="dark"] .bg-slate-50,
-          [data-theme="dark"] .bg-slate-100,
-          [data-theme="dark"] div[class*="bg-gray-"],
-          [data-theme="dark"] div[class*="bg-slate-"] {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix prose content in dark mode */
-          [data-theme="dark"] .prose,
-          [data-theme="dark"] .prose *,
-          [data-theme="dark"] .prose-sm,
-          [data-theme="dark"] .prose-sm * {
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-          
-          /* Fix table headers and rows */
-          [data-theme="dark"] .table-header,
-          [data-theme="dark"] .table-row,
-          [data-theme="dark"] thead tr,
-          [data-theme="dark"] tbody tr {
-            background-color: rgba(${mode.background.secondary}, 1) !important;
-          }
-          
-          /* Fix card gradients and backgrounds */
-          [data-theme="dark"] div[class*="from-"],
-          [data-theme="dark"] div[class*="to-"],
-          [data-theme="dark"] div[class*="gradient"] {
-            background: rgba(${mode.background.secondary}, 1) !important;
-            color: rgba(${mode.text.primary}, 1) !important;
-          }
-        ` : ''}
-        
-        /* Text color classes */
-        .text-primary-mode {
-          color: rgba(${mode.text.primary}, 1) !important;
-        }
-        
-        .text-secondary-mode {
-          color: rgba(${mode.text.secondary}, 1) !important;
-        }
-        
-        .text-muted-mode {
-          color: rgba(${mode.text.muted}, 1) !important;
-        }
-        
-        /* Background color classes */
-        .bg-primary-mode {
-          background-color: rgba(${mode.background.primary}, 1) !important;
-        }
-        
-        .bg-secondary-mode {
-          background-color: rgba(${mode.background.secondary}, 1) !important;
-        }
-        
-        .bg-tertiary-mode {
-          background-color: rgba(${mode.background.tertiary}, 1) !important;
-        }
-        
-        /* Border color classes */
-        .border-mode {
-          border-color: rgba(${mode.border}, 0.2) !important;
-        }
-        
-        .border-theme {
-          border-color: rgba(${theme.primary}, 0.2) !important;
-        }
-        
-        /* Additional fixes for common UI components */
-        
-        /* Badge and status components */
-        .badge, .status, .chip {
-          background-color: hsl(var(--secondary)) !important;
-          color: hsl(var(--secondary-foreground)) !important;
-        }
-        
-        /* Dropdown and select components */
-        .dropdown-content,
-        .select-content,
-        .popover-content {
-          background-color: hsl(var(--popover)) !important;
-          color: hsl(var(--popover-foreground)) !important;
-          border-color: hsl(var(--border)) !important;
-        }
-        
-        /* Toast and notification components */
-        .toast,
-        .notification,
-        .alert {
-          background-color: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-          border-color: hsl(var(--border)) !important;
-        }
-        
-        /* Modal and dialog components */
-        .modal,
-        .dialog,
-        .sheet {
-          background-color: hsl(var(--background)) !important;
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Tabs and navigation components */
-        .tabs,
-        .nav-tabs,
-        .tab-content {
-          background-color: hsl(var(--background)) !important;
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Progress and loading components */
-        .progress,
-        .loading,
-        .skeleton {
-          background-color: hsl(var(--muted)) !important;
-        }
-        
-        /* Fix for Radix UI components */
-        [data-radix-popper-content-wrapper] {
-          background-color: hsl(var(--popover)) !important;
-          color: hsl(var(--popover-foreground)) !important;
-        }
-        
-        /* Fix for any remaining white backgrounds */
-        .bg-white {
-          background-color: hsl(var(--background)) !important;
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Fix for contest-specific elements */
-        .contest-thumbnail,
-        .contest-details-panel,
-        .contest-info-card {
-          background-color: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-        }
-        
-        /* Contest page specific fixes */
-        .prose,
-        .prose * {
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        .prose-sm {
-          color: hsl(var(--muted-foreground)) !important;
-        }
-        
-        /* Table styling fixes */
-        .table-container,
-        table,
-        thead,
-        tbody,
-        tr,
-        td,
-        th {
-          background-color: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-        }
-        
-        /* Card content fixes */
-        .card-content,
-        .card-header,
-        .card-title {
-          background-color: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-        }
-        
-        /* Badge fixes */
-        .badge {
-          background-color: hsl(var(--primary)) !important;
-          color: hsl(var(--primary-foreground)) !important;
-        }
-        
-        /* Tab content fixes */
-        .tabs-content,
-        .tab-content {
-          background-color: hsl(var(--background)) !important;
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Comprehensive text color fixes */
-        .text-gray-900,
-        .text-gray-800,
-        .text-gray-700,
-        .text-gray-600,
-        .text-slate-900,
-        .text-slate-800,
-        .text-slate-700,
-        .text-slate-600 {
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        .text-gray-500,
-        .text-gray-400,
-        .text-slate-500,
-        .text-slate-400,
-        .text-slate-300 {
-          color: hsl(var(--muted-foreground)) !important;
-        }
-        
-        /* Background color fixes */
-        .bg-gradient-to-r,
-        .bg-gradient-to-br,
-        .bg-gradient-to-l,
-        .bg-gradient-to-t,
-        .bg-gradient-to-b {
-          background: hsl(var(--card)) !important;
-          color: hsl(var(--card-foreground)) !important;
-        }
-        
-        /* Specific component fixes */
-        [role="tabpanel"],
-        [role="tab"],
-        [role="tablist"] {
-          background-color: hsl(var(--background)) !important;
-          color: hsl(var(--foreground)) !important;
-        }
-        
-        /* Enhanced UX improvements */
-        
-        /* Better focus states */
-        button:focus-visible,
-        input:focus-visible,
-        textarea:focus-visible,
-        select:focus-visible {
-          outline: 2px solid hsl(var(--primary)) !important;
-          outline-offset: 2px !important;
-        }
-        
-        /* Improved hover states */
-        .card:hover {
-          box-shadow: ${currentMode === 'light'
-          ? '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-          : '0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2)'
-        } !important;
-          transform: translateY(-1px) !important;
-          transition: all 0.2s ease !important;
-        }
-        
-        /* Better button styling */
-        button {
-          transition: all 0.2s ease !important;
-        }
-        
-        button:hover {
-          transform: translateY(-1px) !important;
-          box-shadow: ${currentMode === 'light'
-          ? '0 2px 4px -1px rgba(0, 0, 0, 0.1)'
-          : '0 2px 4px -1px rgba(0, 0, 0, 0.3)'
-        } !important;
-        }
-        
-        /* Loading states */
-        .loading {
-          opacity: 0.7 !important;
-          pointer-events: none !important;
-        }
-        
-        /* Better spacing for content */
-        .contest-content {
-          line-height: 1.6 !important;
-        }
-        
-        /* Improved readability */
-        p, li, span {
-          line-height: 1.5 !important;
-        }
-        
-        h1, h2, h3, h4, h5, h6 {
-          line-height: 1.3 !important;
-          margin-bottom: 0.5em !important;
-        }
-
-      `}</style>
+     
 
       {/* Main Layout Container */}
       <div className="flex min-h-screen dashboard-container">
         {/* Desktop Sidebar */}
-        <aside className={cn(
-          "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
-          sidebarCollapsed ? "w-28" : "w-72"
-        )} style={{
-          background: currentMode === 'light'
-            ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
-            : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
-          borderRightColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
-          boxShadow: currentMode === 'light'
-            ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
-            : 'none'
-        }}>
+        <aside
+          className={cn(
+            "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
+            sidebarCollapsed ? "w-28" : "w-72"
+          )}
+          style={{
+            background:
+              currentMode === "light"
+                ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
+                : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
+            borderRightColor: `rgba(${theme.primary}, ${
+              currentMode === "light" ? "0.3" : "0.2"
+            })`,
+            boxShadow:
+              currentMode === "light"
+                ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
+                : "none",
+          }}
+        >
           {/* Sidebar Header - Premium Styling to Match Main Header */}
-          <div className="relative flex h-20 items-center justify-center border-b" style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}>
+          <div
+            className="relative flex h-20 items-center justify-center border-b"
+            style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}
+          >
             {/* Premium Background Effects - Same as Main Header */}
-            <div className="absolute inset-0" style={{
-              background: currentMode === 'light'
-                ? `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
-                : `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
-            }}></div>
-            <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 50%, rgba(${theme.primary}, ${currentMode === 'light' ? '0.05' : '0.1'}), transparent)` }}></div>
-            <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 70% 50%, rgba(${theme.accent}, ${currentMode === 'light' ? '0.03' : '0.08'}), transparent)` }}></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  currentMode === "light"
+                    ? `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
+                    : `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`,
+              }}
+            ></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 30% 50%, rgba(${
+                  theme.primary
+                }, ${currentMode === "light" ? "0.05" : "0.1"}), transparent)`,
+              }}
+            ></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 70% 50%, rgba(${
+                  theme.accent
+                }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
+              }}
+            ></div>
 
             {/* Premium Grid Pattern */}
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
@@ -1195,18 +625,21 @@ function DashboardContent({
             {/* Logo - Centered and Full Width */}
             <div className="relative flex items-center justify-center flex-1 z-10">
               {!sidebarCollapsed ? (
-                <Link href="/" className="flex items-center group transition-all duration-300">
+                <Link
+                  href="/"
+                  className="flex items-center group transition-all duration-300"
+                >
                   <div
                     className={cn(
                       "relative p-3 rounded-lg transition-all duration-300",
-                      currentMode === 'light'
+                      currentMode === "light"
                         ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
                         : "hover:bg-white/5"
                     )}
                     style={{
-                      ...(currentMode === 'light' && {
-                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`
-                      })
+                      ...(currentMode === "light" && {
+                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
+                      }),
                     }}
                   >
                     <Image
@@ -1216,7 +649,7 @@ function DashboardContent({
                       height={40}
                       className={cn(
                         "h-10 w-auto transition-all duration-300",
-                        currentMode === 'light'
+                        currentMode === "light"
                           ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
                           : "filter brightness-110 group-hover:brightness-125"
                       )}
@@ -1224,18 +657,21 @@ function DashboardContent({
                   </div>
                 </Link>
               ) : (
-                <Link href="/" className="flex items-center justify-center group transition-all duration-300">
+                <Link
+                  href="/"
+                  className="flex items-center justify-center group transition-all duration-300"
+                >
                   <div
                     className={cn(
                       "relative p-2 rounded-lg transition-all duration-300",
-                      currentMode === 'light'
+                      currentMode === "light"
                         ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
                         : "hover:bg-white/5"
                     )}
                     style={{
-                      ...(currentMode === 'light' && {
-                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`
-                      })
+                      ...(currentMode === "light" && {
+                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
+                      }),
                     }}
                   >
                     <Image
@@ -1245,7 +681,7 @@ function DashboardContent({
                       height={44}
                       className={cn(
                         "h-11 w-11 transition-all duration-300",
-                        currentMode === 'light'
+                        currentMode === "light"
                           ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
                           : "filter brightness-110 group-hover:brightness-125"
                       )}
@@ -1254,8 +690,6 @@ function DashboardContent({
                 </Link>
               )}
             </div>
-
-
           </div>
 
           {/* Sidebar Content */}
@@ -1263,6 +697,7 @@ function DashboardContent({
             {userRole && (
               <DashboardSidebar
                 userRole={userRole}
+                onChatOpen={() => setIsChatOpen(true)}
                 collapsed={sidebarCollapsed}
               />
             )}
@@ -1279,47 +714,57 @@ function DashboardContent({
             "border items-center justify-center"
           )}
           style={{
-            left: sidebarCollapsed ? '86px' : '240px', // Center of actual sidebar border (adjusted for zoom)
-            backgroundColor: currentMode === 'light'
-              ? `rgba(${mode.background.primary}, 0.9)`
-              : `rgba(${mode.background.secondary}, 0.9)`,
-            borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.2' : '0.15'})`,
-            boxShadow: currentMode === 'light'
-              ? '0 1px 2px rgba(0, 0, 0, 0.05)'
-              : `0 1px 2px rgba(${theme.primary}, 0.1)`,
-            transition: 'box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease',
+            left: sidebarCollapsed ? "86px" : "240px", // Center of actual sidebar border (adjusted for zoom)
+            backgroundColor:
+              currentMode === "light"
+                ? `rgba(${mode.background.primary}, 0.9)`
+                : `rgba(${mode.background.secondary}, 0.9)`,
+            borderColor: `rgba(${theme.primary}, ${
+              currentMode === "light" ? "0.2" : "0.15"
+            })`,
+            boxShadow:
+              currentMode === "light"
+                ? "0 1px 2px rgba(0, 0, 0, 0.05)"
+                : `0 1px 2px rgba(${theme.primary}, 0.1)`,
+            transition:
+              "box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-            e.currentTarget.style.backgroundColor = currentMode === 'light'
-              ? `rgba(${theme.primary}, 0.08)`
-              : `rgba(${theme.primary}, 0.12)`;
+            e.currentTarget.style.backgroundColor =
+              currentMode === "light"
+                ? `rgba(${theme.primary}, 0.08)`
+                : `rgba(${theme.primary}, 0.12)`;
             // Subtle glow effect without movement
-            e.currentTarget.style.boxShadow = currentMode === 'light'
-              ? `0 0 8px rgba(${theme.primary}, 0.3), 0 2px 4px rgba(0, 0, 0, 0.1)`
-              : `0 0 8px rgba(${theme.primary}, 0.4), 0 2px 4px rgba(${theme.primary}, 0.2)`;
+            e.currentTarget.style.boxShadow =
+              currentMode === "light"
+                ? `0 0 8px rgba(${theme.primary}, 0.3), 0 2px 4px rgba(0, 0, 0, 0.1)`
+                : `0 0 8px rgba(${theme.primary}, 0.4), 0 2px 4px rgba(${theme.primary}, 0.2)`;
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${currentMode === 'light' ? '0.2' : '0.15'})`;
-            e.currentTarget.style.backgroundColor = currentMode === 'light'
-              ? `rgba(${mode.background.primary}, 0.9)`
-              : `rgba(${mode.background.secondary}, 0.9)`;
-            e.currentTarget.style.boxShadow = currentMode === 'light'
-              ? '0 1px 2px rgba(0, 0, 0, 0.05)'
-              : `0 1px 2px rgba(${theme.primary}, 0.1)`;
+            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${
+              currentMode === "light" ? "0.2" : "0.15"
+            })`;
+            e.currentTarget.style.backgroundColor =
+              currentMode === "light"
+                ? `rgba(${mode.background.primary}, 0.9)`
+                : `rgba(${mode.background.secondary}, 0.9)`;
+            e.currentTarget.style.boxShadow =
+              currentMode === "light"
+                ? "0 1px 2px rgba(0, 0, 0, 0.05)"
+                : `0 1px 2px rgba(${theme.primary}, 0.1)`;
           }}
         >
           {sidebarCollapsed ? (
             // Right arrow for expand (show sidebar)
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
               <path
                 d="M9 18L15 12L9 6"
-                stroke={currentMode === 'light' ? `rgba(${mode.text.primary}, 0.8)` : `rgba(${theme.primaryLight}, 0.9)`}
+                stroke={
+                  currentMode === "light"
+                    ? `rgba(${mode.text.primary}, 0.8)`
+                    : `rgba(${theme.primaryLight}, 0.9)`
+                }
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -1327,58 +772,87 @@ function DashboardContent({
             </svg>
           ) : (
             // Left arrow for collapse (hide sidebar)
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
               <path
                 d="M15 18L9 12L15 6"
-                stroke={currentMode === 'light' ? `rgba(${mode.text.primary}, 0.8)` : `rgba(${theme.primaryLight}, 0.9)`}
+                stroke={
+                  currentMode === "light"
+                    ? `rgba(${mode.text.primary}, 0.8)`
+                    : `rgba(${theme.primaryLight}, 0.9)`
+                }
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
             </svg>
           )}
-          <span className="sr-only">{sidebarCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}</span>
+          <span className="sr-only">
+            {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          </span>
         </Button>
 
         {/* Main Content Area */}
-        <div className={cn(
-          "flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out",
-          sidebarCollapsed ? "lg:ml-28" : "lg:ml-72"
-        )}>
+        <div
+          className={cn(
+            "flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out",
+            sidebarCollapsed ? "lg:ml-28" : "lg:ml-72"
+          )}
+        >
           {/* Premium Dashboard Header */}
-          <header className="sticky top-0 z-40 w-full" style={{
-            boxShadow: currentMode === 'light' ? '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)' : 'none'
-          }}>
+          <header
+            className="sticky top-0 z-40 w-full"
+            style={{
+              boxShadow:
+                currentMode === "light"
+                  ? "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)"
+                  : "none",
+            }}
+          >
             {/* Premium Background with Strategic Gradients */}
-            <div className="absolute inset-0" style={{
-              background: currentMode === 'light'
-                ? `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
-                : `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
-            }}></div>
-            <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 30% 50%, rgba(${theme.primary}, ${currentMode === 'light' ? '0.05' : '0.1'}), transparent)` }}></div>
-            <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 70% 50%, rgba(${theme.accent}, ${currentMode === 'light' ? '0.03' : '0.08'}), transparent)` }}></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  currentMode === "light"
+                    ? `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
+                    : `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`,
+              }}
+            ></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 30% 50%, rgba(${
+                  theme.primary
+                }, ${currentMode === "light" ? "0.05" : "0.1"}), transparent)`,
+              }}
+            ></div>
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 70% 50%, rgba(${
+                  theme.accent
+                }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
+              }}
+            ></div>
 
             {/* Premium Grid Pattern */}
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
 
             {/* Refined Border */}
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent" style={{
-              backgroundColor: currentMode === 'light'
-                ? `rgba(${mode.border}, 1)`
-                : `rgba(${theme.primary}, 0.3)`
-            }}></div>
+            <div
+              className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent"
+              style={{
+                backgroundColor:
+                  currentMode === "light"
+                    ? `rgba(${mode.border}, 1)`
+                    : `rgba(${theme.primary}, 0.3)`,
+              }}
+            ></div>
 
             <div className="relative">
               <div className="flex h-20 items-center justify-between px-6">
                 {/* Left Side: Sidebar Toggle + Mobile Menu + Breadcrumb */}
                 <div className="flex items-center gap-4">
-
-
                   {/* Mobile Menu Trigger */}
                   <Sheet>
                     <SheetTrigger asChild>
@@ -1387,12 +861,18 @@ function DashboardContent({
                         size="icon"
                         className="lg:hidden h-8 w-8 backdrop-blur-sm transition-all duration-300"
                         style={{
-                          backgroundColor: currentMode === 'light'
-                            ? `rgba(${mode.background.tertiary}, 1)`
-                            : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
+                          backgroundColor:
+                            currentMode === "light"
+                              ? `rgba(${mode.background.tertiary}, 1)`
+                              : `rgba(${mode.background.secondary}, 0.5)`,
+                          borderColor: `rgba(${theme.primary}, ${
+                            currentMode === "light" ? "0.3" : "0.2"
+                          })`,
                           color: `rgba(${mode.text.muted}, 1)`,
-                          boxShadow: currentMode === 'light' ? '0 1px 2px 0 rgba(0, 0, 0, 0.05)' : 'none'
+                          boxShadow:
+                            currentMode === "light"
+                              ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+                              : "none",
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -1420,7 +900,9 @@ function DashboardContent({
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.08),transparent)]"></div>
                         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
 
-                        <SheetTitle className="relative font-semibold text-white z-10">Game Of Creators</SheetTitle>
+                        <SheetTitle className="relative font-semibold text-white z-10">
+                          Game Of Creators
+                        </SheetTitle>
                         <SheetDescription className="sr-only">
                           Dashboard navigation menu
                         </SheetDescription>
@@ -1430,6 +912,7 @@ function DashboardContent({
                           {userRole && (
                             <DashboardSidebar
                               userRole={userRole}
+                              onChatOpen={() => setIsChatOpen(true)}
                               collapsed={false}
                             />
                           )}
@@ -1438,10 +921,15 @@ function DashboardContent({
                     </SheetContent>
                   </Sheet>
 
-                  <Separator orientation="vertical" className={cn(
-                    "h-6",
-                    currentMode === 'light' ? "bg-slate-300" : "bg-violet-400/20"
-                  )} />
+                  <Separator
+                    orientation="vertical"
+                    className={cn(
+                      "h-6",
+                      currentMode === "light"
+                        ? "bg-slate-300"
+                        : "bg-violet-400/20"
+                    )}
+                  />
 
                   {/* Enhanced Breadcrumb */}
                   <Breadcrumb>
@@ -1451,7 +939,7 @@ function DashboardContent({
                           href="/dashboard"
                           className={cn(
                             "transition-colors duration-200",
-                            currentMode === 'light'
+                            currentMode === "light"
                               ? "text-slate-600 hover:text-slate-900"
                               : "text-slate-300 hover:text-white"
                           )}
@@ -1461,15 +949,23 @@ function DashboardContent({
                       </BreadcrumbItem>
                       {pathname !== "/dashboard" && (
                         <>
-                          <BreadcrumbSeparator className={cn(
-                            "hidden md:block",
-                            currentMode === 'light' ? "text-slate-400" : "text-slate-500"
-                          )} />
+                          <BreadcrumbSeparator
+                            className={cn(
+                              "hidden md:block",
+                              currentMode === "light"
+                                ? "text-slate-400"
+                                : "text-slate-500"
+                            )}
+                          />
                           <BreadcrumbItem>
-                            <BreadcrumbPage className={cn(
-                              "font-medium",
-                              currentMode === 'light' ? "text-slate-900" : "text-white"
-                            )}>
+                            <BreadcrumbPage
+                              className={cn(
+                                "font-medium",
+                                currentMode === "light"
+                                  ? "text-slate-900"
+                                  : "text-white"
+                              )}
+                            >
                               {currentPageTitle}
                             </BreadcrumbPage>
                           </BreadcrumbItem>
@@ -1489,12 +985,18 @@ function DashboardContent({
                       onClick={() => toggleFullscreen()}
                       className="h-8 w-8 backdrop-blur-sm transition-all duration-300"
                       style={{
-                        backgroundColor: currentMode === 'light'
-                          ? `rgba(${mode.background.tertiary}, 1)`
-                          : `rgba(${mode.background.secondary}, 0.5)`,
-                        borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
+                        backgroundColor:
+                          currentMode === "light"
+                            ? `rgba(${mode.background.tertiary}, 1)`
+                            : `rgba(${mode.background.secondary}, 0.5)`,
+                        borderColor: `rgba(${theme.primary}, ${
+                          currentMode === "light" ? "0.3" : "0.2"
+                        })`,
                         color: `rgba(${mode.text.muted}, 1)`,
-                        boxShadow: currentMode === 'light' ? '0 1px 2px 0 rgba(0, 0, 0, 0.05)' : 'none'
+                        boxShadow:
+                          currentMode === "light"
+                            ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+                            : "none",
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -1520,13 +1022,20 @@ function DashboardContent({
                   <div
                     className="flex items-center gap-2 px-3 py-1 rounded-lg border text-xs font-medium transition-all duration-300 cursor-pointer hover:scale-105"
                     style={{
-                      backgroundColor: currentMode === 'light'
-                        ? `rgba(${mode.background.tertiary}, 0.8)`
-                        : `rgba(${mode.background.secondary}, 0.3)`,
-                      borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.2' : '0.15'})`,
+                      backgroundColor:
+                        currentMode === "light"
+                          ? `rgba(${mode.background.tertiary}, 0.8)`
+                          : `rgba(${mode.background.secondary}, 0.3)`,
+                      borderColor: `rgba(${theme.primary}, ${
+                        currentMode === "light" ? "0.2" : "0.15"
+                      })`,
                       color: `rgba(${mode.text.secondary}, 1)`,
                     }}
-                    title={`Click to toggle: ${isCompactMode ? 'Switch to Normal (100%)' : 'Switch to Compact (85%)'}`}
+                    title={`Click to toggle: ${
+                      isCompactMode
+                        ? "Switch to Normal (100%)"
+                        : "Switch to Compact (85%)"
+                    }`}
                     onClick={() => toggleCompactMode(!isCompactMode)}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -1534,10 +1043,13 @@ function DashboardContent({
                       e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${currentMode === 'light' ? '0.2' : '0.15'})`;
-                      e.currentTarget.style.backgroundColor = currentMode === 'light'
-                        ? `rgba(${mode.background.tertiary}, 0.8)`
-                        : `rgba(${mode.background.secondary}, 0.3)`;
+                      e.currentTarget.style.borderColor = `rgba(${
+                        theme.primary
+                      }, ${currentMode === "light" ? "0.2" : "0.15"})`;
+                      e.currentTarget.style.backgroundColor =
+                        currentMode === "light"
+                          ? `rgba(${mode.background.tertiary}, 0.8)`
+                          : `rgba(${mode.background.secondary}, 0.3)`;
                       e.currentTarget.style.color = `rgba(${mode.text.secondary}, 1)`;
                     }}
                   >
@@ -1548,25 +1060,39 @@ function DashboardContent({
                       viewBox="0 0 24 24"
                       stroke="currentColor"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                      />
                     </svg>
-                    {isCompactMode ? '85%' : '100%'}
+                    {isCompactMode ? "85%" : "100%"}
                   </div>
 
                   {/* Settings Panel Trigger - Premium Style */}
-                  <Sheet open={settingsPanelOpen} onOpenChange={setSettingsPanelOpen}>
+                  <Sheet
+                    open={settingsPanelOpen}
+                    onOpenChange={setSettingsPanelOpen}
+                  >
                     <SheetTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 backdrop-blur-sm transition-all duration-300"
                         style={{
-                          backgroundColor: currentMode === 'light'
-                            ? `rgba(${mode.background.tertiary}, 1)`
-                            : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
+                          backgroundColor:
+                            currentMode === "light"
+                              ? `rgba(${mode.background.tertiary}, 1)`
+                              : `rgba(${mode.background.secondary}, 0.5)`,
+                          borderColor: `rgba(${theme.primary}, ${
+                            currentMode === "light" ? "0.3" : "0.2"
+                          })`,
                           color: `rgba(${mode.text.muted}, 1)`,
-                          boxShadow: currentMode === 'light' ? '0 1px 2px 0 rgba(0, 0, 0, 0.05)' : 'none'
+                          boxShadow:
+                            currentMode === "light"
+                              ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+                              : "none",
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -1579,9 +1105,24 @@ function DashboardContent({
                           e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
                         }}
                       >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                          />
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          />
                         </svg>
                         <span className="sr-only">Dashboard Customization</span>
                       </Button>
@@ -1600,19 +1141,19 @@ function DashboardContent({
                       <div
                         className="absolute inset-0"
                         style={{
-                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`
+                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`,
                         }}
                       ></div>
                       <div
                         className="absolute inset-0"
                         style={{
-                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`
+                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`,
                         }}
                       ></div>
                       <div
                         className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"
                         style={{
-                          opacity: 0.3
+                          opacity: 0.3,
                         }}
                       ></div>
 
@@ -1621,20 +1162,20 @@ function DashboardContent({
                         <SheetHeader
                           className="p-6 border-b flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, 0.15)`
+                            borderColor: `rgba(${theme.primary}, 0.15)`,
                           }}
                         >
                           <div className="flex items-center gap-3">
                             <div
                               className="w-12 h-12 rounded-xl flex items-center justify-center"
                               style={{
-                                backgroundColor: `rgba(${theme.primary}, 0.2)`
+                                backgroundColor: `rgba(${theme.primary}, 0.2)`,
                               }}
                             >
                               <Settings
                                 className="h-6 w-6"
                                 style={{
-                                  color: `rgba(${theme.primary}, 1)`
+                                  color: `rgba(${theme.primary}, 1)`,
                                 }}
                               />
                             </div>
@@ -1642,7 +1183,7 @@ function DashboardContent({
                               <SheetTitle
                                 className="text-lg font-semibold"
                                 style={{
-                                  color: `rgba(${mode.text.primary}, 1)`
+                                  color: `rgba(${mode.text.primary}, 1)`,
                                 }}
                               >
                                 Dashboard Customization
@@ -1650,7 +1191,7 @@ function DashboardContent({
                               <p
                                 className="text-sm"
                                 style={{
-                                  color: `rgba(${mode.text.secondary}, 1)`
+                                  color: `rgba(${mode.text.secondary}, 1)`,
                                 }}
                               >
                                 Customize your dashboard experience
@@ -1750,15 +1291,32 @@ function DashboardContent({
                               <div className="flex items-center gap-3">
                                 <div
                                   className="w-10 h-10 rounded-lg flex items-center justify-center"
-                                  style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
+                                  style={{
+                                    backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                  }}
                                 >
-                                  <Contrast className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                  <Contrast
+                                    className="h-5 w-5"
+                                    style={{
+                                      color: `rgba(${theme.primaryLight}, 1)`,
+                                    }}
+                                  />
                                 </div>
                                 <div>
-                                  <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
+                                  <div
+                                    className="font-medium text-sm"
+                                    style={{
+                                      color: `rgba(${mode.text.primary}, 1)`,
+                                    }}
+                                  >
                                     Colorful Mode
                                   </div>
-                                  <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
+                                  <div
+                                    className="text-xs"
+                                    style={{
+                                      color: `rgba(${mode.text.muted}, 1)`,
+                                    }}
+                                  >
                                     Enable vibrant theme colors
                                   </div>
                                 </div>
@@ -1781,19 +1339,43 @@ function DashboardContent({
                                 <div className="flex items-center gap-3">
                                   <div
                                     className="w-10 h-10 rounded-lg flex items-center justify-center"
-                                    style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
+                                    style={{
+                                      backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                    }}
                                   >
                                     {isFullscreen ? (
-                                      <Minimize className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                      <Minimize
+                                        className="h-5 w-5"
+                                        style={{
+                                          color: `rgba(${theme.primaryLight}, 1)`,
+                                        }}
+                                      />
                                     ) : (
-                                      <Maximize className="h-5 w-5" style={{ color: `rgba(${theme.primaryLight}, 1)` }} />
+                                      <Maximize
+                                        className="h-5 w-5"
+                                        style={{
+                                          color: `rgba(${theme.primaryLight}, 1)`,
+                                        }}
+                                      />
                                     )}
                                   </div>
                                   <div>
-                                    <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
-                                      {isFullscreen ? 'Exit Full Screen' : 'Full Screen Mode'}
+                                    <div
+                                      className="font-medium text-sm"
+                                      style={{
+                                        color: `rgba(${mode.text.primary}, 1)`,
+                                      }}
+                                    >
+                                      {isFullscreen
+                                        ? "Exit Full Screen"
+                                        : "Full Screen Mode"}
                                     </div>
-                                    <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
+                                    <div
+                                      className="text-xs"
+                                      style={{
+                                        color: `rgba(${mode.text.muted}, 1)`,
+                                      }}
+                                    >
                                       Toggle full screen view
                                     </div>
                                   </div>
@@ -1816,24 +1398,45 @@ function DashboardContent({
                               <div className="flex items-center gap-3">
                                 <div
                                   className="w-10 h-10 rounded-lg flex items-center justify-center"
-                                  style={{ backgroundColor: `rgba(${theme.primary}, 0.2)` }}
+                                  style={{
+                                    backgroundColor: `rgba(${theme.primary}, 0.2)`,
+                                  }}
                                 >
                                   <svg
                                     className="h-5 w-5"
-                                    style={{ color: `rgba(${theme.primaryLight}, 1)` }}
+                                    style={{
+                                      color: `rgba(${theme.primaryLight}, 1)`,
+                                    }}
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
                                   >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                                    />
                                   </svg>
                                 </div>
                                 <div>
-                                  <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
+                                  <div
+                                    className="font-medium text-sm"
+                                    style={{
+                                      color: `rgba(${mode.text.primary}, 1)`,
+                                    }}
+                                  >
                                     Compact Mode
                                   </div>
-                                  <div className="text-xs" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
-                                    {isCompactMode ? '85% zoom - Perfect for 14" screens' : '100% zoom - Standard for 15"+ screens'}
+                                  <div
+                                    className="text-xs"
+                                    style={{
+                                      color: `rgba(${mode.text.muted}, 1)`,
+                                    }}
+                                  >
+                                    {isCompactMode
+                                      ? '85% zoom - Perfect for 14" screens'
+                                      : '100% zoom - Standard for 15"+ screens'}
                                   </div>
                                 </div>
                               </div>
@@ -1903,18 +1506,27 @@ function DashboardContent({
                   </Sheet>
 
                   {/* User Profile Sidebar Trigger - Premium Style */}
-                  <Sheet open={profileSidebarOpen} onOpenChange={setProfileSidebarOpen}>
+                  <Sheet
+                    open={profileSidebarOpen}
+                    onOpenChange={setProfileSidebarOpen}
+                  >
                     <SheetTrigger asChild>
                       <Button
                         variant="ghost"
                         className="h-8 px-3 backdrop-blur-sm transition-all duration-300"
                         style={{
-                          backgroundColor: currentMode === 'light'
-                            ? `rgba(${mode.background.tertiary}, 1)`
-                            : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${currentMode === 'light' ? '0.3' : '0.2'})`,
+                          backgroundColor:
+                            currentMode === "light"
+                              ? `rgba(${mode.background.tertiary}, 1)`
+                              : `rgba(${mode.background.secondary}, 0.5)`,
+                          borderColor: `rgba(${theme.primary}, ${
+                            currentMode === "light" ? "0.3" : "0.2"
+                          })`,
                           color: `rgba(${mode.text.muted}, 1)`,
-                          boxShadow: currentMode === 'light' ? '0 1px 2px 0 rgba(0, 0, 0, 0.05)' : 'none'
+                          boxShadow:
+                            currentMode === "light"
+                              ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
+                              : "none",
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -1940,7 +1552,10 @@ function DashboardContent({
                               {avatarFallback}
                             </div>
                           )}
-                          <span className="hidden sm:block text-sm font-medium truncate max-w-[120px]" title={displayName}>
+                          <span
+                            className="hidden sm:block text-sm font-medium truncate max-w-[120px]"
+                            title={displayName}
+                          >
                             {displayName}
                           </span>
                         </div>
@@ -1952,29 +1567,32 @@ function DashboardContent({
                       side="right"
                       className="w-80 p-0 border-l"
                       style={{
-                        background: currentMode === 'dark'
-                          ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
-                          : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
-                        borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.3' : '0.2'})`,
+                        background:
+                          currentMode === "dark"
+                            ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
+                            : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
+                        borderColor: `rgba(${theme.primary}, ${
+                          currentMode === "dark" ? "0.3" : "0.2"
+                        })`,
                       }}
                     >
                       {/* Premium Background Effects */}
                       <div
                         className="absolute inset-0"
                         style={{
-                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`
+                          background: `radial-gradient(circle at 70% 30%, rgba(${theme.primary}, 0.1), transparent)`,
                         }}
                       ></div>
                       <div
                         className="absolute inset-0"
                         style={{
-                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`
+                          background: `radial-gradient(circle at 30% 70%, rgba(${theme.accent}, 0.08), transparent)`,
                         }}
                       ></div>
                       <div
                         className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"
                         style={{
-                          opacity: currentMode === 'dark' ? 1 : 0.3
+                          opacity: currentMode === "dark" ? 1 : 0.3,
                         }}
                       ></div>
 
@@ -1983,7 +1601,9 @@ function DashboardContent({
                         <SheetHeader
                           className="p-6 border-b flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.2' : '0.15'})`
+                            borderColor: `rgba(${theme.primary}, ${
+                              currentMode === "dark" ? "0.2" : "0.15"
+                            })`,
                           }}
                         >
                           <div className="flex items-center gap-4">
@@ -1991,14 +1611,17 @@ function DashboardContent({
                               <Avatar
                                 className="h-16 w-16"
                                 style={{
-                                  border: `2px solid rgba(${theme.primary}, 0.3)`
+                                  border: `2px solid rgba(${theme.primary}, 0.3)`,
                                 }}
                               >
-                                <AvatarImage src={avatarSrc} alt={displayName} />
+                                <AvatarImage
+                                  src={avatarSrc}
+                                  alt={displayName}
+                                />
                                 <AvatarFallback
                                   className="text-white text-xl font-bold"
                                   style={{
-                                    background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`
+                                    background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`,
                                   }}
                                 >
                                   {avatarFallback}
@@ -2009,7 +1632,7 @@ function DashboardContent({
                                 className="w-16 h-16 rounded-full flex items-center justify-center text-white text-xl font-bold"
                                 style={{
                                   background: `linear-gradient(135deg, rgba(${theme.primary}, 1), rgba(${theme.primaryDark}, 1))`,
-                                  border: `2px solid rgba(${theme.primary}, 0.3)`
+                                  border: `2px solid rgba(${theme.primary}, 0.3)`,
                                 }}
                               >
                                 {avatarFallback}
@@ -2019,7 +1642,7 @@ function DashboardContent({
                               <SheetTitle
                                 className="text-lg font-semibold truncate max-w-full"
                                 style={{
-                                  color: `rgba(${mode.text.primary}, 1)`
+                                  color: `rgba(${mode.text.primary}, 1)`,
                                 }}
                                 title={displayName}
                               >
@@ -2028,7 +1651,7 @@ function DashboardContent({
                               <p
                                 className="text-sm truncate max-w-full"
                                 style={{
-                                  color: `rgba(${mode.text.secondary}, 1)`
+                                  color: `rgba(${mode.text.secondary}, 1)`,
                                 }}
                                 title={displayEmail}
                               >
@@ -2040,10 +1663,14 @@ function DashboardContent({
                                   style={{
                                     backgroundColor: `rgba(${theme.primary}, 0.2)`,
                                     color: `rgba(${theme.primary}, 1)`,
-                                    borderColor: `rgba(${theme.primary}, 0.2)`
+                                    borderColor: `rgba(${theme.primary}, 0.2)`,
                                   }}
                                 >
-                                  {userRole === "advertiser" ? "Advertiser" : userRole === "creator" ? "Creator" : "Admin"}
+                                  {userRole === "advertiser"
+                                    ? "Advertiser"
+                                    : userRole === "creator"
+                                    ? "Creator"
+                                    : "Admin"}
                                 </span>
                               </div>
                             </div>
@@ -2063,7 +1690,7 @@ function DashboardContent({
                                 <h3
                                   className="text-sm font-semibold uppercase tracking-wider"
                                   style={{
-                                    color: `rgba(${mode.text.muted}, 1)`
+                                    color: `rgba(${mode.text.muted}, 1)`,
                                   }}
                                 >
                                   Current Plan
@@ -2072,7 +1699,7 @@ function DashboardContent({
                                   className="p-4 rounded-xl border"
                                   style={{
                                     background: `linear-gradient(135deg, rgba(${theme.primary}, 0.2), rgba(${theme.primaryDark}, 0.2))`,
-                                    borderColor: `rgba(${theme.primary}, 0.3)`
+                                    borderColor: `rgba(${theme.primary}, 0.3)`,
                                   }}
                                 >
                                   <div className="flex items-center justify-between">
@@ -2080,7 +1707,7 @@ function DashboardContent({
                                       <div
                                         className="font-semibold"
                                         style={{
-                                          color: `rgba(${mode.text.primary}, 1)`
+                                          color: `rgba(${mode.text.primary}, 1)`,
                                         }}
                                       >
                                         {currentPlan.name} Plan
@@ -2088,41 +1715,49 @@ function DashboardContent({
                                       <div
                                         className="text-xs"
                                         style={{
-                                          color: `rgba(${theme.primary}, 1)`
+                                          color: `rgba(${theme.primary}, 1)`,
                                         }}
                                       >
                                         {currentPlan.price === 0
                                           ? "Basic features included"
-                                          : `$${(currentPlan.price / 100).toFixed(2)}/month`
-                                        }
+                                          : `$${(
+                                              currentPlan.price / 100
+                                            ).toFixed(2)}/month`}
                                       </div>
                                     </div>
                                     <div
                                       className="w-10 h-10 rounded-lg flex items-center justify-center"
                                       style={{
-                                        backgroundColor: `rgba(${theme.primary}, 0.3)`
+                                        backgroundColor: `rgba(${theme.primary}, 0.3)`,
                                       }}
                                     >
                                       <svg
                                         className="h-5 w-5"
                                         style={{
-                                          color: `rgba(${theme.primary}, 1)`
+                                          color: `rgba(${theme.primary}, 1)`,
                                         }}
                                         fill="none"
                                         viewBox="0 0 24 24"
                                         stroke="currentColor"
                                       >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                                        />
                                       </svg>
                                     </div>
                                   </div>
-                                  {currentPlan.name !== 'CHAMPION' && (
+                                  {currentPlan.name !== "CHAMPION" && (
                                     <Link
                                       href="/dashboard/billing"
-                                      onClick={() => setProfileSidebarOpen(false)}
+                                      onClick={() =>
+                                        setProfileSidebarOpen(false)
+                                      }
                                       className="inline-flex items-center gap-2 mt-3 text-xs transition-colors"
                                       style={{
-                                        color: `rgba(${theme.primary}, 1)`
+                                        color: `rgba(${theme.primary}, 1)`,
                                       }}
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
@@ -2144,7 +1779,7 @@ function DashboardContent({
                               <h3
                                 className="text-sm font-semibold uppercase tracking-wider"
                                 style={{
-                                  color: `rgba(${mode.text.muted}, 1)`
+                                  color: `rgba(${mode.text.muted}, 1)`,
                                 }}
                               >
                                 Quick Actions
@@ -2157,7 +1792,7 @@ function DashboardContent({
                                   style={{
                                     backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
                                     borderColor: `rgba(${theme.primary}, 0.2)`,
-                                    color: `rgba(${mode.text.secondary}, 1)`
+                                    color: `rgba(${mode.text.secondary}, 1)`,
                                   }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -2173,23 +1808,25 @@ function DashboardContent({
                                   <div
                                     className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
                                     style={{
-                                      backgroundColor: `rgba(${theme.primary}, 0.2)`
+                                      backgroundColor: `rgba(${theme.primary}, 0.2)`,
                                     }}
                                   >
                                     <User
                                       className="h-4 w-4"
                                       style={{
-                                        color: `rgba(${theme.primary}, 1)`
+                                        color: `rgba(${theme.primary}, 1)`,
                                       }}
                                     />
                                   </div>
                                   <div className="flex-1">
-                                    <div className="font-medium text-sm">Edit Profile</div>
+                                    <div className="font-medium text-sm">
+                                      Edit Profile
+                                    </div>
                                   </div>
                                   <ChevronRight
                                     className="h-3 w-3 transition-all group-hover:translate-x-0.5"
                                     style={{
-                                      color: `rgba(${mode.text.muted}, 1)`
+                                      color: `rgba(${mode.text.muted}, 1)`,
                                     }}
                                   />
                                 </Link>
@@ -2202,7 +1839,7 @@ function DashboardContent({
                                   style={{
                                     backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
                                     borderColor: `rgba(${theme.primary}, 0.2)`,
-                                    color: `rgba(${mode.text.secondary}, 1)`
+                                    color: `rgba(${mode.text.secondary}, 1)`,
                                   }}
                                   onMouseEnter={(e) => {
                                     e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -2218,23 +1855,25 @@ function DashboardContent({
                                   <div
                                     className="w-8 h-8 rounded-lg flex items-center justify-center group-hover:opacity-80 transition-colors"
                                     style={{
-                                      backgroundColor: `rgba(${theme.primary}, 0.2)`
+                                      backgroundColor: `rgba(${theme.primary}, 0.2)`,
                                     }}
                                   >
                                     <Settings
                                       className="h-4 w-4"
                                       style={{
-                                        color: `rgba(${theme.primary}, 1)`
+                                        color: `rgba(${theme.primary}, 1)`,
                                       }}
                                     />
                                   </div>
                                   <div className="flex-1 text-left">
-                                    <div className="font-medium text-sm">Dashboard Customization</div>
+                                    <div className="font-medium text-sm">
+                                      Dashboard Customization
+                                    </div>
                                   </div>
                                   <ChevronRight
                                     className="h-3 w-3 transition-all group-hover:translate-x-0.5"
                                     style={{
-                                      color: `rgba(${mode.text.muted}, 1)`
+                                      color: `rgba(${mode.text.muted}, 1)`,
                                     }}
                                   />
                                 </button>
@@ -2246,7 +1885,7 @@ function DashboardContent({
                               <h3
                                 className="text-sm font-semibold uppercase tracking-wider"
                                 style={{
-                                  color: `rgba(${mode.text.muted}, 1)`
+                                  color: `rgba(${mode.text.muted}, 1)`,
                                 }}
                               >
                                 Account Status
@@ -2255,35 +1894,44 @@ function DashboardContent({
                                 className="p-3 rounded-lg border"
                                 style={{
                                   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
-                                  borderColor: profileData.isActive ? 'rgba(34, 197, 94, 0.2)' : 'rgba(244, 63, 94, 0.2)'
+                                  borderColor: profileData.isActive
+                                    ? "rgba(34, 197, 94, 0.2)"
+                                    : "rgba(244, 63, 94, 0.2)",
                                 }}
                               >
                                 <div className="flex items-center gap-2">
                                   <div
                                     className="w-2 h-2 rounded-full"
                                     style={{
-                                      backgroundColor: profileData.isActive ? 'rgb(34, 197, 94)' : 'rgb(244, 63, 94)'
+                                      backgroundColor: profileData.isActive
+                                        ? "rgb(34, 197, 94)"
+                                        : "rgb(244, 63, 94)",
                                     }}
                                   ></div>
                                   <span
                                     className="text-sm font-medium"
                                     style={{
-                                      color: profileData.isActive ? 'rgb(74, 222, 128)' : 'rgb(251, 113, 133)'
+                                      color: profileData.isActive
+                                        ? "rgb(74, 222, 128)"
+                                        : "rgb(251, 113, 133)",
                                     }}
                                   >
-                                    {profileData.isActive ? "Active" : "Inactive"}
+                                    {profileData.isActive
+                                      ? "Active"
+                                      : "Inactive"}
                                   </span>
                                 </div>
                                 <p
                                   className="text-xs mt-1"
                                   style={{
-                                    color: profileData.isActive ? 'rgba(34, 197, 94, 0.7)' : 'rgba(244, 63, 94, 0.7)'
+                                    color: profileData.isActive
+                                      ? "rgba(34, 197, 94, 0.7)"
+                                      : "rgba(244, 63, 94, 0.7)",
                                   }}
                                 >
                                   {profileData.isActive
                                     ? "Your account is active and fully functional"
-                                    : "Your account is currently inactive"
-                                  }
+                                    : "Your account is currently inactive"}
                                 </p>
                               </div>
                             </div>
@@ -2294,7 +1942,9 @@ function DashboardContent({
                         <div
                           className="p-6 border-t flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, ${currentMode === 'dark' ? '0.2' : '0.15'})`
+                            borderColor: `rgba(${theme.primary}, ${
+                              currentMode === "dark" ? "0.2" : "0.15"
+                            })`,
                           }}
                         >
                           <Button
@@ -2302,31 +1952,37 @@ function DashboardContent({
                             variant="ghost"
                             className="w-full justify-start gap-3 p-3 h-auto border transition-all duration-300"
                             style={{
-                              backgroundColor: 'rgba(244, 63, 94, 0.2)',
-                              borderColor: 'rgba(244, 63, 94, 0.2)',
-                              color: 'rgb(251, 113, 133)'
+                              backgroundColor: "rgba(244, 63, 94, 0.2)",
+                              borderColor: "rgba(244, 63, 94, 0.2)",
+                              color: "rgb(251, 113, 133)",
                             }}
                             onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
-                              e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.1)';
-                              e.currentTarget.style.color = 'rgb(248, 113, 113)';
+                              e.currentTarget.style.borderColor =
+                                "rgba(244, 63, 94, 0.4)";
+                              e.currentTarget.style.backgroundColor =
+                                "rgba(244, 63, 94, 0.1)";
+                              e.currentTarget.style.color =
+                                "rgb(248, 113, 113)";
                             }}
                             onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.2)';
-                              e.currentTarget.style.backgroundColor = 'rgba(244, 63, 94, 0.2)';
-                              e.currentTarget.style.color = 'rgb(251, 113, 133)';
+                              e.currentTarget.style.borderColor =
+                                "rgba(244, 63, 94, 0.2)";
+                              e.currentTarget.style.backgroundColor =
+                                "rgba(244, 63, 94, 0.2)";
+                              e.currentTarget.style.color =
+                                "rgb(251, 113, 133)";
                             }}
                           >
                             <div
                               className="w-10 h-10 rounded-lg flex items-center justify-center"
                               style={{
-                                backgroundColor: 'rgba(244, 63, 94, 0.2)'
+                                backgroundColor: "rgba(244, 63, 94, 0.2)",
                               }}
                             >
                               <LogOut
                                 className="h-5 w-5"
                                 style={{
-                                  color: 'rgb(244, 63, 94)'
+                                  color: "rgb(244, 63, 94)",
                                 }}
                               />
                             </div>
@@ -2335,7 +1991,7 @@ function DashboardContent({
                               <div
                                 className="text-xs"
                                 style={{
-                                  color: 'rgba(244, 63, 94, 0.8)'
+                                  color: "rgba(244, 63, 94, 0.8)",
                                 }}
                               >
                                 End your session
@@ -2355,6 +2011,14 @@ function DashboardContent({
           <main className="flex-1 dashboard-main-content">
             <div className="p-6 md:p-8">
               <Suspense fallback={<LoadingPlaceholder />}>{children}</Suspense>
+
+              {/* Chat Popup */}
+              {isChatOpen && (
+                <ChatSuppport
+                  onClose={() => setIsChatOpen(false)}
+                  email={displayEmail}
+                />
+              )}
             </div>
           </main>
         </div>
