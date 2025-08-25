@@ -9,5 +9,11 @@ export async function GET(request: NextRequest) {
     // @ts-ignore
     ip = request.ip || request.socket?.remoteAddress || null;
   }
+  
+  // Prevent invalid IPs like "0.0.0.0" or empty strings
+  if (!ip || ip === '0.0.0.0' || ip.trim() === '') {
+    ip = null;
+  }
+  
   return NextResponse.json({ ip });
 } 
