@@ -150,13 +150,23 @@ export function DashboardSidebar({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Getting Started Link - Bottom */}
+     
+      {/* Navigation Links - Full Height */}
+      <div
+        ref={scrollContainerRef}
+        className={cn(
+          "flex-1 overflow-y-auto transition-all duration-300",
+          showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
+        )}
+      >
+
+         {/* Getting Started Link - Bottom */}
       <div className="px-4 pt-3">
         <Link
           href="/dashboard/getting-started"
           className={cn(
             "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-            "border border-transparent text-black bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950",
+            "border border-transparent text-black ",
             collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
           )}
           style={{
@@ -256,14 +266,6 @@ export function DashboardSidebar({
           )}
         </Link>
       </div>
-      {/* Navigation Links - Full Height */}
-      <div
-        ref={scrollContainerRef}
-        className={cn(
-          "flex-1 overflow-y-auto transition-all duration-300",
-          showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
-        )}
-      >
         <div className="px-4 py-2">
           {!collapsed && (
             <h3
@@ -402,7 +404,14 @@ export function DashboardSidebar({
                 {/* Show Book a Call only for advertisers */}
                 {userRole === "advertiser" && (
                   <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
+                      <a
+                  href="https://calendly.com/guptavishesh2/30min"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 justify-center"
+                >
                     Book a Call
+                    </a>
                   </button>
                 )}
               </div>

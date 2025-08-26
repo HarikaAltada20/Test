@@ -14,11 +14,13 @@ import {
   Headset,
   Sparkles,
   Crown,
+  Globe,
   Rocket,
   Star,
   Palette,
-  Camera,
   Heart,
+  User,
+  Users2,
 } from "lucide-react";
 import socialPair from "@/public/images/social_pair.avif";
 import { useSwipeable } from "react-swipeable";
@@ -172,7 +174,6 @@ export default function HeroContent() {
     trackMouse: false,
     touchEventOptions: { passive: false }, // 👈 replaces preventDefaultTouchmoveEvent
   });
-
 
   return (
     <div>
@@ -335,8 +336,9 @@ export default function HeroContent() {
         >
           <div className="mt-8 sm:mt-14 md:mt-20 lg:mt-40">
             <h2
-              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${animate ? "slide-up" : "opacity-0"
-                }`}
+              className={`text-white text-xl sm:text-2xl md:text-4xl lg:text-5xl font-bold ${
+                animate ? "slide-up" : "opacity-0"
+              }`}
             >
               <span className="text-purple-400">Creative</span>{" "}
               <span className="text-orange-400">Showcase</span>
@@ -344,8 +346,9 @@ export default function HeroContent() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-3 sm:gap-5 flex-wrap">
               <span
-                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${animate ? "slide-left" : "opacity-0"
-                  }`}
+                className={`text-gray-300 text-sm sm:text-base md:text-lg font-medium ${
+                  animate ? "slide-left" : "opacity-0"
+                }`}
                 style={{ animationDelay: "0.3s" }}
               >
                 Join 50,000+ Active Creators
@@ -353,7 +356,9 @@ export default function HeroContent() {
 
               {/* Avatar Stack */}
               <div
-                className={`flex -space-x-2 sm:-space-x-3 ${animate ? "slide-up" : "opacity-0"}`}
+                className={`flex -space-x-2 sm:-space-x-3 ${
+                  animate ? "slide-up" : "opacity-0"
+                }`}
                 style={{ animationDelay: "0.6s" }}
               >
                 {[
@@ -464,8 +469,9 @@ export default function HeroContent() {
 
           {/* Title */}
           <h2
-            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${worksVisible ? "slide-up" : "opacity-0"
-              }`}
+            className={`text-center text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold mb-4 leading-snug ${
+              worksVisible ? "slide-up" : "opacity-0"
+            }`}
           >
             How <span className="text-purple-400">Game</span> of{" "}
             <span className="text-orange-400">Creators</span> Works
@@ -473,8 +479,9 @@ export default function HeroContent() {
 
           {/* Subtitle */}
           <p
-            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${worksVisible ? "slide-left" : "opacity-0"
-              }`}
+            className={`text-center text-base sm:text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-8 md:mb-12 px-2 ${
+              worksVisible ? "slide-left" : "opacity-0"
+            }`}
           >
             Three simple steps to launch your viral marketing campaign and
             dominate the game
@@ -483,7 +490,7 @@ export default function HeroContent() {
           {/* Active Step */}
           <div
             {...handlers}
-            className="flex flex-col gap-1 md:flex-row max-w-[1250px] md:h-[360px] mx-auto relative"
+            className="flex flex-col gap-1 md:flex-row max-w-[1250px] mx-auto relative"
           >
             {/* Left Arrow */}
             <button
@@ -506,7 +513,7 @@ export default function HeroContent() {
             </div>
 
             {/* Content */}
-            <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 md:h-[360px] sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
+            <div className="w-full md:w-1/2 border-2 rounded-xl p-6 border-gray-600 sm:p-8 flex flex-col justify-start relative left-0 lg:left-2 text-left">
               {/* Step Indicator */}
               <div className="flex mb-4 sm:mb-6 items-center justify-between">
                 <div className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-white/60 bg-transparent">
@@ -530,13 +537,16 @@ export default function HeroContent() {
                 </p>
 
                 <button
-                  className="px-5 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
+                  className="px-5 mb-4 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
                   style={{
                     background:
                       "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                   }}
                 >
-                  <Link href="/dashboard" className="flex items-center gap-2 relative z-10">
+                  <Link
+                    href="/dashboard"
+                    className="flex items-center gap-2 relative z-10"
+                  >
                     <div className="scan-line"></div>
                     Start Now
                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -562,227 +572,285 @@ export default function HeroContent() {
                 key={index}
                 onClick={() => setActiveIndex(index)}
                 aria-label={`Go to step ${index + 1}`}
-                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${activeIndex === index ? "bg-purple-600" : "bg-gray-600"
-                  }`}
+                className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full transition-colors ${
+                  activeIndex === index ? "bg-purple-600" : "bg-gray-600"
+                }`}
               ></button>
             ))}
           </div>
         </div>
       </section>
 
+  
       {/* Reasons to Select Us */}
 
-      <section ref={reasonsRef} className="text-white px-6 sm:px-10 py-16">
+      <section ref={reasonsRef} className="text-white px-10 py-20">
         <div className="max-w-[1250px] mx-auto">
           {/* Tagline */}
-          <div className="text-center mb-10">
+          <div className="text-center mb-12">
             <div className="flex justify-center mb-5">
               <span className="bg-[#2C3247] text-sm sm:text-base md:text-lg px-3 sm:px-4 py-1 sm:py-2 rounded-full flex items-center gap-2">
-                <Image
-                  src="/images/tabler_award.png"
-                  alt="Award icon"
-                  width={20}
-                  height={20}
+                <img
+                  src="./images/tabler_award.png"
+                  alt="icon"
                   className="w-5 h-5"
-                  loading="lazy"
                 />
                 Reasons to Select Us
               </span>
             </div>
 
+            {/* <button className="bg-[#2C3247] text-base sm:text-lg px-4 py-1 rounded-full mb-6">
+                Reasons to Select Us
+              </button> */}
             <h2
-              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${reasonsVisible ? "slide-up" : "opacity-0"}`}
+              className={`text-2xl sm:text-3xl md:text-5xl font-bold mb-4 leading-snug ${
+                reasonsVisible ? "slide-up" : "opacity-0"
+              }`}
             >
-              Why Choose {" "}
+              Why Choose{" "}
               <span className="bg-gradient-to-r from-purple-500 to-orange-400 bg-clip-text text-transparent">
                 Game of Creators
               </span>
             </h2>
             <p
-              className={`text-gray-300 text-base sm:text-lg md:text-xl ${reasonsVisible ? "slide-left" : "opacity-0"}`}
+              className={`text-gray-300 text-base sm:text-lg md:text-xl ${
+                reasonsVisible ? "slide-left" : "opacity-0"
+              }`}
             >
-              The benefits that help brands scale content and performance—fast.
+              We're not just a platform – we're your competitive advantage in
+              the creator economy.
             </p>
           </div>
 
-          {/* New Grid Layout */}
-          <div className="grid gap-6 lg:grid-cols-12">
-            {/* Left feature card */}
-            <div className="lg:col-span-7 border border-gray-700 rounded-2xl overflow-hidden bg-[#0b1133]/50">
-              <div className="relative w-full pt-[56%]">
-                <Image
-                  src="/images/64804a487ad8f0cf2e94705ec857e40cee3eae3f.avif"
-                  alt="Creators collaborating"
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <div className="p-6 sm:p-8">
-                <h3 className="text-2xl sm:text-3xl font-semibold mb-2">Organic Content at Scale</h3>
-                <p className="text-gray-300 text-base sm:text-lg">
-                  Generate a high volume of diverse, high‑quality content—without the
-                  hassle of sourcing, negotiating, or managing creators manually.
+          {/* Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* 1 */}
+            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                style={{
+                  backgroundImage:
+                    "url('/images/5b9ccb0130cdd4c8b6a76dccd99f879f41ba8fe2.avif')",
+                }}
+              ></div>
+              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+              <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
+                Organic Content at Scale
+              </h3>
+              <p className="text-gray-400 text-base md:text-md relative z-10">
+                With Game of Creators, you generate a high volume of diverse,
+                high-quality content-without the hassle of sourcing,
+                negotiating, or managing creators manually.
+              </p>
+            </div>
+
+            {/* 2 */}
+            <div
+              className="sm:col-span-2 h-auto border border-gray-700 rounded-xl overflow-hidden flex flex-col sm:flex-row items-center p-4 sm:p-6 relative group
+           
+              [@media(min-width:1000px)_and_(max-width:1246px)]:h-[300px] 
+              
+              [@media(min-width:1246px)]:h-[250px] "
+            >
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                style={{
+                  backgroundImage:
+                    "url('/images/477657f97d63845e03dfc9060e1005e8d8d651df.avif')",
+                }}
+              ></div>
+              <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+              <div className="flex-1 relative z-10 mb-4">
+                <h3 className="text-lg sm:text-xl font-semibold mb-2">
+                  Supply and Demand Based Platform
+                </h3>
+                <p className="text-gray-400 text-base sm:text-lg">
+                  Game of Creators operated on a supply and demand model.
+                  Creators complete, allowing the best ideas to surface
+                  organically and driving higher engagement and reach.
                 </p>
+              </div>
+              <div
+                className="relative w-[200px] h-[200px] 
+               sm:w-[250px] sm:h-[250px] 
+               md:w-[250px] md:h-[250px] 
+               [@media(min-width:1000px)_and_(max-width:1080px)]:w-[200px] 
+              [@media(min-width:1000px)_and_(max-width:1080px)]:h-[200px] 
+               [@media(min-width:1080px)_and_(max-width:1200px)]:w-[250px] 
+              [@media(min-width:1000px)_and_(max-width:1200px)]:h-[250px] 
+               [@media(min-width:1200px)]:w-[300px] 
+              [@media(min-width:1200px)]:h-[300px] 
+                 flex-shrink-0"
+              >
+                <Image
+                  src="/images/bb14a2a8c3979fb268076c3bbb96eaf152d1a0f8.avif"
+                  alt="Calendar"
+                  fill
+                  className="object-contain"
+                />
+                <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
               </div>
             </div>
 
-            {/* Right top grid */}
-            <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="relative overflow-hidden group border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
-                  style={{
-                    backgroundImage: "url('/images/b4273c077c336d85dd75502201d73084ea5fba73.avif')",
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                ></div>
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative z-10">
-                  <Trophy className="mb-3 text-white drop-shadow-lg" />
-                  <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Only Pay for Top Performing Content</h4>
-                  <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                    Stop paying for content that doesn't perform. Pay only for winners.
-                  </p>
-                </div>
-              </div>
-              <div className="relative overflow-hidden group border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
-                  style={{
-                    backgroundImage: "url('/images/477657f97d63845e03dfc9060e1005e8d8d651df.avif')",
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                ></div>
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative z-10">
-                  <Users className="mb-3 text-white drop-shadow-lg" />
-                  <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Skip the Creator Outreach Hassle</h4>
-                  <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                    No more endless coordination. Creators come to you.
-                  </p>
-                </div>
-              </div>
+            {/* 3 */}
+            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                style={{
+                  backgroundImage:
+                    "url('/images/cc72cdf71f826fc780265eb7ba34b2b7a5e3c2c2.avif')",
+                }}
+              ></div>
+              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
 
-              <div className="relative overflow-hidden group sm:col-span-2 border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
-                  style={{
-                    backgroundImage: "url('/images/5b9ccb0130cdd4c8b6a76dccd99f879f41ba8fe2.avif')",
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                ></div>
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative z-10">
-                  <Sparkles className="mb-3 text-white drop-shadow-lg" />
-                  <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Find Content‑Market Fit</h4>
-                  <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                    Validate creative concepts with real audience engagement.
-                  </p>
-                </div>
-              </div>
+              <h3 className="text-xl sm:text-2xl font-semibold mb-2 relative z-10">
+                Find Content- market Fit
+              </h3>
+              <p className="text-gray-400 text-base sm:text-lg relative z-10">
+                Validate creative concepts with real audience engagement.
+              </p>
+            </div>
 
-              <div className="relative overflow-hidden group sm:col-span-2 border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
-                  style={{
-                    backgroundImage: "url('/images/2a6d9ad13dd40e9b3b4f90b35cf0f9324af8dda7.avif')",
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                ></div>
-                <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-                <div className="relative z-10">
-                  <Rocket className="mb-3 text-white drop-shadow-lg" />
-                  <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Supply and Demand Based Platform</h4>
-                  <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                    The best ideas surface organically as creators compete to win.
-                  </p>
-                </div>
+            {/* 4 */}
+            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative group">
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                style={{
+                  backgroundImage:
+                    "url('/images/55970240f7b24d6eff2af2d8d8537bd017058e58.avif')",
+                }}
+              ></div>
+              <div className="absolute inset-0 bg-[#000825]/40 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+              <Rocket className="text-white mb-4 relative z-10" size={26} />
+              <h3 className="text-lg sm:text-xl mb-2 relative z-10">
+                Only Pay for Top Performing Content
+              </h3>
+              <p className="text-gray-400 text-base sm:text-lg relative z-10">
+                Stop wasting money on content that doesn’t covert. Pay only for
+                videos that perform.
+              </p>
+            </div>
+
+            {/* 6 */}
+            <div className="border border-gray-700 rounded-xl p-6 sm:p-8 flex flex-col justify-center items-center text-center relative overflow-hidden group">
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                style={{
+                  backgroundImage:
+                    "url('/images/b4273c077c336d85dd75502201d73084ea5fba73.avif')",
+                }}
+               
+              ></div>
+              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+              <Users2 className="text-white mb-4 relative z-10" size={26} />
+              <h3 className="text-xl sm:text-xl mb-2 relative z-10">
+                Skip the Creator Outreach Hassle
+              </h3>
+              <p className="text-gray-400 text-base sm:text-lg relative z-10">
+                No more hours spent negotiating, coordinating, and following up.
+                With Game of Creators, the creators come to you.
+              </p>
+            </div>
+
+            <div className="sm:col-span-2 border border-gray-700 rounded-xl p-4 flex flex-col sm:flex-row justify-center items-center text-start relative overflow-hidden group">
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
+                style={{
+                  backgroundImage:
+                    "url('/images/2a6d9ad13dd40e9b3b4f90b35cf0f9324af8dda7.avif')",
+                }}
+              ></div>
+              <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
+
+              <div className="flex-1 mb-4 sm:mb-0 px-2 relative z-10">
+                <h3 className="text-lg sm:text-xl font-semibold mb-2">
+                  Scale Winners on Paid Ads
+                </h3>
+                <p className="text-gray-400 text-base sm:text-lg">
+                  Identify the best-performing content and seamlessly scale it
+                  into paid campaigns. With proven, audience-validated content,
+                  your ads drive higher engagement, lower costs, and better
+                  conversions.
+                </p>
+              </div>
+              <div className="relative w-[180px] h-[180px] sm:w-[200px] sm:h-[200px] lg:w-[230px] lg:h-[230px] flex-shrink-0">
+                <Image
+                  src="/images/0045df9e9f7db84c983cc6c5675c55189fa040a2.avif"
+                  alt="Target"
+                  fill
+                  className="object-contain"
+                />
+                <div className="absolute inset-0 bg-[#000825]/60 group-hover:opacity-0 transition-opacity duration-300"></div>
               </div>
             </div>
           </div>
 
-          {/* Bottom row of benefits */}
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="relative overflow-hidden group border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
+          <div className="grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
               <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                 style={{
-                  backgroundImage: "url('/images/14f2649763f196d1c4636f67f952c24d1ffd273d.avif')",
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
+                  backgroundImage:
+                    "url('/images/c90e07a57a2d08340f7c0d3c57b1fde4a6f0f9cd.avif')",
                 }}
               ></div>
-              <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative z-10">
-                <Rocket className="mb-3 text-white drop-shadow-lg" />
-                <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Scale Winners on Paid Ads</h4>
-                <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                  Turn winning creator content into high‑performing ads.
-                </p>
-              </div>
+
+
+              <Globe className="text-white mb-4 relative z-10" size={30} />
+              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
+                Democratised Brands Deals
+              </h3>
+              <p className="text-gray-400 text-base text-md md:text-lg relative z-10">
+                Every creator, no . matter their follower count, can join and
+                win. Success is based on creativity and performance-not just
+                popularity.
+              </p>
             </div>
-            <div className="relative overflow-hidden group border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
+
+            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
               <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                 style={{
-                  backgroundImage: "url('/images/c90e07a57a2d08340f7c0d3c57b1fde4a6f0f9cd.avif')",
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
+                  backgroundImage:
+                    "url('/images/f1dc449ff317e5ede74929b2af2d4ef5b82c298f.avif')",
                 }}
               ></div>
-              <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative z-10">
-                <Headset className="mb-3 text-white drop-shadow-lg" />
-                <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">24/7 Support</h4>
-                <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                  Our team is always ready to help you win big.
-                </p>
-              </div>
+           
+              <Headset className="text-white mb-4 relative z-10" size={30} />
+              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
+                24/7 Support
+              </h3>
+              <p className="text-gray-400 text-base text-md md:text-xl relative z-10">
+                Our team is always ready to help you win big with Game of
+                Creators!
+              </p>
             </div>
-            <div className="relative overflow-hidden group border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
+
+            <div className="border border-gray-700 rounded-xl p-8 md:p-10 flex flex-col justify-center items-center text-center relative group">
               <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
+                className="absolute inset-0 bg-cover bg-center opacity-0 group-hover:opacity-20 transition-opacity duration-300"
                 style={{
-                  backgroundImage: "url('/images/5ce917bc44f4c6db1590e3478c916a367eacfe8a.avif')",
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
+                  backgroundImage:
+                    "url('/images/5ce917bc44f4c6db1590e3478c916a367eacfe8a.avif')",
                 }}
               ></div>
-              <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative z-10">
-                <Gamepad2 className="mb-3 text-white drop-shadow-lg" />
-                <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Democratized Brand Deals</h4>
-                <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                  Every creator can participate—performance over popularity.
-                </p>
-              </div>
-            </div>
-            <div className="relative overflow-hidden group border border-gray-700 rounded-2xl p-6 bg-[#0b1133]/60">
-              <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"
-                style={{
-                  backgroundImage: "url('/images/55970240f7b24d6eff2af2d8d8537bd017058e58.avif')",
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
-              ></div>
-              <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-transparent opacity-0 group-hover:opacity-100 group-active:opacity-100 focus-within:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative z-10">
-                <Palette className="mb-3 text-white drop-shadow-lg" />
-                <h4 className="text-lg sm:text-xl font-bold mb-2 text-white drop-shadow-lg">Creator Freedom of Choice</h4>
-                <p className="text-white text-sm sm:text-base font-medium drop-shadow-lg">
-                  Creators pick the brands and campaigns they love to promote.
-                </p>
-              </div>
+            
+
+              <Palette className="text-white mb-4 relative z-10" size={30} />
+              <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
+                Creator Freedom of Choice
+              </h3>
+              <p className="text-gray-400 text-base text-md md:text-lg relative z-10">
+                Creators choose which brands and campaigns to promote,
+                empowering them to work with what they love and get paid for it.
+              </p>
             </div>
           </div>
         </div>
       </section>
-
       {/* <NumbersSection
           items={[
             {
@@ -801,8 +869,6 @@ export default function HeroContent() {
             },
           ]}
         /> */}
-
-
     </div>
   );
 }
