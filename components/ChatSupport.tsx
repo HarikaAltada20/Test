@@ -94,8 +94,8 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email }) => {
         )} */}
       </div>
 
-      {/* Floating Button */}
-      <button className="fixed bottom-6 right-6 bg-purple-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:bg-gray-800 transition z-50">
+      {/* Button */}
+      <button className="fixed bottom-6 right-6 bg-purple-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg  transition z-50">
         <MessageSquare size={25} />
       </button>
     </div>
