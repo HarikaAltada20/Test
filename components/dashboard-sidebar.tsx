@@ -5,6 +5,7 @@ import { useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
+  MessageCircle,
   Trophy,
   Users,
   BarChart,
@@ -21,7 +22,6 @@ import {
   User,
   Phone,
   HelpCircle,
-  MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -150,7 +150,6 @@ export function DashboardSidebar({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-     
       {/* Navigation Links - Full Height */}
       <div
         ref={scrollContainerRef}
@@ -159,114 +158,113 @@ export function DashboardSidebar({
           showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
         )}
       >
-
-         {/* Getting Started Link - Bottom */}
-      <div className="px-4 pt-3">
-        <Link
-          href="/dashboard/getting-started"
-          className={cn(
-            "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-            "border border-transparent text-black ",
-            collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
-          )}
-          style={{
-            backgroundColor:
-              pathname === "/dashboard/getting-started"
-                ? "hsl(var(--primary))"
-                : "transparent",
-            borderColor:
-              pathname === "/dashboard/getting-started"
-                ? "hsl(var(--primary) / 0.3)"
-                : "transparent",
-            color:
-              pathname === "/dashboard/getting-started"
-                ? "hsl(var(--primary-foreground))"
-                : "hsl(var(--foreground))",
-            boxShadow:
-              pathname === "/dashboard/getting-started"
-                ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
-                : "none",
-          }}
-          onMouseEnter={(e) => {
-            if (pathname !== "/dashboard/getting-started") {
-              e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.3)";
-              e.currentTarget.style.backgroundColor =
-                "hsl(var(--primary) / 0.1)";
-              e.currentTarget.style.boxShadow =
-                "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (pathname !== "/dashboard/getting-started") {
-              e.currentTarget.style.borderColor = "transparent";
-              e.currentTarget.style.backgroundColor = "transparent";
-              e.currentTarget.style.boxShadow = "none";
-            }
-          }}
-          title={collapsed ? "Getting Started" : undefined}
-        >
-          <div
+        <div className="px-4 pt-2">
+          <Link
+            href="/dashboard/getting-started"
             className={cn(
-              "flex items-center justify-center rounded-lg transition-colors",
-              collapsed ? "w-16 h-12" : "w-10 h-10"
+              "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
+              "border border-transparent text-black",
+              collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
             )}
             style={{
               backgroundColor:
                 pathname === "/dashboard/getting-started"
-                  ? "hsl(var(--primary-foreground) / 0.2)"
-                  : "hsl(var(--blue-500) / 0.2)",
+                  ? "hsl(var(--primary))"
+                  : "transparent",
+              borderColor:
+                pathname === "/dashboard/getting-started"
+                  ? "hsl(var(--primary) / 0.3)"
+                  : "transparent",
               color:
                 pathname === "/dashboard/getting-started"
                   ? "hsl(var(--primary-foreground))"
-                  : "hsl(var(--blue-500))",
+                  : "hsl(var(--foreground))",
+              boxShadow:
+                pathname === "/dashboard/getting-started"
+                  ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
+                  : "none",
             }}
+            onMouseEnter={(e) => {
+              if (pathname !== "/dashboard/getting-started") {
+                e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.3)";
+                e.currentTarget.style.backgroundColor =
+                  "hsl(var(--primary) / 0.1)";
+                e.currentTarget.style.boxShadow =
+                  "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (pathname !== "/dashboard/getting-started") {
+                e.currentTarget.style.borderColor = "transparent";
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.boxShadow = "none";
+              }
+            }}
+            title={collapsed ? "Getting Started" : undefined}
           >
-            <HelpCircle className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")} />
-          </div>
-          {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                <div
-                  className="font-semibold text-sm"
-                  style={{
-                    color:
-                      pathname === "/dashboard/getting-started"
-                        ? "hsl(var(--primary-foreground))"
-                        : "hsl(var(--foreground))",
-                  }}
-                >
-                  Getting Started
+            <div
+              className={cn(
+                "flex items-center justify-center rounded-lg transition-colors",
+                collapsed ? "w-16 h-12" : "w-10 h-10"
+              )}
+              style={{
+                backgroundColor:
+                  pathname === "/dashboard/getting-started"
+                    ? "hsl(var(--primary-foreground) / 0.2)"
+                    : "hsl(var(--blue-500) / 0.2)",
+                color:
+                  pathname === "/dashboard/getting-started"
+                    ? "hsl(var(--primary-foreground))"
+                    : "hsl(var(--blue-500))",
+              }}
+            >
+              <HelpCircle className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")} />
+            </div>
+            {!collapsed && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="font-semibold text-sm"
+                    style={{
+                      color:
+                        pathname === "/dashboard/getting-started"
+                          ? "hsl(var(--primary-foreground))"
+                          : "hsl(var(--foreground))",
+                    }}
+                  >
+                    Getting Started
+                  </div>
+                  <div
+                    className="text-xs truncate transition-colors"
+                    style={{
+                      color:
+                        pathname === "/dashboard/getting-started"
+                          ? "hsl(var(--primary-foreground) / 0.8)"
+                          : "hsl(var(--muted-foreground))",
+                    }}
+                  >
+                    Learn about contests & campaigns
+                  </div>
                 </div>
-                <div
-                  className="text-xs truncate transition-colors"
+
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-all duration-200",
+                    pathname === "/dashboard/getting-started" &&
+                      "translate-x-0.5"
+                  )}
                   style={{
                     color:
                       pathname === "/dashboard/getting-started"
                         ? "hsl(var(--primary-foreground) / 0.8)"
                         : "hsl(var(--muted-foreground))",
                   }}
-                >
-                  Learn about contests & campaigns
-                </div>
-              </div>
-
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 transition-all duration-200",
-                  pathname === "/dashboard/getting-started" && "translate-x-0.5"
-                )}
-                style={{
-                  color:
-                    pathname === "/dashboard/getting-started"
-                      ? "hsl(var(--primary-foreground) / 0.8)"
-                      : "hsl(var(--muted-foreground))",
-                }}
-              />
-            </>
-          )}
-        </Link>
-      </div>
-        <div className="px-4 py-2">
+                />
+              </>
+            )}
+          </Link>
+        </div>
+        <div className="p-4">
           {!collapsed && (
             <h3
               className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
@@ -389,7 +387,7 @@ export function DashboardSidebar({
                   We're here to help
                 </p>
 
-                <div className="flex py-1 justify-center">
+                <div className="flex py-2 justify-center">
                   <div className="rounded-full bg-purple-600 p-2">
                     <Phone size={23} className="text-white" />
                   </div>
@@ -404,13 +402,12 @@ export function DashboardSidebar({
                 {/* Show Book a Call only for advertisers */}
                 {userRole === "advertiser" && (
                   <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
-                      <a
-                  href="https://calendly.com/guptavishesh2/30min"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 justify-center"
-                >
-                    Book a Call
+                    <a
+                      href="https://calendly.com/guptavishesh2/30min"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Book a Call
                     </a>
                   </button>
                 )}
