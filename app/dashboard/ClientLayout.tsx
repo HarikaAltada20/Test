@@ -529,8 +529,7 @@ function DashboardContent({
       <SimpleLoadingBar />
 
 
-{/* Dynamic CSS Custom Properties for Theme */}
-<style jsx global>{`
+ <style jsx global>{`
         :root {
           --background: ${currentMode === 'light' ? '210 20% 98%' : '222.2 84% 4.9%'};
           --foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
@@ -563,7 +562,84 @@ function DashboardContent({
         }
       `}</style>
 
-     
+      {/* Global Theme-Based Scrollbar Styles */}
+      <style jsx global>{`
+        /* Theme-based scrollbar for all elements */
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: ${theme.scrollbar} rgba(${mode.background.secondary}, 0.1);
+        }
+        
+       
+        /* Webkit scrollbar styling */
+        *::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        
+        *::-webkit-scrollbar-track {
+          background: rgba(${mode.background.secondary}, ${currentMode === 'light' ? '0.5' : '0.1'});
+          border-radius: 10px;
+        }
+        
+        *::-webkit-scrollbar-thumb {
+          background: ${theme.scrollbar};
+          border-radius: 10px;
+          transition: all 0.2s ease;
+        }
+        
+        *::-webkit-scrollbar-thumb:hover {
+          background: ${theme.scrollbarHover};
+        }
+        
+        *::-webkit-scrollbar-corner {
+          background: transparent;
+        }
+        
+        /* Sidebar specific scrollbar - always reserve space to prevent layout shift */
+        .sidebar-scrollbar,
+        .sidebar-scrollbar-hidden {
+          scrollbar-width: thin; /* Firefox - thin scrollbar */
+          scrollbar-gutter: stable; /* Always reserve space for scrollbar */
+        }
+        
+        .sidebar-scrollbar {
+          scrollbar-color: ${theme.sidebarScrollbar} transparent; /* Firefox - visible thumb */
+        }
+        
+        .sidebar-scrollbar-hidden {
+          scrollbar-color: transparent transparent; /* Firefox - hidden thumb */
+        }
+        
+        /* WebKit scrollbar styles */
+        .sidebar-scrollbar::-webkit-scrollbar,
+        .sidebar-scrollbar-hidden::-webkit-scrollbar {
+          width: 6px;
+          background: transparent; /* Always transparent track */
+        }
+        
+        .sidebar-scrollbar::-webkit-scrollbar-thumb {
+          background: ${theme.sidebarScrollbar};
+          border-radius: 3px;
+        }
+        
+        .sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${theme.sidebarScrollbarHover};
+        }
+        
+        .sidebar-scrollbar-hidden::-webkit-scrollbar-thumb {
+          background: transparent; /* Hidden thumb */
+        }
+        
+        .sidebar-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
+          background: transparent; /* Keep hidden on hover */
+        }
+        
+       
+
+      `}</style>
+
+
 
       {/* Main Layout Container */}
       <div className="flex min-h-screen dashboard-container">

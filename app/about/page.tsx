@@ -198,7 +198,7 @@ export default function AboutPage() {
         </section>
 
         <section className="py-16" ref={storyRef}>
-          <div className="bg-[#040921] flex justify-center items-center py-12 px-4">
+          <div className="flex justify-center items-center py-12 px-4">
             <div className="relative  rounded-2xl p-6 md:p-12 flex flex-col md:flex-row items-center gap-8 shadow-lg max-w-7xl w-full border border-gray-600">
               {/* Purple Glow in Background */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-transparent via-purple-500/20 to-transparent blur-2xl pointer-events-none"></div>
@@ -244,7 +244,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <section className="bg-[#0B0F27] text-white py-16">
+        <section className="text-white py-16">
           <div className="max-w-[1250px] mx-auto px-6">
             <h2
               ref={howItWorksRef}
@@ -290,7 +290,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <div className="bg-[#0b0e26] text-white py-16 px-6">
+        <div className="text-white py-16 px-6">
           <div className="max-w-[1200px] mx-auto text-center">
             <h2
               ref={valuesRef}
