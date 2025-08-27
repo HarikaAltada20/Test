@@ -88,12 +88,14 @@ export default async function ContestDetailPage({
 
   console.log(`[page.tsx] Raw submissionsData for contest ${contestId}:`, JSON.stringify(submissionsData, null, 2));
 
-  // Fetch creator profiles for the submissions
+  // Fetch creator profiles and user data for the submissions
   let creatorProfilesData: any[] = [];
+  let usersData: any[] = [];
   if (submissionsData && submissionsData.length > 0) {
     const creatorIds = [...new Set(submissionsData.map(sub => sub.creator_id).filter(Boolean))];
 
     if (creatorIds.length > 0) {
+      // Fetch creator profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from("creator_profiles")
         .select(`
@@ -107,6 +109,23 @@ export default async function ContestDetailPage({
         console.error(`[page.tsx] Supabase error fetching creator profiles:`, profilesError);
       } else {
         creatorProfilesData = profilesData || [];
+      }
+
+      // Fetch user data for fallbacks
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select(`
+          id,
+          full_name,
+          username,
+          profile_picture_url
+        `)
+        .in("id", creatorIds);
+
+      if (userError) {
+        console.error(`[page.tsx] Supabase error fetching users:`, userError);
+      } else {
+        usersData = userData || [];
       }
     }
   }
@@ -169,8 +188,9 @@ export default async function ContestDetailPage({
       let creatorAvatarUrl: string | null = null;
       const actualCreatorProfileId: string | null = sub.creator_id;
 
-      // Find the creator profile for this submission
+      // Find the creator profile and user for this submission
       const creatorProfile = creatorProfilesData.find(profile => profile.id === sub.creator_id);
+      const user = usersData.find(u => u.id === sub.creator_id);
 
       if (creatorProfile) {
         const platform = sub.platform?.toLowerCase();
@@ -183,7 +203,7 @@ export default async function ContestDetailPage({
             creatorAvatarUrl = ytAccount?.channel_thumbnail;
           } else if (platform?.includes('instagram') && creatorProfile.instagram_account) {
             const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
-            creatorDisplayName = igAccount?.full_name || igAccount?.display_name;
+            creatorDisplayName = igAccount?.name_of_account || igAccount?.full_name || igAccount?.display_name;
             creatorUsername = igAccount?.username;
             creatorAvatarUrl = igAccount?.profile_picture_url;
           }
@@ -193,15 +213,20 @@ export default async function ContestDetailPage({
         }
 
         // Fallback if platform-specific data extraction failed or platform is different
-        if (!creatorDisplayName && creatorProfile.username) creatorDisplayName = creatorProfile.username; // Generic username if exists
-        if (!creatorUsername && creatorProfile.username) creatorUsername = creatorProfile.username; // Generic username if exists
-        if (!creatorAvatarUrl && creatorProfile.avatar_url) creatorAvatarUrl = creatorProfile.avatar_url; // Generic avatar if exists
-        if (!creatorDisplayName) creatorDisplayName = 'N/A'; // Final fallback
-        if (!creatorUsername) creatorUsername = 'N/A'; // Final fallback
+        if (!creatorDisplayName && user?.full_name) creatorDisplayName = user.full_name; // Use user full_name as fallback
+        if (!creatorUsername && user?.username) creatorUsername = user.username; // Use user username as fallback
+        if (!creatorAvatarUrl && user?.profile_picture_url) creatorAvatarUrl = user.profile_picture_url; // Use user profile_picture_url as fallback
+
+        // Final fallbacks using user data if available
+        if (!creatorDisplayName) creatorDisplayName = user?.full_name || user?.username || 'Unknown Creator';
+        if (!creatorUsername) creatorUsername = user?.username || 'Unknown User';
+        if (!creatorAvatarUrl) creatorAvatarUrl = user?.profile_picture_url || null;
 
       } else {
-        creatorDisplayName = 'Unknown Creator'; // Fallback if no creator_profile found
-        creatorUsername = 'N/A';
+        // No creator profile found, use user data as fallback
+        creatorDisplayName = user?.full_name || user?.username || 'Unknown Creator';
+        creatorUsername = user?.username || 'Unknown User';
+        creatorAvatarUrl = user?.profile_picture_url || null;
       }
 
       return {

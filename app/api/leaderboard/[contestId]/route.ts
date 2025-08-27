@@ -150,7 +150,7 @@ export async function GET(
              creator_pfp_url = ytAccount?.channel_thumbnail || null;
           } else if (submission.platform === 'instagram') {
             const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
-            creator_display_name = igAccount?.full_name || igAccount?.display_name;
+            creator_display_name = igAccount?.name_of_account || igAccount?.full_name || igAccount?.display_name;
             creator_username = igAccount?.username;
             creator_pfp_url = igAccount?.profile_picture_url || null;
           }
