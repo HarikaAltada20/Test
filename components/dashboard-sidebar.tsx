@@ -187,8 +187,7 @@ export function DashboardSidebar({
             onMouseEnter={(e) => {
               if (pathname !== "/dashboard/getting-started") {
                 e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.3)";
-                e.currentTarget.style.backgroundColor =
-                  "#7F39EC14";
+                e.currentTarget.style.backgroundColor = "#7F39EC14";
                 e.currentTarget.style.boxShadow =
                   "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
               }
@@ -256,7 +255,7 @@ export function DashboardSidebar({
                   style={{
                     color:
                       pathname === "/dashboard/getting-started"
-                        ? "hsl(var(--primary-foreground) / 0.8)"
+                        ? "#4A00BE"
                         : "hsl(var(--muted-foreground))",
                   }}
                 />
@@ -286,15 +285,11 @@ export function DashboardSidebar({
                     collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
                   )}
                   style={{
-                    backgroundColor: isActive
-                      ? "#7F39EC14"
-                      : "transparent",
+                    backgroundColor: isActive ? "#7F39EC14" : "transparent",
                     borderColor: isActive
                       ? "hsl(var(--primary) / 0.3)"
                       : "transparent",
-                    color: isActive
-                      ? "#4A00BE"
-                      : "hsl(var(--foreground))",
+                    color: isActive ? "#4A00BE" : "hsl(var(--foreground))",
                     boxShadow: isActive
                       ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
                       : "none",
@@ -303,8 +298,7 @@ export function DashboardSidebar({
                     if (!isActive) {
                       e.currentTarget.style.borderColor =
                         "hsl(var(--primary) / 0.3)";
-                      e.currentTarget.style.backgroundColor =
-                        "#7F39EC14";
+                      e.currentTarget.style.backgroundColor = "#7F39EC14";
                       e.currentTarget.style.boxShadow =
                         "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
                     }
@@ -327,9 +321,7 @@ export function DashboardSidebar({
                       // backgroundColor: isActive
                       //   ? "hsl(var(--primary-foreground) / 0.2)"
                       //   : "hsl(var(--primary) / 0.2)",
-                      color: isActive
-                        ? "#4A00BE"
-                        : "hsl(var(--primary))",
+                      color: isActive ? "#4A00BE" : "hsl(var(--primary))",
                     }}
                   >
                     <link.icon
@@ -415,15 +407,23 @@ export function DashboardSidebar({
             ) : (
               <div className="flex flex-col items-center gap-3">
                 <button
-                  onClick={() => setShowChat(true)}
+                  onClick={onChatOpen}
                   className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
                 >
                   <MessageCircle size={18} />
                 </button>
-
-                <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
-                  <Phone size={18} className="text-white" />
-                </div>
+                {/* Show Book a Call only for advertisers */}
+                {userRole === "advertiser" && (
+                  <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
+                    <a
+                      href="https://calendly.com/guptavishesh2/30min"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Phone size={18} className="text-white" />
+                    </a>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -34,6 +34,7 @@ import {
   
   AlertTriangle,
   ExternalLink,
+  GitGraphIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
@@ -2888,7 +2889,7 @@ export default function CreateContestPage({
 
     return (
       <>
-        <CardHeader>
+        {/* <CardHeader>
           <CardTitle>
             {contestType === "leaderboard"
               ? "Prize & Duration"
@@ -2898,56 +2899,67 @@ export default function CreateContestPage({
             Configure the financial aspects, duration, and terms for your
             contest.
           </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        </CardHeader> */}
+        <CardContent className="space-y-12">
           {/* Current Plan Details */}
           <div
-            className={`relative overflow-hidden border-2 rounded-2xl p-8 mb-8 shadow-xl ${
-              currentPlan && currentPlan.price === 0
-                ? "bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 border-gray-300" // Free plan - muted colors
-                : currentPlan &&
-                  currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                ? "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 border-orange-200" // Bronze plan - warm colors
-                : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200/50" // Higher plans - premium colors
-            }`}
+            // className={`relative overflow-hidden border-2 rounded-2xl p-8 mb-8 shadow-xl ${
+            //   currentPlan && currentPlan.price === 0
+            //     ? "bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 border-gray-300"
+            //     : currentPlan &&
+            //       currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+            //     ? "bg-gradient-to-br from-orange-50 via-amber-50 to-orange-50 border-orange-200" 
+            //     : "bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border-blue-200/50" 
+            // }`}
           >
             {/* Background decorative elements */}
-            <div
+            {/* <div
               className={`absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl ${
                 currentPlan && currentPlan.price === 0
-                  ? "bg-gradient-to-br from-gray-300/20 to-gray-400/20" // Free plan
+                  ? "bg-gradient-to-br from-gray-300/20 to-gray-400/20" 
                   : currentPlan &&
                     currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                  ? "bg-gradient-to-br from-orange-300/20 to-amber-400/20" // Bronze plan
-                  : "bg-gradient-to-br from-blue-400/20 to-purple-400/20" // Higher plans
+                  ? "bg-gradient-to-br from-orange-300/20 to-amber-400/20" 
+                  : "bg-gradient-to-br from-blue-400/20 to-purple-400/20" 
               }`}
             ></div>
             <div
               className={`absolute bottom-0 left-0 w-32 h-32 rounded-full blur-2xl ${
                 currentPlan && currentPlan.price === 0
-                  ? "bg-gradient-to-br from-gray-400/15 to-slate-400/15" // Free plan
+                  ? "bg-gradient-to-br from-gray-400/15 to-slate-400/15"
                   : currentPlan &&
                     currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                  ? "bg-gradient-to-br from-amber-400/15 to-orange-400/15" // Bronze plan
-                  : "bg-gradient-to-br from-indigo-400/15 to-pink-400/15" // Higher plans
+                  ? "bg-gradient-to-br from-amber-400/15 to-orange-400/15"
+                  : "bg-gradient-to-br from-indigo-400/15 to-pink-400/15"
               }`}
-            ></div>
+            ></div> */}
 
-            <div className="relative z-10">
+            <div className="relative  z-10">
               {/* Header Section */}
-              <div className="flex items-start justify-between mb-8">
+
+              < div className="px-6 pt-6 pb-4 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
+            <h2 className="text-purple-600 font-semibold text-xl">
+            Rewards & Timeline
+            </h2>
+            </div>
+               <div className="max-w-[1100px] mx-auto bg-white shadow-md px-6 pt-3">
+
+                
+               <h3 className="text-lg font-bold mb-4">Your Plan Details</h3>
+              <div className="flex items-start justify-between ">
+                
                 <div className="flex items-center gap-4">
                   <div
-                    className={`p-3 rounded-2xl shadow-lg ${
+                    className={`p-3 rounded-full shadow-lg ${
                       currentPlan && currentPlan.price === 0
-                        ? "bg-gradient-to-br from-gray-500 to-gray-600" // Free plan
+                        ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
                         : currentPlan &&
                           currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                        ? "bg-gradient-to-br from-amber-500 to-orange-600" // Bronze plan
-                        : "bg-gradient-to-br from-blue-600 to-purple-600" // Higher plans
+                        ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white" // Bronze plan
+                        : "bg-gradient-to-br from-blue-600 to-purple-600 text-white" // Higher plans
                     }`}
                   >
-                    <Trophy className="h-8 w-8 text-white" />
+                    <Trophy className="h-8 w-8" />
                   </div>
                   <div>
                     <h3 className="text-2xl font-bold text-gray-900 mb-2">
@@ -2981,12 +2993,14 @@ export default function CreateContestPage({
                   </div>
                 </div>
               </div>
-
+              </div>
               {currentPlan ? (
-                <div className="space-y-8">
+                <div className="space-y-12">
                   {/* Plan Header Card */}
+
+                  
                   <div
-                    className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg ${
+                    className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl p-6 shadow-lg ${
                       currentPlan.price === 0
                         ? "bg-white/90 border-gray-200" // Free plan
                         : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
@@ -2994,42 +3008,43 @@ export default function CreateContestPage({
                         : "bg-white/80 border-gray-200/50" // Higher plans
                     }`}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center border border-bg-[#757272] rounded-xl p-6 justify-between">
                       <div className="flex items-center gap-6">
                         <div
-                          className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl ${
+                          className={`w-16 h-16 rounded-full flex items-center justify-center ${
                             userPlan === subscriptionPlans[0].id
-                              ? "bg-gradient-to-br from-gray-500 to-gray-600" // Free plan
+                              ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
                               : userPlan === subscriptionPlans[1].id
-                              ? "bg-gradient-to-br from-amber-500 to-orange-600" // Bronze plan
+                              ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white" // Bronze plan
                               : userPlan === subscriptionPlans[2].id
-                              ? "bg-gradient-to-br from-gray-400 to-slate-500" // Silver plan
+                              ? "bg-gradient-to-br from-gray-400 to-slate-500 text-white" // Silver plan
                               : userPlan === subscriptionPlans[3].id
-                              ? "bg-gradient-to-br from-yellow-400 to-orange-500" // Gold plan
+                              ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white" // Gold plan
                               : userPlan === subscriptionPlans[4].id
-                              ? "bg-gradient-to-br from-purple-500 to-indigo-600" // Platinum plan
+                              ? "bg-gradient-to-br from-purple-500 to-indigo-600 text-white" // Platinum plan
                               : userPlan === subscriptionPlans[5].id
-                              ? "bg-gradient-to-br from-blue-500 to-cyan-600" // Diamond plan
-                              : "bg-gradient-to-br from-gray-500 to-gray-600"
+                              ? "bg-gradient-to-br from-blue-500 to-cyan-600 text-white" // Diamond plan
+                              : "bg-gradient-to-br from-gray-500 to-gray-600 text-white"
                           }`}
                         >
-                          <Trophy className="h-8 w-8 text-white" />
+                          <Trophy className="h-8 w-8" />
                         </div>
                         <div>
-                          <h4 className="text-2xl font-bold text-gray-900 mb-1">
+                          <h4 className="text-xl font-bold text-gray-900 mb-1">
                             {currentPlan.name || "FREE"} Plan
                           </h4>
                           <div className="flex items-center gap-2">
                             <span
-                              className={`text-3xl font-bold ${
-                                currentPlan.price === 0
-                                  ? "text-gray-600"
-                                  : "text-blue-600"
-                              }`}
+                              // className={`text-3xl font-bold ${
+                              //   currentPlan.price === 0
+                              //     ? "text-gray-600"
+                              //     : "text-blue-600"
+                              // }`}
+                              className="text-3xl font-bold text-[#7F39EC]"
                             >
                               {formatCurrencyFromCents(currentPlan.price)}
                             </span>
-                            <span className="text-lg text-gray-500">
+                            <span className="text-3xl text-[#7F39EC]">
                               /month
                             </span>
                             {currentPlan.price === 0 && (
@@ -3065,28 +3080,38 @@ export default function CreateContestPage({
                   </div>
 
                   {/* Plan Features with Descriptions */}
+                  <div>
+                    
+              < div className="px-6 pt-6 pb-4 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
+            <h2 className="text-black font-semibold text-2xl">
+            Plan Features
+            </h2>
+            </div>
+                  <div className="max-w-[1100px] mx-auto bg-white rounded-bl-xl rounded-br-xl shadow-lg roundex-xl p-6">
+                    
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Max Winners Feature - Only show for Leaderboard contests */}
                     {contestType === "leaderboard" && (
                       <div
-                        className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                          planFeatures.maxWinnersPerContest <= 3
-                            ? "bg-orange-50/80 border-orange-200" // Limited feature - warm warning
-                            : "bg-white/80 border-gray-200/50"
-                        }`}
+                     className="border rounded-xl p-4 flex flex-col justify-between shadow-sm"
+                        // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                        //   planFeatures.maxWinnersPerContest <= 3
+                        //     ? "bg-orange-50/80 border-orange-200"
+                        //     : "bg-white/80 border-gray-200/50"
+                        // }`}
                       >
                         <div className="flex items-start gap-4">
-                          <div
+                          {/* <div
                             className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
                               planFeatures.maxWinnersPerContest <= 3
-                                ? "bg-gradient-to-br from-orange-500 to-orange-600" // Limited
-                                : "bg-gradient-to-br from-blue-500 to-blue-600" // Good
+                                ? "bg-gradient-to-br from-orange-500 to-orange-600"
+                                : "bg-gradient-to-br from-blue-500 to-blue-600" 
                             }`}
                           >
                             <span className="text-white font-bold text-lg">
                               W
                             </span>
-                          </div>
+                          </div> */}
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
                               <h5 className="text-lg font-semibold text-gray-900">
@@ -3094,11 +3119,8 @@ export default function CreateContestPage({
                               </h5>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-2xl font-bold ${
-                                    planFeatures.maxWinnersPerContest <= 3
-                                      ? "text-orange-600"
-                                      : "text-blue-600"
-                                  }`}
+                                  className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6"
+                                    
                                 >
                                   {planFeatures.maxWinnersPerContest ===
                                   Infinity
@@ -3125,8 +3147,8 @@ export default function CreateContestPage({
                               }`}
                             >
                               {planFeatures.maxWinnersPerContest <= 3
-                                ? "⚡ Upgrade for more winner slots!"
-                                : "💡 Tip: More winners = higher participation rates"}
+                                ? "Upgrade for more winner slots!"
+                                : "Tip: More winners = higher participation rates"}
                             </div>
                           </div>
                         </div>
@@ -3139,7 +3161,7 @@ export default function CreateContestPage({
                         <div className="flex items-start gap-4">
                           <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500 to-purple-600">
                             <span className="text-white font-bold text-lg">
-                              📈
+                              <GitGraphIcon/>
                             </span>
                           </div>
                           <div className="flex-1">
@@ -3159,7 +3181,7 @@ export default function CreateContestPage({
                               content's performance (views) & eligibility.
                             </p>
                             <div className="mt-3 text-xs font-medium text-purple-600">
-                              💡 Pay for performance - reward creators based on
+                               Pay for performance - reward creators based on
                               actual results
                             </div>
                           </div>
@@ -3169,26 +3191,26 @@ export default function CreateContestPage({
 
                     {/* Min Budget Feature */}
                     <div
-                      className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                      className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
                         planFeatures.minContestBudget >=
                         HIGH_MIN_BUDGET_THRESHOLD
-                          ? "bg-orange-50/80 border-orange-200" // High minimum - warning
+                          ? "bg-white" // High minimum - warning
                           : "bg-white/80 border-gray-200/50"
                       }`}
                     >
                       <div className="flex items-start gap-4">
-                        <div
+                        {/* <div
                           className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
                             planFeatures.minContestBudget >=
                             HIGH_MIN_BUDGET_THRESHOLD
-                              ? "bg-gradient-to-br from-orange-500 to-red-600" // High minimum
-                              : "bg-gradient-to-br from-green-500 to-emerald-600" // Low minimum
+                              ? "bg-gradient-to-br from-orange-500 to-red-600"
+                              : "bg-gradient-to-br from-green-500 to-emerald-600"
                           }`}
                         >
                           <span className="text-white font-bold text-lg">
                             $
                           </span>
-                        </div>
+                        </div> */}
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="text-lg font-semibold text-gray-900">
@@ -3196,11 +3218,11 @@ export default function CreateContestPage({
                             </h5>
                             <div className="flex items-center gap-2">
                               <span
-                                className={`text-2xl font-bold ${
+                                className={`text-xl font-bold ${
                                   planFeatures.minContestBudget >=
                                   HIGH_MIN_BUDGET_THRESHOLD
-                                    ? "text-orange-600"
-                                    : "text-green-600"
+                                    ? "text-green-600 border border-green-600 rounded-full px-6"
+                                    : "text-green-600 border border-green-600 rounded-full px-6"
                                 }`}
                               >
                                 {formatCurrencyFromCents(
@@ -3230,8 +3252,8 @@ export default function CreateContestPage({
                           >
                             {planFeatures.minContestBudget >=
                             HIGH_MIN_BUDGET_THRESHOLD
-                              ? "⚡ Upgrade for lower minimum budgets!"
-                              : "💡 Tip: Start with smaller budgets to test campaigns"}
+                              ? "Upgrade for lower minimum budgets!"
+                              : "Tip: Start with smaller budgets to test campaigns"}
                           </div>
                         </div>
                       </div>
@@ -3239,28 +3261,29 @@ export default function CreateContestPage({
 
                     {/* Active Contests Feature */}
                     <div
-                      className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                        planFeatures.maxActiveContests <= 1
-                          ? "bg-red-50/80 border-red-200" // Very limited - red warning
-                          : planFeatures.maxActiveContests <= 5
-                          ? "bg-orange-50/80 border-orange-200" // Limited - orange warning
-                          : "bg-white/80 border-gray-200/50"
-                      }`}
+                    className="backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300"
+                      // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                      //   planFeatures.maxActiveContests <= 1
+                      //     ? "bg-white" 
+                      //     : planFeatures.maxActiveContests <= 5
+                      //     ? "bg-orange-50/80 border-orange-200"
+                      //     : "bg-white/80 border-gray-200/50"
+                      // }`}
                     >
                       <div className="flex items-start gap-4">
-                        <div
+                        {/* <div
                           className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
                             planFeatures.maxActiveContests <= 1
-                              ? "bg-gradient-to-br from-red-500 to-red-600" // Very limited
+                              ? "bg-gradient-to-br from-red-500 to-red-600" 
                               : planFeatures.maxActiveContests <= 5
-                              ? "bg-gradient-to-br from-orange-500 to-orange-600" // Limited
-                              : "bg-gradient-to-br from-purple-500 to-indigo-600" // Good
+                              ? "bg-gradient-to-br from-orange-500 to-orange-600" 
+                              : "bg-gradient-to-br from-purple-500 to-indigo-600" 
                           }`}
                         >
                           <span className="text-white font-bold text-lg">
                             C
                           </span>
-                        </div>
+                        </div> */}
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="text-lg font-semibold text-gray-900">
@@ -3268,12 +3291,12 @@ export default function CreateContestPage({
                             </h5>
                             <div className="flex items-center gap-2">
                               <span
-                                className={`text-2xl font-bold ${
+                                className={`text-xl font-bold ${
                                   planFeatures.maxActiveContests <= 1
-                                    ? "text-red-600"
+                                    ? "text-green-600 border border-green-600 rounded-full px-6"
                                     : planFeatures.maxActiveContests <= 5
-                                    ? "text-orange-600"
-                                    : "text-purple-600"
+                                    ? "text-green-600 border border-green-600 rounded-full px-6"
+                                    : "text-green-600 border border-green-600 rounded-full px-6"
                                 }`}
                               >
                                 {planFeatures.maxActiveContests === Infinity
@@ -3308,10 +3331,10 @@ export default function CreateContestPage({
                             }`}
                           >
                             {planFeatures.maxActiveContests <= 1
-                              ? "🚨 Only 1 contest allowed - upgrade now!"
+                              ? "Only 1 contest allowed - upgrade now!"
                               : planFeatures.maxActiveContests <= 5
-                              ? "⚡ Upgrade for more simultaneous campaigns!"
-                              : "💡 Tip: Run parallel campaigns for different products"}
+                              ? "Upgrade for more simultaneous campaigns!"
+                              : "Tip: Run parallel campaigns for different products"}
                           </div>
                         </div>
                       </div>
@@ -3319,28 +3342,29 @@ export default function CreateContestPage({
 
                     {/* Commission Feature */}
                     <div
-                      className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
-                        planFeatures.commissionPercentage >= 40
-                          ? "bg-red-50/80 border-red-200" // Very high commission - red warning
-                          : planFeatures.commissionPercentage >= 20
-                          ? "bg-orange-50/80 border-orange-200" // High commission - orange warning
-                          : "bg-white/80 border-gray-200/50"
-                      }`}
+                        className="backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300"
+                      // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
+                      //   planFeatures.commissionPercentage >= 40
+                      //     ? "bg-red-50/80 border-red-200" 
+                      //     : planFeatures.commissionPercentage >= 20
+                      //     ? "bg-orange-50/80 border-orange-200" 
+                      //     : "bg-white/80 border-gray-200/50"
+                      // }`}
                     >
                       <div className="flex items-start gap-4">
-                        <div
+                        {/* <div
                           className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
                             planFeatures.commissionPercentage >= 40
-                              ? "bg-gradient-to-br from-red-500 to-red-600" // Very high commission
+                              ? "bg-gradient-to-br from-red-500 to-red-600" 
                               : planFeatures.commissionPercentage >= 20
-                              ? "bg-gradient-to-br from-orange-500 to-red-600" // High commission
-                              : "bg-gradient-to-br from-green-500 to-emerald-600" // Low commission
+                              ? "bg-gradient-to-br from-orange-500 to-red-600"
+                              : "bg-gradient-to-br from-green-500 to-emerald-600" 
                           }`}
                         >
                           <span className="text-white font-bold text-lg">
                             %
                           </span>
-                        </div>
+                        </div> */}
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="text-lg font-semibold text-gray-900">
@@ -3348,12 +3372,12 @@ export default function CreateContestPage({
                             </h5>
                             <div className="flex items-center gap-2">
                               <span
-                                className={`text-2xl font-bold ${
+                                className={`text-xl font-bold ${
                                   planFeatures.commissionPercentage >= 40
-                                    ? "text-red-600"
+                                    ? "text-green-600 border border-green-600 rounded-full px-6"
                                     : planFeatures.commissionPercentage >= 20
-                                    ? "text-orange-600"
-                                    : "text-green-600"
+                                    ? "text-green-600 border border-green-600 rounded-full px-6"
+                                    : "text-green-600 border border-green-600 rounded-full px-6"
                                 }`}
                               >
                                 {planFeatures.commissionPercentage}%
@@ -3386,37 +3410,38 @@ export default function CreateContestPage({
                             }`}
                           >
                             {planFeatures.commissionPercentage >= 40
-                              ? "🚨 High commission rate - upgrade to save!"
+                              ? "High commission rate - upgrade to save!"
                               : planFeatures.commissionPercentage >= 20
-                              ? "⚡ Upgrade to reduce commission fees!"
-                              : "💡 Tip: Great rate - you're saving on fees!"}
+                              ? "Upgrade to reduce commission fees!"
+                              : "Tip: Great rate - you're saving on fees!"}
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-
+                    </div>
+                    </div>
                   {/* Enhanced Plan Benefits Summary */}
                   <div
-                    className={`rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden ${
+                    className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
                       currentPlan.price === 0
-                        ? "bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800" // Free plan - modern slate
+                        ? "bg-white" // Free plan - modern slate
                         : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                        ? "bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600" // Bronze plan - warm
-                        : "bg-gradient-to-br from-blue-600 via-purple-600 to-blue-700" // Higher plans - premium
+                        ? "bg-white" // Bronze plan - warm
+                        : "bg-white" // Higher plans - premium
                     }`}
                   >
                     {/* Background Pattern */}
-                    <div className="absolute inset-0 opacity-10">
+                    {/* <div className="absolute inset-0 opacity-10">
                       <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -translate-y-16 translate-x-16"></div>
                       <div className="absolute bottom-0 left-0 w-24 h-24 bg-white rounded-full translate-y-12 -translate-x-12"></div>
-                    </div>
+                    </div> */}
 
                     <div className="relative z-10">
                       {/* Header */}
                       <div className="flex items-center gap-4 mb-6">
-                        <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
-                          <Trophy className="h-6 w-6 text-white" />
+                        <div className="w-12 h-12 bg-[#D8C3FF] backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
+                          <Trophy className="h-6 w-6 text-[#4A00BE]" />
                         </div>
                         <div>
                           <h4 className="text-xl font-bold">
@@ -3433,11 +3458,11 @@ export default function CreateContestPage({
                       </div>
 
                       {/* Features Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+                      <div className="border border-2 border-bg-[#757272] py-4 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
                         <div className="flex items-start gap-3 group">
                           <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                           <div>
-                            <span className="text-sm font-medium">
+                            <span className="text-md font-medium">
                               Launch up to{" "}
                               {planFeatures.maxActiveContests === Infinity
                                 ? "unlimited"
@@ -3452,7 +3477,7 @@ export default function CreateContestPage({
                           <div className="flex items-start gap-3 group">
                             <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                             <div>
-                              <span className="text-sm font-medium">
+                              <span className="text-md font-medium">
                                 Reward up to{" "}
                                 {planFeatures.maxWinnersPerContest === Infinity
                                   ? "unlimited"
@@ -3471,7 +3496,7 @@ export default function CreateContestPage({
                           <div className="flex items-start gap-3 group">
                             <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                             <div>
-                              <span className="text-sm font-medium">
+                              <span className="text-md font-medium">
                                 Performance-based rewards
                               </span>
                               <span className="text-xs opacity-75 block">
@@ -3484,7 +3509,7 @@ export default function CreateContestPage({
                         <div className="flex items-start gap-3 group">
                           <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                           <div>
-                            <span className="text-sm font-medium">
+                            <span className="text-md font-medium">
                               Start campaigns from just{" "}
                               {formatCurrencyFromCents(
                                 planFeatures.minContestBudget
@@ -3496,7 +3521,7 @@ export default function CreateContestPage({
                         <div className="flex items-start gap-3 group">
                           <div className="w-3 h-3 bg-white rounded-full mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                           <div>
-                            <span className="text-sm font-medium">
+                            <span className="text-md font-medium">
                               Only {planFeatures.commissionPercentage}% platform
                               fee
                             </span>
@@ -3510,10 +3535,10 @@ export default function CreateContestPage({
                       {/* Enhanced Upgrade CTA for lower tier plans */}
                       {(currentPlan.price === 0 ||
                         planFeatures.commissionPercentage >= 20) && (
-                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20">
+                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl py-6 px-4 border border-white/20">
                           <div className="flex items-start justify-between gap-6">
                             <div className="flex-1 min-w-0">
-                              <h5 className="text-base font-bold mb-2">
+                              <h5 className="text-base font-bold">
                                 {currentPlan.price === 0
                                   ? "Ready to unlock more potential?"
                                   : "Want better rates and more features?"}
@@ -3526,13 +3551,13 @@ export default function CreateContestPage({
                             </div>
                             {userPlan !== PRODUCT_IDS.CHAMPION && (
                               <div className="flex-shrink-0">
-                                <Button
-                                  size="sm"
-                                  className="bg-white text-gray-900 hover:bg-gray-50 font-bold shadow-xl border-0 px-6 py-3 rounded-xl transition-all duration-200 hover:scale-105"
+                                <button
+                                  
+                                  className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
                                   onClick={() => setShowUpgradeModal(true)}
                                 >
                                   Upgrade Plan
-                                </Button>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -3566,7 +3591,8 @@ export default function CreateContestPage({
           </div>
 
           {/* Contest Duration */}
-          <div className="space-y-4">
+         
+          <div className="space-y-6 max-w-[1100px] mx-auto bg-white shadow-lg p-6 rounded-xl">
             <h3 className="text-lg font-medium">Contest Duration</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -3631,21 +3657,20 @@ export default function CreateContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              <strong>📅 Start Date Rule:</strong> Contest must start at least{" "}
+              <strong>Start Date Rule:</strong> Contest must start at least{" "}
               {MIN_DAYS_UNTIL_START} days from today.{" "}
               {getStartDateRuleExample()}
               <br />
-              <strong>⏱️ Duration:</strong> Contest must run between{" "}
+              <strong>Duration:</strong> Contest must run between{" "}
               {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
               The end date will automatically adjust to maintain minimum
               duration.
             </p>
-          </div>
+     {/* <Separator className="my-6" /> */}
 
-          <Separator className="my-6" />
+  {/* Conditional UI based on contestType */}
 
-          {/* Conditional UI based on contestType */}
-          {contestType === "leaderboard" ? (
+            {contestType === "leaderboard" ? (
             <>
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -3904,6 +3929,9 @@ export default function CreateContestPage({
                     Specific rules and agreements for CPM participants.
                   </p>
                 </div>
+
+
+                
               </div>
               {/* Min budget alert for CPM */}
               {/* Ensure totalBudget is treated as a number for comparison, and it has a value */}
@@ -3921,7 +3949,117 @@ export default function CreateContestPage({
                 )}
             </>
           )}
+
+
+<CardFooter className="flex justify-between items-center pt-6">
+              {/* Modern Error Display for Prize step */}
+              {formFeedback && formFeedbackType === "error" && (
+                <div className="mr-auto">
+                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle className="h-3 w-3 text-white" />
+                      </div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                        {formFeedback}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={prevStep}
+                disabled={isLoading}
+                className={`${
+                  !(formFeedback && formFeedbackType === "error")
+                    ? "mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                    : ""
+                }`}
+              >
+                Back
+              </Button>
+              <div
+                className={`flex gap-2 ${
+                  formFeedback && formFeedbackType === "error"
+                    ? "ml-4"
+                    : "ml-auto"
+                }`}
+              >
+                <button
+                className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                  
+                  onClick={handleSaveDraft}
+                  disabled={isLoading || !title.trim()}
+                >
+                  {isLoading &&
+                  uploadProgress &&
+                  uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                      <span>{uploadProgress}</span>
+                      <Progress
+                        value={uploadProgress ? 70 : 0}
+                        className="w-10 h-2"
+                      />
+                    </div>
+                  ) : (
+                    "Save Draft"
+                  )}
+                </button>
+                <Button
+                  type="button"
+                  onClick={() => handleSubmit(false)}
+                  disabled={
+                    isLoading ||
+                    !startDate ||
+                    !startTime ||
+                    !endDate ||
+                    !endTime
+                  }
+                  className="px-5 py-4 rounded-lg bg-[#4A00BE] text-white hover:bg-[#4A00BE] transition"
+                >
+                  {isLoading &&
+                  uploadProgress &&
+                  !uploadProgress.includes("draft") ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>{uploadProgress}</span>
+                      <Progress
+                        value={
+                          uploadProgress.includes("Preparing")
+                            ? 15
+                            : uploadProgress.includes("Validating")
+                            ? 25
+                            : uploadProgress.includes("1/2")
+                            ? 40
+                            : uploadProgress.includes("2/2")
+                            ? 60
+                            : uploadProgress.includes("Creating")
+                            ? 80
+                            : uploadProgress.includes("submitted")
+                            ? 100
+                            : 10
+                        }
+                        className="w-10 h-2"
+                      />
+                    </div>
+                  ) : (
+                    "Submit for Review"
+                  )}
+                </Button>
+              </div>
+            </CardFooter>
+          </div>
+
+     
+        
+       
         </CardContent>
+
+
+        
       </>
     );
   };
@@ -4580,21 +4718,21 @@ export default function CreateContestPage({
       </div>
 
       {/* Step Content */}
-      <div className="max-w-[1100px] mx-auto bg-white rounded-2xl shadow-xl space-y-6">
+      <div className="max-w-[1100px] mx-auto ">
         {/* Removed global success Alert (for draft save) that was at the top of the card */}
 
         {step === "basics" && (
           <>
-          <div className="p-6 border-b border-[#D0D0D0]">
-            <h2 className="text-purple-600 font-semibold text-2xl">
+          <div className="p-6 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
+            <h2 className="text-purple-600 font-semibold text-2xl ">
               Customize your Contest
             </h2>
             </div>
-            <div className="space-y-6 px-6">
+            <div className="space-y-6 p-6 rounded-bl-xl rounded-br-xl bg-white shadow-xl">
               {/* Removed general validationError Alert from CardContent */}
 
               {/* Contest Type Selection */}
-              <div className="space-y-2">
+              <div className="space-y-2 ">
                 <Label className="text-base text-xl font-semibold">Contest Type</Label>
                 <RadioGroup
                   value={contestType}
@@ -4664,10 +4802,8 @@ export default function CreateContestPage({
                             content receives, at a pre-defined CPM rate.
                           </p>
                           {!hasCpmAccess && (
-                            <div className="mt-2 space-y-1">
-                              <p className="text-sm text-purple-600 font-medium">
-                                🔒 Available in paid plans only
-                              </p>
+                          <div className="mt-2 flex items-center gap-2">
+                            
                               {isFreePlan && (
                                 <button
                                   
@@ -4677,16 +4813,19 @@ export default function CreateContestPage({
                                   <Link href="/pricing">Upgrade Plan</Link>
                                 </button>
                               )}
+                                <p className="text-sm text-black font-medium">
+                               Available in paid plans only
+                              </p>
                             </div>
                           )}
                         </Label>
-                        {!hasCpmAccess && (
+                        {/* {!hasCpmAccess && (
                           <div className="absolute top-2 right-2">
                             <span className="bg-purple-100 text-purple-600 px-2 py-1 rounded-full text-xs font-medium">
                               Premium
                             </span>
                           </div>
-                        )}
+                        )} */}
                       </div>
                     );
                   })()}
@@ -4850,8 +4989,9 @@ export default function CreateContestPage({
                   )}
                 </div>
               </div>
-            </div>
-            <CardFooter className="flex justify-between items-center pt-6">
+
+
+              <CardFooter className="flex justify-between items-center pt-6">
               {/* Only show red styled error, removed black error display */}
               <div className="flex gap-2 ml-auto">
                 <button
@@ -4885,6 +5025,8 @@ export default function CreateContestPage({
                 </button>
               </div>
             </CardFooter>
+            </div>
+           
           </>
         )}
 
@@ -4895,12 +5037,12 @@ export default function CreateContestPage({
               
             </CardHeader> */}
 
-            <div className="p-6 border-b border-[#D0D0D0]">
+            <div className="p-6 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
             <h2 className="text-purple-600 font-semibold text-2xl">
             Project Overview
             </h2>
             </div>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 p-6 rounded-bl-xl rounded-br-xl bg-white shadow-xl">
               {/* formFeedback display removed from CardContent for brief step, it's in the CardFooter */}
 
               <div className="space-y-2">
@@ -5038,8 +5180,8 @@ export default function CreateContestPage({
                   </div>
                 )}
               </div>
-            </CardContent>
-            <CardFooter className="flex justify-between items-center pt-6">
+
+              <CardFooter className="flex justify-between items-center pt-6">
               {/* Modern Error Display for Brief step */}
               {formFeedback && formFeedbackType === "error" && (
                 <div className="mr-auto">
@@ -5107,6 +5249,8 @@ export default function CreateContestPage({
                 </button>
               </div>
             </CardFooter>
+            </CardContent>
+           
           </>
         )}
 
@@ -5114,11 +5258,12 @@ export default function CreateContestPage({
           <>
             {/* Resources for Participants Section */}
             <div className="mb-8">
-           < div className="p-6 border-b border-[#D0D0D0]">
+           < div className="px-6 py-5 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
             <h2 className="text-purple-600 font-semibold text-2xl">
             Add Resources
             </h2>
             </div>
+            <div className="space-y-6 px-1 rounded-bl-xl rounded-br-xl bg-white shadow-xl">
               <CardHeader>
                 <CardTitle>
                   Resources for Participants{" "}
@@ -5655,9 +5800,8 @@ export default function CreateContestPage({
                   </ul>
                 </div>
               </CardContent>
-            </div>
-            {/* Inspiration Content Section */}
-            <div>
+              <div>
+                  {/* Inspiration Content Section */}
               <CardHeader>
                 <CardTitle>
                   Inspiration Content <span className="text-red-500">*</span>
@@ -5743,7 +5887,7 @@ export default function CreateContestPage({
                   </ul>
                 )}
               </CardContent>
-              <CardFooter>
+              <CardFooter className="py-6 px-4">
                 <button
                  className="mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
                   type="button"
@@ -5786,118 +5930,29 @@ export default function CreateContestPage({
                   </button>
                 </div>
               </CardFooter>
+              </div>
+            </div>
+          
+           
             </div>
           </>
         )}
 
         {step === "prize" && (
           <>
+
+
+{/*           
             <CardHeader>
               <CardTitle>Prize Distribution</CardTitle>
-            </CardHeader>
+            </CardHeader> */}
             <CardContent className="space-y-6">
               {/* Removed general validationError Alert from CardContent */}
               {renderPrizeSection()}
+
+              
             </CardContent>
-            <CardFooter className="flex justify-between items-center pt-6">
-              {/* Modern Error Display for Prize step */}
-              {formFeedback && formFeedbackType === "error" && (
-                <div className="mr-auto">
-                  <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
-                        <AlertTriangle className="h-3 w-3 text-white" />
-                      </div>
-                      <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                        {formFeedback}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={prevStep}
-                disabled={isLoading}
-                className={`${
-                  !(formFeedback && formFeedbackType === "error")
-                    ? "mr-auto"
-                    : ""
-                }`}
-              >
-                Back
-              </Button>
-              <div
-                className={`flex gap-2 ${
-                  formFeedback && formFeedbackType === "error"
-                    ? "ml-4"
-                    : "ml-auto"
-                }`}
-              >
-                <Button
-                  variant="outline"
-                  onClick={handleSaveDraft}
-                  disabled={isLoading || !title.trim()}
-                >
-                  {isLoading &&
-                  uploadProgress &&
-                  uploadProgress.includes("draft") ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                      <span>{uploadProgress}</span>
-                      <Progress
-                        value={uploadProgress ? 70 : 0}
-                        className="w-10 h-2"
-                      />
-                    </div>
-                  ) : (
-                    "Save Draft"
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleSubmit(false)}
-                  disabled={
-                    isLoading ||
-                    !startDate ||
-                    !startTime ||
-                    !endDate ||
-                    !endTime
-                  }
-                  className="bg-rose-600 hover:bg-rose-700 text-white"
-                >
-                  {isLoading &&
-                  uploadProgress &&
-                  !uploadProgress.includes("draft") ? (
-                    <div className="flex items-center gap-2">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>{uploadProgress}</span>
-                      <Progress
-                        value={
-                          uploadProgress.includes("Preparing")
-                            ? 15
-                            : uploadProgress.includes("Validating")
-                            ? 25
-                            : uploadProgress.includes("1/2")
-                            ? 40
-                            : uploadProgress.includes("2/2")
-                            ? 60
-                            : uploadProgress.includes("Creating")
-                            ? 80
-                            : uploadProgress.includes("submitted")
-                            ? 100
-                            : 10
-                        }
-                        className="w-10 h-2"
-                      />
-                    </div>
-                  ) : (
-                    "Submit for Review"
-                  )}
-                </Button>
-              </div>
-            </CardFooter>
+          
           </>
         )}
       </div>

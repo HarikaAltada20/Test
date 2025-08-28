@@ -16,7 +16,8 @@ import {
     TrendingUp,
     Award,
     Star,
-    Shield
+    Shield,
+    Check
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
@@ -53,13 +54,13 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
     }
 
     return (
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="container mx-auto px-4 py-8 max-w-[1100px]">
             {/* Header Section */}
             <div className="mb-8 text-center">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
                     Getting Started with Game Of Creators
                 </h1>
-                <p className="text-gray-600 dark:text-gray-300">
+                <p className="text-lg text-gray-600 dark:text-gray-300">
                     {userType === "advertiser"
                         ? "Learn how to create engaging content campaigns"
                         : "Learn how to participate and earn from contests"
@@ -69,70 +70,74 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
 
             {userType === "advertiser" ? (
                 // BRAND/ADVERTISER CONTENT
-                <div className="space-y-8">
-                    {/* Platform Overview Section */}
-                    <Card className="border border-gray-200 dark:border-gray-700">
-                        <CardHeader className="text-center pb-4">
-                            <div className="flex items-center justify-center space-x-3 mb-2">
-                                <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+
+               <div>
+                <div className="border-b text-center shadow-lg bg-white px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4 ">
+                            <div className="flex justify-start space-x-3">
+                                {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                                </div> */}
+                                <h2 className="text-2xl font-bold text-[#7F39EC]">
                                     Welcome to Game Of Creators
                                 </h2>
                             </div>
-                        </CardHeader>
+                        </div>
+
+                <div className="space-y-8 min-h-screen shadow-lg bg-white px-2 py-6">
+                    {/* Platform Overview Section */}
+                    <div >
+                       
 
                         <CardContent className="space-y-6">
-                            <div className="text-center mb-6">
-                                <p className="text-lg text-gray-700 dark:text-gray-300 mb-4">
+                            <div className="text-start mb-6">
+                                <p className="text-lg text-black  mb-4">
                                     <strong>Game Of Creators</strong> connects brands with talented content creators through engaging video contests.
                                 </p>
-                                <p className="text-gray-600 dark:text-gray-400">
+                                <p className="text-lg text-black dark:text-gray-400">
                                     Launch campaigns, get viral content, and reach new audiences. Simple and effective.
                                 </p>
                             </div>
 
                             {/* Platform Benefits */}
                             <div className="grid md:grid-cols-3 gap-6">
-                                <div className="text-center p-4 bg-green-50 dark:bg-green-950 rounded-lg">
-                                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12 bg-[#D8C3FF]  rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <TrendingUp className="w-6 h-6 text-[#4A00BE]" />
                                     </div>
-                                    <h3 className="font-semibold mb-2">Viral Content</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xl mb-2">Viral Content</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         Get authentic, engaging videos that resonate with your target audience
                                     </p>
                                 </div>
-                                <div className="text-center p-4 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <Users className="w-6 h-6 text-[#4A00BE]" />
                                     </div>
-                                    <h3 className="font-semibold mb-2">Reach New Audiences</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xlmb-2">Reach New Audiences</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         Tap into creators' existing audiences and expand your brand reach
                                     </p>
                                 </div>
-                                <div className="text-center p-4 bg-purple-50 dark:bg-purple-950 rounded-lg">
-                                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <DollarSign className="w-6 h-6 text-[#4A00BE]" />
                                     </div>
-                                    <h3 className="font-semibold mb-2">Cost Effective</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xl mb-2">Cost Effective</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         Pay only for performance with flexible budget options
                                     </p>
                                 </div>
                             </div>
                         </CardContent>
-                    </Card>
+                    </div>
 
                     {/* How It Works Section */}
-                    <Card className="border border-gray-200 dark:border-gray-700">
+                    <div className="">
                         <CardHeader className="text-center pb-4">
                             <div className="flex items-center justify-center space-x-3 mb-2">
-                                <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
+                                {/* <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
                                     <Play className="w-6 h-6 text-green-600 dark:text-green-400" />
-                                </div>
+                                </div> */}
                                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                                     How It Works
                                 </h2>
@@ -142,39 +147,39 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                         <CardContent className="space-y-6">
                             {/* Simple Steps */}
                             <div className="grid md:grid-cols-4 gap-6">
-                                <div className="text-center">
-                                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <span className="text-blue-600 dark:text-blue-400 font-bold">1</span>
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <span className="text-[#4A00BE] font-bold">1</span>
                                     </div>
-                                    <h3 className="font-semibold mb-2">Create Contest</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xl mb-2">Create Contest</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         Set your brief, budget, and contest type (Leaderboard or CPM)
                                     </p>
                                 </div>
-                                <div className="text-center">
-                                    <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <span className="text-purple-600 dark:text-purple-400 font-bold">2</span>
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12  bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <span className="text-[#4A00BE] font-bold">2</span>
                                     </div>
-                                    <h3 className="font-semibold mb-2">Creators Submit</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xl mb-2">Creators Submit</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         Talented creators create and submit videos based on your brief
                                     </p>
                                 </div>
-                                <div className="text-center">
-                                    <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <span className="text-orange-600 dark:text-orange-400 font-bold">3</span>
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12  bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <span className="text-[#4A00BE] font-bold">3</span>
                                     </div>
-                                    <h3 className="font-semibold mb-2">Content Review</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xl mb-2">Content Review</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         We review submissions to ensure quality and brand safety
                                     </p>
                                 </div>
-                                <div className="text-center">
-                                    <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <span className="text-green-600 dark:text-green-400 font-bold">4</span>
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
+                                        <span className="text-[#4A00BE] font-bold">4</span>
                                     </div>
-                                    <h3 className="font-semibold mb-2">Get Results</h3>
-                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                    <h3 className="font-semibold text-xl mb-2">Get Results</h3>
+                                    <p className="text-md text-gray-600 dark:text-gray-300">
                                         Receive viral content and pay creators based on performance
                                     </p>
                                 </div>
@@ -182,76 +187,78 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
 
                             <div className="text-center pt-4">
                                 <Link href="/dashboard/contests/create">
-                                    <Button className="bg-green-600 hover:bg-green-700 text-white">
-                                        <Play className="w-4 h-4 mr-2" />
+                                    <Button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-md text-white">
+                                        {/* <Play className="w-4 h-4 mr-2" /> */}
                                         Create Your First Contest
                                     </Button>
                                 </Link>
                             </div>
                         </CardContent>
-                    </Card>
+                    </div>
 
                     {/* Contest Types Section */}
-                    <Card className="border border-gray-200 dark:border-gray-700">
-                        <CardHeader className="text-center pb-4">
-                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    <div>
+                        <div className="text-center pb-4">
+                            <h2 className="text-2xl mb-5 font-bold text-gray-900 dark:text-white">
                                 Choose Your Contest Type
                             </h2>
-                        </CardHeader>
+                        </div>
 
                         <CardContent className="space-y-6">
                             <div className="grid md:grid-cols-2 gap-6">
                                 {/* Leaderboard Contest Section */}
-                                <div className="p-6 border border-purple-200 dark:border-purple-800 rounded-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950">
+                                <div className="p-6 border border-[#7F39EC] rounded-lg bg-[#D9C0FF26]">
                                     <div className="flex items-center space-x-3 mb-4">
                                         <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                             <Trophy className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                                         </div>
                                         <h3 className="font-bold text-lg">Leaderboard Contests</h3>
-                                    </div>
-                                    <Badge variant="outline" className="border-purple-300 text-purple-700 dark:border-purple-600 dark:text-purple-300 mb-4">
+
+                                        <Badge variant="outline" className="bg-[#ECE1FC] text-purple-700">
                                         Competition Based
                                     </Badge>
+                                    </div>
+                                   
 
-                                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                                    <p className="text-md text-gray-600 dark:text-gray-300 mb-4">
                                         Set a fixed prize pool and let creators compete for the top spots.
                                     </p>
 
                                     {/* Visual Process */}
                                     <div className="text-center mb-4">
-                                        <div className="inline-block p-4 bg-white dark:bg-gray-800 rounded-lg border border-purple-200 dark:border-purple-700">
-                                            <div className="text-lg font-bold text-purple-600 dark:text-purple-400 mb-1">
+                                        <div className="inline-block p-4 bg-[#D9C0FF26] rounded-lg border border-[#7F39EC]">
+                                            <div className="text-lg font-bold text-black mb-1">
                                                 Set Prize Pool → Creators Compete → Winners Get Paid
                                             </div>
-                                            <div className="text-sm text-purple-500 dark:text-purple-300">
+                                            <div className="text-sm text-black">
                                                 Example: $1000 total, 3 winners get $500, $300, $200
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Benefits */}
-                                    <div className="space-y-2">
+                                    <div className="space-y-4">
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Fixed budget - know your total cost upfront</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Fixed budget - know your total cost upfront</span>
                                         </div>
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">High competition drives quality content</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">High competition drives quality content</span>
                                         </div>
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Own winning videos forever</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Own winning videos forever</span>
                                         </div>
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Perfect for viral marketing & brand awareness</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Perfect for viral marketing & brand awareness</span>
                                         </div>
                                     </div>
 
                                     <div className="text-center pt-4">
                                         <Link href="/dashboard/contests/create">
-                                            <Button className="bg-purple-600 hover:bg-purple-700 text-white w-full">
+                                            <Button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-md text-white w-full">
                                                 <Trophy className="w-4 h-4 mr-2" />
                                                 Create Leaderboard Contest
                                             </Button>
@@ -260,57 +267,58 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                                 </div>
 
                                 {/* CPM Contest Section */}
-                                <div className="p-6 border border-blue-200 dark:border-blue-800 rounded-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950">
+                                <div className="p-6 border border-[#7F39EC] rounded-lg bg-[#D9C0FF26]">
                                     <div className="flex items-center space-x-3 mb-4">
-                                        <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                                            <DollarSign className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                                        <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                                            <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                                         </div>
                                         <h3 className="font-bold text-lg">CPM Contests</h3>
-                                    </div>
-                                    <Badge variant="outline" className="border-blue-300 text-blue-700 dark:border-blue-600 dark:text-blue-300 mb-4">
+                                        <Badge variant="outline" className="bg-[#ECE1FC] text-purple-700">
                                         Pay Per 1000 Views
                                     </Badge>
+                                    </div>
+                                  
 
-                                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                                    <p className="text-md text-gray-600 dark:text-gray-300 mb-4">
                                         Pay only for actual views. More views = more marketing reach for your brand.
                                     </p>
 
                                     {/* Visual Process */}
                                     <div className="text-center mb-4">
-                                        <div className="inline-block p-4 bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-700">
-                                            <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mb-1">
+                                        <div className="inline-block p-4 px-8 bg-[#D9C0FF26] rounded-lg border border-[#7F39EC]">
+                                            <div className="text-lg font-bold text-black mb-2">
                                                 Set CPM Rate → Creators Post → Pay Per Views
                                             </div>
-                                            <div className="text-sm text-blue-500 dark:text-blue-300">
+                                            <div className="text-md text-black ">
                                                 Example: $5 per 1K views, 50K views = $250 payment
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Benefits */}
-                                    <div className="space-y-2">
+                                    <div className="space-y-4">
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Pay only for performance - no wasted budget</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Pay only for performance - no wasted budget</span>
                                         </div>
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Scalable - more views = more marketing</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Scalable - more views = more marketing</span>
                                         </div>
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Set max budget & CPM rate for control</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Set max budget & CPM rate for control</span>
                                         </div>
                                         <div className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                            <span className="text-sm text-gray-700 dark:text-gray-300">Perfect for ongoing marketing & paid advertising</span>
+                                            <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
+                                            <span className="text-md text-gray-700 dark:text-gray-300">Perfect for ongoing marketing & paid advertising</span>
                                         </div>
                                     </div>
 
                                     <div className="text-center pt-4">
                                         <Link href="/dashboard/contests/create">
-                                            <Button className="bg-blue-600 hover:bg-blue-700 text-white w-full">
-                                                <DollarSign className="w-4 h-4 mr-2" />
+                                            <Button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-md text-white w-full">
+                                                <DollarSign className="w-4 h-4" />
                                                 Create CPM Contest
                                             </Button>
                                         </Link>
@@ -318,99 +326,100 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                                 </div>
                             </div>
                         </CardContent>
-                    </Card>
+                    </div>
 
                     {/* Content Quality & Safety */}
-                    <Card className="border border-gray-200 dark:border-gray-700">
-                        <CardHeader className="text-center pb-4">
-                            <div className="flex items-center justify-center space-x-3 mb-2">
-                                <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                    <div >
+                        <div className="text-center pb-4">
+                            <div className="flex items-center justify-center space-x-3">
+                                {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Shield className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-                                </div>
+                                </div> */}
                                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                                     Content Quality & Safety
                                 </h2>
                             </div>
-                        </CardHeader>
+                        </div>
 
                         <CardContent className="space-y-6">
                             <div className="text-center mb-6">
-                                <p className="text-gray-600 dark:text-gray-300">
+                                <p className="text-lg text-gray-600 dark:text-gray-300">
                                     We ensure all content meets high quality standards and brand safety requirements.
                                 </p>
                             </div>
 
                             <div className="grid md:grid-cols-3 gap-6">
-                                <div className="p-4 border border-green-200 dark:border-green-800 rounded-lg bg-green-50 dark:bg-green-950">
-                                    <h3 className="font-semibold mb-3 text-green-800 dark:text-green-200">Quality Review:</h3>
-                                    <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <h3 className="font-semibold text-xl mb-3 text-black">Quality Review:</h3>
+                                    <ul className="space-y-3 text-[13px] text-gray-700 dark:text-gray-300">
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Content follows your brief and guidelines</span>
                                         </li>
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Video quality and production standards</span>
                                         </li>
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Brand safety and compliance checks</span>
                                         </li>
                                     </ul>
                                 </div>
 
-                                <div className="p-4 border border-blue-200 dark:border-blue-800 rounded-lg bg-blue-50 dark:bg-blue-950">
-                                    <h3 className="font-semibold mb-3 text-blue-800 dark:text-blue-200">What You Get:</h3>
-                                    <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <h3 className="font-semibold text-xl mb-3 text-black">What You Get:</h3>
+                                    <ul className="space-y-3 text-[14px] text-gray-700 dark:text-gray-300">
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Verified, high-quality content</span>
                                         </li>
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Performance metrics and analytics</span>
                                         </li>
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Usage rights for winning content</span>
                                         </li>
                                     </ul>
                                 </div>
 
-                                <div className="p-4 border border-purple-200 dark:border-purple-800 rounded-lg bg-purple-50 dark:bg-purple-950">
-                                    <h3 className="font-semibold mb-3 text-purple-800 dark:text-purple-200">Platform Support:</h3>
-                                    <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                                    <h3 className="font-semibold mb-3 text-xl text-black">Platform Support:</h3>
+                                    <ul className="space-y-3 text-[14px] text-gray-700 dark:text-gray-300">
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Dedicated campaign management</span>
                                         </li>
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>Creator community access</span>
                                         </li>
                                         <li className="flex items-start space-x-2">
-                                            <CheckCircle className="w-4 h-4 text-purple-500 mt-0.5 flex-shrink-0" />
+                                            <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                                             <span>24/7 support and guidance</span>
                                         </li>
                                     </ul>
                                 </div>
                             </div>
 
-                            <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <div className="bg-[#D9C0FF26] p-4 rounded-lg border border-[#7F39EC]">
                                 <div className="flex items-start space-x-3">
-                                    <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg flex-shrink-0">
+                                    {/* <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg flex-shrink-0">
                                         <MessageCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                    </div>
+                                    </div> */}
                                     <div>
-                                        <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">Pro Tip:</h4>
-                                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                                        <h4 className="font-semibold text-lg text-black mb-2">Pro Tip:</h4>
+                                        <p className="text-md text-black">
                                             <strong>Create clear, detailed briefs</strong> to get the best content. Include your brand guidelines, target audience, and specific requirements for better results.
                                         </p>
                                     </div>
                                 </div>
                             </div>
                         </CardContent>
-                    </Card>
+                    </div>
+                </div>
                 </div>
             ) : (
                 // CREATOR CONTENT
@@ -758,13 +767,14 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                         </CardContent>
                     </Card>
                 </div>
+                
             )}
 
             {/* Next Steps Section */}
             {userType === "advertiser" ? (
                 // BRAND/ADVERTISER READY TO START
-                <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900 dark:to-blue-900 border-0 mt-8">
-                    <CardContent className="p-6">
+                <div className="space-y-8 rounded-bl-xl rounded-br-xl shadow-lg bg-white px-6 pb-6">
+                    <CardContent className="p-6 border border-[#7F39EC] rounded-2xl bg-[#D9C0FF26]">
                         <div className="text-center mb-6">
                             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                                 Ready to Start?
@@ -776,17 +786,17 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
 
                         <div className="text-center">
                             <Link href="/dashboard/contests/create">
-                                <Button className="bg-green-600 hover:bg-green-700 text-white py-3 px-8 text-lg">
-                                    <Video className="w-5 h-5 mr-2" />
+                                <Button className="bg-[#4A00BE] w-full hover:bg-[#4A00BE] text-white py-3 px-8 text-lg">
+                                    <Video className="w-6 h-6" />
                                     Create Contest
                                 </Button>
                             </Link>
                         </div>
                     </CardContent>
-                </Card>
+                </div>
             ) : (
                 // CREATOR READY TO START (original simple layout)
-                <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900 dark:to-blue-900 border-0 mt-8">
+                <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900 dark:to-blue-900 border-0 mt-8">
                     <CardContent className="p-6">
                         <div className="text-center mb-6">
                             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
@@ -806,7 +816,7 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                             </Link>
                         </div>
                     </CardContent>
-                </Card>
+                </div>
             )}
         </div>
     );
