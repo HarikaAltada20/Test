@@ -146,7 +146,7 @@ export function DashboardSidebar({
 
   return (
     <div
-      className="flex h-full flex-col min-h-0"
+      className="flex h-full flex-col min-h-0 bg-white"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -169,7 +169,7 @@ export function DashboardSidebar({
             style={{
               backgroundColor:
                 pathname === "/dashboard/getting-started"
-                  ? "hsl(var(--primary))"
+                  ? "#7F39EC14"
                   : "transparent",
               borderColor:
                 pathname === "/dashboard/getting-started"
@@ -188,7 +188,7 @@ export function DashboardSidebar({
               if (pathname !== "/dashboard/getting-started") {
                 e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.3)";
                 e.currentTarget.style.backgroundColor =
-                  "hsl(var(--primary) / 0.1)";
+                  "#7F39EC14";
                 e.currentTarget.style.boxShadow =
                   "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
               }
@@ -214,8 +214,8 @@ export function DashboardSidebar({
                     : "hsl(var(--blue-500) / 0.2)",
                 color:
                   pathname === "/dashboard/getting-started"
-                    ? "hsl(var(--primary-foreground))"
-                    : "hsl(var(--blue-500))",
+                    ? "#4A00BE"
+                    : "hsl(var(--primary))",
               }}
             >
               <HelpCircle className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")} />
@@ -228,7 +228,7 @@ export function DashboardSidebar({
                     style={{
                       color:
                         pathname === "/dashboard/getting-started"
-                          ? "hsl(var(--primary-foreground))"
+                          ? "#4A00BE"
                           : "hsl(var(--foreground))",
                     }}
                   >
@@ -239,7 +239,7 @@ export function DashboardSidebar({
                     style={{
                       color:
                         pathname === "/dashboard/getting-started"
-                          ? "hsl(var(--primary-foreground) / 0.8)"
+                          ? "#4A00BE"
                           : "hsl(var(--muted-foreground))",
                     }}
                   >
@@ -264,7 +264,7 @@ export function DashboardSidebar({
             )}
           </Link>
         </div>
-        <div className="p-4">
+        <div className="px-4 pb-4 ">
           {!collapsed && (
             <h3
               className="px-3 py-2 text-xs font-semibold uppercase tracking-wider"
@@ -287,13 +287,13 @@ export function DashboardSidebar({
                   )}
                   style={{
                     backgroundColor: isActive
-                      ? "hsl(var(--primary))"
+                      ? "#7F39EC14"
                       : "transparent",
                     borderColor: isActive
                       ? "hsl(var(--primary) / 0.3)"
                       : "transparent",
                     color: isActive
-                      ? "hsl(var(--primary-foreground))"
+                      ? "#4A00BE"
                       : "hsl(var(--foreground))",
                     boxShadow: isActive
                       ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
@@ -304,7 +304,7 @@ export function DashboardSidebar({
                       e.currentTarget.style.borderColor =
                         "hsl(var(--primary) / 0.3)";
                       e.currentTarget.style.backgroundColor =
-                        "hsl(var(--primary) / 0.1)";
+                        "#7F39EC14";
                       e.currentTarget.style.boxShadow =
                         "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
                     }
@@ -324,11 +324,11 @@ export function DashboardSidebar({
                       collapsed ? "w-16 h-12" : "w-10 h-10"
                     )}
                     style={{
-                      backgroundColor: isActive
-                        ? "hsl(var(--primary-foreground) / 0.2)"
-                        : "hsl(var(--primary) / 0.2)",
+                      // backgroundColor: isActive
+                      //   ? "hsl(var(--primary-foreground) / 0.2)"
+                      //   : "hsl(var(--primary) / 0.2)",
                       color: isActive
-                        ? "hsl(var(--primary-foreground))"
+                        ? "#4A00BE"
                         : "hsl(var(--primary))",
                     }}
                   >
@@ -343,7 +343,7 @@ export function DashboardSidebar({
                           className="font-semibold text-sm"
                           style={{
                             color: isActive
-                              ? "hsl(var(--primary-foreground))"
+                              ? "#4A00BE"
                               : "hsl(var(--foreground))",
                           }}
                         >
@@ -353,7 +353,7 @@ export function DashboardSidebar({
                           className="text-xs truncate transition-colors"
                           style={{
                             color: isActive
-                              ? "hsl(var(--primary-foreground) / 0.8)"
+                              ? "#4A00BE"
                               : "hsl(var(--muted-foreground))",
                           }}
                         >
@@ -367,7 +367,7 @@ export function DashboardSidebar({
                         )}
                         style={{
                           color: isActive
-                            ? "hsl(var(--primary-foreground) / 0.8)"
+                            ? "#4A00BE"
                             : "hsl(var(--muted-foreground))",
                         }}
                       />

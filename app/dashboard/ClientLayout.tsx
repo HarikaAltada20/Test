@@ -49,8 +49,8 @@ import { useFullscreen } from "@/hooks/use-fullscreen";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import Link from "next/link";
 import Image from "next/image";
-import logo from "@/public/images/gold_logo_horizontal.svg";
-import squareLogo from "@/public/images/goc_square.avif";
+import logo from "@/public/images/Primary Horizintal.svg";
+import squareLogo from "@/public/images/Group (2).avif";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -649,27 +649,27 @@ function DashboardContent({
             "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
             sidebarCollapsed ? "w-28" : "w-72"
           )}
-          style={{
-            background:
-              currentMode === "light"
-                ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
-                : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
-            borderRightColor: `rgba(${theme.primary}, ${
-              currentMode === "light" ? "0.3" : "0.2"
-            })`,
-            boxShadow:
-              currentMode === "light"
-                ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
-                : "none",
-          }}
+          // style={{
+          //   background:
+          //     currentMode === "light"
+          //       ? `linear-gradient(to bottom, rgba(${mode.background.secondary}, 1), rgba(${mode.background.tertiary}, 1), rgba(${mode.background.secondary}, 1))`
+          //       : `linear-gradient(to bottom, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.90), rgba(${mode.background.primary}, 0.95))`,
+          //   borderRightColor: `rgba(${theme.primary}, ${
+          //     currentMode === "light" ? "0.3" : "0.2"
+          //   })`,
+          //   boxShadow:
+          //     currentMode === "light"
+          //       ? `2px 0 8px 0 rgba(0, 0, 0, 0.1), inset -1px 0 0 0 rgba(${theme.primary}, 0.1)`
+          //       : "none",
+          // }}
         >
           {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div
-            className="relative flex h-20 items-center justify-center border-b"
-            style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}
+            className="relative bg-white flex h-20 items-center justify-center border-b"
+            // style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}
           >
-            {/* Premium Background Effects - Same as Main Header */}
-            <div
+         
+            {/* <div
               className="absolute inset-0"
               style={{
                 background:
@@ -693,10 +693,10 @@ function DashboardContent({
                   theme.accent
                 }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
               }}
-            ></div>
+            ></div> */}
 
-            {/* Premium Grid Pattern */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+          
+          
 
             {/* Logo - Centered and Full Width */}
             <div className="relative flex items-center justify-center flex-1 z-10">
@@ -706,25 +706,25 @@ function DashboardContent({
                   className="flex items-center group transition-all duration-300"
                 >
                   <div
-                    className={cn(
-                      "relative p-3 rounded-lg transition-all duration-300",
-                      currentMode === "light"
-                        ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
-                        : "hover:bg-white/5"
-                    )}
-                    style={{
-                      ...(currentMode === "light" && {
-                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
-                      }),
-                    }}
+                    // className={cn(
+                    //   "relative p-3 rounded-lg transition-all duration-300",
+                    //   currentMode === "light"
+                    //     ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
+                    //     : "hover:bg-white/5"
+                    // )}
+                    // style={{
+                    //   ...(currentMode === "light" && {
+                    //     boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
+                    //   }),
+                    // }}
                   >
                     <Image
                       src={logo}
                       alt="Game Of Creators Logo"
-                      width={160}
-                      height={40}
+                      width={180}
+                      height={100}
                       className={cn(
-                        "h-10 w-auto transition-all duration-300",
+                        "h-[50px] w-auto transition-all duration-300",
                         currentMode === "light"
                           ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
                           : "filter brightness-110 group-hover:brightness-125"
@@ -753,10 +753,10 @@ function DashboardContent({
                     <Image
                       src={squareLogo}
                       alt="Game Of Creators"
-                      width={44}
-                      height={44}
+                      width={184}
+                      height={100}
                       className={cn(
-                        "h-11 w-11 transition-all duration-300",
+                        "h-[50px] w-auto transition-all duration-300",
                         currentMode === "light"
                           ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
                           : "filter brightness-110 group-hover:brightness-125"
