@@ -1122,7 +1122,7 @@ export function ContestClientPage({
                     </Card>
 
                     {/* Sponsor Card */}
-                    <Card className="md:col-span-2 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-700/50 hover:shadow-lg transition-all duration-300">
+                    {/* <Card className="md:col-span-2 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-700/50 hover:shadow-lg transition-all duration-300">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -1137,7 +1137,8 @@ export function ContestClientPage({
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
+                    </Card> */}
+
                   </div>
                 </div>
                 <Separator />

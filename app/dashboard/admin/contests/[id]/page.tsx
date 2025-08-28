@@ -158,7 +158,7 @@ export default async function AdminContestDetailPage({
                             creatorAvatarUrl = ytAccount?.channel_thumbnail;
                         } else if (platform?.includes('instagram') && creatorProfile.instagram_account) {
                             const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
-                            creatorDisplayName = igAccount?.full_name || igAccount?.display_name;
+                            creatorDisplayName = igAccount?.name_of_account || igAccount?.full_name || igAccount?.display_name;
                             creatorUsername = igAccount?.username;
                             creatorAvatarUrl = igAccount?.profile_picture_url;
                         }
