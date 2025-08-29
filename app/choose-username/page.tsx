@@ -336,7 +336,9 @@ export default function ChooseUsernamePage() {
           description: "Your username is already set. Redirecting...",
           duration: 3000,
         });
-        router.push("/dashboard");
+        // Only show Discord onboarding for creators
+        const welcomeFlag = profileData.user_type === 'creator' ? '?welcome=1' : '';
+        router.push(`/dashboard${welcomeFlag}`);
         router.refresh();
         return;
       }

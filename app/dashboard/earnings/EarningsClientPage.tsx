@@ -108,9 +108,7 @@ export default function EarningsClientPage({
     const [currentPayoutMethod, setCurrentPayoutMethod] = useState<PayoutMethod | null>(null);
     const [selectedPayoutType, setSelectedPayoutType] = useState<PayoutMethodType>("crypto");
 
-    const [cryptoType, setCryptoType] = useState<'LTC' | 'USDT_BEP20'>('LTC');
     const [cryptoAddress, setCryptoAddress] = useState('');
-    const [paypalEmail, setPaypalEmail] = useState('');
     const [bankAccountHolder, setBankAccountHolder] = useState('');
     const [bankAccountNumber, setBankAccountNumber] = useState('');
     const [bankBranchName, setBankBranchName] = useState('');
@@ -130,6 +128,10 @@ export default function EarningsClientPage({
 
     const [cryptoNetwork, setCryptoNetwork] = useState<string>('BNB_BEP20'); // Added for crypto network
     const [payoutFriendlyName, setPayoutFriendlyName] = useState<string>(''); // Added for friendly name
+
+    // Coupon/code redemption
+    const [redeemCode, setRedeemCode] = useState<string>('');
+    const [isRedeeming, setIsRedeeming] = useState<boolean>(false);
 
     // Pagination for cash transactions
     const {
@@ -593,6 +595,67 @@ export default function EarningsClientPage({
                                 <p className="text-xs text-muted-foreground">Total cash contest victories</p>
                             </CardContent>
                         </Card>
+                    </div>
+
+                    {/* Code Redemption */}
+                    <div className="mb-6 p-4 border rounded-md bg-muted/30">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
+                            <div className="flex-1">
+                                <Label htmlFor="redeemCode">Redeem a Code</Label>
+                                <Input
+                                    id="redeemCode"
+                                    placeholder="Enter coupon or promo code"
+                                    value={redeemCode}
+                                    onChange={(e) => setRedeemCode(e.target.value)}
+                                    disabled={isRedeeming}
+                                />
+                            </div>
+                            <Button
+                                onClick={async () => {
+                                    setIsRedeeming(true);
+                                    try {
+                                        const res = await fetch('/api/coupons/redeem', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ code: redeemCode.trim() })
+                                        });
+                                        const data = await res.json();
+                                        if (!res.ok || data.error) {
+                                            toast.error(data.error || 'Failed to redeem code');
+                                        } else {
+                                            // If server signals already redeemed, show neutral feedback
+                                            if (typeof data.message === 'string' && data.message.toLowerCase().includes('already redeemed')) {
+                                                toast('Code already redeemed on this account.');
+                                                setRedeemCode('');
+                                                return;
+                                            }
+                                            const creditedParts: string[] = [];
+                                            if (typeof data.cash_cents === 'number' && data.cash_cents > 0) {
+                                                setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) + data.cash_cents }) : prev);
+                                                creditedParts.push(`$${(data.cash_cents / 100).toFixed(2)} to withdrawable balance`);
+                                            }
+                                            if (typeof data.coins === 'number' && data.coins > 0) {
+                                                setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) + data.coins, total_lifetime_coins_earned: (prev.total_lifetime_coins_earned || 0) + data.coins }) : prev);
+                                                creditedParts.push(`${data.coins} coins`);
+                                            }
+                                            const successMsg = creditedParts.length > 0
+                                                ? `Code redeemed: ${creditedParts.join(' + ')}`
+                                                : 'Code redeemed successfully';
+                                            toast.success(successMsg);
+                                            setRedeemCode('');
+                                        }
+                                    } catch (err: any) {
+                                        toast.error(err?.message || 'Failed to redeem code');
+                                    } finally {
+                                        setIsRedeeming(false);
+                                    }
+                                }}
+                                disabled={isRedeeming || redeemCode.trim().length === 0}
+                            >
+                                {isRedeeming ? 'Redeeming...' : 'Redeem Code'}
+                            </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">Enter any valid code shared via Discord, email, or campaigns.</p>
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-4 mb-6">

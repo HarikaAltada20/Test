@@ -5,6 +5,7 @@ import "./globals.css";
 import { Nav } from "@/components/nav";
 import ReferralCapture from "@/components/ReferralCapture";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { createClient } from "@/utils/supabase/server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
@@ -128,6 +129,7 @@ export default async function RootLayout({
           <ConditionalFooter />
         </div>
         <Toaster />
+        <SonnerToaster />
         <Analytics />
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8J6VZKVWLF"
