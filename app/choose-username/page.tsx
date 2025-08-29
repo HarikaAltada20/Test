@@ -1313,6 +1313,16 @@ export default function ChooseUsernamePage() {
                           underscores only)
                         </p>
                       )}
+                      {userType === "creator" && (
+                        <Alert
+                          variant="default"
+                          className="mt-2 bg-emerald-950/40 border-emerald-700 text-emerald-300"
+                        >
+                          <AlertDescription>
+                            Use a valid referral code to get $0.50 cash bonus (50 cents) added to your withdrawable balance.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   )}
 
