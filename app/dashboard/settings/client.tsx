@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
-import { Bell, LogOut, Mail, ExternalLink, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { Bell, LogOut, Mail, ExternalLink, RefreshCw, Eye, EyeOff, Copy } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
 import dayjs from 'dayjs';
@@ -86,6 +86,7 @@ export default function SettingsPage({
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
     null
   );
+  const [username, setUsername] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
@@ -325,6 +326,22 @@ export default function SettingsPage({
     }
   }, [profile, userType]);
 
+  useEffect(() => {
+    const load = async () => {
+      if (!user?.id) return;
+      const { data, error } = await supabase
+        .from('users')
+        .select('username, user_type')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (!error && data) {
+        setUsername(data.username || null);
+        setUserType((data.user_type as any) || null);
+      }
+    };
+    load();
+  }, [user, supabase]);
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordChangeLoading(true);
@@ -383,12 +400,24 @@ export default function SettingsPage({
     }
   };
 
+  const buildReferralLinks = () => {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'https://www.gameofcreators.com';
+    const code = username || '';
+    return {
+      general: `${base}/?ref=${code}`,
+      creators: `${base}/creators?ref=${code}`,
+      brands: `${base}/brands?ref=${code}`,
+    };
+  };
 
-
-
-
-
-
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: 'Copied', description: 'Referral link copied to clipboard.' });
+    } catch (e) {
+      toast({ title: 'Copy failed', description: 'Please copy manually.', variant: 'destructive' });
+    }
+  };
 
 
   const clearConnectionError = () => {
@@ -1149,6 +1178,45 @@ export default function SettingsPage({
                 {passwordChangeLoading ? "Updating Password..." : "Update Password"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Referral Links */}
+      {username && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Share Your Referral Links</CardTitle>
+            <CardDescription>
+              Invite others with your referral code embedded. Choose the right landing page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {(() => {
+              const links = buildReferralLinks();
+              return (
+                <div className="space-y-3">
+                  <div className="flex gap-2 items-center">
+                    <Input readOnly value={links.general} />
+                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.general)}>
+                      <Copy className="h-4 w-4 mr-2" />Copy General
+                    </Button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Input readOnly value={links.creators} />
+                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.creators)}>
+                      <Copy className="h-4 w-4 mr-2" />Copy Creators
+                    </Button>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Input readOnly value={links.brands} />
+                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.brands)}>
+                      <Copy className="h-4 w-4 mr-2" />Copy Brands
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}
