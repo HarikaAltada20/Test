@@ -184,30 +184,62 @@ export async function POST(request: Request) {
           if (typeof cpm?.max_views === 'number' && effectiveViews > cpm.max_views) effectiveViews = cpm.max_views;
           rewardAmount = Math.round((effectiveViews * rate / 1000) * 100); // cents
         } else if (contest.contest_type === 'leaderboard') {
-          // Compute prize by rank (views desc)
-          const { data: allSubs } = await supabase
+          // Compute prize by rank among verified (and already paid) submissions only
+          const { count: higherViewsCount } = await supabase
             .from('submissions')
-            .select('id, views')
+            .select('id', { count: 'exact', head: true })
             .eq('contest_id', submissionFull.contest_id)
-            .order('views', { ascending: false });
-          const rank = (allSubs || []).findIndex((s: any) => s.id === submissionFull.id) + 1;
+            .in('status', ['verified', 'paid'])
+            .gt('views', submissionFull.views || 0);
+          const rank = (higherViewsCount || 0) + 1;
           const prizes = (contest as any)?.contest_based_details?.leaderboard_contest?.prizes || [];
           const prizeForRank = prizes.find((p: any) => p.position === rank);
           rewardAmount = prizeForRank?.amount || 0; // already in cents
         }
       }
       if (rewardAmount > 0) {
-        const creditRes = await creditCreatorWithdrawableBalance(
-          submissionFull.creator_id,
-          rewardAmount,
-          customAmount ? `Custom contest payment credited for submission ${submissionId}` : `Contest reward credited for submission ${submissionId}`,
-          {
-            remarks: customAmount ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet',
-            metadata: { contest_id: submissionFull.contest_id, submission_id: submissionId, payout_type: customAmount ? 'custom' : 'standard' }
+        // Determine payout cycle, allowing repay after full refund
+        const { data: existingRewards } = await supabase
+          .from('money_transactions')
+          .select('id')
+          .eq('user_id', submissionFull.creator_id)
+          .eq('type', 'reward')
+          .contains('metadata', { submission_id: submissionId });
+
+        const { data: existingRefunds } = await supabase
+          .from('money_transactions')
+          .select('id, remarks')
+          .eq('user_id', submissionFull.creator_id)
+          .eq('type', 'refund')
+          .contains('metadata', { submission_id: submissionId });
+
+        const rewardsCount = (existingRewards || []).length;
+        const refundsCount = (existingRefunds || [])
+          ?.filter((r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK)
+          .length || 0;
+        const nextCycle = rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
+
+        // Check duplicate reward in this cycle
+        const { data: rewardInThisCycle } = await supabase
+          .from('money_transactions')
+          .select('id')
+          .eq('user_id', submissionFull.creator_id)
+          .eq('type', 'reward')
+          .contains('metadata', { submission_id: submissionId, payout_cycle: nextCycle });
+
+        if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
+          const creditRes = await creditCreatorWithdrawableBalance(
+            submissionFull.creator_id,
+            rewardAmount,
+            customAmount ? `Custom contest payment credited for submission ${submissionId}` : `Contest reward credited for submission ${submissionId}`,
+            {
+              remarks: customAmount ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet',
+              metadata: { contest_id: submissionFull.contest_id, submission_id: submissionId, payout_type: customAmount ? 'custom' : 'standard', payout_cycle: nextCycle }
+            }
+          );
+          if (!creditRes.success) {
+            return NextResponse.json({ error: `Failed to credit creator: ${creditRes.error}` }, { status: 500 });
           }
-        );
-        if (!creditRes.success) {
-          return NextResponse.json({ error: `Failed to credit creator: ${creditRes.error}` }, { status: 500 });
         }
 
         // Update creator metrics: contests won (+1)
@@ -227,22 +259,39 @@ export async function POST(request: Request) {
       }
     }
 
-    // If status is changed away from paid, remove reward and delete related reward transactions
+    // If status is changed away from paid, remove reward, reverse wallet credit, and clear earnings
     if ((action === SUBMISSION_STATUS.verified || action === SUBMISSION_STATUS.pending || action === SUBMISSION_STATUS.rejected) && submission.status === SUBMISSION_STATUS.paid) {
-      // Sum all reward transactions for this submission
-      // Use admin client to bypass RLS when reading creator transactions
-      const { data: rewardTxns, error: listErr } = await supabaseAdmin
-        .from('money_transactions')
-        .select('id, amount')
-        .eq('user_id', submissionFull.creator_id)
-        .eq('type', 'reward')
-        .contains('metadata', { submission_id: submissionId });
+      // O(1) reversal: prefer the current earnings snapshot on the submission
+      // This is exactly the last granted amount for this submission
+      let reversalAmount = submissionFull.earnings || 0;
+      if (!reversalAmount || reversalAmount <= 0) {
+        // Fallback: calculate net unreversed reward = rewards - prior reversals (rare path)
+        const [{ data: rewardTxns, error: rewardErr }, { data: refundTxns, error: refundErr }] = await Promise.all([
+          supabaseAdmin
+            .from('money_transactions')
+            .select('id, amount')
+            .eq('user_id', submissionFull.creator_id)
+            .eq('type', 'reward')
+            .contains('metadata', { submission_id: submissionId }),
+          supabaseAdmin
+            .from('money_transactions')
+            .select('id, amount, remarks')
+            .eq('user_id', submissionFull.creator_id)
+            .eq('type', 'refund')
+            .contains('metadata', { submission_id: submissionId })
+        ] as any);
 
-      if (listErr) {
-        return NextResponse.json({ error: `Failed to fetch reward transactions: ${listErr.message}` }, { status: 500 });
+        if (rewardErr || refundErr) {
+          const message = rewardErr?.message || refundErr?.message || 'unknown';
+          return NextResponse.json({ error: `Failed to fetch transactions for reversal: ${message}` }, { status: 500 });
+        }
+
+        const totalRewards = (rewardTxns || []).reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
+        const totalReversals = (refundTxns || [])
+          .filter((tx: any) => !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+          .reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
+        reversalAmount = Math.max(0, totalRewards - totalReversals);
       }
-
-      const reversalAmount = (rewardTxns || []).reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
 
       if (reversalAmount > 0) {
         // Debit creator wallet by the credited total
@@ -266,15 +315,14 @@ export async function POST(request: Request) {
           `Reversal of contest reward for submission ${submissionId}`,
           { remarks: REVERSAL_TRANSACTION_REMARK, paymentMethod: 'refund', metadata: { submission_id: submissionId, contest_id: submissionFull.contest_id } }
         );
-        // Ensure earnings remain present so UI can show amount with Pending label
-        const currentEarnings = submissionFull.earnings || 0;
-        if (!currentEarnings || currentEarnings === 0) {
-          await supabaseAdmin
-            .from('submissions')
-            .update({ earnings: reversalAmount })
-            .eq('id', submissionId);
-        }
+        // No longer keep earnings on reversal; it should be cleared when leaving Paid
       }
+
+      // Always clear earnings once we move away from Paid, regardless of reversalAmount
+      await supabaseAdmin
+        .from('submissions')
+        .update({ earnings: null })
+        .eq('id', submissionId);
     }
 
     // Note: With the new system, verified and pending submissions show in leaderboard immediately
