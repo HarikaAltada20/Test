@@ -91,6 +91,12 @@ export function DashboardSidebar({
       description: "Admin overview",
     },
     {
+      name: "Withdrawal Requests",
+      href: "/dashboard/admin/withdrawals",
+      icon: DollarSign,
+      description: "Manage payout withdrawals",
+    },
+    {
       name: "All Contests",
       href: "/dashboard/admin/contests",
       icon: Trophy,
@@ -101,6 +107,12 @@ export function DashboardSidebar({
       href: "/dashboard/admin/contest-moderation",
       icon: Shield,
       description: "Review & approve contests",
+    },
+    {
+      name: "Support",
+      href: "/dashboard/admin/support",
+      icon: HelpCircle,
+      description: "Queries & contacts",
     },
   ];
 
@@ -141,8 +153,8 @@ export function DashboardSidebar({
     userRole === "advertiser"
       ? advertiserLinks
       : userRole === "admin"
-      ? adminLinks
-      : creatorLinks;
+        ? adminLinks
+        : creatorLinks;
 
   return (
     <div
@@ -158,112 +170,7 @@ export function DashboardSidebar({
           showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
         )}
       >
-        <div className="px-4 pt-2">
-          <Link
-            href="/dashboard/getting-started"
-            className={cn(
-              "group relative flex items-center gap-3 rounded-xl transition-all duration-200",
-              "border border-transparent text-black",
-              collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
-            )}
-            style={{
-              backgroundColor:
-                pathname === "/dashboard/getting-started"
-                  ? "hsl(var(--primary))"
-                  : "transparent",
-              borderColor:
-                pathname === "/dashboard/getting-started"
-                  ? "hsl(var(--primary) / 0.3)"
-                  : "transparent",
-              color:
-                pathname === "/dashboard/getting-started"
-                  ? "hsl(var(--primary-foreground))"
-                  : "hsl(var(--foreground))",
-              boxShadow:
-                pathname === "/dashboard/getting-started"
-                  ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
-                  : "none",
-            }}
-            onMouseEnter={(e) => {
-              if (pathname !== "/dashboard/getting-started") {
-                e.currentTarget.style.borderColor = "hsl(var(--primary) / 0.3)";
-                e.currentTarget.style.backgroundColor =
-                  "hsl(var(--primary) / 0.1)";
-                e.currentTarget.style.boxShadow =
-                  "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (pathname !== "/dashboard/getting-started") {
-                e.currentTarget.style.borderColor = "transparent";
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.boxShadow = "none";
-              }
-            }}
-            title={collapsed ? "Getting Started" : undefined}
-          >
-            <div
-              className={cn(
-                "flex items-center justify-center rounded-lg transition-colors",
-                collapsed ? "w-16 h-12" : "w-10 h-10"
-              )}
-              style={{
-                backgroundColor:
-                  pathname === "/dashboard/getting-started"
-                    ? "hsl(var(--primary-foreground) / 0.2)"
-                    : "hsl(var(--blue-500) / 0.2)",
-                color:
-                  pathname === "/dashboard/getting-started"
-                    ? "hsl(var(--primary-foreground))"
-                    : "hsl(var(--blue-500))",
-              }}
-            >
-              <HelpCircle className={cn(collapsed ? "h-6 w-6" : "h-5 w-5")} />
-            </div>
-            {!collapsed && (
-              <>
-                <div className="flex-1 min-w-0">
-                  <div
-                    className="font-semibold text-sm"
-                    style={{
-                      color:
-                        pathname === "/dashboard/getting-started"
-                          ? "hsl(var(--primary-foreground))"
-                          : "hsl(var(--foreground))",
-                    }}
-                  >
-                    Getting Started
-                  </div>
-                  <div
-                    className="text-xs truncate transition-colors"
-                    style={{
-                      color:
-                        pathname === "/dashboard/getting-started"
-                          ? "hsl(var(--primary-foreground) / 0.8)"
-                          : "hsl(var(--muted-foreground))",
-                    }}
-                  >
-                    Learn about contests & campaigns
-                  </div>
-                </div>
-
-                <ChevronRight
-                  className={cn(
-                    "h-4 w-4 transition-all duration-200",
-                    pathname === "/dashboard/getting-started" &&
-                      "translate-x-0.5"
-                  )}
-                  style={{
-                    color:
-                      pathname === "/dashboard/getting-started"
-                        ? "hsl(var(--primary-foreground) / 0.8)"
-                        : "hsl(var(--muted-foreground))",
-                  }}
-                />
-              </>
-            )}
-          </Link>
-        </div>
+        {/* Removed Getting Started link for admin */}
         <div className="p-4">
           {!collapsed && (
             <h3
@@ -379,54 +286,56 @@ export function DashboardSidebar({
           </nav>
         </div>
         <div>
-          {/* Sidebar Content */}
-          <div className="p-4 rounded-2xl border border-purple-500 mr-4 ml-4 bg-purple-100 shadow-lg shadow-purple-200">
-            {!collapsed ? (
-              <div className="flex flex-col gap-3">
-                <p className="text-md text-purple-800 text-center font-medium">
-                  We're here to help
-                </p>
+          {/* Sidebar Content: hide chat widget for admin */}
+          {userRole !== "admin" && (
+            <div className="p-4 rounded-2xl border border-purple-500 mr-4 ml-4 bg-purple-100 shadow-lg shadow-purple-200">
+              {!collapsed ? (
+                <div className="flex flex-col gap-3">
+                  <p className="text-md text-purple-800 text-center font-medium">
+                    We're here to help
+                  </p>
 
-                <div className="flex py-2 justify-center">
-                  <div className="rounded-full bg-purple-600 p-2">
-                    <Phone size={23} className="text-white" />
+                  <div className="flex py-2 justify-center">
+                    <div className="rounded-full bg-purple-600 p-2">
+                      <Phone size={23} className="text-white" />
+                    </div>
+                  </div>
+                  <button
+                    onClick={onChatOpen}
+                    className="w-full rounded-xl bg-purple-600 text-white py-2 transition hover:bg-purple-700"
+                  >
+                    Chat with Us
+                  </button>
+
+                  {/* Show Book a Call only for advertisers */}
+                  {userRole === "advertiser" && (
+                    <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
+                      <a
+                        href="https://calendly.com/guptavishesh2/30min"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Book a Call
+                      </a>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={() => setShowChat(true)}
+                    className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
+                  >
+                    <MessageCircle size={18} />
+                  </button>
+
+                  <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
+                    <Phone size={18} className="text-white" />
                   </div>
                 </div>
-                <button
-                  onClick={onChatOpen}
-                  className="w-full rounded-xl bg-purple-600 text-white py-2 transition hover:bg-purple-700"
-                >
-                  Chat with Us
-                </button>
-
-                {/* Show Book a Call only for advertisers */}
-                {userRole === "advertiser" && (
-                  <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
-                    <a
-                      href="https://calendly.com/guptavishesh2/30min"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Book a Call
-                    </a>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <button
-                  onClick={() => setShowChat(true)}
-                  className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
-                >
-                  <MessageCircle size={18} />
-                </button>
-
-                <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
-                  <Phone size={18} className="text-white" />
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
