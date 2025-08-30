@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import CtcBanner from "@/components/CtcBanner";
 import Testimonials from "../../components/Testimonials";
 import FAQ from "@/components/FAQ";
+import { SOCIAL_LINKS } from "@/constants/socialLinks";
+import { FaDiscord } from "react-icons/fa";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
 
@@ -321,11 +323,20 @@ export default function CreatorsClient() {
                   Watch Demo
                 </a>
               </Button>
+
             </div>
 
-            {/* Social Proof */}
-            <div className="flex justify-center items-center text-base text-slate-300 mb-8">
-              <span className="font-medium">Trusted by 500+ creators and brands</span>
+            {/* Creator Discord link (replaces social proof line) */}
+            <div className="flex justify-center items-center mb-8">
+              <a
+                href={SOCIAL_LINKS.discord}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-[#5865F2]/30 bg-[#5865F2]/10 px-4 py-2 text-sm text-[#C7CEFF] hover:bg-[#5865F2]/20 hover:shadow-[0_0_18px_rgba(88,101,242,0.35)] hover:ring-1 hover:ring-[#5865F2]/40 transition-colors transition-shadow"
+              >
+                <FaDiscord className="h-4 w-4 text-[#5865F2]" />
+                Join Creator Community
+              </a>
             </div>
           </div>
         </section>

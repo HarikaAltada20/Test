@@ -168,6 +168,12 @@ const creatorFaqs = [
     answer:
       "If you win a contest, both you, the creator, and the brand will have shared ownership of the content. You can use the content for your portfolio and social media (non-commercial use), while the brand can use it for marketing, advertising, and promotions.<br><br>This shared ownership model allows you to keep your work in your portfolio, while also allowing the brand to use the content for their commercial purposes.",
   },
+  {
+    id: "faq-16",
+    question: "What if someone copies content from another participant?",
+    answer:
+      "Copying content from other participants is unfair and goes against the rules. If caught, the participant will be disqualified. We encourage originality and fair competition.",
+  },
 ];
 const brandFaqs = [
   {
@@ -228,7 +234,7 @@ const brandFaqs = [
     id: "faq-brand-10",
     question: "How are creators paid?",
     answer:
-      "Game of Creators handles all creator payments seamlessly for you. Once the contest ends and winners are determined based on organic views, we distribute the prize money directly to the winning creators' wallets.<br><br>From there, they can request a withdrawal at any time through their preferred payment method—<strong>Crypto, Bank Transfer, or UPI</strong>. The only condition is that the payout must be at least <strong>$20</strong>.<br><br>This ensures a smooth process, so you don't have to worry about managing individual payments or logistics.",
+      "Game of Creators handles all creator payments seamlessly for you. Once the contest ends and winners are determined based on organic views, we distribute the prize money directly to the winning creators' wallets.<br><br>From there, they can request a withdrawal at any time through their preferred payment method—<strong>Crypto, Bank Transfer, or UPI</strong>. The only condition is that the payout must be at least <strong>$5</strong>.<br><br>This ensures a smooth process, so you don't have to worry about managing individual payments or logistics.",
   },
 ];
 
