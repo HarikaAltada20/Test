@@ -12,6 +12,21 @@ import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsL
 import Image from 'next/image';
 import React from 'react';
 import { centsToDollars } from '@/lib/currency-utils';
+import { getFullRejectionDetails } from '@/lib/submission-metadata';
+
+// Map human-readable rejection reason labels to their descriptions
+const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
+    'Content Guidelines Violation': 'Content does not follow the contest guidelines, platform rules, or community standards',
+    'Quality Standards Not Met': 'Content quality, production value, or presentation does not meet the required standards',
+    'Brand Guidelines Violation': 'Content does not align with our brand guidelines, tone, or messaging requirements',
+    'Inappropriate Content': 'Content contains inappropriate, offensive, or unsuitable material for our platform',
+    'Copyright Issues': 'Content may violate copyright, trademark, or intellectual property rights',
+    'Technical Issues': 'Content has technical problems, is not accessible, or fails to load properly',
+    'Off Topic': 'Content is not relevant to the contest theme, brief, or specific requirements',
+    'Duplicate Content': 'Content appears to be duplicate or very similar to existing submissions or previous work',
+    'Incomplete Submission': 'Submission is incomplete, missing required elements, or appears unfinished',
+    'Other Reason': 'Other reason not listed above - please provide specific details'
+};
 
 interface SubmissionsClientProps {
     initialSubmissions: SubmissionWithContest[];
@@ -364,6 +379,7 @@ export default function SubmissionsClient({
                                     const views = submission.views ?? 0;
                                     const contestId = submission.contests?.id;
                                     const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
+                                    const rejectionDetails = submission.status === 'rejected' ? getFullRejectionDetails(submission.metadata) : null;
 
                                     let primaryEarningsDisplay: React.ReactNode | null = null;
 
@@ -522,6 +538,25 @@ export default function SubmissionsClient({
                                                     >
                                                         {displayStatus}
                                                     </Badge>
+                                                    {submission.status === 'rejected' && rejectionDetails && (
+                                                        <div className="mt-2 rounded-md border border-red-200 dark:border-red-800 bg-red-50/60 dark:bg-red-950/40 p-2 text-xs text-red-700 dark:text-red-300">
+                                                            <div className="flex items-start gap-2">
+                                                                <AlertCircle className="h-4 w-4 mt-0.5" />
+                                                                <div>
+                                                                    <p className="font-semibold">Rejection Reason</p>
+                                                                    <p className="mt-0.5">{rejectionDetails.reason}</p>
+                                                                    {REJECTION_REASON_DESCRIPTIONS[rejectionDetails.reason] && (
+                                                                        <p className="mt-0.5 text-[11px] opacity-90">
+                                                                            {REJECTION_REASON_DESCRIPTIONS[rejectionDetails.reason]}
+                                                                        </p>
+                                                                    )}
+                                                                    {rejectionDetails.additionalNotes && (
+                                                                        <p className="mt-0.5">Notes: {rejectionDetails.additionalNotes}</p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                                                     <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
