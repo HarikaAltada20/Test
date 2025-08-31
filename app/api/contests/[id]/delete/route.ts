@@ -121,9 +121,10 @@ export async function DELETE(
 
     if (isRefundable && contest.payment_details) {
         const paymentDetails = contest.payment_details as any;
-        if(paymentDetails.payment_status === 'completed' && paymentDetails.total_amount_paid > 0) {
+        if (paymentDetails.payment_status === 'completed' && paymentDetails.total_amount_paid > 0) {
             refundAmount = paymentDetails.total_amount_paid;
-            await issueRefund(user.id, contestId, refundAmount);
+            // IMPORTANT: Refund the advertiser, not the current user (admin may be deleting)
+            await issueRefund(contest.advertiser_id, contestId, refundAmount);
         }
     }
 
