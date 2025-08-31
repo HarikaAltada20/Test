@@ -1,13 +1,15 @@
 "use client";
 import React, { useState } from "react";
-import { X, MessageSquare } from "lucide-react";
+import { X, MessageSquare, ExternalLink, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SOCIAL_LINKS } from "@/constants/socialLinks";
 interface ChatProps {
   onClose: () => void;
   email: string; // 👈 pass logged-in user's email
+  userType?: "creator" | "advertiser" | "admin"; // optional: show creator-only CTA
 }
 
-const ChatSupport: React.FC<ChatProps> = ({ onClose, email }) => {
+const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -18,7 +20,7 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email }) => {
       toast({
         title: "Missing Query",
         description: "Please enter your query before submitting.",
-        variant: "destructive", 
+        variant: "destructive",
       });
       return;
     }
@@ -70,7 +72,7 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email }) => {
       <div className="p-5 flex-1">
         <h3 className="font-semibold mb-2 text-lg">Drop us a Query</h3>
         <p className="text-md text-gray-600 mb-4">
-          Fill in the details below and our advisors will get in touch with you
+          Fill in the details below and our team will get in touch with you
           within 24 hours.
         </p>
 
@@ -80,6 +82,29 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email }) => {
           onChange={(e) => setQuery(e.target.value)}
           className="w-full border border-gray-300 px-3 py-2 rounded mb-3 text-sm h-[200px] resize-none focus:outline-none focus:ring-1 focus:ring-purple-500"
         ></textarea>
+
+        {userType === "creator" && (
+          <div className="mb-4 p-3 rounded-md border bg-purple-50">
+            <div className="flex items-start gap-2">
+              <div className="p-1.5 rounded bg-white border">
+                <MessageCircle className="h-4 w-4 text-purple-600" />
+              </div>
+              <div className="flex-1 text-sm text-gray-700">
+                For quicker responses, join our active Game of creators discord community.
+                <div className="mt-2">
+                  <a
+                    href={SOCIAL_LINKS.discord}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700"
+                  >
+                    <ExternalLink className="h-4 w-4" /> Join Discord
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={handleSubmit}

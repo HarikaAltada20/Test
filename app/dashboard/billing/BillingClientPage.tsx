@@ -104,6 +104,7 @@ export default function BillingClientPage({
 
     // Form States for Payout Methods
     const [payoutFriendlyName, setPayoutFriendlyName] = useState("");
+    const [payoutCountry, setPayoutCountry] = useState<'IN' | 'OTHER'>('IN');
     const [cryptoNetwork, setCryptoNetwork] = useState("BNB_BEP20");
     const [cryptoAddress, setCryptoAddress] = useState("");
     const [upiId, setUpiId] = useState("");
@@ -192,6 +193,12 @@ export default function BillingClientPage({
         setBankBranchName('');
         setBankCountry('IN');
         setPayoutFriendlyName('');
+        setPayoutCountry('IN');
+    };
+
+    // Simple BNB Smart Chain (BEP20) wallet validation: 0x + 40 hex chars
+    const isValidBep20Address = (address: string): boolean => {
+        return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
     };
 
     // Handle save payout method
@@ -212,27 +219,36 @@ export default function BillingClientPage({
                 toast.error("Crypto wallet address and network are required.");
                 return;
             }
+            if (cryptoNetwork !== 'BNB_BEP20') {
+                toast.error("Only BNB Smart Chain (BEP20) is supported.");
+                return;
+            }
+            if (!isValidBep20Address(cryptoAddress)) {
+                toast.error("Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars).");
+                return;
+            }
             details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim() };
         } else if (selectedPayoutType === 'upi') {
-            if (!upiId.trim()) {
-                toast.error("UPI ID is required.");
+            if (!bankAccountHolder.trim() || !upiId.trim()) {
+                toast.error("Account holder name and UPI ID are required.");
                 return;
             }
-            details = { upi_id: upiId.trim() };
+            details = { account_holder_name: bankAccountHolder.trim(), upi_id: upiId.trim() };
         } else if (selectedPayoutType === 'bank_transfer') {
-            if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankName.trim() || !bankCountry.trim()) {
-                toast.error("Account holder name, account number, bank name, and country are required for bank transfer.");
+            if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankIfscCode.trim()) {
+                toast.error("Account holder name, account number, and IFSC code are required for bank transfer.");
                 return;
             }
-            details = {
+            const bankDetails: any = {
                 account_holder_name: bankAccountHolder.trim(),
                 account_number: bankAccountNumber.trim(),
-                ifsc_code: bankIfscCode.trim() || undefined,
-                swift_bic_code: bankRoutingNumber.trim() || undefined,
-                bank_name: bankName.trim(),
-                branch_name: bankBranchName.trim() || undefined,
+                ifsc_code: bankIfscCode.trim(),
                 country: bankCountry.trim(),
             };
+            if (bankRoutingNumber.trim()) bankDetails.swift_bic_code = bankRoutingNumber.trim();
+            if (bankName.trim()) bankDetails.bank_name = bankName.trim();
+            if (bankBranchName.trim()) bankDetails.branch_name = bankBranchName.trim();
+            details = bankDetails;
         } else {
             toast.error("Invalid payout method type selected.");
             return;
@@ -989,7 +1005,7 @@ export default function BillingClientPage({
                 setIsPayoutModalOpen(isOpen);
                 if (!isOpen) resetPayoutForm();
             }}>
-                <DialogContent className="sm:max-w-[625px]">
+                <DialogContent className="sm:max-w-[625px] max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{currentPayoutMethod?.id ? "Edit Payout Method" : "Add New Payout Method"}</DialogTitle>
                         <DialogDescription>
@@ -997,13 +1013,34 @@ export default function BillingClientPage({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
+                        {/* Country selector controls which payout methods show */}
+                        <div>
+                            <Label htmlFor="payoutCountry">Country</Label>
+                            <Select value={payoutCountry} onValueChange={(val) => {
+                                const v = (val as 'IN' | 'OTHER');
+                                setPayoutCountry(v);
+                                setSelectedPayoutType(v === 'IN' ? 'upi' : 'crypto');
+                            }} disabled={isLoading}>
+                                <SelectTrigger id="payoutCountry"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="IN">India</SelectItem>
+                                    <SelectItem value="OTHER">Other</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                         {/* Tabs for payout types */}
                         <Tabs defaultValue={selectedPayoutType} onValueChange={(value) => setSelectedPayoutType(value as PayoutMethodType)} className="w-full">
-                            <TabsList className="grid w-full grid-cols-3">
-                                <TabsTrigger value="crypto">Crypto</TabsTrigger>
-                                <TabsTrigger value="bank_transfer">Bank Transfer</TabsTrigger>
-                                <TabsTrigger value="upi">UPI</TabsTrigger>
-                            </TabsList>
+                            {payoutCountry === 'IN' ? (
+                                <TabsList className="grid w-full grid-cols-3">
+                                    <TabsTrigger value="upi">UPI</TabsTrigger>
+                                    <TabsTrigger value="bank_transfer">Bank Transfer</TabsTrigger>
+                                    <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
+                                </TabsList>
+                            ) : (
+                                <TabsList className="grid w-full grid-cols-1">
+                                    <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
+                                </TabsList>
+                            )}
 
                             <TabsContent value="crypto" className="pt-4 space-y-3">
                                 <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
@@ -1019,9 +1056,6 @@ export default function BillingClientPage({
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="BNB_BEP20">BNB Smart Chain (BEP20)</SelectItem>
-                                        <SelectItem value="ETH_ERC20">Ethereum (ERC20)</SelectItem>
-                                        <SelectItem value="TRX_TRC20">Tron (TRC20)</SelectItem>
-                                        <SelectItem value="LTC">Litecoin</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
@@ -1032,110 +1066,36 @@ export default function BillingClientPage({
                                     placeholder={`Enter your ${cryptoNetwork} wallet address`}
                                     disabled={isLoading}
                                 />
+                                <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
+                                    We only support BNB Smart Chain (BEP20). Do not enter ERC20/other chain addresses. Wrong address = funds lost.
+                                </div>
+                                <p className="text-[11px] text-muted-foreground">
+                                    Crypto payouts are optional digital rewards. By choosing this method, you accept responsibility for declaring and paying taxes as per your country’s laws.
+                                </p>
                             </TabsContent>
 
+                            {/* Bank Transfer Form (India) */}
                             <TabsContent value="bank_transfer" className="pt-4 space-y-3">
                                 <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
-                                <Input
-                                    id="payoutFriendlyNameBank"
-                                    value={payoutFriendlyName}
-                                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                                    placeholder="e.g., My Savings Account"
-                                    disabled={isLoading}
-                                />
+                                <Input id="payoutFriendlyNameBank" value={payoutFriendlyName} onChange={(e) => setPayoutFriendlyName(e.target.value)} placeholder="e.g., Primary Savings" disabled={isLoading} />
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div>
-                                        <Label htmlFor="bankAccountHolder">Account Holder Name</Label>
-                                        <Input
-                                            id="bankAccountHolder"
-                                            value={bankAccountHolder}
-                                            onChange={(e) => setBankAccountHolder(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankAccountNumber">Account Number</Label>
-                                        <Input
-                                            id="bankAccountNumber"
-                                            value={bankAccountNumber}
-                                            onChange={(e) => setBankAccountNumber(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankCountry">Country</Label>
-                                        <Input
-                                            id="bankCountry"
-                                            value={bankCountry}
-                                            onChange={(e) => setBankCountry(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankName">Bank Name</Label>
-                                        <Input
-                                            id="bankName"
-                                            value={bankName}
-                                            onChange={(e) => setBankName(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankBranchName">Branch Name</Label>
-                                        <Input
-                                            id="bankBranchName"
-                                            value={bankBranchName}
-                                            onChange={(e) => setBankBranchName(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankSortCode">Sort Code (UK)</Label>
-                                        <Input
-                                            id="bankSortCode"
-                                            value={bankSortCode}
-                                            onChange={(e) => setBankSortCode(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankRoutingNumber">Routing Number (US)</Label>
-                                        <Input
-                                            id="bankRoutingNumber"
-                                            value={bankRoutingNumber}
-                                            onChange={(e) => setBankRoutingNumber(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label htmlFor="bankIfscCode">IFSC Code (India)</Label>
-                                        <Input
-                                            id="bankIfscCode"
-                                            value={bankIfscCode}
-                                            onChange={(e) => setBankIfscCode(e.target.value)}
-                                            disabled={isLoading}
-                                        />
-                                    </div>
+                                    <div><Label htmlFor="bankAccountHolder">Account Holder Name</Label><Input id="bankAccountHolder" value={bankAccountHolder} onChange={(e) => setBankAccountHolder(e.target.value)} disabled={isLoading} /></div>
+                                    <div><Label htmlFor="bankAccountNumber">Account Number</Label><Input id="bankAccountNumber" value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} disabled={isLoading} /></div>
+                                    <div><Label htmlFor="bankIfscCode">IFSC Code</Label><Input id="bankIfscCode" value={bankIfscCode} onChange={(e) => setBankIfscCode(e.target.value)} disabled={isLoading} /></div>
+                                    <div><Label htmlFor="bankName">Bank Name (Optional)</Label><Input id="bankName" value={bankName} onChange={(e) => setBankName(e.target.value)} disabled={isLoading} /></div>
                                 </div>
+                                <p className="text-xs text-muted-foreground">Bank transfers may take 2–24 hours. Your bank may charge a small fee. You are responsible for declaring your earnings and paying any taxes as per Indian law.</p>
                             </TabsContent>
 
+                            {/* UPI Form (India, default) */}
                             <TabsContent value="upi" className="pt-4 space-y-3">
                                 <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
-                                <Input
-                                    id="payoutFriendlyNameUpi"
-                                    value={payoutFriendlyName}
-                                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                                    placeholder="e.g., My PhonePe"
-                                    disabled={isLoading}
-                                />
-                                <Label htmlFor="upiId">UPI ID (India)</Label>
-                                <Input
-                                    id="upiId"
-                                    value={upiId}
-                                    onChange={(e) => setUpiId(e.target.value)}
-                                    placeholder="Enter your UPI ID (e.g., yourname@bank)"
-                                    disabled={isLoading}
-                                />
+                                <Input id="payoutFriendlyNameUpi" value={payoutFriendlyName} onChange={(e) => setPayoutFriendlyName(e.target.value)} placeholder="e.g., My UPI" disabled={isLoading} />
+                                <Label htmlFor="upiHolder">Account Holder Name</Label>
+                                <Input id="upiHolder" value={bankAccountHolder} onChange={(e) => setBankAccountHolder(e.target.value)} placeholder="e.g., Rahul Kumar" disabled={isLoading} />
+                                <Label htmlFor="upiId">UPI ID</Label>
+                                <Input id="upiId" value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="yourname@bank" disabled={isLoading} />
+                                <p className="text-xs text-muted-foreground">UPI withdrawals are instant and usually free. You are responsible for declaring your earnings and paying any taxes as per Indian law.</p>
                             </TabsContent>
                         </Tabs>
                     </div>

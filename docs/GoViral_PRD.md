@@ -247,7 +247,7 @@ GoViral is a contest-based influencer marketing platform where brands launch cre
 - **Bank Transfer**: International wire transfers
 
 #### **Withdrawal Management**
-- **Minimum Thresholds**: $20 minimum withdrawal
+- **Minimum Thresholds**: $5 minimum withdrawal
 - **Fee Structure**: 10% platform fee
 - **Request Tracking**: Status monitoring
 - **Security Verification**: Multi-step approval process

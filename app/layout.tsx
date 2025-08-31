@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import ReferralCapture from "@/components/ReferralCapture";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { createClient } from "@/utils/supabase/server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
@@ -63,6 +65,7 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user;
@@ -113,6 +116,8 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className} suppressHydrationWarning>
         <div className="relative flex min-h-screen flex-col">
+          {/* Capture referral codes from landing links and store in localStorage */}
+          <ReferralCapture />
           <Nav
             user={user}
             profileFullName={profileFullName}
@@ -124,6 +129,7 @@ export default async function RootLayout({
           <ConditionalFooter />
         </div>
         <Toaster />
+        <SonnerToaster />
         <Analytics />
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8J6VZKVWLF"

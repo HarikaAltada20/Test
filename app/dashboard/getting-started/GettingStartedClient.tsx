@@ -19,9 +19,11 @@ import {
     Shield,
     Check
 } from "lucide-react";
+import { FaDiscord } from "react-icons/fa";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useState, useEffect } from "react";
+import { SOCIAL_LINKS } from "@/constants/socialLinks";
 
 interface GettingStartedClientProps {
     user: User;
@@ -807,13 +809,19 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                             </p>
                         </div>
 
-                        <div className="text-center">
+                        <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-3">
                             <Link href="/dashboard/opportunities">
                                 <Button className="bg-green-600 hover:bg-green-700 text-white py-3 px-8 text-lg">
                                     <Video className="w-5 h-5 mr-2" />
                                     Browse Contests
                                 </Button>
                             </Link>
+                            <a href={SOCIAL_LINKS.discord} target="_blank" rel="noopener noreferrer">
+                                <Button className="bg-[#5865F2] hover:bg-[#4752C4] text-white py-3 px-8 text-lg">
+                                    <FaDiscord className="w-5 h-5 mr-2" />
+                                    Join Creator Community
+                                </Button>
+                            </a>
                         </div>
                     </CardContent>
                 </div>

@@ -529,7 +529,7 @@ function DashboardContent({
       <SimpleLoadingBar />
 
 
- <style jsx global>{`
+      <style jsx global>{`
         :root {
           --background: ${currentMode === 'light' ? '210 20% 98%' : '222.2 84% 4.9%'};
           --foreground: ${currentMode === 'light' ? '220 13% 9%' : '210 40% 98%'};
@@ -681,17 +681,15 @@ function DashboardContent({
             <div
               className="absolute inset-0"
               style={{
-                background: `radial-gradient(circle at 30% 50%, rgba(${
-                  theme.primary
-                }, ${currentMode === "light" ? "0.05" : "0.1"}), transparent)`,
+                background: `radial-gradient(circle at 30% 50%, rgba(${theme.primary
+                  }, ${currentMode === "light" ? "0.05" : "0.1"}), transparent)`,
               }}
             ></div>
             <div
               className="absolute inset-0"
               style={{
-                background: `radial-gradient(circle at 70% 50%, rgba(${
-                  theme.accent
-                }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
+                background: `radial-gradient(circle at 70% 50%, rgba(${theme.accent
+                  }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
               }}
             ></div> */}
 
@@ -795,9 +793,8 @@ function DashboardContent({
               currentMode === "light"
                 ? `rgba(${mode.background.primary}, 0.9)`
                 : `rgba(${mode.background.secondary}, 0.9)`,
-            borderColor: `rgba(${theme.primary}, ${
-              currentMode === "light" ? "0.2" : "0.15"
-            })`,
+            borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
+              })`,
             boxShadow:
               currentMode === "light"
                 ? "0 1px 2px rgba(0, 0, 0, 0.05)"
@@ -818,9 +815,8 @@ function DashboardContent({
                 : `0 0 8px rgba(${theme.primary}, 0.4), 0 2px 4px rgba(${theme.primary}, 0.2)`;
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${
-              currentMode === "light" ? "0.2" : "0.15"
-            })`;
+            e.currentTarget.style.borderColor = `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
+              })`;
             e.currentTarget.style.backgroundColor =
               currentMode === "light"
                 ? `rgba(${mode.background.primary}, 0.9)`
@@ -897,17 +893,15 @@ function DashboardContent({
             <div
               className="absolute inset-0"
               style={{
-                background: `radial-gradient(circle at 30% 50%, rgba(${
-                  theme.primary
-                }, ${currentMode === "light" ? "0.05" : "0.1"}), transparent)`,
+                background: `radial-gradient(circle at 30% 50%, rgba(${theme.primary
+                  }, ${currentMode === "light" ? "0.05" : "0.1"}), transparent)`,
               }}
             ></div>
             <div
               className="absolute inset-0"
               style={{
-                background: `radial-gradient(circle at 70% 50%, rgba(${
-                  theme.accent
-                }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
+                background: `radial-gradient(circle at 70% 50%, rgba(${theme.accent
+                  }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
               }}
             ></div>
 
@@ -941,9 +935,8 @@ function DashboardContent({
                             currentMode === "light"
                               ? `rgba(${mode.background.tertiary}, 1)`
                               : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${
-                            currentMode === "light" ? "0.3" : "0.2"
-                          })`,
+                          borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
+                            })`,
                           color: `rgba(${mode.text.muted}, 1)`,
                           boxShadow:
                             currentMode === "light"
@@ -1065,9 +1058,8 @@ function DashboardContent({
                           currentMode === "light"
                             ? `rgba(${mode.background.tertiary}, 1)`
                             : `rgba(${mode.background.secondary}, 0.5)`,
-                        borderColor: `rgba(${theme.primary}, ${
-                          currentMode === "light" ? "0.3" : "0.2"
-                        })`,
+                        borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
+                          })`,
                         color: `rgba(${mode.text.muted}, 1)`,
                         boxShadow:
                           currentMode === "light"
@@ -1102,16 +1094,14 @@ function DashboardContent({
                         currentMode === "light"
                           ? `rgba(${mode.background.tertiary}, 0.8)`
                           : `rgba(${mode.background.secondary}, 0.3)`,
-                      borderColor: `rgba(${theme.primary}, ${
-                        currentMode === "light" ? "0.2" : "0.15"
-                      })`,
+                      borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.2" : "0.15"
+                        })`,
                       color: `rgba(${mode.text.secondary}, 1)`,
                     }}
-                    title={`Click to toggle: ${
-                      isCompactMode
-                        ? "Switch to Normal (100%)"
-                        : "Switch to Compact (85%)"
-                    }`}
+                    title={`Click to toggle: ${isCompactMode
+                      ? "Switch to Normal (100%)"
+                      : "Switch to Compact (85%)"
+                      }`}
                     onClick={() => toggleCompactMode(!isCompactMode)}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
@@ -1119,9 +1109,8 @@ function DashboardContent({
                       e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = `rgba(${
-                        theme.primary
-                      }, ${currentMode === "light" ? "0.2" : "0.15"})`;
+                      e.currentTarget.style.borderColor = `rgba(${theme.primary
+                        }, ${currentMode === "light" ? "0.2" : "0.15"})`;
                       e.currentTarget.style.backgroundColor =
                         currentMode === "light"
                           ? `rgba(${mode.background.tertiary}, 0.8)`
@@ -1161,9 +1150,8 @@ function DashboardContent({
                             currentMode === "light"
                               ? `rgba(${mode.background.tertiary}, 1)`
                               : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${
-                            currentMode === "light" ? "0.3" : "0.2"
-                          })`,
+                          borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
+                            })`,
                           color: `rgba(${mode.text.muted}, 1)`,
                           boxShadow:
                             currentMode === "light"
@@ -1595,9 +1583,8 @@ function DashboardContent({
                             currentMode === "light"
                               ? `rgba(${mode.background.tertiary}, 1)`
                               : `rgba(${mode.background.secondary}, 0.5)`,
-                          borderColor: `rgba(${theme.primary}, ${
-                            currentMode === "light" ? "0.3" : "0.2"
-                          })`,
+                          borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
+                            })`,
                           color: `rgba(${mode.text.muted}, 1)`,
                           boxShadow:
                             currentMode === "light"
@@ -1647,9 +1634,8 @@ function DashboardContent({
                           currentMode === "dark"
                             ? `linear-gradient(135deg, rgba(${mode.background.primary}, 0.95), rgba(${mode.background.secondary}, 0.9), rgba(${mode.background.primary}, 0.95))`
                             : `linear-gradient(135deg, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1))`,
-                        borderColor: `rgba(${theme.primary}, ${
-                          currentMode === "dark" ? "0.3" : "0.2"
-                        })`,
+                        borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.3" : "0.2"
+                          })`,
                       }}
                     >
                       {/* Premium Background Effects */}
@@ -1677,9 +1663,8 @@ function DashboardContent({
                         <SheetHeader
                           className="p-6 border-b flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, ${
-                              currentMode === "dark" ? "0.2" : "0.15"
-                            })`,
+                            borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.2" : "0.15"
+                              })`,
                           }}
                         >
                           <div className="flex items-center gap-4">
@@ -1745,8 +1730,8 @@ function DashboardContent({
                                   {userRole === "advertiser"
                                     ? "Advertiser"
                                     : userRole === "creator"
-                                    ? "Creator"
-                                    : "Admin"}
+                                      ? "Creator"
+                                      : "Admin"}
                                 </span>
                               </div>
                             </div>
@@ -1797,8 +1782,8 @@ function DashboardContent({
                                         {currentPlan.price === 0
                                           ? "Basic features included"
                                           : `$${(
-                                              currentPlan.price / 100
-                                            ).toFixed(2)}/month`}
+                                            currentPlan.price / 100
+                                          ).toFixed(2)}/month`}
                                       </div>
                                     </div>
                                     <div
@@ -2018,9 +2003,8 @@ function DashboardContent({
                         <div
                           className="p-6 border-t flex-shrink-0"
                           style={{
-                            borderColor: `rgba(${theme.primary}, ${
-                              currentMode === "dark" ? "0.2" : "0.15"
-                            })`,
+                            borderColor: `rgba(${theme.primary}, ${currentMode === "dark" ? "0.2" : "0.15"
+                              })`,
                           }}
                         >
                           <Button
@@ -2093,6 +2077,7 @@ function DashboardContent({
                 <ChatSuppport
                   onClose={() => setIsChatOpen(false)}
                   email={displayEmail}
+                  userType={userRole as any}
                 />
               )}
             </div>

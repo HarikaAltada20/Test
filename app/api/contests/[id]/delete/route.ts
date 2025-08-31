@@ -81,6 +81,20 @@ export async function DELETE(
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
 
+  // Determine if the current user is an admin
+  let isAdmin = false;
+  try {
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('user_type')
+      .eq('id', user.id)
+      .single();
+    isAdmin = userRow?.user_type === 'admin';
+  } catch (e) {
+    // If this check fails, default to non-admin; do not block deletion later if owner
+    isAdmin = false;
+  }
+
   const resolvedParams = await params;
   const contestId = resolvedParams.id;
 
@@ -96,7 +110,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
     }
 
-    if (contest.advertiser_id !== user.id) {
+    if (!isAdmin && contest.advertiser_id !== user.id) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
@@ -148,7 +162,51 @@ export async function DELETE(
             console.log(`Successfully deleted ${filesToDelete.length} storage files for contest ${contestId}`);
         }
     } else {
-        console.log(`No storage files to delete for contest ${contestId}`);
+        console.log(`No direct file paths extracted from URLs for contest ${contestId}`);
+    }
+
+    // 3a. Extra safety: delete any objects under contest resources folder
+    try {
+        const resourcesFolder = `contest_resources/${contestId}`;
+        const { data: resObjects, error: listResErr } = await supabase.storage
+          .from('contest-assets')
+          .list(resourcesFolder);
+        if (listResErr) {
+          console.warn(`Could not list resources folder for ${contestId}:`, listResErr.message);
+        } else if (resObjects && resObjects.length > 0) {
+          const paths = resObjects.map((o: any) => `${resourcesFolder}/${o.name}`);
+          const { error: removeResErr } = await supabase.storage.from('contest-assets').remove(paths);
+          if (removeResErr) {
+            console.error(`Failed to remove contest resources for ${contestId}:`, removeResErr.message);
+          } else {
+            console.log(`Removed ${paths.length} resource files for contest ${contestId}`);
+          }
+        }
+    } catch (e: any) {
+        console.error(`Unexpected error while cleaning contest resources for ${contestId}:`, e?.message || e);
+    }
+
+    // 3b. Extra safety: remove any thumbnail files matching the contest-specific pattern
+    try {
+        const { data: thumbObjects, error: listThumbErr } = await supabase.storage
+          .from('contest-assets')
+          .list('contest_thumbnails');
+        if (listThumbErr) {
+          console.warn(`Could not list thumbnails while deleting contest ${contestId}:`, listThumbErr.message);
+        } else if (thumbObjects && thumbObjects.length > 0) {
+          const matching = thumbObjects.filter((f: any) => typeof f.name === 'string' && f.name.startsWith(`${contestId}_`));
+          if (matching.length > 0) {
+            const thumbPaths = matching.map((f: any) => `contest_thumbnails/${f.name}`);
+            const { error: removeThumbErr } = await supabase.storage.from('contest-assets').remove(thumbPaths);
+            if (removeThumbErr) {
+              console.error(`Failed to remove contest thumbnail(s) for ${contestId}:`, removeThumbErr.message);
+            } else {
+              console.log(`Removed ${thumbPaths.length} thumbnail file(s) for contest ${contestId}`);
+            }
+          }
+        }
+    } catch (e: any) {
+        console.error(`Unexpected error while cleaning thumbnails for ${contestId}:`, e?.message || e);
     }
 
 

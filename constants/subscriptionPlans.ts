@@ -206,7 +206,7 @@ export const DEFAULT_PRIZE_ALLOCATIONS = {
   }
 
 export const WITHDRAWAL_FEE_PERCENTAGE = 10; // 10% fee
-export const MIN_WITHDRAWAL_AMOUNT = 2000; // $20.00 in cents
+export const MIN_WITHDRAWAL_AMOUNT = 500; // $5.00 in cents
 
 // --- Timeout and Duration Constants ---
 // Toast and notification timeouts

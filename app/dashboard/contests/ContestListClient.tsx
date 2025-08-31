@@ -564,7 +564,10 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     className="flex-1 bg-orange-600 hover:bg-orange-700"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        router.push(`/dashboard/contests/${contest.id}/edit`);
+                                        const href = isAdminView
+                                            ? `/dashboard/contests/${contest.id}/edit`
+                                            : `/dashboard/contests/${contest.id}/edit`;
+                                        router.push(href);
                                     }}
                                 >
                                     <Edit className="h-4 w-4 mr-1" />
@@ -588,7 +591,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                 </Button>
                             )}
 
-                            {!isAdminView && contest.moderation_status !== 'published' && (
+                            {contest.moderation_status !== 'published' && (
                                 <DeleteContestButton
                                     contestId={contest.id}
                                     contestTitle={contest.title || 'this contest'}

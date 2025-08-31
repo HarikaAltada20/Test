@@ -30,6 +30,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
+import { DiscordOnboardingModal } from "@/components/DiscordOnboardingModal";
 
 function DashboardPage() {
   const router = useRouter();
@@ -51,6 +52,7 @@ function DashboardPage() {
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
+  const [showDiscordModal, setShowDiscordModal] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
 
   // Handle checkout success - with protection against infinite loops
@@ -98,6 +100,24 @@ function DashboardPage() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Show Discord onboarding modal for creators after signup/first visit
+  useEffect(() => {
+    if (!isAuthenticated || isAuthLoading) return;
+    if (!user) return;
+    const flag = searchParams.get('welcome');
+    const isCreator = profile && !('company_name' in profile);
+    try {
+      const alreadyShown = typeof window !== 'undefined' && localStorage.getItem('discordOnboardingShown') === '1';
+      if (isCreator && (flag === '1' || flag === 'true') && !alreadyShown) {
+        setShowDiscordModal(true);
+        // Clean the query param so refresh doesn't reopen
+        const url = new URL(window.location.href);
+        url.searchParams.delete('welcome');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch { }
+  }, [isAuthenticated, isAuthLoading, user, profile, searchParams]);
 
   useEffect(() => {
     let isMounted = true;
@@ -586,6 +606,10 @@ function DashboardPage() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         userId={user?.id || ""}
+      />
+      <DiscordOnboardingModal
+        isOpen={showDiscordModal}
+        onClose={() => setShowDiscordModal(false)}
       />
     </div>
   );

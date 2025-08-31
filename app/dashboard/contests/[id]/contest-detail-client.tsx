@@ -178,13 +178,17 @@ export default function ContestDetailClient({
     const [paymentModalOpen, setPaymentModalOpen] = useState(false);
     const [pendingPaymentSubmission, setPendingPaymentSubmission] = useState<string | null>(null);
     const [confirmReversal, setConfirmReversal] = useState<{ id: string; target: 'verified' | 'pending' | 'rejected'; needRejectionReason?: boolean } | null>(null);
-    const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'paid'>('all');
+    const [activeStatusTab, setActiveStatusTab] = useState<'all' | 'pending' | 'verified' | 'rejected' | 'paid' | 'verified_or_paid'>('all');
+    const [sortOption, setSortOption] = useState<'views_desc' | 'views_asc' | 'time_desc' | 'time_asc'>('views_desc');
 
     const cooldownInfo = getMetricsRefreshCooldownInfoOwner(currentContest.last_metrics_updated);
 
     // Filter submissions based on active tab
     const filteredSubmissions = currentSubmissions.filter(submission => {
         if (activeStatusTab === 'all') return true;
+        if (activeStatusTab === 'verified_or_paid') {
+            return submission.status === 'verified' || submission.status === 'paid';
+        }
         return submission.status === activeStatusTab;
     });
 
@@ -267,11 +271,26 @@ export default function ContestDetailClient({
                 }),
             });
 
-            const result = await response.json();
+            let result: any = null;
+            const contentType = response.headers.get('content-type') || '';
+            const isJson = contentType.includes('application/json');
+            try {
+                result = isJson ? await response.json() : await response.text();
+            } catch (parseErr) {
+                // Fall back to text if JSON parsing fails
+                try {
+                    result = await response.text();
+                } catch (_) {
+                    result = null;
+                }
+            }
             console.log('📡 API Response:', { status: response.status, result });
 
             if (!response.ok) {
-                throw new Error(result.error || 'Failed to update submission status');
+                const message = typeof result === 'string' && result.trim().length > 0
+                    ? result
+                    : (result?.error || `Failed to update submission status (HTTP ${response.status})`);
+                throw new Error(message);
             }
 
             // Update the local submissions state with latest fields from API (status + earnings)
@@ -335,6 +354,9 @@ export default function ContestDetailClient({
             if (error.message?.includes('Unauthorized') || error.message?.includes('Authentication')) {
                 errorTitle = "🔒 Access Denied";
                 errorDescription = "You don't have permission to perform this action";
+            } else if (error.message?.includes('504') || error.message?.toLowerCase().includes('gateway timeout')) {
+                errorTitle = "⏱️ Request Timed Out";
+                errorDescription = "The server took too long to respond. Please try again.";
             } else if (error.message?.includes('not found')) {
                 errorTitle = "🔍 Not Found";
                 errorDescription = "Submission could not be found";
@@ -1542,6 +1564,22 @@ export default function ContestDetailClient({
                                                     </Badge>
                                                 </TabsTrigger>
                                                 <TabsTrigger
+                                                    value="verified_or_paid"
+                                                    className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <CheckCircle2 className="h-3 w-3" />
+                                                        <Wallet className="h-3 w-3" />
+                                                        <span className="text-xs font-medium">Verified + Paid</span>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                                                    >
+                                                        {currentSubmissions.filter(s => s.status === 'verified' || s.status === 'paid').length}
+                                                    </Badge>
+                                                </TabsTrigger>
+                                                <TabsTrigger
                                                     value="pending"
                                                     className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
                                                 >
@@ -1610,6 +1648,23 @@ export default function ContestDetailClient({
                                 <Card className="shadow-sm">
                                     <CardContent className="p-0">
                                         <div className="overflow-auto">
+                                            {/* Sort control moved above the table headers to preserve clean layout */}
+                                            <div className="flex items-center justify-end px-4 py-2">
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="text-slate-500">Sort by</span>
+                                                    <Select value={sortOption} onValueChange={(v) => setSortOption(v as any)}>
+                                                        <SelectTrigger className="h-8 w-[220px]">
+                                                            <SelectValue placeholder="Sort submissions" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="views_desc">Views • High → Low</SelectItem>
+                                                            <SelectItem value="views_asc">Views • Low → High</SelectItem>
+                                                            <SelectItem value="time_desc">Submitted • Newest First</SelectItem>
+                                                            <SelectItem value="time_asc">Submitted • Oldest First</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
@@ -1628,7 +1683,8 @@ export default function ContestDetailClient({
                                                                 {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
                                                             </>
                                                         )}
-                                                        <TableHead className="text-center">Reward</TableHead>
+                                                        <TableHead className="text-center">Expected Reward</TableHead>
+                                                        <TableHead className="text-center">Reward Granted</TableHead>
                                                         <TableHead className="text-center">Status</TableHead>
                                                         <TableHead className="text-center">Submitted</TableHead>
                                                         <TableHead className="text-center">Actions</TableHead>
@@ -1636,131 +1692,80 @@ export default function ContestDetailClient({
                                                 </TableHeader>
                                                 <TableBody>
                                                     {filteredSubmissions
-                                                        .sort((a, b) => (b.views || 0) - (a.views || 0)) // Sort by views descending
+                                                        .sort((a, b) => {
+                                                            switch (sortOption) {
+                                                                case 'views_asc':
+                                                                    return (a.views || 0) - (b.views || 0);
+                                                                case 'time_desc': {
+                                                                    const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+                                                                    const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+                                                                    return bt - at;
+                                                                }
+                                                                case 'time_asc': {
+                                                                    const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+                                                                    const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+                                                                    return at - bt;
+                                                                }
+                                                                case 'views_desc':
+                                                                default:
+                                                                    return (b.views || 0) - (a.views || 0);
+                                                            }
+                                                        })
                                                         .map((submission, index) => {
                                                             const metrics = extractPlatformMetrics(submission);
                                                             const submissionStatus = getSubmissionStatusBadge(submission.status);
                                                             const isLoading = isLoadingSubmission[submission.id] || false;
                                                             const rank = index + 1;
 
-                                                            // Calculate reward/earnings display with proper color coding
-                                                            const getRewardDisplay = () => {
-                                                                // For rejected submissions - RED
-                                                                if (submission.status === 'rejected') {
-                                                                    return {
-                                                                        amount: 0,
-                                                                        label: "No Reward",
-                                                                        className: "text-red-600 font-semibold"
-                                                                    };
-                                                                }
-
-                                                                // For paid submissions - BLUE
-                                                                if (submission.status === 'paid') {
-                                                                    const earningsInDollars = submission.earnings ? centsToDollars(submission.earnings) : 0;
-                                                                    return {
-                                                                        amount: earningsInDollars,
-                                                                        label: "Paid",
-                                                                        className: "text-blue-600 font-semibold"
-                                                                    };
-                                                                }
-
-                                                                // For leaderboard contests
+                                                            // Compute expected and granted rewards separately
+                                                            const getExpectedReward = () => {
                                                                 if (currentContest.contest_type === 'leaderboard') {
                                                                     const contestDetails = currentContest.contest_based_details?.leaderboard_contest;
-                                                                    const postContestStatus = currentContest.post_contest_status;
-                                                                    const isContestCompleted = postContestStatus === 'verification_complete' || postContestStatus === 'payouts_processed';
-
-                                                                    // If contest is completed and earnings are calculated
-                                                                    if (isContestCompleted && submission.earnings !== null && submission.earnings !== undefined) {
-                                                                        const earningsInDollars = centsToDollars(submission.earnings);
-                                                                        if (earningsInDollars > 0) {
-                                                                            return {
-                                                                                amount: earningsInDollars,
-                                                                                label: "Prize Won",
-                                                                                className: "text-green-600 font-semibold"
-                                                                            };
-                                                                        } else {
-                                                                            return {
-                                                                                amount: 0,
-                                                                                label: "No Prize Won",
-                                                                                className: "text-gray-600"
-                                                                            };
+                                                                    if (contestDetails?.prizes && Array.isArray(contestDetails.prizes)) {
+                                                                        const currentRank = index + 1; // 1-based ranking
+                                                                        const prizeForRank = contestDetails.prizes.find((prize: any) => prize.position === currentRank);
+                                                                        if (prizeForRank) {
+                                                                            const prizeAmount = centsToDollars(prizeForRank.amount);
+                                                                            return { amount: prizeAmount, label: 'Expected', className: 'text-slate-700 font-semibold' };
                                                                         }
+                                                                        return { amount: 0, label: 'No Prize', className: 'text-slate-500' };
                                                                     }
-
-                                                                    // If contest is not completed yet OR completed but submission not verified yet
-                                                                    if (!isContestCompleted || submission.status === 'pending') {
-                                                                        // Calculate estimated prize based on ranking and prize distribution
-                                                                        if (contestDetails?.prizes && Array.isArray(contestDetails.prizes)) {
-                                                                            const currentRank = index + 1; // 1-based ranking
-                                                                            const prizeForRank = contestDetails.prizes.find((prize: any) => prize.position === currentRank);
-
-                                                                            if (prizeForRank) {
-                                                                                const prizeAmount = centsToDollars(prizeForRank.amount);
-                                                                                return {
-                                                                                    amount: prizeAmount,
-                                                                                    label: "Winning Zone",
-                                                                                    className: "text-pink-600 font-semibold"
-                                                                                };
-                                                                            }
-                                                                        }
-
-                                                                        // Fallback if no prize distribution found
-                                                                        return {
-                                                                            amount: 0,
-                                                                            label: "TBD",
-                                                                            className: "text-yellow-600 font-semibold"
-                                                                        };
-                                                                    }
+                                                                    return { amount: 0, label: 'N/A', className: 'text-slate-500' };
                                                                 }
-
-                                                                // For CPM contests
                                                                 if (currentContest.contest_type === 'cpm') {
                                                                     const cpmConfig = currentContest.contest_based_details?.cpm_contest;
                                                                     const views = submission.views || 0;
-                                                                    const postContestStatus = currentContest.post_contest_status;
-                                                                    const isContestCompleted = postContestStatus === 'verification_complete' || postContestStatus === 'payouts_processed';
-
-                                                                    // If contest is completed and earnings are calculated
-                                                                    if (isContestCompleted && submission.earnings !== null && submission.earnings !== undefined) {
-                                                                        const earningsInDollars = centsToDollars(submission.earnings);
-                                                                        const label = submission.status === 'verified' ? 'Final Earnings' : 'Pending';
-                                                                        return {
-                                                                            amount: earningsInDollars,
-                                                                            label,
-                                                                            className: submission.status === 'verified' ? 'text-green-600 font-semibold' : 'text-yellow-600 font-semibold'
-                                                                        };
-                                                                    }
-
-                                                                    // Calculate estimated earnings for pending/verified submissions
-                                                                    if (submission.status === 'pending' || submission.status === 'verified') {
-                                                                        if (cpmConfig?.cpm_rate_usd) {
-                                                                            let effectiveViews = views;
-                                                                            if (cpmConfig.min_views != null && views < cpmConfig.min_views) {
-                                                                                effectiveViews = 0;
-                                                                            } else if (cpmConfig.max_views != null && views > cpmConfig.max_views) {
-                                                                                effectiveViews = cpmConfig.max_views;
-                                                                            }
-
-                                                                            const calculatedEarnings = (effectiveViews * cpmConfig.cpm_rate_usd) / 1000;
-                                                                            return {
-                                                                                amount: calculatedEarnings,
-                                                                                label: "Est. Earnings",
-                                                                                className: "text-yellow-600 font-semibold"
-                                                                            };
+                                                                    if (cpmConfig?.cpm_rate_usd) {
+                                                                        let effectiveViews = views;
+                                                                        if (cpmConfig.min_views != null && views < cpmConfig.min_views) {
+                                                                            effectiveViews = 0;
+                                                                        } else if (cpmConfig.max_views != null && views > cpmConfig.max_views) {
+                                                                            effectiveViews = cpmConfig.max_views;
                                                                         }
+                                                                        const calculatedEarnings = (effectiveViews * cpmConfig.cpm_rate_usd) / 1000;
+                                                                        return { amount: calculatedEarnings, label: 'Expected', className: 'text-slate-700 font-semibold' };
                                                                     }
+                                                                    return { amount: 0, label: 'N/A', className: 'text-slate-500' };
                                                                 }
-
-                                                                // Default fallback
-                                                                return {
-                                                                    amount: 0,
-                                                                    label: "TBD",
-                                                                    className: "text-gray-600"
-                                                                };
+                                                                return { amount: 0, label: 'N/A', className: 'text-slate-500' };
                                                             };
 
-                                                            const rewardInfo = getRewardDisplay();
+                                                            const getGrantedReward = () => {
+                                                                if (submission.status === 'rejected') {
+                                                                    return { amount: 0, label: 'No Reward', className: 'text-red-600 font-semibold' };
+                                                                }
+                                                                if (submission.status === 'paid') {
+                                                                    const dollars = submission.earnings ? centsToDollars(submission.earnings) : 0;
+                                                                    return { amount: dollars, label: 'Paid', className: 'text-blue-600 font-semibold' };
+                                                                }
+                                                                if (submission.earnings !== null && submission.earnings !== undefined && submission.earnings > 0) {
+                                                                    return { amount: centsToDollars(submission.earnings), label: 'Pending', className: 'text-amber-600 font-semibold' };
+                                                                }
+                                                                return { amount: 0, label: '—', className: 'text-slate-500' };
+                                                            };
+
+                                                            const expectedInfo = getExpectedReward();
+                                                            const grantedInfo = getGrantedReward();
 
                                                             return (
                                                                 <TableRow key={submission.id} className={cn(
@@ -1856,27 +1861,27 @@ export default function ContestDetailClient({
                                                                     )}
                                                                     <TableCell className="text-center">
                                                                         <div className="flex flex-col items-center">
-                                                                            {rewardInfo.amount !== null ? (
-                                                                                rewardInfo.amount > 0 ? (
-                                                                                    <div className="flex flex-col items-center">
-                                                                                        <span className={cn("text-lg font-bold", rewardInfo.className)}>
-                                                                                            ${rewardInfo.amount.toFixed(2)}
-                                                                                        </span>
-                                                                                        <span className="text-xs text-slate-500 capitalize">
-                                                                                            {rewardInfo.label.toLowerCase()}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    <div className="flex flex-col items-center">
-                                                                                        <span className={cn("text-sm font-semibold", rewardInfo.className)}>
-                                                                                            {rewardInfo.label}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                )
+                                                                            <div className="flex flex-col items-center">
+                                                                                <span className={cn("text-lg font-bold", expectedInfo.className)}>
+                                                                                    ${expectedInfo.amount.toFixed(2)}
+                                                                                </span>
+                                                                                <span className="text-xs text-slate-500 uppercase tracking-wide">{expectedInfo.label}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-center">
+                                                                        <div className="flex flex-col items-center">
+                                                                            {grantedInfo.amount > 0 ? (
+                                                                                <div className="flex flex-col items-center">
+                                                                                    <span className={cn("text-lg font-bold", grantedInfo.className)}>
+                                                                                        ${grantedInfo.amount.toFixed(2)}
+                                                                                    </span>
+                                                                                    <span className="text-xs text-slate-500 uppercase tracking-wide">{grantedInfo.label}</span>
+                                                                                </div>
                                                                             ) : (
                                                                                 <div className="flex flex-col items-center">
-                                                                                    <span className={cn("text-sm font-semibold", rewardInfo.className)}>
-                                                                                        {rewardInfo.label}
+                                                                                    <span className={cn("text-sm font-semibold", grantedInfo.className)}>
+                                                                                        {grantedInfo.label}
                                                                                     </span>
                                                                                 </div>
                                                                             )}

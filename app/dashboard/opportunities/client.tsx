@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 
 // Define types for filters and sorting
-type StatusFilterType = 'all' | 'live' | 'upcoming';
+type StatusFilterType = 'all' | 'live' | 'upcoming' | 'completed';
 type PlatformFilterType = 'all' | 'youtube' | 'instagram'; // Add more as needed
 type ContestTypeFilterType = 'all' | 'leaderboard' | 'cpm';
 type SortOptionType =
@@ -169,6 +169,7 @@ export default function OpportunitiesPage({
         if (contest.moderation_status !== 'published' || !contest.status) return false;
         if (statusFilter === 'live') return contest.status === 'active';
         if (statusFilter === 'upcoming') return contest.status === 'upcoming';
+        if (statusFilter === 'completed') return contest.post_contest_status === 'payouts_processed';
         return true; // Should not happen if logic is correct
       });
     }
@@ -315,6 +316,9 @@ export default function OpportunitiesPage({
           <TabsTrigger value="upcoming">
             Upcoming <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status === 'upcoming').length}</Badge>
           </TabsTrigger>
+          <TabsTrigger value="completed">
+            Completed <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.post_contest_status === 'payouts_processed').length}</Badge>
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -382,7 +386,7 @@ export default function OpportunitiesPage({
                 ) : (
                   <Trophy className="h-16 w-16 text-slate-400 dark:text-slate-500" />
                 )}
-                <div className="absolute top-2 right-2">
+                <div className="absolute top-2 right-2 flex gap-2">
                   <Badge
                     className={cn(
                       "capitalize text-xs px-2 py-0.5 font-medium border",
@@ -394,6 +398,11 @@ export default function OpportunitiesPage({
                   >
                     {contest.status === "active" ? "Live" : contest.status}
                   </Badge>
+                  {contest.post_contest_status === 'payouts_processed' && (
+                    <Badge className="text-xs px-2 py-0.5 font-medium border bg-emerald-600 border-emerald-600 text-white">
+                      Completed
+                    </Badge>
+                  )}
                 </div>
               </div>
               <CardHeader className="p-4 pb-2">

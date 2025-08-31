@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -105,6 +105,7 @@ export default function ChooseUsernamePage() {
     getInitialUserType
   );
   const [referralCode, setReferralCode] = useState("");
+  const searchParams = useSearchParams();
   const [userData, setUserData] = useState<UserProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -186,6 +187,34 @@ export default function ChooseUsernamePage() {
       setReferralCodeError(null);
     }
   };
+
+  // Auto-fill referral code from URL query (?ref=, ?referral=, ?code=, ?r=)
+  useEffect(() => {
+    const urlCode =
+      searchParams.get("ref") ||
+      searchParams.get("referral") ||
+      searchParams.get("code") ||
+      searchParams.get("r");
+    if (!referralCode && urlCode) {
+      handleReferralCodeChange(urlCode);
+    }
+  }, [searchParams, referralCode]);
+
+  // Fallback: Auto-fill from localStorage if present (captured on landing)
+  useEffect(() => {
+    try {
+      if (!referralCode) {
+        const stored = localStorage.getItem("referralCode");
+        if (stored) {
+          handleReferralCodeChange(stored);
+        }
+      }
+    } catch (_) {
+      // ignore if storage not available
+    }
+    // run once on mount and when referralCode becomes empty
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referralCode]);
 
   useEffect(() => {
     const fetchProfileAndRedirect = async () => {
@@ -307,7 +336,9 @@ export default function ChooseUsernamePage() {
           description: "Your username is already set. Redirecting...",
           duration: 3000,
         });
-        router.push("/dashboard");
+        // Only show Discord onboarding for creators
+        const welcomeFlag = profileData.user_type === 'creator' ? '?welcome=1' : '';
+        router.push(`/dashboard${welcomeFlag}`);
         router.refresh();
         return;
       }
@@ -1312,6 +1343,16 @@ export default function ChooseUsernamePage() {
                           rewards! (3-20 characters, letters, numbers,
                           underscores only)
                         </p>
+                      )}
+                      {userType === "creator" && (
+                        <Alert
+                          variant="default"
+                          className="mt-2 bg-emerald-950/40 border-emerald-700 text-emerald-300"
+                        >
+                          <AlertDescription>
+                            Use a valid referral code to get $0.50 cash bonus (50 cents) added to your withdrawable balance.
+                          </AlertDescription>
+                        </Alert>
                       )}
                     </div>
                   )}
