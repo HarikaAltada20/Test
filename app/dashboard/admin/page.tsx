@@ -11,6 +11,9 @@ import { Trophy, Video, User, Building, DollarSign, PlayCircle, StopCircle, Chec
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ContestTypeFilter from "@/components/admin/ContestTypeFilter";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import Link from "next/link";
+import React from "react";
+import { Button } from "@/components/ui/button";
 
 export default async function AdminDashboardPage({ searchParams }: { searchParams?: Promise<Record<string, string | undefined>> }) {
     // Verify admin access
@@ -612,6 +615,14 @@ export default async function AdminDashboardPage({ searchParams }: { searchParam
                             <p className="text-xs text-muted-foreground">All views</p>
                         </CardContent>
                     </Card>
+                </div>
+
+                {/* Admin actions */}
+                <div className="flex items-center justify-between mt-6">
+                    <h2 className="text-lg font-semibold">Actions</h2>
+                    <form action="/api/jobs/process-now" method="post">
+                        <Button type="submit" variant="default">Process Payout Queue Now</Button>
+                    </form>
                 </div>
 
                 {/* Money Metrics */}

@@ -234,8 +234,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // Handle wallet credit/debit on status changes
+    // Enqueue payout job instead of doing full payout synchronously (avoid timeouts)
     if (action === SUBMISSION_STATUS.paid) {
+      // Try to enqueue; on failure, fall back to inline payout logic below
+      const { error: enqueueErr } = await supabaseAdmin
+        .from('payout_jobs')
+        .insert({
+          submission_id: submissionId,
+          requested_by: currentUserId,
+          payload: paymentDetails || {},
+        });
+      if (!enqueueErr) {
+        return NextResponse.json({ success: true, queued: true, message: 'Payout queued for processing' });
+      }
+
+      // Fallback path below keeps previous inline behavior if enqueue fails
+      // Handle wallet credit/debit on status changes
+      if (action === SUBMISSION_STATUS.paid) {
       // Determine amount: custom from paymentDetails or default to earnings
       const customAmount = paymentDetails?.amountInCents && paymentDetails?.isCustom ? Number(paymentDetails.amountInCents) : null;
       let rewardAmount = customAmount && customAmount > 0 ? customAmount : (submissionFull.earnings || 0);
@@ -323,6 +338,7 @@ export async function POST(request: Request) {
             .eq('id', submissionId);
         }
       }
+    }
     }
 
     // If status is changed away from paid, remove reward, reverse wallet credit, and clear earnings
