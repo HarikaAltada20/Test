@@ -1527,8 +1527,9 @@ export function ContestClientPage({
                         {(() => {
                           let prizeDisplay = null;
                           if (myLeaderboardEntry.earnings > 0) {
-                            // Show actual earnings for verified submissions, expected for pending
-                            const earningsLabel = myLeaderboardEntry.status === 'verified' ? 'Earned' : 'Expected';
+                            // Show actual earnings for verified or paid submissions; otherwise show expected
+                            const isEarned = myLeaderboardEntry.status === 'verified' || myLeaderboardEntry.status === 'paid';
+                            const earningsLabel = isEarned ? 'Earned' : 'Expected';
                             prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">{earningsLabel}: {formatMoney(myLeaderboardEntry.earnings)}</span>;
                           } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && myLeaderboardEntry.rank) {
                             const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
@@ -1588,9 +1589,10 @@ export function ContestClientPage({
                   let prizeDisplay = null;
 
                   if (entry.earnings > 0) {
-                    // For CPM contests, show Expected vs Earned based on verification status
+                    // For CPM contests, show Expected vs Earned based on verification/paid status
                     if (contestType === 'cpm') {
-                      const earningsLabel = entry.status === 'verified' ? 'Earned' : 'Expected';
+                      const isEarned = entry.status === 'verified' || entry.status === 'paid';
+                      const earningsLabel = isEarned ? 'Earned' : 'Expected';
                       prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">{earningsLabel}: {formatMoney(entry.earnings)}</span>;
                     } else {
                       prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(entry.earnings)}</span>;
