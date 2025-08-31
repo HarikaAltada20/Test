@@ -72,7 +72,7 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                 // BRAND/ADVERTISER CONTENT
 
                <div>
-                <div className="border-b text-center shadow-lg bg-white px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4 ">
+                <div className="border-b text-center shadow-xl bg-white px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4 ">
                             <div className="flex justify-start space-x-3">
                                 {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -83,7 +83,7 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                             </div>
                         </div>
 
-                <div className="space-y-8 min-h-screen shadow-lg bg-white px-2 py-6">
+                <div className="space-y-8 min-h-screen shadow-xl bg-white px-2 py-6">
                     {/* Platform Overview Section */}
                     <div >
                        

@@ -2800,7 +2800,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                 </Alert>
             </div>
 
-            <Card className="mx-auto max-w-4xl">
+            <div className="mx-auto bg-white rounded-xl shadow-xl max-w-[1150px]">
                 <CardHeader>
                     <CardTitle>Edit Contest Details</CardTitle>
                 </CardHeader>
@@ -3794,7 +3794,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false }: 
                         )}
                     </div>
                 </CardFooter>
-            </Card>
+            </div>
 
             {/* Payment Modal */}
             {showPayment && contest && (
