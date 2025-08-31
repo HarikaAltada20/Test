@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { status } = body || {};
   if (!status) return NextResponse.json({ error: "Missing status" }, { status: 400 });
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("withdrawal_requests")
     .update({ status, updated_at: new Date().toISOString() })
