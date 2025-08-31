@@ -52,6 +52,12 @@ export function DashboardSidebar({
 
   const advertiserLinks = [
     {
+      name: "Getting Started",
+      href: "/dashboard/getting-started",
+      icon: HelpCircle,
+      description: "How it works",
+    },
+    {
       name: "Dashboard",
       href: "/dashboard",
       icon: LayoutDashboard,
@@ -117,6 +123,12 @@ export function DashboardSidebar({
   ];
 
   const creatorLinks = [
+    {
+      name: "Getting Started",
+      href: "/dashboard/getting-started",
+      icon: HelpCircle,
+      description: "How it works",
+    },
     {
       name: "Dashboard",
       href: "/dashboard",
