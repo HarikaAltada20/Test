@@ -11,7 +11,7 @@ import { Loader2, DollarSign, Link } from "lucide-react";
 interface PaymentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (paymentDetails: { paymentProofUrl: string; paymentDescription: string; amountInCents?: number; isCustom?: boolean }) => void;
+    onConfirm: (paymentDetails: { paymentProofUrl: string; paymentDescription: string; amountInCents?: number; isCustom?: boolean; customRemarks?: string }) => void;
     isLoading?: boolean;
     initialMode?: 'standard' | 'custom';
     showModeSwitcher?: boolean;
@@ -37,6 +37,7 @@ export default function PaymentModal({
         }
     }, [isOpen, initialMode]);
     const [customAmount, setCustomAmount] = useState<string>("");
+    const [customMessage, setCustomMessage] = useState<string>("");
 
     const handleConfirm = () => {
         const isCustom = mode === 'custom';
@@ -46,11 +47,13 @@ export default function PaymentModal({
             paymentDescription: paymentDescription.trim(),
             amountInCents,
             isCustom,
+            customRemarks: customMessage.trim() || undefined,
         });
         // Reset form
         setPaymentProofUrl("");
         setPaymentDescription("");
         setCustomAmount("");
+        setCustomMessage("");
         setMode('standard');
     };
 
@@ -94,6 +97,20 @@ export default function PaymentModal({
                                 disabled={isLoading}
                             />
                             <p className="text-xs text-muted-foreground">This amount will be credited to the creator's wallet and recorded as a reward (custom).</p>
+                        </div>
+                    )}
+
+                    {mode === 'custom' && (
+                        <div className="space-y-2">
+                            <Label htmlFor="customMessage">Message (optional)</Label>
+                            <Textarea
+                                id="customMessage"
+                                placeholder="Add a note that will appear in money transactions remarks"
+                                value={customMessage}
+                                onChange={(e) => setCustomMessage(e.target.value)}
+                                disabled={isLoading}
+                                rows={2}
+                            />
                         </div>
                     )}
 

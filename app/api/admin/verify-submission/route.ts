@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     // Fetch the contest to check its type
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('contest_type, contest_based_details')
+      .select('title, contest_type, contest_based_details')
       .eq('id', submission.contest_id)
       .single();
 
@@ -146,6 +146,7 @@ export async function POST(request: Request) {
         type: 'payment',
         paymentProofUrl: paymentDetails.paymentProofUrl || null,
         paymentDescription: paymentDetails.paymentDescription || null,
+        customRemarks: paymentDetails.customRemarks || null,
         timestamp: new Date().toISOString(),
         updatedBy: currentUserId
       };
@@ -212,25 +213,20 @@ export async function POST(request: Request) {
         console.error('Failed to snapshot credited views:', snapErr);
       }
 
-      // Persist locked views on the submission row if columns exist (non-fatal if they don't)
+      // Persist locked views on the submission row only (contest-wide timestamp lives on contests)
       try {
         const { error: lockErr } = await supabaseAdmin
           .from('submissions')
           .update({
-            // @ts-ignore - columns may not exist until migration is applied
+            // per-submission locked views snapshot
             views_locked: currentViews,
-            // @ts-ignore - columns may not exist until migration is applied
-            views_locked_at: new Date().toISOString(),
           })
           .eq('id', submissionId);
         if (lockErr) {
-          // Ignore unknown column errors to keep backward compatible
-          if (!`${lockErr.message}`.toLowerCase().includes('column') || !`${lockErr.message}`.toLowerCase().includes('does not exist')) {
-            console.error('Failed to update submission locked views:', lockErr);
-          }
+          console.error('Failed to update submission views_locked:', lockErr);
         }
       } catch (e) {
-        console.warn('Skipping submission locked views update (likely columns not present yet).');
+        console.warn('Skipping submission views_locked update due to error.');
       }
     }
 
@@ -253,6 +249,7 @@ export async function POST(request: Request) {
       if (action === SUBMISSION_STATUS.paid) {
       // Determine amount: custom from paymentDetails or default to earnings
       const customAmount = paymentDetails?.amountInCents && paymentDetails?.isCustom ? Number(paymentDetails.amountInCents) : null;
+      const customRemarks = (paymentDetails as any)?.customRemarks as string | undefined;
       let rewardAmount = customAmount && customAmount > 0 ? customAmount : (submissionFull.earnings || 0);
 
       // Fallback amount computation when earnings are not yet set
@@ -312,9 +309,11 @@ export async function POST(request: Request) {
           const creditRes = await creditCreatorWithdrawableBalance(
             submissionFull.creator_id,
             rewardAmount,
-            customAmount ? `Custom contest payment credited for submission ${submissionId}` : `Contest reward credited for submission ${submissionId}`,
+            customAmount
+              ? `Custom contest payment credited - ${(contest as any)?.title || 'Contest'}`
+              : `Contest reward credited - ${(contest as any)?.title || 'Contest'}`,
             {
-              remarks: customAmount ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet',
+              remarks: customRemarks || (customAmount ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet'),
               metadata: { contest_id: submissionFull.contest_id, submission_id: submissionId, payout_type: customAmount ? 'custom' : 'standard', payout_cycle: nextCycle }
             }
           );
@@ -394,7 +393,7 @@ export async function POST(request: Request) {
           'refund',
           reversalAmount,
           'success',
-          `Reversal of contest reward for submission ${submissionId}`,
+          `Reversal of contest reward - ${(contest as any)?.title || 'Contest'}`,
           { remarks: REVERSAL_TRANSACTION_REMARK, paymentMethod: 'refund', metadata: { submission_id: submissionId, contest_id: submissionFull.contest_id } }
         );
         // No longer keep earnings on reversal; it should be cleared when leaving Paid

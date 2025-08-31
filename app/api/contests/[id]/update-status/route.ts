@@ -94,13 +94,20 @@ export async function POST(
             }
         }
 
-        // Update contest post_contest_status
+        // Update contest post_contest_status (and lock timestamp when entering locked states)
+        const nowIso = new Date().toISOString();
+        const contestUpdate: any = {
+            post_contest_status: status,
+            updated_at: nowIso,
+        };
+        if (status === POST_CONTEST_STATUS.verification_complete || status === POST_CONTEST_STATUS.payouts_processed) {
+            // record when views were locked for this contest
+            // column exists on contests per schema: views_locked_at
+            (contestUpdate as any).views_locked_at = nowIso;
+        }
         const { error: updateError } = await supabase
             .from("contests")
-            .update({
-                post_contest_status: status,
-                updated_at: new Date().toISOString()
-            })
+            .update(contestUpdate)
             .eq("id", contestId);
 
         if (updateError) {
@@ -110,12 +117,16 @@ export async function POST(
             }, { status: 500 });
         }
 
-        // Kick off async views credit when entering verification or payouts_processed
+        // Kick off views credit asynchronously to avoid serverless timeouts
         if (status === POST_CONTEST_STATUS.verification_complete || status === POST_CONTEST_STATUS.payouts_processed) {
             try {
-                await MetricsService.creditViewsForContest(contestId, 20000);
+                // Fire-and-forget without blocking the response
+                // Safe: this only updates creator aggregate views and snapshots
+                MetricsService.creditViewsForContest(contestId, 20000)
+                    .then(() => console.log(`[update-status] Views credit finished for contest ${contestId}`))
+                    .catch((e) => console.warn('[update-status] Views credit failed (non-blocking):', e));
             } catch (e) {
-                console.warn('Views credit processing failed:', e);
+                console.warn('[update-status] Failed to start views credit task:', e);
             }
         }
 

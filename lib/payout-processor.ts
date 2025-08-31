@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/utils/supabase/admin';
 import { MetricsService } from '@/lib/metrics-service';
+import { creditCreatorWithdrawableBalance, REVERSAL_TRANSACTION_REMARK } from '@/lib/payment-utils';
 
 export interface PayoutJobResult {
   id: string;
@@ -45,13 +46,26 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
 
       const { data: contest, error: contestErr } = await supabaseAdmin
         .from('contests')
-        .select('contest_type, contest_based_details')
+        .select('title, contest_type, contest_based_details')
         .eq('id', sub.contest_id)
         .single();
       if (contestErr || !contest) throw new Error(`Contest not found: ${contestErr?.message || ''}`);
 
-      // Compute reward amount if missing
+      // Compute reward amount with support for custom payload
       let rewardAmount = sub.earnings || 0; // cents
+      let payoutType: 'custom' | 'standard' = 'standard';
+
+      // Parse job payload
+      let payload: any = (job as any)?.payload;
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); } catch { payload = undefined; }
+      }
+
+      if (payload?.isCustom && typeof payload?.amountInCents === 'number' && payload.amountInCents > 0) {
+        rewardAmount = payload.amountInCents;
+        payoutType = 'custom';
+      }
+
       if (!rewardAmount || rewardAmount <= 0) {
         if ((contest as any).contest_type === 'cpm') {
           const cpm = (contest as any)?.contest_based_details?.cpm_contest;
@@ -75,10 +89,62 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
       }
 
       if (rewardAmount > 0) {
+        // 1) Update submission to paid and persist earnings
         await supabaseAdmin
           .from('submissions')
           .update({ earnings: rewardAmount, status: 'paid' })
           .eq('id', sub.id);
+
+        // 2) Idempotency-safe wallet crediting
+        // Determine payout cycle based on prior rewards/refunds for this submission
+        const [{ data: existingRewards }, { data: existingRefunds }] = await Promise.all([
+          supabaseAdmin
+            .from('money_transactions')
+            .select('id')
+            .eq('user_id', sub.creator_id)
+            .eq('type', 'reward')
+            .contains('metadata', { submission_id: sub.id }),
+          supabaseAdmin
+            .from('money_transactions')
+            .select('id, remarks')
+            .eq('user_id', sub.creator_id)
+            .eq('type', 'refund')
+            .contains('metadata', { submission_id: sub.id })
+        ] as any);
+
+        const rewardsCount = (existingRewards || []).length;
+        const refundsCount = (existingRefunds || [])
+          ?.filter((r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK)
+          .length || 0;
+        const nextCycle = rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
+
+        // Avoid duplicate reward for the same cycle
+        const { data: rewardInThisCycle } = await supabaseAdmin
+          .from('money_transactions')
+          .select('id')
+          .eq('user_id', sub.creator_id)
+          .eq('type', 'reward')
+          .contains('metadata', { submission_id: sub.id, payout_cycle: nextCycle });
+
+        if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
+          const customRemarks = payload?.customRemarks as string | undefined;
+          const creditRes = await creditCreatorWithdrawableBalance(
+            sub.creator_id,
+            rewardAmount,
+            payoutType === 'custom'
+              ? `Custom contest payment credited - ${(contest as any)?.title || 'Contest'}`
+              : `Contest reward credited - ${(contest as any)?.title || 'Contest'}`,
+            {
+              remarks: customRemarks || (payoutType === 'custom' ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet'),
+              metadata: { contest_id: sub.contest_id, submission_id: sub.id, payout_type: payoutType, payout_cycle: nextCycle }
+            }
+          );
+          if (!creditRes.success) {
+            throw new Error(`Failed to credit creator wallet: ${creditRes.error}`);
+          }
+        }
+
+        // 3) Increment creator metric: contests won
         try {
           await MetricsService.incrementContestsWon(sub.creator_id);
         } catch {}
