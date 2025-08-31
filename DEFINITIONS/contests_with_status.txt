@@ -1,5 +1,6 @@
-CREATE VIEW public.contests_with_status AS
-SELECT
+-- Append views_locked_at as the LAST column of the view (keeps all existing columns/ordinals intact)
+create or replace view public.contests_with_status as
+select
   contests.id,
   contests.advertiser_id,
   contests.title,
@@ -29,15 +30,14 @@ SELECT
   contests.published_at,
   contests.rejection_reason,
   contests.payment_details,
-  CASE
-    WHEN contests.moderation_status <> 'published'::contest_moderation_status_enum THEN NULL::text
-    WHEN contests.start_date IS NULL
-      OR contests.end_date IS NULL THEN 'incomplete'::text
-    WHEN (now() AT TIME ZONE 'UTC'::text) < contests.start_date THEN 'upcoming'::text
-    WHEN (now() AT TIME ZONE 'UTC'::text) >= contests.start_date
-      AND (now() AT TIME ZONE 'UTC'::text) < contests.end_date THEN 'active'::text
-    WHEN (now() AT TIME ZONE 'UTC'::text) >= contests.end_date THEN 'ended'::text
-    ELSE 'unknown'::text
-  END AS status
-FROM
-  contests;
+  case
+    when contests.moderation_status <> 'published'::contest_moderation_status_enum then null::text
+    when contests.start_date is null or contests.end_date is null then 'incomplete'::text
+    when (now() at time zone 'UTC') < contests.start_date then 'upcoming'::text
+    when (now() at time zone 'UTC') >= contests.start_date
+         and (now() at time zone 'UTC') < contests.end_date then 'active'::text
+    when (now() at time zone 'UTC') >= contests.end_date then 'ended'::text
+    else 'unknown'::text
+  end as status,
+  contests.views_locked_at
+from contests;

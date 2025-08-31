@@ -22,12 +22,19 @@ export async function POST(
     // Get contest details including last metrics update time
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('id, title, platform, advertiser_id, last_metrics_updated')
+      .select('id, title, platform, advertiser_id, last_metrics_updated, post_contest_status')
       .eq('id', contestId)
       .single();
 
     if (contestError || !contest) {
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
+    }
+
+    // Hard lock: once verification complete or payouts processed, do not refresh
+    if (contest.post_contest_status === 'verification_complete' || contest.post_contest_status === 'payouts_processed') {
+      return NextResponse.json({
+        error: 'Metrics are locked after verification. No further refresh allowed.',
+      }, { status: 400 });
     }
 
     // Check if user has access (either owns the contest, is admin, or is viewing opportunities)

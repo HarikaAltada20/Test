@@ -168,6 +168,72 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to update submission status' }, { status: 500 });
     }
 
+    // Snapshot views and credit creator totals when entering verified/paid (idempotent via delta)
+    if (action === SUBMISSION_STATUS.verified || action === SUBMISSION_STATUS.paid) {
+      const currentViews = submissionFull.views || 0;
+
+      // Read prior credited snapshot (0 if none)
+      const { data: priorSnap, error: priorErr } = await supabaseAdmin
+        .from('submission_views_credited')
+        .select('credited_views')
+        .eq('submission_id', submissionId)
+        .maybeSingle();
+      if (priorErr) {
+        console.error('Failed to read prior credited snapshot:', priorErr);
+      }
+      const priorCredited = (priorSnap?.credited_views as number) || 0;
+      const delta = Math.max(0, currentViews - priorCredited);
+
+      // Credit creator total_views by delta
+      if (delta > 0) {
+        try {
+          const currentTotal = await MetricsService.getCreatorField(submissionFull.creator_id, 'total_views');
+          const { error: updCreatorErr } = await supabaseAdmin
+            .from('creator_profiles')
+            .update({ total_views: currentTotal + delta })
+            .eq('id', submissionFull.creator_id);
+          if (updCreatorErr) {
+            console.error('Failed to update creator total_views:', updCreatorErr);
+          }
+        } catch (e) {
+          console.error('Error while crediting creator total_views:', e);
+        }
+      }
+
+      // Upsert snapshot to current
+      const { error: snapErr } = await supabaseAdmin
+        .from('submission_views_credited')
+        .upsert({
+          submission_id: submissionId,
+          credited_views: currentViews,
+          credited_at: new Date().toISOString(),
+        }, { onConflict: 'submission_id' });
+      if (snapErr) {
+        console.error('Failed to snapshot credited views:', snapErr);
+      }
+
+      // Persist locked views on the submission row if columns exist (non-fatal if they don't)
+      try {
+        const { error: lockErr } = await supabaseAdmin
+          .from('submissions')
+          .update({
+            // @ts-ignore - columns may not exist until migration is applied
+            views_locked: currentViews,
+            // @ts-ignore - columns may not exist until migration is applied
+            views_locked_at: new Date().toISOString(),
+          })
+          .eq('id', submissionId);
+        if (lockErr) {
+          // Ignore unknown column errors to keep backward compatible
+          if (!`${lockErr.message}`.toLowerCase().includes('column') || !`${lockErr.message}`.toLowerCase().includes('does not exist')) {
+            console.error('Failed to update submission locked views:', lockErr);
+          }
+        }
+      } catch (e) {
+        console.warn('Skipping submission locked views update (likely columns not present yet).');
+      }
+    }
+
     // Handle wallet credit/debit on status changes
     if (action === SUBMISSION_STATUS.paid) {
       // Determine amount: custom from paymentDetails or default to earnings
