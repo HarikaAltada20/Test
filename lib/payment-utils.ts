@@ -726,6 +726,84 @@ export async function debitCreatorWithdrawableBalance(
   }
 }
 
+// 🆕 Generic wallet credit for any user (creator or advertiser) without touching contest win totals
+export async function creditUserWithdrawableBalance(
+  userId: string,
+  amountInCents: number,
+  description: string,
+  opts?: { remarks?: string; metadata?: any }
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  try {
+    if (amountInCents <= 0) {
+      return { success: false, error: 'Amount must be positive' };
+    }
+
+    const supabase = createAdminClient();
+
+    // Determine user type
+    const { data: userRow, error: userErr } = await supabase
+      .from('users')
+      .select('user_type')
+      .eq('id', userId)
+      .single();
+    if (userErr || !userRow?.user_type) {
+      return { success: false, error: userErr?.message || 'User not found' };
+    }
+
+    const isCreator = userRow.user_type === 'creator';
+    const table = isCreator ? 'creator_profiles' : 'advertiser_profiles';
+
+    // Read current balance
+    const { data: profile, error: readErr } = await supabase
+      .from(table)
+      .select('withdrawable_balance')
+      .eq('id', userId)
+      .single();
+    if (readErr) {
+      return { success: false, error: readErr.message };
+    }
+
+    const currentBalance = profile?.withdrawable_balance || 0;
+    const newBalance = currentBalance + amountInCents;
+
+    const { error: updateErr } = await supabase
+      .from(table)
+      .update({ withdrawable_balance: newBalance })
+      .eq('id', userId);
+    if (updateErr) {
+      return { success: false, error: updateErr.message };
+    }
+
+    // Also increment users.total_other_earnings for analytics/reporting (atomic)
+    const { error: incErr } = await supabase.rpc('increment_other_earnings', { p_user_id: userId, p_amount: amountInCents });
+    if (incErr) {
+      console.warn('increment_other_earnings RPC failed:', incErr.message);
+    }
+
+    // Log as reward for now (category specified in metadata)
+    const { error: insertErr } = await supabase
+      .from('money_transactions')
+      .insert({
+        user_id: userId,
+        type: 'reward',
+        status: 'success',
+        amount: amountInCents,
+        description,
+        remarks: opts?.remarks,
+        metadata: opts?.metadata,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    if (insertErr) {
+      return { success: false, error: insertErr.message };
+    }
+
+    return { success: true, newBalance };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Unknown error' };
+  }
+}
+
 // 🆕 Admin-privileged transaction logger (bypasses RLS for cross-user entries)
 export async function logTransactionAsAdmin(
   userId: string,

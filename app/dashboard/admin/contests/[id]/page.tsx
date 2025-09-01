@@ -223,13 +223,23 @@ export default async function AdminContestDetailPage({
         console.log(`Admin: Mapped submissions for contest ${contestId}:`, JSON.stringify(submissions, null, 2));
 
         return (
-            <ContestDetailClient
-                contest={contest}
-                initialSubmissions={submissions}
-                durationDays={durationDays}
-                contestId={contestId}
-                isAdminView={true}
-            />
+            <>
+                <div className="mb-4">
+                    <a
+                        href={`/dashboard/admin/affiliate/${contestId}`}
+                        className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+                    >
+                        Settle Affiliate Earnings
+                    </a>
+                </div>
+                <ContestDetailClient
+                    contest={contest}
+                    initialSubmissions={submissions}
+                    durationDays={durationDays}
+                    contestId={contestId}
+                    isAdminView={true}
+                />
+            </>
         );
 
     } catch (error) {

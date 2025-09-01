@@ -115,6 +115,12 @@ export function DashboardSidebar({
       description: "Review & approve contests",
     },
     {
+      name: "Affiliate",
+      href: "/dashboard/admin/affiliate",
+      icon: BarChart3,
+      description: "Commissions & credits",
+    },
+    {
       name: "Support",
       href: "/dashboard/admin/support",
       icon: HelpCircle,
