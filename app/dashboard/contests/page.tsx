@@ -1,7 +1,6 @@
 import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-import { ContestListClient } from "./ContestListClient";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import { ContestsPageClient } from "./ContestsPageClient";
 
