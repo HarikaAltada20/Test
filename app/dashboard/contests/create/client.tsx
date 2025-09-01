@@ -5432,17 +5432,16 @@ export default function CreateContestPage({
                               </div>
                             )}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                          <button
+                           
                             onClick={(e) => {
                               e.stopPropagation();
                               removeResourceFile();
                             }}
-                            className="text-red-500 ml-auto"
+                            className="text-purple-500 ml-auto"
                           >
                             <Trash className="h-4 w-4" /> Remove
-                          </Button>
+                          </button>
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center h-32">

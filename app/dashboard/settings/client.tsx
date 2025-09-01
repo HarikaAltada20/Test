@@ -15,20 +15,13 @@ import type { UserResponse } from "@supabase/supabase-js";
 import { Bell, LogOut, Mail, ExternalLink, RefreshCw, Eye, EyeOff, Copy } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
-import dayjs from "dayjs";
+import dayjs from 'dayjs';
 import { useRouter, useSearchParams } from "next/navigation";
-import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 import { useToast } from "@/hooks/use-toast";
-import {
-  validatePassword,
-  getPasswordErrorMessage,
-} from "@/lib/password-utils";
+import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
-import {
-  API_TIMEOUT_MEDIUM,
-  API_TIMEOUT_LONG,
-  API_TIMEOUT_SHORT,
-} from "@/constants/subscriptionPlans";
+import { API_TIMEOUT_MEDIUM, API_TIMEOUT_LONG, API_TIMEOUT_SHORT } from "@/constants/subscriptionPlans";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -50,7 +43,7 @@ interface SocialAccount {
   instagram_user_id?: string; // Actual global IG User ID
   app_scoped_user_id?: string; // IGBA ID or Professional Account ID for the app
   name_of_account?: string; // User's full name on IG
-  account_type?: "BUSINESS" | "MEDIA_CREATOR" | "PERSONAL";
+  account_type?: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
   followers_count?: number;
   follows_count?: number;
   media_count?: number;
@@ -97,153 +90,129 @@ export default function SettingsPage({
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
-  const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(
-    null
-  );
-  const [instagramAccount, setInstagramAccount] =
-    useState<SocialAccount | null>(null);
+  const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
+  const [instagramAccount, setInstagramAccount] = useState<SocialAccount | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingYouTube, setIsLoadingYouTube] = useState(false);
-  const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] =
-    useState(false);
+  const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] = useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<{
-    type: "youtube" | "instagram";
+    type: 'youtube' | 'instagram';
     message: string;
     details?: string;
-    code?: "no_channel" | "generic";
+    code?: 'no_channel' | 'generic';
   } | null>(null);
 
   // Handle URL error parameters
   useEffect(() => {
-    const error = searchParams.get("error");
-    const message = searchParams.get("message");
-    const success = searchParams.get("success");
-    const platform = searchParams.get("platform");
+    const error = searchParams.get('error');
+    const message = searchParams.get('message');
+    const success = searchParams.get('success');
+    const platform = searchParams.get('platform');
 
-    if (error === "youtube_connection_failed") {
-      if (message === "No+channel+found") {
+    if (error === 'youtube_connection_failed') {
+      if (message === 'No+channel+found') {
         setConnectionError({
-          type: "youtube",
-          message: "YouTube Connection Failed",
-          details:
-            "No channel found. Create your YouTube channel first, then try connecting your YouTube account again.",
-          code: "no_channel",
+          type: 'youtube',
+          message: 'YouTube Connection Failed',
+          details: 'No channel found. Create your YouTube channel first, then try connecting your YouTube account again.',
+          code: 'no_channel'
         });
       } else {
         // Handle other YouTube connection errors
         setConnectionError({
-          type: "youtube",
-          message: "YouTube Connection Failed",
-          details: message
-            ? decodeURIComponent(message)
-            : "An error occurred while connecting your YouTube account. Please try again.",
+          type: 'youtube',
+          message: 'YouTube Connection Failed',
+          details: message ? decodeURIComponent(message) : 'An error occurred while connecting your YouTube account. Please try again.'
         });
       }
 
       toast({
         title: "YouTube Connection Failed",
-        description: message
-          ? decodeURIComponent(message)
-          : "An error occurred while connecting your YouTube account.",
+        description: message ? decodeURIComponent(message) : "An error occurred while connecting your YouTube account.",
         variant: "destructive",
         duration: 10000, // Show for 10 seconds to ensure user sees it
       });
 
       // Clear the error from URL to prevent showing it again on refresh
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete("error");
-      newUrl.searchParams.delete("message");
+      newUrl.searchParams.delete('error');
+      newUrl.searchParams.delete('message');
       router.replace(newUrl.pathname);
     }
 
     // Handle success parameters
     // Pattern A: success=true&platform=youtube|instagram
-    if (success === "true" && platform) {
-      const platformName = platform === "youtube" ? "YouTube" : "Instagram";
+    if (success === 'true' && platform) {
+      const platformName = platform === 'youtube' ? 'YouTube' : 'Instagram';
 
       toast({
         title: `${platformName} Connected Successfully`,
         description: `Your ${platformName} account has been connected successfully.`,
-        variant: "default",
+        variant: 'default',
         duration: 5000,
       });
 
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete("success");
-      newUrl.searchParams.delete("platform");
+      newUrl.searchParams.delete('success');
+      newUrl.searchParams.delete('platform');
       router.replace(newUrl.pathname);
     }
 
     // Pattern B: success=youtube_connected | instagram_connected
-    if (success === "youtube_connected" || success === "instagram_connected") {
-      const platformName =
-        success === "youtube_connected" ? "YouTube" : "Instagram";
+    if (success === 'youtube_connected' || success === 'instagram_connected') {
+      const platformName = success === 'youtube_connected' ? 'YouTube' : 'Instagram';
 
       toast({
         title: `${platformName} Connected Successfully`,
         description: `Your ${platformName} account has been connected successfully.`,
-        variant: "default",
+        variant: 'default',
         duration: 5000,
       });
 
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete("success");
+      newUrl.searchParams.delete('success');
       router.replace(newUrl.pathname);
     }
   }, [searchParams, toast, router]);
 
   // Function declarations
-  const refreshInstagramToken = async (
-    currentToken: string,
-    userId: string,
-    currentProfile: CreatorProfile
-  ) => {
+  const refreshInstagramToken = async (currentToken: string, userId: string, currentProfile: CreatorProfile) => {
     try {
-      const refreshRes = await fetch(
-        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`
-      );
+      const refreshRes = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`);
       const newData = await refreshRes.json();
 
       if (!refreshRes.ok || newData.error) {
-        throw new Error(
-          newData.error?.message || "Failed to refresh Instagram token"
-        );
+        throw new Error(newData.error?.message || 'Failed to refresh Instagram token');
       }
 
       const updatedInstagramAccount = {
         ...(currentProfile.instagram_account || {}),
         access_token: newData.access_token,
-        token_expiry: dayjs().add(59, "days").toISOString(), // Refreshed token is also valid for 60 days
+        token_expiry: dayjs().add(59, 'days').toISOString(), // Refreshed token is also valid for 60 days
         updated_at: new Date().toISOString(),
       };
 
       const { error: updateError } = await supabase
-        .from("creator_profiles")
+        .from('creator_profiles')
         .update({
           instagram_account: updatedInstagramAccount,
         })
-        .eq("id", userId);
+        .eq('id', userId);
 
       if (updateError) {
         throw updateError;
       }
 
-      setProfile((prev) =>
-        prev
-          ? {
-              ...prev,
-              instagram_account: updatedInstagramAccount as SocialAccount,
-            }
-          : null
-      );
-      console.log("Instagram token refreshed successfully");
+      setProfile(prev => prev ? { ...prev, instagram_account: updatedInstagramAccount as SocialAccount } : null);
+      console.log('Instagram token refreshed successfully');
       // Optionally show a success message to the user, though this can be silent
+
     } catch (err: any) {
-      console.error("Error refreshing Instagram token:", err);
+      console.error('Error refreshing Instagram token:', err);
       // Handle token refresh error, e.g., notify user, attempt disconnect, or ask to re-authenticate
-      // For now, we'll log the error. Depending on the error type (e.g. token revoked),
+      // For now, we'll log the error. Depending on the error type (e.g. token revoked), 
       // you might want to nullify the instagram_account or prompt for re-login.
       toast({
         title: "Error",
@@ -273,12 +242,10 @@ export default function SettingsPage({
         setUserType(userData.user_type);
 
         // Simple check: if user has email provider, they can manage passwords
-        const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
+        const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
           const providers = authUser.app_metadata?.providers || [];
-          const hasEmailProvider = providers.includes("email");
+          const hasEmailProvider = providers.includes('email');
           setHasPassword(hasEmailProvider);
         }
 
@@ -293,20 +260,11 @@ export default function SettingsPage({
           setProfile(data);
 
           // Check and refresh Instagram token
-          if (
-            data.instagram_account?.access_token &&
-            data.instagram_account?.token_expiry
-          ) {
-            const shouldRefresh = dayjs().isAfter(
-              dayjs(data.instagram_account.token_expiry).subtract(7, "days")
-            ); // Refresh 7 days before expiry
+          if (data.instagram_account?.access_token && data.instagram_account?.token_expiry) {
+            const shouldRefresh = dayjs().isAfter(dayjs(data.instagram_account.token_expiry).subtract(7, 'days')); // Refresh 7 days before expiry
             if (shouldRefresh) {
-              console.log("Attempting to refresh Instagram token");
-              await refreshInstagramToken(
-                data.instagram_account.access_token,
-                user!.id,
-                data
-              );
+              console.log('Attempting to refresh Instagram token');
+              await refreshInstagramToken(data.instagram_account.access_token, user!.id, data);
             }
           }
         } else if (userData.user_type === "advertiser") {
@@ -342,7 +300,7 @@ export default function SettingsPage({
   }, [user, supabase]);
 
   useEffect(() => {
-    if (profile && userType === "creator") {
+    if (profile && userType === 'creator') {
       const creatorProfile = profile as CreatorProfile;
       if (creatorProfile.youtube_account) {
         setYoutubeAccount(creatorProfile.youtube_account);
@@ -425,9 +383,7 @@ export default function SettingsPage({
 
       toast({
         title: "Success",
-        description: hasPassword
-          ? "Password updated successfully"
-          : "Password set successfully! You can now sign in with email and password.",
+        description: hasPassword ? "Password updated successfully" : "Password set successfully! You can now sign in with email and password.",
         variant: "default",
       });
       setCurrentPassword("");
@@ -436,11 +392,7 @@ export default function SettingsPage({
     } catch (err: any) {
       toast({
         title: "Error",
-        description:
-          err.message ||
-          (hasPassword
-            ? "Failed to update password"
-            : "Failed to set password"),
+        description: err.message || (hasPassword ? "Failed to update password" : "Failed to set password"),
         variant: "destructive",
       });
     } finally {
@@ -448,12 +400,24 @@ export default function SettingsPage({
     }
   };
 
+  const buildReferralLinks = () => {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'https://www.gameofcreators.com';
+    const code = username || '';
+    return {
+      general: `${base}/?ref=${code}`,
+      creators: `${base}/creators?ref=${code}`,
+      brands: `${base}/brands?ref=${code}`,
+    };
+  };
 
-
-
-
-
-
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: 'Copied', description: 'Referral link copied to clipboard.' });
+    } catch (e) {
+      toast({ title: 'Copy failed', description: 'Please copy manually.', variant: 'destructive' });
+    }
+  };
 
 
   const clearConnectionError = () => {
@@ -462,8 +426,7 @@ export default function SettingsPage({
     // Show a success message when error is dismissed
     toast({
       title: "Error Dismissed",
-      description:
-        "You can try connecting your account again when you're ready.",
+      description: "You can try connecting your account again when you're ready.",
       variant: "default",
       duration: 3000,
     });
@@ -485,6 +448,10 @@ export default function SettingsPage({
       console.error(`Error updating ${type} notifications:`, err);
     }
   };
+
+
+
+
 
   const updateCompanyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -574,7 +541,7 @@ export default function SettingsPage({
         });
       }, API_TIMEOUT_LONG);
 
-      window.location.href = "/api/youtube/auth";
+      window.location.href = '/api/youtube/auth';
     } catch (err: any) {
       setIsLoadingYouTube(false);
       toast({
@@ -592,8 +559,7 @@ export default function SettingsPage({
     if (!instagramClientId) {
       toast({
         title: "Error",
-        description:
-          "Instagram Client ID is not configured. Please contact support.",
+        description: "Instagram Client ID is not configured. Please contact support.",
         variant: "destructive",
       });
       return;
@@ -601,8 +567,7 @@ export default function SettingsPage({
     if (!appBaseUrl) {
       toast({
         title: "Error",
-        description:
-          "Application Base URL is not configured. Please contact support.",
+        description: "Application Base URL is not configured. Please contact support.",
         variant: "destructive",
       });
       return;
@@ -612,13 +577,11 @@ export default function SettingsPage({
     try {
       const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
       const scopes = [
-        "instagram_business_basic",
-        "instagram_business_manage_insights",
-      ].join(",");
+        'instagram_business_basic',
+        'instagram_business_manage_insights'
+      ].join(',');
 
-      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
-        instagramRedirectUri
-      )}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
+      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
 
       // Set a timeout to reset loading state if redirect doesn't happen
       const timeoutId = setTimeout(() => {
@@ -656,21 +619,16 @@ export default function SettingsPage({
       }, API_TIMEOUT_SHORT);
 
       const { error: updateError } = await supabase
-        .from("creator_profiles")
-        .update({
-          instagram_account: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+        .from('creator_profiles')
+        .update({ instagram_account: null, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
 
       clearTimeout(timeoutId);
 
       if (updateError) throw updateError;
 
       setInstagramAccount(null);
-      setProfile((prev) =>
-        prev ? { ...prev, instagram_account: null } : null
-      );
+      setProfile(prev => prev ? { ...prev, instagram_account: null } : null);
       toast({
         title: "Success",
         description: "Instagram account disconnected successfully.",
@@ -702,16 +660,16 @@ export default function SettingsPage({
       }, 5000);
 
       const { error: updateError } = await supabase
-        .from("creator_profiles")
+        .from('creator_profiles')
         .update({ youtube_account: null, updated_at: new Date().toISOString() })
-        .eq("id", user.id);
+        .eq('id', user.id);
 
       clearTimeout(timeoutId);
 
       if (updateError) throw updateError;
 
       setYoutubeAccount(null);
-      setProfile((prev) => (prev ? { ...prev, youtube_account: null } : null));
+      setProfile(prev => prev ? { ...prev, youtube_account: null } : null);
       toast({
         title: "Success",
         description: "YouTube account disconnected successfully.",
@@ -730,28 +688,24 @@ export default function SettingsPage({
 
   // Auto-refresh Instagram token if nearing expiry
   const checkAndRefreshInstagramToken = useCallback(async () => {
-    if (
-      !instagramAccount ||
-      !instagramAccount.access_token ||
-      !instagramAccount.token_expiry
-    ) {
+    if (!instagramAccount || !instagramAccount.access_token || !instagramAccount.token_expiry) {
       return;
     }
 
     // Check if token expires within 7 days
-    if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, "day"))) {
+    if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, 'day'))) {
       try {
-        const response = await fetch("/api/instagram/refresh-token", {
-          method: "POST",
+        const response = await fetch('/api/instagram/refresh-token', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
         });
 
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || "Failed to refresh Instagram token");
+          throw new Error(result.error || 'Failed to refresh Instagram token');
         }
 
         // Show success message
@@ -763,18 +717,15 @@ export default function SettingsPage({
 
         // Refresh the page data to show updated token expiry
         window.location.reload();
+
       } catch (error: any) {
-        console.error("Error refreshing Instagram token:", error);
+        console.error('Error refreshing Instagram token:', error);
 
         // Handle different error scenarios
-        if (
-          error.message?.includes("re-authenticate") ||
-          error.message?.includes("revoked")
-        ) {
+        if (error.message?.includes('re-authenticate') || error.message?.includes('revoked')) {
           toast({
             title: "Authentication Required",
-            description:
-              "Your Instagram token has expired. Please reconnect your Instagram account.",
+            description: "Your Instagram token has expired. Please reconnect your Instagram account.",
             variant: "destructive",
           });
         } else {
@@ -790,28 +741,24 @@ export default function SettingsPage({
 
   // Auto-refresh YouTube token if nearing expiry
   const checkAndRefreshYouTubeToken = useCallback(async () => {
-    if (
-      !youtubeAccount ||
-      !youtubeAccount.access_token ||
-      !youtubeAccount.expires_at
-    ) {
+    if (!youtubeAccount || !youtubeAccount.access_token || !youtubeAccount.expires_at) {
       return;
     }
 
     // Check if token expires within 5 minutes (YouTube tokens have shorter expiry)
-    if (dayjs(youtubeAccount.expires_at).isBefore(dayjs().add(5, "minute"))) {
+    if (dayjs(youtubeAccount.expires_at).isBefore(dayjs().add(5, 'minute'))) {
       try {
-        const response = await fetch("/api/youtube/refresh", {
-          method: "POST",
+        const response = await fetch('/api/youtube/refresh', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
           },
         });
 
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || "Failed to refresh YouTube token");
+          throw new Error(result.error || 'Failed to refresh YouTube token');
         }
 
         // Show success message
@@ -823,18 +770,15 @@ export default function SettingsPage({
 
         // Refresh the page data to show updated token expiry
         window.location.reload();
+
       } catch (error: any) {
-        console.error("Error refreshing YouTube token:", error);
+        console.error('Error refreshing YouTube token:', error);
 
         // Handle different error scenarios
-        if (
-          error.message?.includes("re-authenticate") ||
-          error.message?.includes("revoked")
-        ) {
+        if (error.message?.includes('re-authenticate') || error.message?.includes('revoked')) {
           toast({
             title: "Authentication Required",
-            description:
-              "Your YouTube token has expired. Please reconnect your YouTube account.",
+            description: "Your YouTube token has expired. Please reconnect your YouTube account.",
             variant: "destructive",
           });
         } else {
@@ -1380,8 +1324,8 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* Referral Links */}
-      {username && (
+       {/* Referral Links */}
+       {username && (
         <Card>
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
@@ -1419,44 +1363,7 @@ export default function SettingsPage({
         </Card>
       )}
 
-      {/* Referral Links */}
-      {username && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Share Your Referral Links</CardTitle>
-            <CardDescription>
-              Invite others with your referral code embedded. Choose the right landing page.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(() => {
-              const links = buildReferralLinks();
-              return (
-                <div className="space-y-3">
-                  <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.general} />
-                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.general)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy General
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.creators} />
-                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.creators)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy Creators
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.brands} />
-                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.brands)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy Brands
-                    </Button>
-                  </div>
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-      )}
+  
 
       {/* Danger Zone */}
       {/* <Card>

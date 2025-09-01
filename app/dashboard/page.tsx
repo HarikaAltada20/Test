@@ -574,7 +574,7 @@ function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="bg-white md:h-[380px] rounded-xl shadow-md py-6">
+              <div className="text-center">
                 <p className="text-md text-muted-foreground">
                   {isAdvertiser
                     ? "No contests created yet"
