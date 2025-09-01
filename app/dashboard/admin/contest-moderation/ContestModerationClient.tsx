@@ -92,7 +92,7 @@ const contestStatusConfig = {
 export default function ContestModerationClient() {
     const [contests, setContests] = useState<Contest[]>([]);
     const [loading, setLoading] = useState(true);
-    const [selectedStatus, setSelectedStatus] = useState("all");
+    const [selectedStatus, setSelectedStatus] = useState("pending_approval");
     const [selectedContest, setSelectedContest] = useState<Contest | null>(null);
     const [showApprovalDialog, setShowApprovalDialog] = useState(false);
     const [showRejectionDialog, setShowRejectionDialog] = useState(false);
@@ -399,23 +399,17 @@ export default function ContestModerationClient() {
 
     // Group contests by status for tab counts
     const contestCounts = {
-        all: contests.length,
         pending_approval: contests.filter(c => c.moderation_status === 'pending_approval').length,
         approved: contests.filter(c => c.moderation_status === 'approved').length,
         published: contests.filter(c => c.moderation_status === 'published').length,
         rejected: contests.filter(c => c.moderation_status === 'rejected').length,
-        draft: contests.filter(c => c.moderation_status === 'draft').length,
+        all: contests.length,
     };
 
     return (
         <div className="space-y-6">
             <Tabs value={selectedStatus} onValueChange={setSelectedStatus} className="mb-8">
                 <TabsList>
-                    <TabsTrigger value="all">
-                        All <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                            {contestCounts.all}
-                        </Badge>
-                    </TabsTrigger>
                     <TabsTrigger value="pending_approval">
                         Pending <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestCounts.pending_approval}
@@ -436,9 +430,9 @@ export default function ContestModerationClient() {
                             {contestCounts.rejected}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="draft">
-                        Drafts <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                            {contestCounts.draft}
+                    <TabsTrigger value="all">
+                        All <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
+                            {contestCounts.all}
                         </Badge>
                     </TabsTrigger>
                 </TabsList>

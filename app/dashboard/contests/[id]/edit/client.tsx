@@ -140,24 +140,16 @@ type ContestData = {
   winner_count?: number;
 };
 
-export default function EditContestPage({
-  user,
-  contestId,
-  datesOnly = false,
-}: {
-  user: UserResponse["data"]["user"];
-  contestId: string;
-  datesOnly?: boolean;
-}) {
-  const router = useRouter();
-  const supabase = createClient();
-  const { toast } = useToast();
+export default function EditContestPage({ user, contestId, datesOnly = false, isAdmin = false }: { user: UserResponse["data"]["user"], contestId: string, datesOnly?: boolean, isAdmin?: boolean }) {
+    const router = useRouter()
+    const supabase = createClient()
+    const { toast } = useToast()
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
-  const [error, setError] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [contest, setContest] = useState<ContestData | null>(null);
+    const [isLoading, setIsLoading] = useState(true)
+    const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
+    const [error, setError] = useState<string | null>(null)
+    const [validationError, setValidationError] = useState<string | null>(null)
+    const [contest, setContest] = useState<ContestData | null>(null)
 
   // State for subscription plans and user plan
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -378,11 +370,12 @@ export default function EditContestPage({
           return;
         }
 
-        if (data && data.advertiser_id !== user.id) {
-          setError("You do not have permission to edit this contest.");
-          setIsLoading(false);
-          return;
-        }
+                if (!isAdmin && data && data.advertiser_id !== user.id) {
+                    setError("You do not have permission to edit this contest.");
+                    setIsLoading(false);
+                    return;
+                }
+
 
         if (data) {
           // Simplified logic: Only check dates if contest is published
@@ -659,12 +652,15 @@ export default function EditContestPage({
   const updateContestResourcesInDB = async (newResources: ResourceItem[]) => {
     if (!user?.id || !contestId) return;
 
-    try {
-      const { error } = await supabase
-        .from("contests")
-        .update({ resources: newResources })
-        .eq("id", contestId)
-        .eq("advertiser_id", user.id);
+        try {
+            let query = supabase
+                .from("contests")
+                .update({ resources: newResources })
+                .eq("id", contestId);
+            if (!isAdmin) {
+                query = query.eq("advertiser_id", user.id);
+            }
+            const { error } = await query;
 
       if (error) {
         console.error("Error updating resources in DB:", error);
@@ -1333,16 +1329,29 @@ export default function EditContestPage({
         updatePayload.resources = resources;
       }
 
-      const { error: updateError } = await supabase
-        .from("contests")
-        .update(updatePayload)
-        .eq("id", contestId)
-        .eq("advertiser_id", user.id);
+            // For admins, call a secure API that uses the service role to bypass RLS
+            if (isAdmin) {
+                const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatePayload)
+                });
+                if (!resp.ok) {
+                    const j = await resp.json().catch(() => ({}));
+                    throw new Error(j.error || 'Admin update failed');
+                }
+            } else {
+                let updateQuery = supabase
+                    .from("contests")
+                    .update(updatePayload)
+                    .eq("id", contestId)
+                    .eq("advertiser_id", user.id);
+                const { error: updateError } = await updateQuery;
+                if (updateError) {
+                    throw updateError;
+                }
+            }
 
-      if (updateError) {
-        console.error("Supabase update error:", updateError);
-        throw updateError;
-      }
 
       // Show success toast
       toast({
@@ -1384,86 +1393,75 @@ export default function EditContestPage({
         return;
       }
 
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (file.size > maxSize) {
-        toast({
-          title: "File Too Large",
-          description:
-            "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
-          variant: "destructive",
-        });
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                toast({
+                    title: "File Too Large",
+                    description: "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
+                    variant: "destructive"
+                });
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
+                return;
+            }
+            try {
+                if (!user?.id) {
+                    toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
+                    return;
+                }
+                // Remove any existing thumbnail for this contest (all extensions)
+                const { data: existingFiles } = await supabase.storage
+                    .from("contest-assets")
+                    .list("contest_thumbnails");
+                if (existingFiles) {
+                    const matching = existingFiles.filter(f => f.name.startsWith(`${contestId}_`));
+                    if (matching.length > 0) {
+                        const paths = matching.map(f => `contest_thumbnails/${f.name}`);
+                        await supabase.storage.from("contest-assets").remove(paths);
+                    }
+                }
+                // Get extension and timestamp
+                const ext = file.name.split('.').pop() || 'jpg';
+                const timestamp = Date.now();
+                const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
+                setThumbnail(file);
+                setThumbnailPreview("uploading");
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from("contest-assets")
+                    .upload(fileName, file);
+                if (uploadError) {
+                    throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
+                }
+                const { data: publicUrlData } = supabase.storage
+                    .from("contest-assets")
+                    .getPublicUrl(fileName);
+                const publicUrl = publicUrlData?.publicUrl || "";
+                if (!publicUrl) {
+                    throw new Error("Failed to get public URL for uploaded thumbnail");
+                }
+                setThumbnail(null);
+                setThumbnailPreview(publicUrl);
+                let thumbQuery = supabase
+                    .from("contests")
+                    .update({ thumbnail_url: publicUrl })
+                    .eq("id", contestId);
+                if (!isAdmin) {
+                    thumbQuery = thumbQuery.eq("advertiser_id", user.id);
+                }
+                await thumbQuery;
+                toast({ title: "Success", description: "Thumbnail uploaded successfully!" });
+            } catch (error: any) {
+                console.error("Error uploading thumbnail:", error);
+                setThumbnail(null);
+                setThumbnailPreview(null);
+                toast({ title: "Upload Error", description: `Failed to upload thumbnail: ${error.message}`, variant: "destructive" });
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = "";
+                }
+            }
         }
-        return;
-      }
-      try {
-        if (!user?.id) {
-          toast({
-            title: "Authentication Error",
-            description: "User not authenticated. Please sign in again.",
-            variant: "destructive",
-          });
-          return;
-        }
-        // Remove any existing thumbnail for this contest (all extensions)
-        const { data: existingFiles } = await supabase.storage
-          .from("contest-assets")
-          .list("contest_thumbnails");
-        if (existingFiles) {
-          const matching = existingFiles.filter((f) =>
-            f.name.startsWith(`${contestId}_`)
-          );
-          if (matching.length > 0) {
-            const paths = matching.map((f) => `contest_thumbnails/${f.name}`);
-            await supabase.storage.from("contest-assets").remove(paths);
-          }
-        }
-        // Get extension and timestamp
-        const ext = file.name.split(".").pop() || "jpg";
-        const timestamp = Date.now();
-        const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
-        setThumbnail(file);
-        setThumbnailPreview("uploading");
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("contest-assets")
-          .upload(fileName, file);
-        if (uploadError) {
-          throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
-        }
-        const { data: publicUrlData } = supabase.storage
-          .from("contest-assets")
-          .getPublicUrl(fileName);
-        const publicUrl = publicUrlData?.publicUrl || "";
-        if (!publicUrl) {
-          throw new Error("Failed to get public URL for uploaded thumbnail");
-        }
-        setThumbnail(null);
-        setThumbnailPreview(publicUrl);
-        await supabase
-          .from("contests")
-          .update({ thumbnail_url: publicUrl })
-          .eq("id", contestId)
-          .eq("advertiser_id", user.id);
-        toast({
-          title: "Success",
-          description: "Thumbnail uploaded successfully!",
-        });
-      } catch (error: any) {
-        console.error("Error uploading thumbnail:", error);
-        setThumbnail(null);
-        setThumbnailPreview(null);
-        toast({
-          title: "Upload Error",
-          description: `Failed to upload thumbnail: ${error.message}`,
-          variant: "destructive",
-        });
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      }
-    }
-  };
+    };
 
   const removeThumbnail = async () => {
     try {
@@ -1474,14 +1472,17 @@ export default function EditContestPage({
       ) {
         await deleteFromStorage(thumbnailPreview);
 
-        // Update DB to remove thumbnail URL
-        if (contestId && user) {
-          await supabase
-            .from("contests")
-            .update({ thumbnail_url: null })
-            .eq("id", contestId)
-            .eq("advertiser_id", user.id);
-        }
+                // Update DB to remove thumbnail URL
+                if (contestId && user) {
+                    let clearThumbQuery = supabase
+                        .from("contests")
+                        .update({ thumbnail_url: null })
+                        .eq("id", contestId);
+                    if (!isAdmin) {
+                        clearThumbQuery = clearThumbQuery.eq("advertiser_id", user.id);
+                    }
+                    await clearThumbQuery;
+                }
 
         toast({
           title: "Success",
@@ -2919,62 +2920,43 @@ export default function EditContestPage({
       return;
     }
 
-    // Skip contest type validation for datesOnly mode and draft mode
-    if (!datesOnly && !isDraftMode && contestType === "leaderboard") {
-      const currentTotalPrizePool = winnerAmounts.reduce(
-        (sum, amount) => sum + (amount || 0),
-        0
-      );
-      if (winnerCount > planFeatures.maxWinnersPerContest) {
-        toast({
-          title: "Plan Limit Exceeded",
-          description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      if (currentTotalPrizePool < planFeatures.minContestBudget) {
-        toast({
-          title: "Prize Pool Too Low",
-          description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(
-            planFeatures.minContestBudget
-          )}.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      for (let i = 0; i < winnerCount; i++) {
-        if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-          toast({
-            title: "Prize Amount Too Low",
-            description: `Prize for Winner ${
-              i + 1
-            } must be at least ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
-            )}`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-        if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-          toast({
-            title: "Prize Amount Too High",
-            description: `Prize for Winner ${
-              i + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-      }
+        // Skip contest type validation for datesOnly mode and draft mode
+        if (!datesOnly && !isDraftMode && contestType === 'leaderboard') {
+            const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+            if (winnerCount > planFeatures.maxWinnersPerContest) {
+                toast({
+                    title: "Plan Limit Exceeded",
+                    description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            if (currentTotalPrizePool < planFeatures.minContestBudget) {
+                toast({
+                    title: "Prize Pool Too Low",
+                    description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
+            for (let i = 0; i < winnerCount; i++) {
+                if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+                    toast({
+                        title: "Prize Amount Too Low",
+                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+                if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+                    toast({
+                        title: "Prize Amount Too High",
+                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+            }
 
       contestBasedDetails.leaderboard_contest = {
         prizes: winnerAmounts.slice(0, winnerCount).map((amount, index) => ({
@@ -2988,108 +2970,79 @@ export default function EditContestPage({
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
-    if (!datesOnly && !isDraftMode && contestType === "cpm") {
-      const parsedCpmRate =
-        typeof cpmRate === "string" ? parseFloat(cpmRate) : cpmRate;
-      const parsedMinViews = minViews
-        ? typeof minViews === "string"
-          ? parseInt(minViews)
-          : minViews
-        : null;
-      const parsedMaxViews = maxViews
-        ? typeof maxViews === "string"
-          ? parseInt(maxViews)
-          : maxViews
-        : null;
-      const parsedTotalBudget =
-        typeof totalBudget === "string" ? parseFloat(totalBudget) : totalBudget;
+        if (!datesOnly && contestType === 'cpm') {
+            const parsedCpmRate = typeof cpmRate === 'string' ? parseFloat(cpmRate) : cpmRate;
+            const parsedMinViews = minViews ? (typeof minViews === 'string' ? parseInt(minViews) : minViews) : null;
+            const parsedMaxViews = maxViews ? (typeof maxViews === 'string' ? parseInt(maxViews) : maxViews) : null;
+            const parsedTotalBudget = typeof totalBudget === 'string' ? parseFloat(totalBudget) : totalBudget;
 
-      if (!parsedCpmRate || parsedCpmRate <= 0) {
-        toast({
-          title: "Invalid CPM Rate",
-          description: "CPM rate must be a positive number.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+            if (!isDraftMode) {
+                if (!parsedCpmRate || parsedCpmRate <= 0) {
+                    toast({
+                        title: "Invalid CPM Rate",
+                        description: "CPM rate must be a positive number.",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
 
-      if (parsedCpmRate < MIN_CPM_RATE) {
-        toast({
-          title: "CPM Rate Too Low",
-          description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+                if (parsedCpmRate < MIN_CPM_RATE) {
+                    toast({
+                        title: "CPM Rate Too Low",
+                        description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
 
-      if (parsedCpmRate > MAX_CPM_RATE) {
-        toast({
-          title: "CPM Rate Too High",
-          description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+                if (parsedCpmRate > MAX_CPM_RATE) {
+                    toast({
+                        title: "CPM Rate Too High",
+                        description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
 
-      if (
-        !parsedTotalBudget ||
-        parsedTotalBudget * 100 < planFeatures.minContestBudget
-      ) {
-        toast({
-          title: "Budget Too Low",
-          description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(
-            planFeatures.minContestBudget
-          )}.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+            if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
+                toast({
+                    title: "Budget Too Low",
+                    description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
 
-      if (
-        parsedMinViews &&
-        parsedMaxViews &&
-        parsedMinViews >= parsedMaxViews
-      ) {
-        toast({
-          title: "Invalid View Range",
-          description: "Minimum views must be less than maximum views.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+            if (parsedMinViews && parsedMaxViews && parsedMinViews >= parsedMaxViews) {
+                toast({
+                    title: "Invalid View Range",
+                    description: "Minimum views must be less than maximum views.",
+                    variant: "destructive",
+                });
+                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            }
 
-      if (!termsConditions || termsConditions.trim() === "") {
-        toast({
-          title: "Missing Terms & Conditions",
-          description: "Terms and conditions are required for CPM contests.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+                if (!termsConditions || termsConditions.trim() === "") {
+                    toast({
+                        title: "Missing Terms & Conditions",
+                        description: "Terms and conditions are required for CPM contests.",
+                        variant: "destructive",
+                    });
+                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+                }
+            }
 
-      contestBasedDetails.cpm_contest = {
-        cpm_rate_usd: parsedCpmRate,
-        min_views: parsedMinViews,
-        max_views: parsedMaxViews,
-        total_budget: parsedTotalBudget * 100, // Convert to cents for storage
-        budget_spent: 0,
-        terms_conditions: termsConditions.trim(),
-      };
-      updatePayload.contest_type = "cpm";
-      updatePayload.contest_based_details = contestBasedDetails;
-    }
+            contestBasedDetails.cpm_contest = {
+                cpm_rate_usd: parsedCpmRate || 0,
+                min_views: parsedMinViews,
+                max_views: parsedMaxViews,
+                total_budget: parsedTotalBudget ? parsedTotalBudget * 100 : 0, // cents
+                budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
+                terms_conditions: (termsConditions || '').trim()
+            };
+            updatePayload.contest_type = 'cpm';
+            updatePayload.contest_based_details = contestBasedDetails;
+        }
 
     // Validate active contest limits when submitting for approval
     if (moderationStatus === "pending_approval") {
@@ -3155,16 +3108,28 @@ export default function EditContestPage({
         updatePayload.resources = resources;
       }
 
-      const { error: updateError } = await supabase
-        .from("contests")
-        .update(updatePayload)
-        .eq("id", contestId)
-        .eq("advertiser_id", user.id);
+            if (isAdmin) {
+                const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatePayload)
+                });
+                if (!resp.ok) {
+                    const j = await resp.json().catch(() => ({}));
+                    throw new Error(j.error || 'Admin update failed');
+                }
+            } else {
+                const { error: updateError } = await supabase
+                    .from("contests")
+                    .update(updatePayload)
+                    .eq("id", contestId)
+                    .eq("advertiser_id", user.id);
 
-      if (updateError) {
-        console.error("Supabase update error:", updateError);
-        throw updateError;
-      }
+                if (updateError) {
+                    console.error("Supabase update error:", updateError);
+                    throw updateError;
+                }
+            }
 
       // Show appropriate success message
       let successMessage = "Contest updated successfully.";

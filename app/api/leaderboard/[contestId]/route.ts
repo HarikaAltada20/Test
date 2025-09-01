@@ -42,16 +42,14 @@ export async function GET(
     }
 
     // 2. Fetch total count of submissions for the contest
-    // For CPM contests, count verified and pending submissions (exclude rejected)
+    // Exclude rejected submissions from public leaderboard counts for all contest types
     let countQuery = supabase
       .from('submissions')
       .select('id', { count: 'exact', head: true })
       .eq('contest_id', contestId);
 
-    // For CPM contests, exclude only rejected submissions (show verified + pending)
-    if (contestData.contest_type === 'cpm') {
-      countQuery = countQuery.neq('status', 'rejected');
-    }
+    // Exclude rejected for both leaderboard and CPM contests
+    countQuery = countQuery.neq('status', 'rejected');
 
     const { count: totalEntries, error: countError } = await countQuery;
 
@@ -79,11 +77,8 @@ export async function GET(
       `)
       .eq('contest_id', contestId);
 
-    // For CPM contests, show verified and pending submissions (exclude only rejected)
-    // For leaderboard contests, show all submissions regardless of status
-    if (contestData.contest_type === 'cpm') {
-      submissionsQuery = submissionsQuery.neq('status', 'rejected');
-    }
+    // Exclude rejected submissions for all contest types on public leaderboard
+    submissionsQuery = submissionsQuery.neq('status', 'rejected');
 
     const { data: submissions, error: submissionsError } = await submissionsQuery
       .order('views', { ascending: false, nullsFirst: false })

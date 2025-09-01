@@ -1,4 +1,4 @@
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import WithdrawalsClient from "./withdrawals-client";
 
@@ -8,7 +8,7 @@ export default async function AdminWithdrawalsPage() {
     const { isAdmin } = await verifyAdminAccess();
     if (!isAdmin) return null;
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data: withdrawalRequests = [] } = await supabase
         .from("withdrawal_requests")

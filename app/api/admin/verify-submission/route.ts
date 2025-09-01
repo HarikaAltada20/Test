@@ -77,7 +77,7 @@ export async function POST(request: Request) {
     // Fetch the contest to check its type
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('contest_type, contest_based_details')
+      .select('title, contest_type, contest_based_details')
       .eq('id', submission.contest_id)
       .single();
 
@@ -146,6 +146,7 @@ export async function POST(request: Request) {
         type: 'payment',
         paymentProofUrl: paymentDetails.paymentProofUrl || null,
         paymentDescription: paymentDetails.paymentDescription || null,
+        customRemarks: paymentDetails.customRemarks || null,
         timestamp: new Date().toISOString(),
         updatedBy: currentUserId
       };
@@ -168,10 +169,87 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to update submission status' }, { status: 500 });
     }
 
-    // Handle wallet credit/debit on status changes
+    // Snapshot views and credit creator totals when entering verified/paid (idempotent via delta)
+    if (action === SUBMISSION_STATUS.verified || action === SUBMISSION_STATUS.paid) {
+      const currentViews = submissionFull.views || 0;
+
+      // Read prior credited snapshot (0 if none)
+      const { data: priorSnap, error: priorErr } = await supabaseAdmin
+        .from('submission_views_credited')
+        .select('credited_views')
+        .eq('submission_id', submissionId)
+        .maybeSingle();
+      if (priorErr) {
+        console.error('Failed to read prior credited snapshot:', priorErr);
+      }
+      const priorCredited = (priorSnap?.credited_views as number) || 0;
+      const delta = Math.max(0, currentViews - priorCredited);
+
+      // Credit creator total_views by delta
+      if (delta > 0) {
+        try {
+          const currentTotal = await MetricsService.getCreatorField(submissionFull.creator_id, 'total_views');
+          const { error: updCreatorErr } = await supabaseAdmin
+            .from('creator_profiles')
+            .update({ total_views: currentTotal + delta })
+            .eq('id', submissionFull.creator_id);
+          if (updCreatorErr) {
+            console.error('Failed to update creator total_views:', updCreatorErr);
+          }
+        } catch (e) {
+          console.error('Error while crediting creator total_views:', e);
+        }
+      }
+
+      // Upsert snapshot to current
+      const { error: snapErr } = await supabaseAdmin
+        .from('submission_views_credited')
+        .upsert({
+          submission_id: submissionId,
+          credited_views: currentViews,
+          credited_at: new Date().toISOString(),
+        }, { onConflict: 'submission_id' });
+      if (snapErr) {
+        console.error('Failed to snapshot credited views:', snapErr);
+      }
+
+      // Persist locked views on the submission row only (contest-wide timestamp lives on contests)
+      try {
+        const { error: lockErr } = await supabaseAdmin
+          .from('submissions')
+          .update({
+            // per-submission locked views snapshot
+            views_locked: currentViews,
+          })
+          .eq('id', submissionId);
+        if (lockErr) {
+          console.error('Failed to update submission views_locked:', lockErr);
+        }
+      } catch (e) {
+        console.warn('Skipping submission views_locked update due to error.');
+      }
+    }
+
+    // Enqueue payout job instead of doing full payout synchronously (avoid timeouts)
     if (action === SUBMISSION_STATUS.paid) {
+      // Try to enqueue; on failure, fall back to inline payout logic below
+      const { error: enqueueErr } = await supabaseAdmin
+        .from('payout_jobs')
+        .insert({
+          submission_id: submissionId,
+          requested_by: currentUserId,
+          payload: paymentDetails || {},
+        });
+      if (!enqueueErr) {
+        return NextResponse.json({ success: true, queued: true, message: 'Payout queued for processing' });
+      }
+
+      // Fallback path below keeps previous inline behavior if enqueue fails
+      // Handle wallet credit/debit on status changes
+      if (action === SUBMISSION_STATUS.paid) {
       // Determine amount: custom from paymentDetails or default to earnings
       const customAmount = paymentDetails?.amountInCents && paymentDetails?.isCustom ? Number(paymentDetails.amountInCents) : null;
+      const customRemarks = (paymentDetails as any)?.customRemarks as string | undefined;
       let rewardAmount = customAmount && customAmount > 0 ? customAmount : (submissionFull.earnings || 0);
 
       // Fallback amount computation when earnings are not yet set
@@ -231,9 +309,11 @@ export async function POST(request: Request) {
           const creditRes = await creditCreatorWithdrawableBalance(
             submissionFull.creator_id,
             rewardAmount,
-            customAmount ? `Custom contest payment credited for submission ${submissionId}` : `Contest reward credited for submission ${submissionId}`,
+            customAmount
+              ? `Custom contest payment credited - ${(contest as any)?.title || 'Contest'}`
+              : `Contest reward credited - ${(contest as any)?.title || 'Contest'}`,
             {
-              remarks: customAmount ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet',
+              remarks: customRemarks || (customAmount ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet'),
               metadata: { contest_id: submissionFull.contest_id, submission_id: submissionId, payout_type: customAmount ? 'custom' : 'standard', payout_cycle: nextCycle }
             }
           );
@@ -257,6 +337,7 @@ export async function POST(request: Request) {
             .eq('id', submissionId);
         }
       }
+    }
     }
 
     // If status is changed away from paid, remove reward, reverse wallet credit, and clear earnings
@@ -312,7 +393,7 @@ export async function POST(request: Request) {
           'refund',
           reversalAmount,
           'success',
-          `Reversal of contest reward for submission ${submissionId}`,
+          `Reversal of contest reward - ${(contest as any)?.title || 'Contest'}`,
           { remarks: REVERSAL_TRANSACTION_REMARK, paymentMethod: 'refund', metadata: { submission_id: submissionId, contest_id: submissionFull.contest_id } }
         );
         // No longer keep earnings on reversal; it should be cleared when leaving Paid

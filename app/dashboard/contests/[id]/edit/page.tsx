@@ -1,6 +1,7 @@
 import React from "react";
 import EditContestClient from "./client";
 import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
 export default async function page({
   params,
@@ -15,9 +16,23 @@ export default async function page({
   const { data: user } = await supabase.auth.getUser();
   const datesOnly = resolvedSearchParams.dates === 'true';
 
+  if (!user?.user) {
+    redirect("/login");
+  }
+
+  // Determine if current user is an admin
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("user_type")
+    .eq("id", user.user.id)
+    .single();
+
+  const isAdmin = userRow?.user_type === "admin";
+
   return <EditContestClient
     user={user?.user}
     contestId={resolvedParams.id}
     datesOnly={datesOnly}
+    isAdmin={isAdmin}
   />;
 }

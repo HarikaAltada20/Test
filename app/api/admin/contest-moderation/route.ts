@@ -98,7 +98,8 @@ export async function GET(request: Request) {
     }
 
     const url = new URL(request.url);
-    const status = url.searchParams.get('status') || 'pending_approval';
+    // Default to 'all' so the All tab can omit the status query param
+    const status = url.searchParams.get('status') || 'all';
 
     const supabase = await createClient();
 

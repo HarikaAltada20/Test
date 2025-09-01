@@ -94,9 +94,13 @@ export async function middleware(request: NextRequest) {
           }
 
           // Prevent admins from accessing brand/creator specific routes
+          // but allow admins to access contest edit routes for moderation/assistance
           if (userType === 'admin' && (isAccessingBrandRoute || isAccessingCreatorRoute)) {
-            const redirectUrl = new URL('/dashboard/admin', request.url)
-            return NextResponse.redirect(redirectUrl)
+            const isContestEditRoute = pathname.startsWith('/dashboard/contests/') && pathname.includes('/edit');
+            if (!isContestEditRoute) {
+              const redirectUrl = new URL('/dashboard/admin', request.url)
+              return NextResponse.redirect(redirectUrl)
+            }
           }
         }
       }

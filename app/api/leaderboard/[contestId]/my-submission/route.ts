@@ -67,17 +67,14 @@ export async function GET(
     }
 
     // 3. Calculate the user's rank based on contest type
-    // For CPM contests: Rank against verified and pending submissions (exclude rejected)
-    // For leaderboard contests: Rank against all submissions
+    // Public rank should exclude rejected submissions for all contest types
     let rankQuery = supabase
       .from('submissions')
       .select('id', { count: 'exact', head: true })
       .eq('contest_id', contestId);
 
-    // For CPM contests, exclude only rejected submissions (include verified + pending)
-    if (contestData.contest_type === 'cpm') {
-      rankQuery = rankQuery.neq('status', 'rejected');
-    }
+    // Exclude rejected submissions for both leaderboard and CPM
+    rankQuery = rankQuery.neq('status', 'rejected');
 
     const { count: higherRankedCount, error: rankError } = await rankQuery
       .or(`views.gt.${mySubmission.views},and(views.eq.${mySubmission.views},created_at.lt.${mySubmission.created_at})`);
