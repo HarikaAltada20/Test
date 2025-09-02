@@ -480,10 +480,10 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         </div>
 
                         <div className="flex items-center gap-2 mb-3">
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-sm  bg-[#7F39EC] text-white py-1 capitalize">
                                 {contest.platform || "Platform"}
                             </Badge>
-                            <Badge variant="outline" className="text-xs capitalize">
+                            <Badge variant="outline" className="text-sm  bg-[#7F39EC] text-white py-1 capitalize">
                                 {contest.contest_type || "Type"}
                             </Badge>
                         </div>
@@ -519,7 +519,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             )}
                         </div>
 
-                        <div className="flex gap-2">
+                       <div className="flex gap-2 items-center">
                             {contest.moderation_status === 'approved' ? (
                                 <>
                                     <Button
@@ -559,9 +559,9 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                 </>
                             ) : contest.moderation_status !== 'published' ? (
                                 // Non-published contests: Show Edit Contest button
-                                <Button
-                                    size="sm"
-                                    className="flex-1 bg-orange-600 hover:bg-orange-700"
+                                <button
+                                   
+                                      className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const href = isAdminView
@@ -570,14 +570,14 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                         router.push(href);
                                     }}
                                 >
-                                    <Edit className="h-4 w-4 mr-1" />
-                                    Edit Contest
-                                </Button>
+                                      <Edit className="h-4 w-4" />
+                                      <span>Edit Contest</span>
+                                </button>
                             ) : (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1"
+                                <button
+                                    // variant="outline"
+                                    // size="sm"
+                                    className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const href = isAdminView
@@ -586,16 +586,19 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                         router.push(href);
                                     }}
                                 >
-                                    <Eye className="h-4 w-4 mr-1" />
-                                    View Details
-                                </Button>
+                                    <Eye className="h-4 w-4" />
+                                    <span>View Details</span>
+                                </button>
                             )}
 
                             {contest.moderation_status !== 'published' && (
+                            
                                 <DeleteContestButton
+                            
                                     contestId={contest.id}
                                     contestTitle={contest.title || 'this contest'}
                                     isDeletable={true}
+                                      className="flex items-center gap-2"
                                 />
                             )}
                         </div>
@@ -681,7 +684,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
     return (
         <div className="w-full">
             {/* Header with filters */}
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-3">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                         <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOptionType)}>
@@ -747,43 +750,44 @@ export function ContestListClient({ initialContests, isAdminView = false, select
 
             {/* Enhanced Status Filter Tabs - More Responsive */}
             <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full mb-8">
-                <TabsList>
-                    <TabsTrigger value="all">
+                <TabsList className="flex gap-6">
+                    <TabsTrigger className="border border-gray-400" value="all">
                         All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                            {contestsByStatus.all.length}
+                        {contestsByStatus.all.length}
                         </Badge>
+                       
                     </TabsTrigger>
-                    <TabsTrigger value="draft">
+                    <TabsTrigger className="border border-gray-400" value="draft">
                         Draft <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.draft.length}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="pending_approval">
+                    <TabsTrigger className="border border-gray-400"value="pending_approval">
                         Pending Approval <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.pending_approval.length}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="ready">
+                    <TabsTrigger className="border border-gray-400" value="ready">
                         Ready <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.ready.length}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="active">
+                    <TabsTrigger className="border border-gray-400" value="active">
                         Active <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.active.length}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="pending_verification">
+                    <TabsTrigger className="border border-gray-400"value="pending_verification">
                         Pending Verification <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.pending_verification.length}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="done">
+                    <TabsTrigger className="border border-gray-400" value="done">
                         Done <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.done.length}
                         </Badge>
                     </TabsTrigger>
-                    <TabsTrigger value="rejected">
+                    <TabsTrigger className="border border-gray-400"value="rejected">
                         Rejected <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
                             {contestsByStatus.rejected.length}
                         </Badge>

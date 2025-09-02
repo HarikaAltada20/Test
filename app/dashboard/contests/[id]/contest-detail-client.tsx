@@ -894,7 +894,8 @@ export default function ContestDetailClient({
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex justify-between items-center gap-3 mb-8">
+        <div className="flex gap-2">
         <Button variant="ghost" size="icon" asChild>
           <Link
             href={
@@ -907,30 +908,29 @@ export default function ContestDetailClient({
         <h1 className="text-3xl font-bold text-gray-900">
           {currentContest.title}
         </h1>
-        <Badge
+        <div className="flex mt-1">
+        <div
           className={cn(
             contestStatusBadgeInfo.className,
-            "ml-3 text-xs shadow-sm"
+            "ml-3 capitalize ml-2 bg-[#FDD36F57] text-sm px-3 item-center mb-3 py-1 rounded-full text-[#A87313]"
           )}
         >
           {contestStatusBadgeInfo.text}
-        </Badge>
+        </div>
         {currentContest.contest_type && (
-          <Badge
-            variant={
-              currentContest.contest_type === "cpm" ? "secondary" : "default"
-            }
-            className="capitalize ml-2 text-xs shadow-sm"
+          <div
+            // variant={
+            //   currentContest.contest_type === "cpm" ? "secondary" : "default"
+            // }
+            className="capitalize ml-2 bg-[#7F39EC3B] text-sm px-3 item-center mb-3 py-1 rounded-full text-[#4A00BE]"
           >
             {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
-          </Badge>
+          </div>
         )}
-      </div>
-
-      {/* Modern Contest Overview - Redesigned for better UX */}
-      <div className="space-y-6 mb-8">
-        {/* Quick Actions Bar */}
-        <div className="flex items-center justify-end gap-2 mb-6">
+        </div>
+</div>
+         {/* Quick Actions Bar */}
+         <div className="flex gap-4 items-center mb-3">
           {/* Contest Status Update Button */}
           {canUpdateContestStatus() && (
             <Dialog
@@ -1028,7 +1028,7 @@ export default function ContestDetailClient({
           <Button
             variant="outline"
             size="sm"
-            className="flex items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 transition-all duration-200 hover:scale-105"
+            className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
             onClick={handleShare}
           >
             <Share2 className="h-4 w-4" />
@@ -1039,7 +1039,7 @@ export default function ContestDetailClient({
             <Button
               size="sm"
               variant="outline"
-              className="border-amber-200 text-amber-700 hover:bg-amber-50"
+               className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
               asChild
             >
               <Link
@@ -1048,27 +1048,29 @@ export default function ContestDetailClient({
                     ? `/dashboard/admin/contests/${contestId}/edit`
                     : `/dashboard/contests/${contestId}/edit`
                 }
+                className="flex items-center gap-2"
               >
                 <Edit className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Edit</span>
               </Link>
             </Button>
           )}
 
           {isContestDeletable && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-red-200 text-red-700 hover:bg-red-50"
-              asChild
-            >
+          
               <DeleteContestButton
                 contestId={contestId}
                 contestTitle={currentContest.title || "this contest"}
                 isDeletable={isContestDeletable}
               />
-            </Button>
+          
           )}
         </div>
+      </div>
+
+      {/* Modern Contest Overview - Redesigned for better UX */}
+      <div className="space-y-6 mb-8">
+       
 
         {/* Colorful Contest Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
