@@ -7,6 +7,22 @@ import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+    Eye,
+    Clock,
+    CheckCircle,
+    DollarSign,
+    XCircle,
+    AlertTriangle,
+    X,
+    User,
+    Mail,
+    Calendar,
+    CreditCard,
+    Settings
+} from "lucide-react";
 
 type Request = {
     id: string;
@@ -22,7 +38,11 @@ type Request = {
     transaction_reference?: string | null;
     payout_method_type_snapshot?: string | null;
     payout_method_details_snapshot?: any | null;
-    users?: { full_name?: string | null; email?: string | null } | null;
+    users?: {
+        full_name?: string | null;
+        email?: string | null;
+        username?: string | null;
+    } | null;
 };
 
 export default function WithdrawalsClient({ initialRequests }: { initialRequests: Request[] }) {
@@ -63,7 +83,7 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
     };
 
     const cancelRequest = async (req: Request) => {
-        if (!confirm("Cancel this withdrawal and refund the user's balance?")) return;
+        if (!confirm("Cancel this withdrawal request? Note: Balance refund will need to be handled separately.")) return;
         try {
             setUpdating(true);
             const res = await fetch(`/api/admin/withdrawals/${req.id}`, {
@@ -71,12 +91,23 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "cancel", user_id: req.user_id })
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const errorText = await res.text();
+                let errorMessage = "Failed to cancel request";
+                try {
+                    const errorData = JSON.parse(errorText);
+                    errorMessage = errorData.error || errorMessage;
+                } catch {
+                    errorMessage = errorText || errorMessage;
+                }
+                throw new Error(errorMessage);
+            }
             setRequests((prev) => prev.map((r) => (r.id === req.id ? { ...r, status: "cancelled" } as Request : r)));
             setDetailsOpen(false);
+            alert("Withdrawal request cancelled successfully!");
         } catch (e) {
             console.error("Failed to cancel request", e);
-            alert("Failed to cancel request");
+            alert(`Failed to cancel request: ${e instanceof Error ? e.message : 'Unknown error'}`);
         } finally {
             setUpdating(false);
         }
@@ -98,37 +129,245 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
         return type ? `${type}: ${JSON.stringify(d)}` : "Unknown method";
     };
 
+    const getStatusBadge = (status: string) => {
+        const statusConfig = {
+            pending: { variant: "secondary" as const, icon: Clock, color: "text-yellow-600" },
+            in_review: { variant: "default" as const, icon: Eye, color: "text-blue-600" },
+            approved: { variant: "default" as const, icon: CheckCircle, color: "text-green-600" },
+            processed: { variant: "default" as const, icon: DollarSign, color: "text-green-600" },
+            rejected: { variant: "destructive" as const, icon: XCircle, color: "text-red-600" },
+            failed: { variant: "destructive" as const, icon: AlertTriangle, color: "text-red-600" },
+            cancelled: { variant: "outline" as const, icon: X, color: "text-gray-600" },
+        };
+
+        const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
+        const Icon = config.icon;
+
+        return (
+            <Badge variant={config.variant} className="flex items-center gap-1">
+                <Icon className="h-3 w-3" />
+                {status.replace("_", " ")}
+            </Badge>
+        );
+    };
+
+    const formatUserInfo = (r: Request) => {
+        const user = r.users;
+        if (!user) return <span className="text-muted-foreground">-</span>;
+
+        return (
+            <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{user.full_name || "Unknown"}</span>
+                </div>
+                {user.username && (
+                    <div className="text-sm text-muted-foreground">
+                        @{user.username}
+                    </div>
+                )}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Mail className="h-3 w-3" />
+                    {user.email || "-"}
+                </div>
+            </div>
+        );
+    };
+
     const renderTable = (rows: Request[]) => (
-        <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-                <thead>
-                    <tr className="text-left border-b">
-                        <th className="py-2 pr-4">Created</th>
-                        <th className="py-2 pr-4">User</th>
-                        <th className="py-2 pr-4">Amount</th>
-                        <th className="py-2 pr-4">Type</th>
-                        <th className="py-2 pr-4">Status</th>
-                        <th className="py-2 pr-4">Pay To</th>
-                        <th className="py-2 pr-4">Actions</th>
+        <div className="overflow-x-auto border rounded-lg">
+            <table className="min-w-full">
+                <thead className="bg-muted/50">
+                    <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4" />
+                                Created
+                            </div>
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                                <User className="h-4 w-4" />
+                                User Details
+                            </div>
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                                <DollarSign className="h-4 w-4" />
+                                Amount
+                            </div>
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Status
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4" />
+                                Payment Method
+                            </div>
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            Actions
+                        </th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                     {rows.map((r) => (
-                        <tr key={r.id} className="border-b">
-                            <td className="py-2 pr-4">{new Date(r.created_at).toLocaleString()}</td>
-                            <td className="py-2 pr-4">{r.users?.full_name || "-"} ({r.users?.email || "-"})</td>
-                            <td className="py-2 pr-4">{r.amount_type === "cash" ? formatCurrencyFromCents(r.amount) : `${r.amount} coins`}</td>
-                            <td className="py-2 pr-4">{r.amount_type}</td>
-                            <td className="py-2 pr-4 capitalize">{r.status.replace("_", " ")}</td>
-                            <td className="py-2 pr-4">{formatPayoutSummary(r)}</td>
-                            <td className="py-2 pr-4 space-x-2">
-                                <Button size="sm" variant="outline" onClick={() => openDetails(r)}>View</Button>
-                                <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, "in_review")} disabled={updating}>Mark In Review</Button>
-                                <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, "approved")} disabled={updating}>Approve</Button>
-                                <Button size="sm" onClick={() => updateStatus(r.id, "processed")} disabled={updating}>Mark Paid</Button>
-                                <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, "rejected")} disabled={updating}>Reject</Button>
-                                <Button size="sm" variant="outline" onClick={() => updateStatus(r.id, "failed")} disabled={updating}>Fail</Button>
-                                <Button size="sm" variant="outline" onClick={() => cancelRequest(r)} disabled={updating}>Cancel</Button>
+                        <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                                <div className="text-sm text-muted-foreground">
+                                    {new Date(r.created_at).toLocaleDateString()}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                    {new Date(r.created_at).toLocaleTimeString()}
+                                </div>
+                            </td>
+                            <td className="px-4 py-4">
+                                {formatUserInfo(r)}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                                <div className="text-lg font-semibold">
+                                    {r.amount_type === "cash" ? formatCurrencyFromCents(r.amount) : `${r.amount} coins`}
+                                </div>
+                                <div className="text-xs text-muted-foreground capitalize">
+                                    {r.amount_type}
+                                </div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                                {getStatusBadge(r.status)}
+                            </td>
+                            <td className="px-4 py-4">
+                                <div className="text-sm max-w-xs truncate" title={formatPayoutSummary(r)}>
+                                    {formatPayoutSummary(r)}
+                                </div>
+                            </td>
+                            <td className="px-4 py-4">
+                                <div className="flex flex-wrap gap-1">
+                                    {/* View button - always available */}
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button size="sm" variant="outline" onClick={() => openDetails(r)}>
+                                                <Eye className="h-4 w-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="z-50">
+                                            <p>View detailed information</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+
+                                    {/* Mark In Review - only for pending */}
+                                    {r.status === "pending" && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => updateStatus(r.id, "in_review")}
+                                                    disabled={updating}
+                                                >
+                                                    <Clock className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="z-50">
+                                                <p>Mark as under review</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )}
+
+                                    {/* Approve - only for pending and in_review */}
+                                    {["pending", "in_review"].includes(r.status) && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => updateStatus(r.id, "approved")}
+                                                    disabled={updating}
+                                                >
+                                                    <CheckCircle className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="z-50">
+                                                <p>Approve for payment</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )}
+
+                                    {/* Mark Paid - only for approved */}
+                                    {r.status === "approved" && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => updateStatus(r.id, "processed")}
+                                                    disabled={updating}
+                                                >
+                                                    <DollarSign className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="z-50">
+                                                <p>Mark as paid</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )}
+
+                                    {/* Reject - only for pending, in_review, and approved */}
+                                    {["pending", "in_review", "approved"].includes(r.status) && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => updateStatus(r.id, "rejected")}
+                                                    disabled={updating}
+                                                >
+                                                    <XCircle className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="z-50">
+                                                <p>Reject request</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )}
+
+                                    {/* Mark Failed - only for approved */}
+                                    {r.status === "approved" && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => updateStatus(r.id, "failed")}
+                                                    disabled={updating}
+                                                >
+                                                    <AlertTriangle className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="z-50">
+                                                <p>Mark payment as failed</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )}
+
+                                    {/* Cancel - only for pending and in_review */}
+                                    {["pending", "in_review"].includes(r.status) && (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => cancelRequest(r)}
+                                                    disabled={updating}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="z-50">
+                                                <p>Cancel and refund</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    )}
+                                </div>
                             </td>
                         </tr>
                     ))}
@@ -142,94 +381,279 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
     const paidRows = requests.filter((r) => r.status === "processed" || r.status === "approved");
 
     return (
-        <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Total</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.all)}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Pending</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.pending)}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Paid</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.paid)}</div>
-                    </CardContent>
-                </Card>
+        <TooltipProvider>
+            <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Total</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.all)}</div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Pending</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.pending)}</div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Paid</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.paid)}</div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <Tabs defaultValue="all">
+                    <TabsList>
+                        <TabsTrigger value="all">All</TabsTrigger>
+                        <TabsTrigger value="pending">Pending</TabsTrigger>
+                        <TabsTrigger value="paid">Paid</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="all">{renderTable(allRows)}</TabsContent>
+                    <TabsContent value="pending">{renderTable(pendingRows)}</TabsContent>
+                    <TabsContent value="paid">{renderTable(paidRows)}</TabsContent>
+                </Tabs>
+
+                {/* Enhanced Details Modal */}
+                <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+                    <DialogContent className="sm:max-w-[700px] max-h-[90vh] flex flex-col">
+                        <DialogHeader className="flex-shrink-0">
+                            <DialogTitle className="flex items-center gap-2">
+                                <DollarSign className="h-5 w-5" />
+                                Withdrawal Details
+                            </DialogTitle>
+                            <DialogDescription>
+                                Review withdrawal information and manage the request status
+                            </DialogDescription>
+                        </DialogHeader>
+                        {active && (
+                            <div className="flex-1 overflow-y-auto space-y-4 py-4">
+                                {/* Key Information Cards */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    {/* Created Date Card */}
+                                    <Card className="border-l-4 border-l-blue-500">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                                                    <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-medium text-muted-foreground">Created</p>
+                                                    <p className="text-sm font-semibold truncate">
+                                                        {new Date(active.created_at).toLocaleDateString()}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {new Date(active.created_at).toLocaleTimeString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Amount Card */}
+                                    <Card className="border-l-4 border-l-green-500">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                                                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-medium text-muted-foreground">Amount</p>
+                                                    <p className="text-lg font-bold text-green-600 dark:text-green-400 truncate">
+                                                        {active.amount_type === "cash" ? formatCurrencyFromCents(active.amount) : `${active.amount} coins`}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground capitalize">
+                                                        {active.amount_type}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Status Card */}
+                                    <Card className="border-l-4 border-l-purple-500">
+                                        <CardContent className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                                                    <Clock className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-medium text-muted-foreground">Status</p>
+                                                    <div className="mt-1">
+                                                        {getStatusBadge(active.status)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                {/* User Information */}
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                            <User className="h-4 w-4" />
+                                            User Information
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="pt-0">
+                                        {formatUserInfo(active)}
+                                    </CardContent>
+                                </Card>
+
+                                {/* Payment Details */}
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                            <CreditCard className="h-4 w-4" />
+                                            Payment Details
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="pt-0">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                                                <CreditCard className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-xs font-medium text-muted-foreground">Payment Method</p>
+                                                <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded mt-1 break-all">
+                                                    {formatPayoutSummary(active)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+
+                                {/* Admin Actions */}
+                                <Card>
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                            <Settings className="h-4 w-4" />
+                                            Admin Actions
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="pt-0">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <Label htmlFor="admin_notes" className="text-xs font-medium">Admin Notes</Label>
+                                                <Input
+                                                    id="admin_notes"
+                                                    value={adminNotes}
+                                                    onChange={(e) => setAdminNotes(e.target.value)}
+                                                    placeholder="Add notes for audit trail..."
+                                                    className="w-full h-8 text-sm"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <Label htmlFor="tx_ref" className="text-xs font-medium">Transaction Reference</Label>
+                                                <Input
+                                                    id="tx_ref"
+                                                    value={txRef}
+                                                    onChange={(e) => setTxRef(e.target.value)}
+                                                    placeholder="UTR / TXID / Reference #"
+                                                    className="w-full h-8 text-sm"
+                                                />
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        )}
+                        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+                            <div className="flex flex-wrap gap-2 w-full justify-between">
+                                <div className="flex flex-wrap gap-2">
+                                    {active && (
+                                        <>
+                                            {/* Cancel - only for pending and in_review */}
+                                            {["pending", "in_review"].includes(active.status) && (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => cancelRequest(active!)}
+                                                            disabled={updating}
+                                                        >
+                                                            <X className="h-4 w-4 mr-1" />
+                                                            Cancel
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="z-50">
+                                                        <p>Cancel and refund user balance</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                            {/* Approve - only for pending and in_review */}
+                                            {["pending", "in_review"].includes(active.status) && (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => updateStatus(active!.id, "approved", { admin_notes: adminNotes })}
+                                                            disabled={updating}
+                                                        >
+                                                            <CheckCircle className="h-4 w-4 mr-1" />
+                                                            Approve
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="z-50">
+                                                        <p>Approve for payment processing</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {active && (
+                                        <>
+                                            {/* Mark In Review - only for pending */}
+                                            {active.status === "pending" && (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => updateStatus(active!.id, "in_review", { admin_notes: adminNotes })}
+                                                            disabled={updating}
+                                                        >
+                                                            <Clock className="h-4 w-4 mr-1" />
+                                                            Review
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="z-50">
+                                                        <p>Mark as under review</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                            {/* Mark Paid - only for approved */}
+                                            {active.status === "approved" && (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => updateStatus(active!.id, "processed", { transaction_reference: txRef, admin_notes: adminNotes })}
+                                                    disabled={updating}
+                                                >
+                                                    <DollarSign className="h-4 w-4 mr-1" />
+                                                    Mark Paid
+                                                </Button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             </div>
-
-            <Tabs defaultValue="all">
-                <TabsList>
-                    <TabsTrigger value="all">All</TabsTrigger>
-                    <TabsTrigger value="pending">Pending</TabsTrigger>
-                    <TabsTrigger value="paid">Paid</TabsTrigger>
-                </TabsList>
-                <TabsContent value="all">{renderTable(allRows)}</TabsContent>
-                <TabsContent value="pending">{renderTable(pendingRows)}</TabsContent>
-                <TabsContent value="paid">{renderTable(paidRows)}</TabsContent>
-            </Tabs>
-
-            {/* Details / Pay Instruction Modal */}
-            <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-                <DialogContent className="sm:max-w-[650px]">
-                    <DialogHeader>
-                        <DialogTitle>Withdrawal Details</DialogTitle>
-                        <DialogDescription>Use this information to pay the creator and update status.</DialogDescription>
-                    </DialogHeader>
-                    {active && (
-                        <div className="space-y-4 py-2">
-                            <div className="text-sm">
-                                <div><b>Created:</b> {new Date(active.created_at).toLocaleString()}</div>
-                                <div><b>User:</b> {active.users?.full_name || "-"} ({active.users?.email || "-"})</div>
-                                <div><b>Amount:</b> {active.amount_type === "cash" ? formatCurrencyFromCents(active.amount) : `${active.amount} coins`}</div>
-                                <div><b>Status:</b> {active.status}</div>
-                                <div><b>Pay To:</b> {formatPayoutSummary(active)}</div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <Label htmlFor="admin_notes">Admin Notes</Label>
-                                    <Input id="admin_notes" value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} placeholder="Notes for audit trail" />
-                                </div>
-                                <div>
-                                    <Label htmlFor="tx_ref">Transaction Reference</Label>
-                                    <Input id="tx_ref" value={txRef} onChange={(e) => setTxRef(e.target.value)} placeholder="UTR / TXID / Ref#" />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    <DialogFooter className="justify-between">
-                        <div className="space-x-2">
-                            {active && (
-                                <>
-                                    <Button variant="outline" onClick={() => cancelRequest(active!)} disabled={updating}>Cancel Request</Button>
-                                    <Button variant="outline" onClick={() => updateStatus(active!.id, "approved", { admin_notes: adminNotes })} disabled={updating}>Approve</Button>
-                                </>
-                            )}
-                        </div>
-                        <div className="space-x-2">
-                            {active && (
-                                <>
-                                    <Button variant="outline" onClick={() => updateStatus(active!.id, "in_review", { admin_notes: adminNotes })} disabled={updating}>Mark In Review</Button>
-                                    <Button onClick={() => updateStatus(active!.id, "processed", { transaction_reference: txRef, admin_notes: adminNotes })} disabled={updating}>Mark Paid</Button>
-                                </>
-                            )}
-                        </div>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        </div>
+        </TooltipProvider>
     );
 }
 

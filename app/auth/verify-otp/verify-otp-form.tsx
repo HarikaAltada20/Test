@@ -223,6 +223,7 @@ export function VerifyOtpForm() {
             referred_by: userMetaData?.referral_code || null,
             is_active: true,
             email_confirmed_at: authUser.email_confirmed_at || new Date().toISOString(),
+            total_other_earnings: 0, // Initialize to 0
           }, { onConflict: 'id' });
 
         if (upsertUserError) throw new Error(`Failed to save user profile: ${upsertUserError.message}`);

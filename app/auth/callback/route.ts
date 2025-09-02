@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
           user_type: 'creator' as 'creator' | 'advertiser', // Default, can be changed in choose-username
           is_active: true,
           email_confirmed_at: new Date().toISOString(),
+          total_other_earnings: 0, // Initialize to 0
         }
 
         const { data: newProfile, error: insertError } = await supabase
