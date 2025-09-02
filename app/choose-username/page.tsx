@@ -338,7 +338,7 @@ export default function ChooseUsernamePage() {
         });
         // Only show Discord onboarding for creators
         const welcomeFlag = profileData.user_type === 'creator' ? '?welcome=1' : '';
-        router.push(`/dashboard${welcomeFlag}`);
+        router.push(`/dashboard/getting-started${welcomeFlag}`);
         router.refresh();
         return;
       }
@@ -833,8 +833,9 @@ export default function ChooseUsernamePage() {
       // Set redirecting state to prevent button re-enabling
       setIsRedirecting(true);
 
-      // Redirect new users to Getting Started page
-      router.push("/dashboard/getting-started");
+      // Redirect new users to getting-started page with welcome flag for creators
+      const welcomeFlag = userType === 'creator' ? '?welcome=1' : '';
+      router.push(`/dashboard/getting-started${welcomeFlag}`);
       router.refresh();
     } catch (err: any) {
       setError(err.message || "Failed to set up your account.");
