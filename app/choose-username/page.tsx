@@ -599,6 +599,7 @@ export default function ChooseUsernamePage() {
         is_active: true,
         email_confirmed_at: new Date().toISOString(),
         registration_info,
+        total_other_earnings: 0, // Initialize to 0
       };
 
       // Add full name if provided
