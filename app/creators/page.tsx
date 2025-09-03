@@ -6,8 +6,6 @@ export const metadata: Metadata = {
   title: "Best Platform to Get Paid Based on Views - Turn Your Creativity Into Income | Game Of Creators",
   description:
     "The best platform to get paid based on views and ranking. Join Game of Creators and earn money even with 0 followers! Top choice for creators seeking performance-based payments and fair compensation for quality content.",
-  keywords:
-    "best platform to get paid based on views, best platform for creators to make money, get paid for views, creators make money, get paid for content, no followers required, performance based payments, creator contests, views based payment, ranking based payment, content creator platform, earn from creativity, best creator platform",
   openGraph: {
     title: "Creators - Turn Your Creativity Into Income | Game Of Creators",
     description:

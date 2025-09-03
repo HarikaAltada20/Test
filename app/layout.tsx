@@ -58,6 +58,9 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+  other: {
+    "apple-mobile-web-app-title": "Game Of Creators",
+  },
 };
 
 export default async function RootLayout({
