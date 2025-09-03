@@ -1198,58 +1198,58 @@ export default function ContestDetailClient({
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
               null && (
-              //     <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-              //     <CardContent className="p-4 flex justify-between">
-              //       <div className="flex-1 text-black space-y-3">
-              //         <p className="text-lg font-medium"> Total Budget</p>
-              //         <p className="text-xl font-bold">
-              //         {formatMoney(
-              //               currentContest.contest_based_details.cpm_contest
-              //                 .total_budget
-              //             )}
+                  <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+                  <CardContent className="p-4 flex justify-between">
+                    <div className="flex-1 text-black space-y-3">
+                      <p className="text-lg font-medium"> Total Budget</p>
+                      <p className="text-xl font-bold">
+                      {formatMoney(
+                            currentContest.contest_based_details.cpm_contest
+                              .total_budget
+                          )}
+                      </p>
+                      <p className="text-md">
+                          $
+                          {
+                            currentContest.contest_based_details.cpm_contest
+                              .cpm_rate_usd
+                          }{" "}
+                          CPM
+                        </p>
+                    </div>
+                    <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                    <DollarSign className="h-5 w-5" />
+                    </div>
+                  </CardContent>
+                </div>
+              // <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
+              //   <CardContent className="p-4">
+              //     <div className="flex items-center gap-3">
+              //       <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+              //         <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              //       </div>
+              //       <div className="flex-1">
+              //         <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">
+              //           Total Budget
               //         </p>
-              //         <p className="text-md">
-              //             $
-              //             {
-              //               currentContest.contest_based_details.cpm_contest
-              //                 .cpm_rate_usd
-              //             }{" "}
-              //             CPM
-              //           </p>
+              //         <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+              //           {formatMoney(
+              //             currentContest.contest_based_details.cpm_contest
+              //               .total_budget
+              //           )}
+              //         </p>
+              //         <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+              //           $
+              //           {
+              //             currentContest.contest_based_details.cpm_contest
+              //               .cpm_rate_usd
+              //           }{" "}
+              //           CPM
+              //         </p>
               //       </div>
-              //       <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
-              //       <DollarSign className="h-5 w-5" />
-              //       </div>
-              //     </CardContent>
-              //   </div>
-              <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                      <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">
-                        Total Budget
-                      </p>
-                      <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
-                        {formatMoney(
-                          currentContest.contest_based_details.cpm_contest
-                            .total_budget
-                        )}
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
-                        $
-                        {
-                          currentContest.contest_based_details.cpm_contest
-                            .cpm_rate_usd
-                        }{" "}
-                        CPM
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              //     </div>
+              //   </CardContent>
+              // </Card>
             )}
 
           {/* Submissions Count Card */}
@@ -1529,7 +1529,7 @@ export default function ContestDetailClient({
                       </div> */}
 
                       {/* Prize Distribution */}
-                      <div className="px-2 py-4">
+                      <div className="py-4">
                         <h4 className="font-medium text-lg text-foreground mb-3 flex items-center gap-2">
                           {/* <ListOrdered className="h-4 w-4" /> */}
                           Prize Distribution
@@ -2069,29 +2069,29 @@ export default function ContestDetailClient({
             {currentSubmissions.length > 0 ? (
               <div className="space-y-6">
                 {/* Enhanced Header Section */}
-                <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900/20">
-                  <CardContent className="p-6">
+                <div className="border border-[#D1B7F9] rounded-2xl">
+                  <CardContent className="p-5">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="p-3 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl shadow-lg">
-                          <Trophy className="h-6 w-6 text-white" />
+                        <div className="p-4 bg-[#D8C3FF] rounded-full">
+                          <Trophy className="h-6 w-6 text-[#4A00BE]" />
                         </div>
                         <div>
                           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                             Submissions Leaderboard
                           </h2>
-                          <div className="flex items-center gap-3 mt-1">
-                            <Badge variant="secondary" className="px-3 py-1">
+                          <div className="flex items-center mt-1">
+                            <div className="text-sm">
                               {filteredSubmissions.length} submission
                               {filteredSubmissions.length !== 1 ? "s" : ""}
-                            </Badge>
+                            </div>
                             <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
-                              <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                              <div className="px-[3px]">|</div>
                               {currentContest.platform}
                             </div>
                             {currentContest.last_metrics_updated && (
                               <div className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-400">
-                                <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                                <div className="px-[3px]">|</div>
                                 Last updated:{" "}
                                 {formatTimeAgo(
                                   currentContest.last_metrics_updated
@@ -2107,17 +2107,17 @@ export default function ContestDetailClient({
                             currentContest.status === "ended") &&
                           currentSubmissions &&
                           currentSubmissions.length > 0 && (
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <button
+                            
+                              
                               onClick={handleRefreshMetrics}
                               disabled={
                                 isRefreshingMetrics || !cooldownInfo.canRefresh
                               }
-                              className={`flex items-center gap-2 shadow-sm ${
+                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${
                                 cooldownInfo.canRefresh && !isRefreshingMetrics
-                                  ? "border-green-200 text-green-700 hover:bg-green-50"
-                                  : "border-gray-200 text-gray-500 cursor-not-allowed"
+                                  ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                                  : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
                               }`}
                               title={
                                 !cooldownInfo.canRefresh
@@ -2141,16 +2141,16 @@ export default function ContestDetailClient({
                                 : !cooldownInfo.canRefresh
                                 ? `Wait ${cooldownInfo.remainingMinutes}m`
                                 : "Refresh Metrics"}
-                            </Button>
+                            </button>
                           )}
                       </div>
                     </div>
                   </CardContent>
-                </Card>
+                </div>
 
                 {/* Enhanced Status Filter Tabs */}
-                <Card className="shadow-sm">
-                  <CardContent className="p-4">
+                <div >
+                  <div className="py-4">
                     <Tabs
                       value={activeStatusTab}
                       onValueChange={(value) =>
@@ -2158,36 +2158,36 @@ export default function ContestDetailClient({
                       }
                       className="w-full"
                     >
-                      <TabsList className="flex w-full h-auto p-1 bg-slate-100 rounded-lg">
+                      <TabsList className="flex gap-5 w-full h-auto p-1">
                         <TabsTrigger
                           value="all"
-                          className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                          className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            <span className="text-xs font-medium">All</span>
+                            <Users className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-[13px] font-medium">All</span>
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {currentSubmissions.length}
                           </Badge>
                         </TabsTrigger>
                         <TabsTrigger
                           value="verified_or_paid"
-                          className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                          className="flex-1 gap-3 items-center px-4 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            <Wallet className="h-3 w-3" />
-                            <span className="text-xs font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <Wallet className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-[13px] font-medium">
                               Verified + Paid
                             </span>
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2199,15 +2199,15 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="pending"
-                          className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                          className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span className="text-xs font-medium">Pending</span>
+                            <Clock className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-[13px] font-medium">Pending</span>
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                              className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2218,17 +2218,17 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="verified"
-                          className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                        className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            <span className="text-xs font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-[13px] font-medium">
                               Verified
                             </span>
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                           className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2239,17 +2239,17 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="rejected"
-                          className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                        className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
-                            <XCircle className="h-3 w-3" />
-                            <span className="text-xs font-medium">
+                            <XCircle className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-[13px] font-medium">
                               Rejected
                             </span>
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2260,15 +2260,15 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="paid"
-                          className="flex-1 flex flex-col items-center gap-1 py-2 px-1 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm transition-all duration-200 hover:bg-white/50 rounded-md"
+                       className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
-                            <Wallet className="h-3 w-3" />
-                            <span className="text-xs font-medium">Paid</span>
+                            <Wallet className="h-3.5 w-3.5 mr-1" />
+                            <span className="text-[13px] font-medium">Paid</span>
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-xs h-5 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-700"
+                             className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2279,25 +2279,25 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                       </TabsList>
                     </Tabs>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
 
                 {/* Enhanced Submissions Table */}
-                <Card className="shadow-sm">
+                <div className="bg-white p-4 rounded-xl shadow-xl">
                   <CardContent className="p-0">
                     <div className="overflow-auto">
                       {/* Sort control moved above the table headers to preserve clean layout */}
-                      <div className="flex items-center justify-end px-4 py-2">
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-slate-500">Sort by</span>
+                      <div className="flex items-center justify-end px-4 py-2 mb-4">
+                        <div className="flex items-center gap-3 text-md">
+                          <span className="text-slate-600">Sort by</span>
                           <Select
                             value={sortOption}
                             onValueChange={(v) => setSortOption(v as any)}
                           >
-                            <SelectTrigger className="h-8 w-[220px]">
+                            <SelectTrigger className="h-12 w-[220px]">
                               <SelectValue placeholder="Sort submissions" />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent >
                               <SelectItem value="views_desc">
                                 Views • High → Low
                               </SelectItem>
@@ -2892,7 +2892,7 @@ export default function ContestDetailClient({
                       </Table>
                     </div>
                   </CardContent>
-                </Card>
+                </div>
               </div>
             ) : (
               <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900/20">

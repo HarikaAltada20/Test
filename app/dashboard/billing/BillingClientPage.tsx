@@ -86,6 +86,7 @@ import { WalletTopUp } from "@/components/WalletTopUp";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
+import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -172,584 +173,454 @@ export default function BillingClientPage({
   >(null);
   const [withdrawalUserNotes, setWithdrawalUserNotes] = useState("");
 
-  // Pagination for cash transactions
-  const {
-    data: paginatedCashTransactions,
-    pagination: cashPagination,
-    loading: cashTransactionsLoading,
-    error: cashTransactionsError,
-    setPage: setCashPage,
-    setLimit: setCashLimit,
-    refresh: refreshCashTransactions,
+  
+    // Pagination for cash transactions
+    const {
+      data: paginatedCashTransactions,
+      pagination: cashPagination,
+      loading: cashTransactionsLoading,
+      error: cashTransactionsError,
+      setPage: setCashPage,
+      setLimit: setCashLimit,
+      refresh: refreshCashTransactions,
   } = usePagination<CashTransaction>({
-    apiEndpoint: "/api/money-transactions",
-    initialLimit: 25,
+      apiEndpoint: '/api/money-transactions',
+      initialLimit: 25,
   });
 
   // Get payout method summary
   const getPayoutMethodSummary = (method: PayoutMethod): string => {
-    switch (method.method_type) {
-      case "crypto":
-        return `${
-          method.details?.network?.toUpperCase() || "Crypto"
-        } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${
-          method.friendly_name || "Crypto"
-        })`;
-      case "upi":
-        return `UPI: ${method.details?.upi_id || "N/A"} (${
-          method.friendly_name || "UPI"
-        })`;
-      case "bank_transfer":
-        return `Bank: ...${
-          method.details?.account_number?.slice(-4) || "XXXX"
-        } (${method.friendly_name || "Bank"})`;
-      default:
-        return "Unknown Method Type";
-    }
+      switch (method.method_type) {
+          case "crypto":
+              return `${method.details?.network?.toUpperCase() || 'Crypto'} Wallet: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Crypto'})`;
+          case "upi":
+              return `UPI: ${method.details?.upi_id || 'N/A'} (${method.friendly_name || 'UPI'})`;
+          case "bank_transfer":
+              return `Bank: ...${method.details?.account_number?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Bank'})`;
+          default:
+              return "Unknown Method Type";
+      }
   };
 
   const getPayoutMethodSummaryById = (methodId: string | null): string => {
-    if (!methodId) return "Payout method deleted or N/A";
-    const method = payoutMethods.find((p) => p.id === methodId);
-    return method ? getPayoutMethodSummary(method) : "Unknown Method";
+      if (!methodId) return "Payout method deleted or N/A";
+      const method = payoutMethods.find(p => p.id === methodId);
+      return method ? getPayoutMethodSummary(method) : "Unknown Method";
   };
 
   // Initialize data when props change
   useEffect(() => {
-    if (!initialAuthUser) {
-      router.push("/login");
-      return;
-    }
-    setAuthUser(initialAuthUser);
-    setProfile(initialProfile);
-    setUserData(initialUserData);
-    // Note: Cash transactions now handled by pagination hook
-    setCoinTransactionsState(initialCoinTransactions);
-    setPayoutMethods(initialPayoutMethods);
-    setWithdrawalRequests(
-      initialWithdrawalRequests.map((wr) => ({
-        ...wr,
-        payout_method_summary: getPayoutMethodSummaryById(
-          wr.payout_method_id === undefined ? null : wr.payout_method_id
-        ),
-      }))
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    initialAuthUser,
-    initialProfile,
-    initialUserData,
-    initialCoinTransactions,
-    initialPayoutMethods,
-    initialWithdrawalRequests,
-    router,
-  ]);
+      if (!initialAuthUser) {
+          router.push("/login");
+          return;
+      }
+      setAuthUser(initialAuthUser);
+      setProfile(initialProfile);
+      setUserData(initialUserData);
+      // Note: Cash transactions now handled by pagination hook
+      setCoinTransactionsState(initialCoinTransactions);
+      setPayoutMethods(initialPayoutMethods);
+      setWithdrawalRequests(
+          initialWithdrawalRequests.map(wr => ({
+              ...wr,
+              payout_method_summary: getPayoutMethodSummaryById(wr.payout_method_id === undefined ? null : wr.payout_method_id)
+          }))
+      );
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAuthUser, initialProfile, initialUserData, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
 
   // Reset form function
   const resetPayoutForm = () => {
-    setCurrentPayoutMethod(null);
-    setSelectedPayoutType("crypto");
-    setCryptoAddress("");
-    setCryptoNetwork("BNB_BEP20");
-    setUpiId("");
-    setBankAccountHolder("");
-    setBankAccountNumber("");
-    setBankIfscCode("");
-    setBankRoutingNumber("");
-    setBankName("");
-    setBankBranchName("");
-    setBankCountry("IN");
-    setPayoutFriendlyName("");
-    setPayoutCountry("IN");
+      setCurrentPayoutMethod(null);
+      setSelectedPayoutType("crypto");
+      setCryptoAddress('');
+      setCryptoNetwork('BNB_BEP20');
+      setUpiId('');
+      setBankAccountHolder('');
+      setBankAccountNumber('');
+      setBankIfscCode('');
+      setBankRoutingNumber('');
+      setBankName('');
+      setBankBranchName('');
+      setBankCountry('IN');
+      setPayoutFriendlyName('');
+      setPayoutCountry('IN');
   };
 
   // Simple BNB Smart Chain (BEP20) wallet validation: 0x + 40 hex chars
   const isValidBep20Address = (address: string): boolean => {
-    return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
+      return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
   };
 
   // Handle save payout method
   const handleSavePayoutMethod = async () => {
-    if (!authUser) {
-      toast.error("Authentication error.");
-      return;
-    }
-    if (!payoutFriendlyName.trim()) {
-      toast.error("Please provide a friendly name for this payout method.");
-      return;
-    }
-
-    let details: PayoutMethodDetails;
-
-    if (selectedPayoutType === "crypto") {
-      if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
-        toast.error("Crypto wallet address and network are required.");
-        return;
+      if (!authUser) {
+          toast.error("Authentication error.");
+          return;
       }
-      if (cryptoNetwork !== "BNB_BEP20") {
-        toast.error("Only BNB Smart Chain (BEP20) is supported.");
-        return;
+      if (!payoutFriendlyName.trim()) {
+          toast.error("Please provide a friendly name for this payout method.");
+          return;
       }
-      if (!isValidBep20Address(cryptoAddress)) {
-        toast.error(
-          "Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars)."
-        );
-        return;
-      }
-      details = {
-        wallet_address: cryptoAddress.trim(),
-        network: cryptoNetwork.trim(),
-      };
-    } else if (selectedPayoutType === "upi") {
-      if (!bankAccountHolder.trim() || !upiId.trim()) {
-        toast.error("Account holder name and UPI ID are required.");
-        return;
-      }
-      details = {
-        account_holder_name: bankAccountHolder.trim(),
-        upi_id: upiId.trim(),
-      };
-    } else if (selectedPayoutType === "bank_transfer") {
-      if (
-        !bankAccountHolder.trim() ||
-        !bankAccountNumber.trim() ||
-        !bankIfscCode.trim()
-      ) {
-        toast.error(
-          "Account holder name, account number, and IFSC code are required for bank transfer."
-        );
-        return;
-      }
-      const bankDetails: any = {
-        account_holder_name: bankAccountHolder.trim(),
-        account_number: bankAccountNumber.trim(),
-        ifsc_code: bankIfscCode.trim(),
-        country: bankCountry.trim(),
-      };
-      if (bankRoutingNumber.trim())
-        bankDetails.swift_bic_code = bankRoutingNumber.trim();
-      if (bankName.trim()) bankDetails.bank_name = bankName.trim();
-      if (bankBranchName.trim())
-        bankDetails.branch_name = bankBranchName.trim();
-      details = bankDetails;
-    } else {
-      toast.error("Invalid payout method type selected.");
-      return;
-    }
 
-    setIsLoading(true);
-    const methodToSave = {
-      user_id: authUser.id,
-      method_type: selectedPayoutType,
-      details: details,
-      friendly_name: payoutFriendlyName.trim(),
-      ...(currentPayoutMethod ? { id: currentPayoutMethod.id } : {}),
-    };
+      let details: PayoutMethodDetails;
 
-    try {
-      const { data, error } = await supabase
-        .from("payout_methods")
-        .upsert(methodToSave)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setPayoutMethods((prevMethods) => {
-          const index = prevMethods.findIndex((m) => m.id === data.id);
-          if (index !== -1) {
-            const newMethods = [...prevMethods];
-            newMethods[index] = data as PayoutMethod;
-            return newMethods;
-          } else {
-            return [...prevMethods, data as PayoutMethod];
+      if (selectedPayoutType === 'crypto') {
+          if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
+              toast.error("Crypto wallet address and network are required.");
+              return;
           }
-        });
-        toast.success(
-          `Payout method ${
-            currentPayoutMethod ? "updated" : "added"
-          } successfully!`
-        );
-        setIsPayoutModalOpen(false);
-        resetPayoutForm();
+          if (cryptoNetwork !== 'BNB_BEP20') {
+              toast.error("Only BNB Smart Chain (BEP20) is supported.");
+              return;
+          }
+          if (!isValidBep20Address(cryptoAddress)) {
+              toast.error("Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars).");
+              return;
+          }
+          details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim() };
+      } else if (selectedPayoutType === 'upi') {
+          if (!bankAccountHolder.trim() || !upiId.trim()) {
+              toast.error("Account holder name and UPI ID are required.");
+              return;
+          }
+          details = { account_holder_name: bankAccountHolder.trim(), upi_id: upiId.trim() };
+      } else if (selectedPayoutType === 'bank_transfer') {
+          if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankIfscCode.trim()) {
+              toast.error("Account holder name, account number, and IFSC code are required for bank transfer.");
+              return;
+          }
+          const bankDetails: any = {
+              account_holder_name: bankAccountHolder.trim(),
+              account_number: bankAccountNumber.trim(),
+              ifsc_code: bankIfscCode.trim(),
+              country: bankCountry.trim(),
+          };
+          if (bankRoutingNumber.trim()) bankDetails.swift_bic_code = bankRoutingNumber.trim();
+          if (bankName.trim()) bankDetails.bank_name = bankName.trim();
+          if (bankBranchName.trim()) bankDetails.branch_name = bankBranchName.trim();
+          details = bankDetails;
       } else {
-        throw new Error("No data returned after saving payout method.");
+          toast.error("Invalid payout method type selected.");
+          return;
       }
-    } catch (error: any) {
-      console.error("Error saving payout method:", error);
-      toast.error(
-        `Failed to save payout method: ${error.message || "Unknown error"}`
-      );
-    }
-    setIsLoading(false);
+
+      setIsLoading(true);
+      const methodToSave = {
+          user_id: authUser.id,
+          method_type: selectedPayoutType,
+          details: details,
+          friendly_name: payoutFriendlyName.trim(),
+          ...(currentPayoutMethod ? { id: currentPayoutMethod.id } : {}),
+      };
+
+      try {
+          const { data, error } = await supabase
+              .from('payout_methods')
+              .upsert(methodToSave)
+              .select()
+              .single();
+
+          if (error) throw error;
+
+          if (data) {
+              setPayoutMethods(prevMethods => {
+                  const index = prevMethods.findIndex(m => m.id === data.id);
+                  if (index !== -1) {
+                      const newMethods = [...prevMethods];
+                      newMethods[index] = data as PayoutMethod;
+                      return newMethods;
+                  } else {
+                      return [...prevMethods, data as PayoutMethod];
+                  }
+              });
+              toast.success(`Payout method ${currentPayoutMethod ? 'updated' : 'added'} successfully!`);
+              setIsPayoutModalOpen(false);
+              resetPayoutForm();
+          } else {
+              throw new Error("No data returned after saving payout method.")
+          }
+      } catch (error: any) {
+          console.error("Error saving payout method:", error);
+          toast.error(`Failed to save payout method: ${error.message || 'Unknown error'}`);
+      }
+      setIsLoading(false);
   };
 
   const handleEditPayoutMethod = (method: PayoutMethod) => {
-    setCurrentPayoutMethod(method);
-    setSelectedPayoutType(method.method_type);
-    setPayoutFriendlyName(method.friendly_name || "");
+      setCurrentPayoutMethod(method);
+      setSelectedPayoutType(method.method_type);
+      setPayoutFriendlyName(method.friendly_name || '');
 
-    if (method.method_type === "crypto" && method.details) {
-      setCryptoAddress(method.details.wallet_address || "");
-      setCryptoNetwork(method.details.network || "BNB_BEP20");
-    } else if (method.method_type === "upi" && method.details) {
-      setUpiId(method.details.upi_id || "");
-    } else if (method.method_type === "bank_transfer" && method.details) {
-      setBankAccountHolder(method.details.account_holder_name || "");
-      setBankAccountNumber(method.details.account_number || "");
-      setBankIfscCode(method.details.ifsc_code || "");
-      setBankRoutingNumber(method.details.swift_bic_code || "");
-      setBankName(method.details.bank_name || "");
-      setBankBranchName(method.details.branch_name || "");
-      setBankCountry(method.details.country || "IN");
-    }
-    setIsPayoutModalOpen(true);
+      if (method.method_type === 'crypto' && method.details) {
+          setCryptoAddress(method.details.wallet_address || '');
+          setCryptoNetwork(method.details.network || 'BNB_BEP20');
+      } else if (method.method_type === 'upi' && method.details) {
+          setUpiId(method.details.upi_id || '');
+      } else if (method.method_type === 'bank_transfer' && method.details) {
+          setBankAccountHolder(method.details.account_holder_name || '');
+          setBankAccountNumber(method.details.account_number || '');
+          setBankIfscCode(method.details.ifsc_code || '');
+          setBankRoutingNumber(method.details.swift_bic_code || '');
+          setBankName(method.details.bank_name || '');
+          setBankBranchName(method.details.branch_name || '');
+          setBankCountry(method.details.country || 'IN');
+      }
+      setIsPayoutModalOpen(true);
   };
 
   const handleDeletePayoutMethod = async (methodId: string) => {
-    if (!confirm("Are you sure you want to delete this payout method?")) return;
-    setIsLoading(true);
-    const { error } = await supabase
-      .from("payout_methods")
-      .delete()
-      .eq("id", methodId);
-    setIsLoading(false);
-    if (error) {
-      console.error("Error deleting payout method:", error);
-      toast.error(`Failed to delete method: ${error.message}`);
-    } else {
-      setPayoutMethods(payoutMethods.filter((p) => p.id !== methodId));
-      toast.success("Payout method deleted.");
-    }
+      if (!confirm("Are you sure you want to delete this payout method?")) return;
+      setIsLoading(true);
+      const { error } = await supabase.from("payout_methods").delete().eq("id", methodId);
+      setIsLoading(false);
+      if (error) {
+          console.error("Error deleting payout method:", error);
+          toast.error(`Failed to delete method: ${error.message}`);
+      } else {
+          setPayoutMethods(payoutMethods.filter(p => p.id !== methodId));
+          toast.success("Payout method deleted.");
+      }
   };
 
   const handleSetDefaultPayoutMethod = async (methodId: string) => {
-    if (!authUser) return;
-    setIsLoading(true);
-    // Set all others to false for this user
-    const { error: unsetError } = await supabase
-      .from("payout_methods")
-      .update({ is_default: false })
-      .eq("user_id", authUser.id);
+      if (!authUser) return;
+      setIsLoading(true);
+      // Set all others to false for this user
+      const { error: unsetError } = await supabase
+          .from("payout_methods")
+          .update({ is_default: false })
+          .eq("user_id", authUser.id);
 
-    if (unsetError) {
-      console.error("Error unsetting other defaults:", unsetError);
-    }
+      if (unsetError) {
+          console.error("Error unsetting other defaults:", unsetError);
+      }
 
-    const { data, error } = await supabase
-      .from("payout_methods")
-      .update({ is_default: true })
-      .eq("id", methodId)
-      .eq("user_id", authUser.id)
-      .select()
-      .single();
-    setIsLoading(false);
+      const { data, error } = await supabase
+          .from("payout_methods")
+          .update({ is_default: true })
+          .eq("id", methodId)
+          .eq("user_id", authUser.id)
+          .select()
+          .single();
+      setIsLoading(false);
 
-    if (error) {
-      console.error("Error setting default payout method:", error);
-      toast.error(`Failed to set default method: ${error.message}`);
-    } else if (data) {
-      setPayoutMethods(
-        payoutMethods.map((p) => ({ ...p, is_default: p.id === data.id }))
-      );
-      toast.success("Default payout method updated.");
-    }
+      if (error) {
+          console.error("Error setting default payout method:", error);
+          toast.error(`Failed to set default method: ${error.message}`);
+      } else if (data) {
+          setPayoutMethods(payoutMethods.map(p => ({ ...p, is_default: p.id === data.id })));
+          toast.success("Default payout method updated.");
+      }
   };
 
   const handleWithdraw = async () => {
-    if (!authUser || !selectedWithdrawMethodId) {
-      toast.error("Please select a payout method.");
-      return;
-    }
-    if (!profile || !userData) {
-      toast.error("User profile or data not loaded.");
-      return;
-    }
-
-    const minWithdrawalDollars = MIN_WITHDRAWAL_AMOUNT / 100;
-    let amountToWithdraw = 0;
-    let currencyForRpc = "USD";
-    let amountTypeForRpc: "cash" | "coins" = activeTab;
-    let redeemedItemDescForRpc: any | null = null;
-
-    if (activeTab === "cash") {
-      if (withdrawAmountDollars <= 0) {
-        toast.error("Please enter a valid withdrawal amount.");
-        return;
+      if (!authUser || !selectedWithdrawMethodId) {
+          toast.error("Please select a payout method.");
+          return;
       }
-      if (withdrawAmountDollars < minWithdrawalDollars) {
-        toast.error(
-          `Minimum cash withdrawal amount is ${formatCurrencyFromCents(
-            MIN_WITHDRAWAL_AMOUNT
-          )}.`
-        );
-        return;
+      if (!profile || !userData) {
+          toast.error("User profile or data not loaded.");
+          return;
       }
-      amountToWithdraw = Math.round(withdrawAmountDollars * 100); // Convert to cents
-      if (amountToWithdraw > (profile.withdrawable_balance || 0)) {
-        toast.error("Insufficient cash balance.");
-        return;
+
+      const minWithdrawalDollars = MIN_WITHDRAWAL_AMOUNT / 100;
+      let amountToWithdraw = 0;
+      let currencyForRpc = 'USD';
+      let amountTypeForRpc: 'cash' | 'coins' = activeTabModal;
+      let redeemedItemDescForRpc: any | null = null;
+
+      if (activeTabModal=== 'cash') {
+          if (withdrawAmountDollars <= 0) {
+              toast.error("Please enter a valid withdrawal amount.");
+              return;
+          }
+          if (withdrawAmountDollars < minWithdrawalDollars) {
+              toast.error(`Minimum cash withdrawal amount is ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.`);
+              return;
+          }
+          amountToWithdraw = Math.round(withdrawAmountDollars * 100); // Convert to cents
+          if (amountToWithdraw > (profile.withdrawable_balance || 0)) {
+              toast.error("Insufficient cash balance.");
+              return;
+          }
+      } else { // activeTabModal === 'coins'
+          if (withdrawAmountCoins <= 0) {
+              toast.error("Please enter a valid coin amount to redeem.");
+              return;
+          }
+          amountToWithdraw = withdrawAmountCoins;
+          currencyForRpc = 'COIN';
+          redeemedItemDescForRpc = { placeholder: "Item to be redeemed" };
+          if (amountToWithdraw > (userData.coins || 0)) {
+              toast.error("Insufficient coin balance.");
+              return;
+          }
       }
-    } else {
-      // activeTab === 'coins'
-      if (withdrawAmountCoins <= 0) {
-        toast.error("Please enter a valid coin amount to redeem.");
-        return;
-      }
-      amountToWithdraw = withdrawAmountCoins;
-      currencyForRpc = "COIN";
-      redeemedItemDescForRpc = { placeholder: "Item to be redeemed" };
-      if (amountToWithdraw > (userData.coins || 0)) {
-        toast.error("Insufficient coin balance.");
-        return;
-      }
-    }
 
-    const rpcArgs = {
-      p_user_id: authUser.id,
-      p_payout_method_id: selectedWithdrawMethodId,
-      p_amount: amountToWithdraw,
-      p_currency: currencyForRpc,
-      p_amount_type: amountTypeForRpc,
-      p_user_notes: withdrawalUserNotes,
-      p_redeemed_item_description: redeemedItemDescForRpc,
-    };
+      const rpcArgs = {
+          p_user_id: authUser.id,
+          p_payout_method_id: selectedWithdrawMethodId,
+          p_amount: amountToWithdraw,
+          p_currency: currencyForRpc,
+          p_amount_type: amountTypeForRpc,
+          p_user_notes: withdrawalUserNotes,
+          p_redeemed_item_description: redeemedItemDescForRpc
+      };
 
-    console.log(
-      "Calling create_advertiser_withdrawal_request with args:",
-      JSON.stringify(rpcArgs, null, 2)
-    );
+      console.log("Calling create_advertiser_withdrawal_request with args:", JSON.stringify(rpcArgs, null, 2));
 
-    setIsSubmittingWithdrawal(true);
-    const { data: rpcResponse, error: rpcError } = await supabase.rpc(
-      "create_advertiser_withdrawal_request",
-      rpcArgs
-    );
-    setIsSubmittingWithdrawal(false);
+      setIsSubmittingWithdrawal(true);
+      const { data: rpcResponse, error: rpcError } = await supabase.rpc('create_advertiser_withdrawal_request', rpcArgs);
+      setIsSubmittingWithdrawal(false);
 
-    if (rpcError) {
-      console.error("Error creating withdrawal request via RPC:", rpcError);
-      toast.error(`Withdrawal request failed: ${rpcError.message}`);
-    } else if (
-      rpcResponse &&
-      Array.isArray(rpcResponse) &&
-      rpcResponse.length > 0
-    ) {
-      const createdRequest = rpcResponse[0] as WithdrawalRequest;
-      toast.success(
-        `Withdrawal request for ${
-          activeTab === "cash"
-            ? formatCurrencyFromCents(createdRequest.amount)
-            : formatCoins(createdRequest.amount) + " coins"
-        } submitted successfully!`
-      );
-      setWithdrawalRequests((prev) => [
-        {
-          ...createdRequest,
-          payout_method_summary: getPayoutMethodSummaryById(
-            createdRequest.payout_method_id === undefined
-              ? null
-              : createdRequest.payout_method_id
-          ),
-        },
-        ...prev,
-      ]);
-      if (activeTab === "cash") {
-        setProfile((prev) =>
-          prev
-            ? {
-                ...prev,
-                withdrawable_balance:
-                  (prev.withdrawable_balance || 0) - createdRequest.amount,
-              }
-            : null
-        );
+      if (rpcError) {
+          console.error("Error creating withdrawal request via RPC:", rpcError);
+          toast.error(`Withdrawal request failed: ${rpcError.message}`);
+      } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
+          const createdRequest = rpcResponse[0] as WithdrawalRequest;
+          toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrencyFromCents(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
+          setWithdrawalRequests(prev => [{
+              ...createdRequest,
+              payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id === undefined ? null : createdRequest.payout_method_id)
+          }, ...prev]);
+          if (activeTab === 'cash') {
+              setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) - (createdRequest.amount) }) : null);
+          } else {
+              setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) - createdRequest.amount }) : null);
+          }
+          setIsWithdrawModalOpen(false);
+          setWithdrawAmountDollars(0);
+          setWithdrawAmountCoins(0);
+          setSelectedWithdrawMethodId(null);
+          setWithdrawalUserNotes("");
       } else {
-        setUserData((prev) =>
-          prev
-            ? { ...prev, coins: (prev.coins || 0) - createdRequest.amount }
-            : null
-        );
+          console.error("Withdrawal request RPC returned unexpected data:", rpcResponse);
+          toast.error("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
       }
-      setIsWithdrawModalOpen(false);
-      setWithdrawAmountDollars(0);
-      setWithdrawAmountCoins(0);
-      setSelectedWithdrawMethodId(null);
-      setWithdrawalUserNotes("");
-    } else {
-      console.error(
-        "Withdrawal request RPC returned unexpected data:",
-        rpcResponse
-      );
-      toast.error(
-        "Withdrawal request submitted, but couldn't confirm details. Please check your requests."
-      );
-    }
   };
 
   // Handle balance update after successful top-up
   const handleBalanceUpdate = (newBalanceInCents: number) => {
-    console.log("💰 BillingPage: Balance update received:", newBalanceInCents);
-    console.log(
-      "💰 BillingPage: Previous balance was:",
-      profile?.available_deposit_balance
-    );
+      console.log('💰 BillingPage: Balance update received:', newBalanceInCents);
+      console.log('💰 BillingPage: Previous balance was:', profile?.available_deposit_balance);
 
-    setProfile((prev) => {
-      const updated = prev
-        ? { ...prev, available_deposit_balance: newBalanceInCents }
-        : null;
-      console.log("💰 BillingPage: Profile updated:", updated);
-      return updated;
-    });
+      setProfile(prev => {
+          const updated = prev ? { ...prev, available_deposit_balance: newBalanceInCents } : null;
+          console.log('💰 BillingPage: Profile updated:', updated);
+          return updated;
+      });
 
-    // Refresh paginated transactions to show the new deposit
-    console.log("🔄 BillingPage: Refreshing transaction history...");
-    refreshCashTransactions();
+      // Refresh paginated transactions to show the new deposit
+      console.log('🔄 BillingPage: Refreshing transaction history...');
+      refreshCashTransactions();
   };
 
-  const handleCancelWithdrawal = async (
-    requestId: string,
-    amountToRestore: number,
-    amountType: "cash" | "coins"
-  ) => {
-    if (!authUser || !profile || !userData) return;
-    if (
-      !confirm(
-        "Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance."
-      )
-    ) {
-      return;
-    }
-    setIsCancellingWithdrawal(requestId);
-
-    const { data: rpcSuccess, error: rpcError } = await supabase.rpc(
-      "cancel_advertiser_withdrawal_request_by_user",
-      {
-        p_request_id: requestId,
-        p_user_id: authUser.id,
+  const handleCancelWithdrawal = async (requestId: string, amountToRestore: number, amountType: 'cash' | 'coins') => {
+      if (!authUser || !profile || !userData) return;
+      if (!confirm("Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance.")) {
+          return;
       }
-    );
+      setIsCancellingWithdrawal(requestId);
 
-    setIsCancellingWithdrawal(null);
+      const { data: rpcSuccess, error: rpcError } = await supabase.rpc('cancel_advertiser_withdrawal_request_by_user', {
+          p_request_id: requestId,
+          p_user_id: authUser.id
+      });
 
-    if (rpcError) {
-      console.error("Error cancelling withdrawal request via RPC:", rpcError);
-      toast.error(`Failed to cancel request: ${rpcError.message}`);
-    } else if (rpcSuccess === true) {
-      if (amountType === "cash") {
-        setProfile((prev) =>
-          prev
-            ? {
-                ...prev,
-                withdrawable_balance:
-                  (prev.withdrawable_balance || 0) + amountToRestore,
-              }
-            : null
-        );
+      setIsCancellingWithdrawal(null);
+
+      if (rpcError) {
+          console.error("Error cancelling withdrawal request via RPC:", rpcError);
+          toast.error(`Failed to cancel request: ${rpcError.message}`);
+      } else if (rpcSuccess === true) {
+          if (amountType === 'cash') {
+              setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) + (amountToRestore) }) : null);
+          } else {
+              setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) + amountToRestore }) : null);
+          }
+          setWithdrawalRequests(prevReqs =>
+              prevReqs.map(req =>
+                  req.id === requestId
+                      ? {
+                          ...req,
+                          status: 'cancelled',
+                          payout_method_summary: getPayoutMethodSummaryById(req.payout_method_id === undefined ? null : req.payout_method_id),
+                          cancelled_at: new Date().toISOString(),
+                          cancellation_reason: 'Cancelled by user'
+                      }
+                      : req
+              )
+          );
+          toast.success("Withdrawal Cancelled: The funds have been returned to your balance.");
       } else {
-        setUserData((prev) =>
-          prev ? { ...prev, coins: (prev.coins || 0) + amountToRestore } : null
-        );
+          console.error("RPC call to cancel withdrawal did not return true. Response:", rpcSuccess);
+          toast.error("Failed to cancel the withdrawal request. Please try again or contact support.");
       }
-      setWithdrawalRequests((prevReqs) =>
-        prevReqs.map((req) =>
-          req.id === requestId
-            ? {
-                ...req,
-                status: "cancelled",
-                payout_method_summary: getPayoutMethodSummaryById(
-                  req.payout_method_id === undefined
-                    ? null
-                    : req.payout_method_id
-                ),
-                cancelled_at: new Date().toISOString(),
-                cancellation_reason: "Cancelled by user",
-              }
-            : req
-        )
-      );
-      toast.success(
-        "Withdrawal Cancelled: The funds have been returned to your balance."
-      );
-    } else {
-      console.error(
-        "RPC call to cancel withdrawal did not return true. Response:",
-        rpcSuccess
-      );
-      toast.error(
-        "Failed to cancel the withdrawal request. Please try again or contact support."
-      );
-    }
   };
 
   // Payout method icon component
   const PayoutMethodIcon = ({ type }: { type: PayoutMethodType }) => {
-    switch (type) {
-      case "crypto":
-        return <CryptoWalletIcon className="h-5 w-5 mr-3 text-orange-500" />;
-      case "upi":
-        return <Sparkles className="h-5 w-5 mr-3 text-purple-500" />;
-      case "bank_transfer":
-        return <Landmark className="h-5 w-5 mr-3 text-blue-500" />;
-      default:
-        return <CreditCard className="h-5 w-5 mr-3 text-gray-500" />;
-    }
+      switch (type) {
+          case "crypto":
+              return <CryptoWalletIcon className="h-5 w-5 mr-3 text-orange-500" />;
+          case "upi":
+              return <Sparkles className="h-5 w-5 mr-3 text-purple-500" />;
+          case "bank_transfer":
+              return <Landmark className="h-5 w-5 mr-3 text-blue-500" />;
+          default:
+              return <CreditCard className="h-5 w-5 mr-3 text-gray-500" />;
+      }
   };
 
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
-    const success = searchParams.get("success");
-    const sessionId = searchParams.get("session_id");
+      const success = searchParams.get('success');
+      const sessionId = searchParams.get('session_id');
 
-    if (success === "true" && sessionId && !hasProcessedSuccess) {
-      console.log("🎉 Payment successful, refreshing subscription data...");
-      setHasProcessedSuccess(true);
-      toast.success("Payment successful! Your subscription has been updated.");
+      if (success === 'true' && sessionId && !hasProcessedSuccess) {
+          console.log('🎉 Payment successful, refreshing subscription data...');
+          setHasProcessedSuccess(true);
+          toast.success('Payment successful! Your subscription has been updated.');
 
-      // Clear URL parameters to prevent refresh loops
-      const newUrl = window.location.pathname;
-      window.history.replaceState({}, "", newUrl);
+          // Clear URL parameters to prevent refresh loops
+          const newUrl = window.location.pathname;
+          window.history.replaceState({}, '', newUrl);
 
-      // Refresh the page data to get updated subscription info
-      const refreshData = async () => {
-        try {
-          // Give the webhook a moment to process
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+          // Refresh the page data to get updated subscription info
+          const refreshData = async () => {
+              try {
+                  // Give the webhook a moment to process
+                  await new Promise(resolve => setTimeout(resolve, 2000));
 
-          // Refresh the current page to get updated data
-          window.location.reload();
-        } catch (error) {
-          console.error("Error refreshing data:", error);
-        }
-      };
+                  // Refresh the current page to get updated data
+                  window.location.reload();
+              } catch (error) {
+                  console.error('Error refreshing data:', error);
+              }
+          };
 
-      refreshData();
-    }
+          refreshData();
+      }
   }, [searchParams, hasProcessedSuccess]);
 
   if (!authUser || !profile || !userData) {
-    return (
-      <div className="container mx-auto py-8 px-4 md:px-6">
-        <div className="flex items-center justify-center h-64">
-          <p>Loading billing data or not authenticated...</p>
-        </div>
-      </div>
-    );
+      return (
+          <div className="container mx-auto py-8 px-4 md:px-6">
+              <div className="flex items-center justify-center h-64">
+                  <p>Loading billing data or not authenticated...</p>
+              </div>
+          </div>
+      );
   }
 
   // Derived state for total referrals
-  const totalReferrals =
-    (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
+  const totalReferrals = (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
 
   // Filter withdrawal requests for display
-  const cashWithdrawalRequests = withdrawalRequests.filter(
-    (req) => req.amount_type === "cash"
-  );
-  const coinWithdrawalRequests = withdrawalRequests.filter(
-    (req) => req.amount_type === "coins"
-  );
+  const cashWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'cash');
+  const coinWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'coins');
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -774,13 +645,13 @@ export default function BillingClientPage({
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        className="mt-12 mb-6"
+        className="mt-12 mb-10"
       />
 
       {/* Cash Account Tab */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-10">
             {/*Total Spent*/}
             <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4 flex justify-between">
@@ -1403,7 +1274,7 @@ export default function BillingClientPage({
         {/* Subscription Tab */}
         <TabPanel value="subscription" activeTab={activeTab}>
           <div className="space-y-6">
-            <Card>
+            <div className="bg-white rounded-xl shadow-xl">
               <CardHeader>
                 <CardTitle>Subscription Management</CardTitle>
                 <CardDescription>
@@ -1411,9 +1282,9 @@ export default function BillingClientPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <SubscriptionManagement />
+                <SubscriptionManagementBilling />
               </CardContent>
-            </Card>
+            </div>
           </div>
         </TabPanel>
       </TabContent>
@@ -1871,7 +1742,7 @@ export default function BillingClientPage({
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="pt-4">
             <WalletTopUp
               currentBalance={profile?.available_deposit_balance || 0}
               onBalanceUpdate={handleBalanceUpdate}

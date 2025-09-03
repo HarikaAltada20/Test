@@ -357,20 +357,20 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
 
     return (
         <>
-            <Card>
-                <CardHeader>
+            <div>
+                <div className="mb-6">
                     <CardTitle className="flex items-center gap-2">
-                        <DollarSign className="h-5 w-5" />
+                        {/* <DollarSign className="h-5 w-5" /> */}
                         Top Up Wallet
                     </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                </div>
+                <div className="space-y-6">
+                    <div className="p-4 rounded-lg border border-[#E0E0E0]">
                         <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-green-800">
+                            <span className="text-md font-medium text-gray-500">
                                 Current Balance
                             </span>
-                            <span className="text-2xl font-bold text-green-900 transition-all duration-300 ease-in-out">
+                            <span className="text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out">
                                 {formatCurrencyFromCents(currentBalance)}
                             </span>
                         </div>
@@ -378,11 +378,12 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
 
                     {!showPaymentForm ? (
                         <div className="space-y-4">
-                            <div className="space-y-3">
+                            <div className="space-y-4">
                                 <Label className="text-sm font-medium">Quick amounts</Label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-3 gap-3">
                                     {predefinedAmounts.map((presetAmount) => (
                                         <Button
+                                        className="border-[#4A00BE]"
                                             key={presetAmount}
                                             variant={amount === presetAmount ? "default" : "outline"}
                                             size="sm"
@@ -394,7 +395,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="space-y-2 mb-4">
                                 <Label htmlFor="custom-amount">Or enter custom amount</Label>
                                 <Input
                                     id="custom-amount"
@@ -406,16 +407,17 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                                     placeholder="Enter amount"
                                 />
                             </div>
-
-                            <Button
+                            
+                            <button
                                 onClick={() => setShowPaymentForm(true)}
-                                className="w-full"
-                                size="lg"
+                                className="w-full bg-[#D9C0FF61] text-[#7F39EC] py-4 rounded-full"
+                             
                                 disabled={!amount || amount < 1}
                             >
                                 Proceed to Payment
-                            </Button>
-                        </div>
+                            </button>
+                            </div>
+                      
                     ) : (
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
@@ -439,8 +441,8 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                             </Elements>
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* Payment Animation Overlay */}
             <PaymentAnimation

@@ -2041,7 +2041,7 @@ function DashboardContent({
                           <Button
                             onClick={handleSignOut}
                             variant="ghost"
-                            className="w-full border-[#E50000] bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300"
+                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300"
                             // style={{
                             //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                             //   borderColor: "rgba(244, 63, 94, 0.2)",
