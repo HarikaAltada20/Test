@@ -18,7 +18,15 @@ export const metadata: Metadata = {
   description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
   metadataBase: new URL('https://www.gameofcreators.com'),
   icons: {
-    icon: "/goc.png",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/goc.png", type: "image/png" },
+      { url: "/icon1.png", sizes: "96x96", type: "image/png" },
+      { url: "/icon0.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   openGraph: {
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
