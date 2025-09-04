@@ -12,7 +12,7 @@ export default async function AdminWithdrawalsPage() {
 
     const { data: withdrawalRequests = [] } = await supabase
         .from("withdrawal_requests")
-        .select("*, users(full_name, email)")
+        .select("*, users(full_name, email, username)")
         .order("created_at", { ascending: false });
 
     return <WithdrawalsClient initialRequests={withdrawalRequests as any[]} />;

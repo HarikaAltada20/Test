@@ -20,6 +20,7 @@ export interface Database {
           email_confirmed_at: string | null
           created_at: string
           updated_at: string
+          total_other_earnings: number
           registration_ip?: string | null;
           login_history?: Array<{
             ip_address: string;
@@ -43,6 +44,7 @@ export interface Database {
           email_confirmed_at?: string | null
           created_at?: string
           updated_at?: string
+          total_other_earnings?: number
           registration_ip?: string | null;
           login_history?: Array<{
             ip_address: string;
@@ -66,6 +68,7 @@ export interface Database {
           email_confirmed_at?: string | null
           created_at?: string
           updated_at?: string
+          total_other_earnings?: number
           registration_ip?: string | null;
           login_history?: Array<{
             ip_address: string;

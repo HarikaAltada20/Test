@@ -24,6 +24,8 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useState, useEffect } from "react";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
+import { useSearchParams } from "next/navigation";
+import { DiscordOnboardingModal } from "@/components/DiscordOnboardingModal";
 
 interface GettingStartedClientProps {
     user: User;
@@ -31,7 +33,9 @@ interface GettingStartedClientProps {
 
 export default function GettingStartedClient({ user }: GettingStartedClientProps) {
     const [userType, setUserType] = useState<string | null>(null);
+    const [showDiscordModal, setShowDiscordModal] = useState(false);
     const supabase = createClient();
+    const searchParams = useSearchParams();
 
     useEffect(() => {
         const fetchUserType = async () => {
@@ -50,6 +54,23 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
 
         fetchUserType();
     }, [user.id, supabase]);
+
+    // Show Discord onboarding modal for creators after signup/first visit
+    useEffect(() => {
+        if (!userType) return;
+        const flag = searchParams.get('welcome');
+        const isCreator = userType === 'creator';
+        try {
+            const alreadyShown = typeof window !== 'undefined' && localStorage.getItem('discordOnboardingShown') === '1';
+            if (isCreator && (flag === '1' || flag === 'true') && !alreadyShown) {
+                setShowDiscordModal(true);
+                // Clean the query param so refresh doesn't reopen
+                const url = new URL(window.location.href);
+                url.searchParams.delete('welcome');
+                window.history.replaceState({}, '', url.toString());
+            }
+        } catch { }
+    }, [userType, searchParams]);
 
     if (!userType) {
         return <div>Loading...</div>;
@@ -826,6 +847,12 @@ export default function GettingStartedClient({ user }: GettingStartedClientProps
                     </CardContent>
                 </div>
             )}
+
+            {/* Discord Onboarding Modal */}
+            <DiscordOnboardingModal
+                isOpen={showDiscordModal}
+                onClose={() => setShowDiscordModal(false)}
+            />
         </div>
     );
 } 
