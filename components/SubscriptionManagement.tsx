@@ -493,7 +493,11 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         // If all scheduled changes are canceled or no scheduled changes, show "Canceling" since subscription will end
         return <Badge className="bg-red-100 text-red-800">Canceling</Badge>;
       }
-      return <Badge className="bg-green-100 text-md px-5 text-green-800">Active</Badge>;
+      return (
+        <Badge className="bg-green-100 text-md px-5 text-green-800">
+          Active
+        </Badge>
+      );
     }
     return (
       <Badge className="bg-red-100 text-red-800">{subscription.status}</Badge>
@@ -539,7 +543,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             <Skeleton className="h-32 w-full rounded-lg" />
           </CardContent>
         </Card> */}
-{/* 
+        {/* 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card
@@ -572,8 +576,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
         <div className="max-w-7xl bg-gradient-to-b rounded-lg from-purple-900/10 to-purple-900/3 border-2 border-gray-700 hover:border-2 cursor-pointer text-white mx-auto">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2 mb-4 text-2xl">
-                <div className="border rounded-3xl p-2">
-              <Shield className="h-6 w-6 text-white" />
+              <div className="border rounded-3xl p-2">
+                <Shield className="h-6 w-6 text-white" />
               </div>
               Current Subscription
             </CardTitle>
@@ -603,19 +607,23 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
               <div className="flex items-center gap-3">
                 {getStatusBadge(currentSubscription)}
                 {currentPlan.price > 0 && (
-                  <Button
-                    variant="outline"
+                  <button
+                    // variant="outline"
                     onClick={handleCustomerPortal}
                     disabled={isProcessing}
-                    className="border-2 hover:border-gray-300 transition-colors"
+                    className="rounded-3xl relative text-white font-bold px-4 py-2 text-md overflow-hidden flex items-center justify-center gap-2"
+                    style={{
+                      background:
+                        "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                    }}
                   >
                     {isProcessing ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <ExternalLink className="h-4 w-4 mr-2" />
+                      <ExternalLink className="h-4 w-4" />
                     )}
                     Manage Billing
-                  </Button>
+                  </button>
                 )}
               </div>
             </div>
@@ -624,8 +632,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             {billingDetails && (
               <div className="bg-gradient-to-b rounded-lg from-purple-900/10 to-purple-900/3 border-2 border-gray-700 p-6 space-y-4">
                 <div className="flex items-center gap-2">
-                    <div className="border rounded-3xl p-2">
-                  <CalendarDays className="h-5 w-5 text-white " />
+                  <div className="border rounded-3xl p-2">
+                    <CalendarDays className="h-5 w-5 text-white " />
                   </div>
                   <span className="font-semibold text-white text-lg">
                     Billing Period
@@ -643,9 +651,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     </p>
                   </div>
                   <div className="bg-[#B16FF43D] rounded-lg p-4 shadow-sm border-2 border-[#7F39EC]">
-                    <p className="text-sm text-white mb-1">
-                      Next Billing Date
-                    </p>
+                    <p className="text-sm text-white mb-1">Next Billing Date</p>
                     <p className="font-semibold text-white">
                       {formatDate(billingDetails.nextBillingDate)}
                     </p>
@@ -912,14 +918,14 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 {getPlanFeatures(currentPlan).map((feature, index) => (
                   <div key={index} className="flex items-center gap-3">
                     <div
-                    className="rounded-full p-3 flex items-center justify-center"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
-                    }}
-                  >
-                    <Check className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
+                      className="rounded-full p-3 flex items-center justify-center"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                      }}
+                    >
+                      <Check className="h-6 w-6 text-white" strokeWidth={3} />
+                    </div>
                     <span className="text-lg text-gray-300">{feature}</span>
                   </div>
                 ))}
@@ -994,27 +1000,27 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                 !scheduledChanges.some(
                   (change) => change.status !== "canceled"
                 )) && (
-                <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl p-4 border border-red-100">
+                <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="h-5 w-5 text-red-600" />
-                    <span className="font-semibold text-gray-900">
+                    <AlertTriangle className="h-5 w-5 text-purple-600" />
+                    <span className="font-semibold text-white">
                       Subscription Ending
                     </span>
                   </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-red-50">
+                  <div className="bg-gradient-to-b rounded-lg from-purple-900/10 to-purple-900/3 border-2 border-gray-700 p-6 ">
                     <div className="flex items-center gap-3">
                       <div
                         className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
                           currentPlan?.name || ""
-                        )} text-white opacity-60`}
+                        )} text-white`}
                       >
                         {getPlanIcon(currentPlan?.name || "")}
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">
+                        <p className="font-semibold text-white">
                           {currentPlan?.displayName}
                         </p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-white">
                           Ends on {formatDate(billingDetails.nextBillingDate)}
                         </p>
                         <p className="text-xs text-red-600">
@@ -1022,8 +1028,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <p className="text-sm text-gray-600">
+                    <div className="mt-3">
+                      <p className="text-sm text-white">
                         Your subscription will end and you'll lose access to
                         premium features.
                       </p>
@@ -1037,36 +1043,34 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
 
       {/* Available Plans */}
       <div className="space-y-6">
-       
-          {/* <h2 className="text-2xl font-bold mb-2">Available Plans</h2>
+        {/* <h2 className="text-2xl font-bold mb-2">Available Plans</h2>
           <p className="text-gray-600">
             {!currentPlan && !currentSubscription
               ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
               : "Choose the plan that best fits your needs"}
           </p> */}
-          <div className="max-w-[1200px] pt-16 mx-auto text-center">
-            <h2 className="text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform">
-              Available{" "}
-              <span
-                style={{
-                  background:
-                    "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
+        <div className="max-w-[1200px] pt-16 mx-auto text-center">
+          <h2 className="text-3xl md:text-5xl font-semibold transition-all duration-700 mb-4 ease-out transform">
+            Available{" "}
+            <span
+              style={{
+                background:
+                  "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
 
-                  display: "inline",
-                }}
-              >
-                Plans
-              </span>
-            </h2>
-            <p className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
-              {!currentPlan && !currentSubscription
-                ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
-                : "Choose the plan that best fits your needs"}
-            </p>
-          
+                display: "inline",
+              }}
+            >
+              Plans
+            </span>
+          </h2>
+          <p className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg">
+            {!currentPlan && !currentSubscription
+              ? "Welcome! Start with our free plan or choose a paid plan that fits your needs"
+              : "Choose the plan that best fits your needs"}
+          </p>
         </div>
         {/* New User Info */}
         {!currentPlan && !currentSubscription && (

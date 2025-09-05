@@ -2946,13 +2946,13 @@ export default function CreateContestPage({
                 <div className="flex items-start justify-between ">
                   <div className="flex items-center gap-4">
                     <div
-                      className={`p-3 rounded-full shadow-lg ${
+                      className={`p-3 rounded-full ${
                         currentPlan && currentPlan.price === 0
                           ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
                           : currentPlan &&
                             currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                          ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white" // Bronze plan
-                          : "bg-gradient-to-br from-blue-600 to-purple-600 text-white" // Higher plans
+                          ? "bg-[#D8C3FF] text-[#4A00BE]" // Bronze plan
+                          : "bg-[#D8C3FF] text-[#4A00BE]" // Higher plans
                       }`}
                     >
                       <Trophy className="h-8 w-8" />
@@ -3054,8 +3054,8 @@ export default function CreateContestPage({
                       <div className="flex flex-col items-end gap-2">
                         {currentPlan.price > 0 ? (
                           <>
-                            <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
-                              ✓ Active Subscription
+                            <div className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white text-sm md:text-[13px] ">
+                              Active Subscription
                             </div>
                             <p className="text-xs text-gray-500">
                               Billed monthly
@@ -3063,7 +3063,7 @@ export default function CreateContestPage({
                           </>
                         ) : (
                           <>
-                            <div className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white text-smmd:text-md ">
+                            <div className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white text-sm md:text-[13px]">
                               Free Plan
                             </div>
                             <p className="text-xs text-orange-600 font-medium">
@@ -3149,20 +3149,20 @@ export default function CreateContestPage({
 
                         {/* CPM Rate Info - Only show for CPM contests */}
                         {contestType === "cpm" && (
-                          <div className="backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-purple-50/80 border-purple-200">
+                          <div className="backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300">
                             <div className="flex items-start gap-4">
-                              <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500 to-purple-600">
+                              {/* <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-purple-500 to-purple-600">
                                 <span className="text-white font-bold text-lg">
                                   <GitGraphIcon />
                                 </span>
-                              </div>
+                              </div> */}
                               <div className="flex-1">
                                 <div className="flex items-center justify-between mb-2">
                                   <h5 className="text-lg font-semibold text-gray-900">
                                     Total Winners
                                   </h5>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-2xl font-bold text-purple-600">
+                                    <span className="text-xl font-bold text-green-600 border border-green-600 rounded-full px-6">
                                       ∞
                                     </span>
                                   </div>
@@ -3173,7 +3173,7 @@ export default function CreateContestPage({
                                   their content's performance (views) &
                                   eligibility.
                                 </p>
-                                <div className="mt-3 text-xs font-medium text-purple-600">
+                                <div className="mt-4 text-sm font-medium border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2">
                                   Pay for performance - reward creators based on
                                   actual results
                                 </div>
@@ -3184,12 +3184,13 @@ export default function CreateContestPage({
 
                         {/* Min Budget Feature */}
                         <div
-                          className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
-                            planFeatures.minContestBudget >=
-                            HIGH_MIN_BUDGET_THRESHOLD
-                              ? "bg-white" // High minimum - warning
-                              : "bg-white/80 border-gray-200/50"
-                          }`}
+                          className="backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300"
+                          // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
+                          //   planFeatures.minContestBudget >=
+                          //   HIGH_MIN_BUDGET_THRESHOLD
+                          //     ? "bg-white" 
+                          //     : "bg-white/80 border-gray-200/50"
+                          // }`}
                         >
                           <div className="flex items-start gap-4">
                             {/* <div
@@ -3585,8 +3586,8 @@ export default function CreateContestPage({
 
           {/* Contest Duration */}
 
-          <div className="space-y-6 max-w-[1100px] mx-auto bg-white shadow-lg p-6 rounded-xl">
-            <h3 className="text-lg font-medium">Contest Duration</h3>
+          <div className="space-y-6 max-w-[1100px] mx-auto bg-white shadow-xl p-6 rounded-xl">
+            <h3 className="text-xl font-semibold">Contest Duration</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="start-date">Start Date</Label>

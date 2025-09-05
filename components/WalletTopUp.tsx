@@ -365,7 +365,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                     </CardTitle>
                 </div>
                 <div className="space-y-6">
-                    <div className="p-4 rounded-lg border border-[#E0E0E0]">
+                    <div className="p-4 rounded-lg border border-gray-400">
                         <div className="flex items-center justify-between">
                             <span className="text-md font-medium text-gray-500">
                                 Current Balance

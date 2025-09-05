@@ -3893,7 +3893,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                     disabled={
                       !newExternalResourceUrl || !externalResourceDescription
                     }
-                     className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                     className="w-full mt-6 py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
                   >
                     Add Link
                   </Button>
@@ -4342,7 +4342,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   <Button
                     type="button"
                     onClick={addInspiration}
-                     className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                     className="w-full mt-6 py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
                     disabled={!newInspirationUrl || !newInspirationDescription}
                   >
                     Add Inspiration
@@ -4899,7 +4899,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-between items-center pt-6">
+        <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
           {/* Show rejection reason banner for rejected contests */}
           {contest?.moderation_status === "rejected" &&
             contest?.rejection_reason && (
@@ -4940,14 +4940,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             onClick={() => router.back()}
             disabled={isSubmitting} // Disable during submission
             className={`${
-              !(formFeedback && formFeedbackType === "error") ? "border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] mr-auto" : ""
+              !(formFeedback && formFeedbackType === "error") ? "border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto" : "w-full sm:w-auto"
             }`}
           >
             Cancel
           </button>
 
           <div
-            className={`flex gap-2 ${
+            className={`flex flex-col sm:flex-row gap-2 w-full sm:w-auto ${
               formFeedback && formFeedbackType === "error" ? "ml-4" : "ml-auto"
             }`}
           >
@@ -4999,7 +4999,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 )}
 
                 <button
-                 className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                  className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
                  
                   onClick={handleSaveAsDraft}
                   disabled={isSubmitting || !!validationError}
@@ -5016,7 +5016,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 <Button
                   onClick={handleResubmitForApproval}
                   disabled={isSubmitting || !!validationError}
-                  className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE]"
+                 className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE] w-full sm:w-auto"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">

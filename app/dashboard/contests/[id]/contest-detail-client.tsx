@@ -894,9 +894,10 @@ export default function ContestDetailClient({
 
   return (
     <div>
-      <div className="flex justify-between items-center gap-3 mb-8">
-        <div className="flex gap-2">
-        <Button variant="ghost" size="icon" asChild>
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
+     
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <Button className="cursor-pointer" variant="ghost" size="icon" asChild>
           <Link
             href={
               isAdminView ? "/dashboard/admin/contests" : "/dashboard/contests"
@@ -905,14 +906,18 @@ export default function ContestDetailClient({
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
-        <h1 className="text-3xl font-bold text-gray-900">
+        <div className="flex items-center gap-2">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 break-words">
           {currentContest.title}
         </h1>
-        <div className="flex mt-1">
+        
+
+         {/* Status + Contest type */}
+        
         <div
           className={cn(
             contestStatusBadgeInfo.className,
-            "ml-3 capitalize ml-2 bg-[#FDD36F57] text-sm px-3 item-center mb-3 py-1 rounded-full text-[#A87313]"
+            "capitalize bg-[#FDD36F57] text-sm px-3 py-1 rounded-full text-[#A87313]"
           )}
         >
           {contestStatusBadgeInfo.text}
@@ -922,13 +927,13 @@ export default function ContestDetailClient({
             // variant={
             //   currentContest.contest_type === "cpm" ? "secondary" : "default"
             // }
-            className="capitalize ml-2 bg-[#7F39EC3B] text-sm px-3 item-center mb-3 py-1 rounded-full text-[#4A00BE]"
+            className="capitalize bg-[#7F39EC3B] text-sm px-3 py-1 rounded-full text-[#4A00BE]"
           >
             {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
           </div>
         )}
         </div>
-</div>
+        </div>
          {/* Quick Actions Bar */}
          <div className="flex gap-4 items-center mb-3">
           {/* Contest Status Update Button */}
@@ -1083,7 +1088,7 @@ export default function ContestDetailClient({
                 <p className="text-xl font-bold">
                   {currentContest.platform || "N/A"}
                 </p>
-                <p className="text-md">https:youtube.com</p>
+                {/* <p className="text-md">https:youtube.com</p> */}
               </div>
               <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
                 {getPlatformIcon(currentContest.platform)}
@@ -1570,12 +1575,12 @@ export default function ContestDetailClient({
                       <h3 className="font-semibold text-lg text-foreground">
                         CPM Configuration
                       </h3>
-                      <div className="space-y-4 border p-4 rounded-lg bg-muted/30">
-                        <div className="flex justify-between items-center p-2 bg-background rounded border">
-                          <span className="text-sm font-medium text-muted-foreground">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex justify-between items-center p-3  rounded border">
+                        <span className="text-md font-medium text-black">
                             CPM Rate:
                           </span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-md text-foreground">
                             $
                             {parseFloat(
                               currentContest.contest_based_details.cpm_contest
@@ -1584,11 +1589,11 @@ export default function ContestDetailClient({
                             per 1000 views
                           </span>
                         </div>
-                        <div className="flex justify-between items-center p-2 bg-background rounded border">
-                          <span className="text-sm font-medium text-muted-foreground">
+                        <div className="flex justify-between items-center p-3 rounded border">
+                        <span className="text-md font-medium text-black">
                             Total Budget:
                           </span>
-                          <span className="font-semibold text-foreground">
+                          <span className="font-semibold text-md text-foreground">
                             {formatMoney(
                               currentContest.contest_based_details.cpm_contest
                                 .total_budget
@@ -1597,27 +1602,27 @@ export default function ContestDetailClient({
                         </div>
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
-                          <div className="flex justify-between items-center p-2 bg-background rounded border">
-                            <span className="text-sm font-medium text-muted-foreground">
+                          <div className="flex justify-between items-center p-3 rounded border">
+                            <span className="text-md font-medium text-black">
                               Min Views:
                             </span>
-                            <span className="font-semibold text-foreground">
+                            <span className="font-semibold text-md text-foreground">
                               {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
                             </span>
                           </div>
                         )}
                         {currentContest.contest_based_details.cpm_contest
                           .max_views != null && (
-                          <div className="flex justify-between items-center p-2 bg-background rounded border">
-                            <span className="text-sm font-medium text-muted-foreground">
+                          <div className="flex justify-between items-center p-3 rounded border">
+                            <span className="text-md font-medium text-black">
                               Max Views (Cap):
                             </span>
-                            <span className="font-semibold text-foreground">
+                            <span className="font-semibold text-md text-foreground">
                               {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
                             </span>
                           </div>
                         )}
-                        <div>
+                        {/* <div>
                           <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
                             Terms & Conditions
                           </h4>
@@ -1628,8 +1633,20 @@ export default function ContestDetailClient({
                                 "No specific terms provided."}
                             </div>
                           </div>
-                        </div>
+                        </div> */}
                       </div>
+                      <div>
+                          <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
+                            Terms & Conditions
+                          </h4>
+                          <div className="p-3 border rounded-lg text-[13px] text-black">
+                            <div className="whitespace-pre-wrap break-words">
+                              {currentContest.contest_based_details.cpm_contest
+                                .terms_conditions ||
+                                "No specific terms provided."}
+                            </div>
+                          </div>
+                        </div>
                     </div>
                   )}
 
@@ -1965,10 +1982,11 @@ export default function ContestDetailClient({
                           return (
                             <div
                               key={idx}
-                              className="bg-white border border-gray-300 dark:border-gray-700 rounded-xl p-6 transition-all duration-200"
+                              className="bg-white  border border-gray-300 dark:border-gray-700 rounded-xl p-6 transition-all duration-200"
                             >
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
+
+  <div className="flex items-center gap-4 flex-1 min-w-0">
                                   {isInternal && isImage && !isPdf ? (
                                     <img
                                       src={resource.url}
@@ -2755,8 +2773,8 @@ export default function ContestDetailClient({
                                           </span>
                                         </Button>
                                       </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuLabel>
+                                      <DropdownMenuContent  className="bg-white" align="end">
+                                        <DropdownMenuLabel className="text-purple-500">
                                           Change Status
                                         </DropdownMenuLabel>
                                         <DropdownMenuSeparator />
@@ -2895,7 +2913,7 @@ export default function ContestDetailClient({
                 </div>
               </div>
             ) : (
-              <Card className="shadow-sm border-0 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900/20">
+              <Card className="shadow-sm border-0 bg-purple-50">
                 <CardContent className="py-16 flex flex-col items-center justify-center text-center">
                   <div className="p-4 bg-white rounded-full shadow-lg mb-6">
                     <FileText className="h-12 w-12 text-slate-400" />

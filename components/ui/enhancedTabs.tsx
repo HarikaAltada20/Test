@@ -29,7 +29,7 @@ export function EnhancedTabs({ tabs, activeTab, onTabChange, className = '' }: E
       }
     }
     
-    const baseClasses = `flex-1 px-6 py-3.5 text-md font-medium transition-all duration-200 ${roundedClasses}`;
+    const baseClasses = `flex-1 px-4 sm:px-6 py-2 sm:py-3.5 font-medium transition-all duration-200 ${roundedClasses}`;
     
     if (isActive) {
       return `${baseClasses} bg-[#662EBD] text-white shadow-sm`;

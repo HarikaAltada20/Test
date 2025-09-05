@@ -897,7 +897,7 @@ function DashboardContent({
         >
           {/* Premium Dashboard Header */}
           <header
-            className="sticky top-0 z-40 w-full"
+            className="sticky bg-white top-0 z-40 w-full"
             style={{
               boxShadow:
                 currentMode === "light"
@@ -906,7 +906,7 @@ function DashboardContent({
             }}
           >
             {/* Premium Background with Strategic Gradients */}
-            <div
+            {/* <div
               className="absolute inset-0"
               style={{
                 background:
@@ -914,8 +914,8 @@ function DashboardContent({
                     ? `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`
                     : `linear-gradient(to right, rgba(${mode.background.primary}, 1), rgba(${mode.background.secondary}, 1), rgba(${mode.background.primary}, 1))`,
               }}
-            ></div>
-            <div
+            ></div> */}
+            {/* <div
               className="absolute inset-0"
               style={{
                 background: `radial-gradient(circle at 30% 50%, rgba(${
@@ -930,13 +930,13 @@ function DashboardContent({
                   theme.accent
                 }, ${currentMode === "light" ? "0.03" : "0.08"}), transparent)`,
               }}
-            ></div>
+            ></div> */}
 
             {/* Premium Grid Pattern */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+            {/* <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div> */}
 
             {/* Refined Border */}
-            <div
+            {/* <div
               className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent"
               style={{
                 backgroundColor:
@@ -944,7 +944,7 @@ function DashboardContent({
                     ? `rgba(${mode.border}, 1)`
                     : `rgba(${theme.primary}, 0.3)`,
               }}
-            ></div>
+            ></div> */}
 
             <div className="relative">
               <div className="flex h-20 items-center justify-between px-6">
@@ -988,18 +988,29 @@ function DashboardContent({
                     </SheetTrigger>
                     <SheetContent
                       side="left"
-                      className="w-64 p-0 bg-gradient-to-b from-slate-950/95 via-slate-900/90 to-slate-950/95 backdrop-blur-sm border-r border-violet-500/20"
+                      className="w-64 p-0"
                     >
                       <SheetHeader className="flex h-20 items-center justify-between border-b border-violet-500/30 px-4">
                         {/* Premium Background Effects for Mobile Header */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
+                        {/* <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.1),transparent)]"></div>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.08),transparent)]"></div>
-                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div>
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div> */}
 
-                        <SheetTitle className="relative font-semibold text-white z-10">
-                          Game Of Creators
-                        </SheetTitle>
+<div>
+                    <Image
+                      src={logo}
+                      alt="Game Of Creators Logo"
+                      width={180}
+                      height={100}
+                      className={cn(
+                        "h-[50px] w-auto transition-all duration-300",
+                        currentMode === "light"
+                          ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
+                          : "filter brightness-110 group-hover:brightness-125"
+                      )}
+                    />
+                  </div>
                         <SheetDescription className="sr-only">
                           Dashboard navigation menu
                         </SheetDescription>

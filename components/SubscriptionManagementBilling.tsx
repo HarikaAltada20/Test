@@ -507,10 +507,10 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
           </div>
-          <h2 className="text-2xl font-bold text-gray-300 mb-2">
+          <h2 className="text-2xl font-bold text-gray-600 mb-2">
             Loading Subscription Details
           </h2>
-          <p className="text-gray-300">
+          <p className="text-gray-600">
             Please wait while we fetch your subscription information...
           </p>
         </div>
@@ -569,7 +569,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
     <div className="space-y-8">
       {/* Current Subscription Status */}
       {currentSubscription && currentPlan && (
-        <div className="">
+        <div >
           <div className="pl-1 mb-3">
             <CardTitle className="flex items-center gap-2 text-2xl">
                 {/* <div className="border rounded-3xl p-2">
@@ -580,7 +580,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
           </div>
           <div className="p-1 space-y-6">
             {/* Plan Details */}
-            <div className="border border-2 p-5 rounded-xl flex items-center justify-between">
+            <div className="border border-2 p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div
                   className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
@@ -600,19 +600,19 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 {getStatusBadge(currentSubscription)}
                 {currentPlan.price > 0 && (
                   <Button
                     variant="outline"
                     onClick={handleCustomerPortal}
                     disabled={isProcessing}
-                    className="border-2 hover:border-gray-300 transition-colors"
+                    className="border bg-[#4A00BE] text-white hover:border-gray-300 transition-colors"
                   >
                     {isProcessing ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
-                      <ExternalLink className="h-4 w-4 mr-2" />
+                      <ExternalLink className="h-4 w-4" />
                     )}
                     Manage Billing
                   </Button>

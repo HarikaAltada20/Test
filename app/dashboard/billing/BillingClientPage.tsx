@@ -623,7 +623,7 @@ export default function BillingClientPage({
 
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6">
+    <div className="container mx-auto py-8 md:px-6">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Billing & Account</h1>
       </div>

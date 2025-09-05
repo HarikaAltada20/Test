@@ -264,8 +264,8 @@ export function ContestListClient({ initialContests, isAdminView = false, select
 
         const Icon = config.icon;
         return (
-            <Badge className={`${config.color} text-white border-0`}>
-                <Icon className="w-3 h-3 mr-1" />
+            <Badge className={`${config.color} text-white px=3 py-1 text-sm bg-[#7F39EC] text-white border-0`}>
+                {/* <Icon className="w-3 h-3 mr-1" /> */}
                 {config.label}
             </Badge>
         );
@@ -309,7 +309,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
             return (
                 <Card
                     key={contest.id}
-                    className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 w-full cursor-pointer"
+                    className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full cursor-pointer"
                     onClick={() => {
                         const href = isAdminView
                             ? `/dashboard/admin/contests/${contest.id}`
@@ -330,10 +330,10 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         <div className="absolute top-2 right-2">
                             <Badge
                                 className={cn(
-                                    "capitalize text-xs px-2 py-0.5 font-medium border",
-                                    contest.status === "active" && "bg-green-500 border-green-500 text-white",
-                                    contest.status === "upcoming" && "bg-blue-500 border-blue-500 text-white",
-                                    contest.status === "ended" && "bg-slate-500 border-slate-500 text-white",
+                                    "capitalize text-sm px-3 py-1 font-medium border",
+                                    contest.status === "active" && "bg-[#7F39EC] text-white",
+                                    contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                                    contest.status === "ended" && "bg-[#7F39EC] text-white",
                                     !["active", "upcoming", "ended"].includes(contest.status || "") && "bg-yellow-400 border-yellow-400 text-yellow-900"
                                 )}
                             >
@@ -342,14 +342,14 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         </div>
                     </div>
                     <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300 mr-2 leading-tight">
+                        <CardTitle className="text-lg font-bold text-slate-800 transition-colors duration-300 mr-2 leading-tight">
                             {contest.title || "Untitled Contest"}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                        <div className="space-y-1.5 text-sm mb-3 text-slate-600 dark:text-slate-400">
+                        <div className="space-y-1.5 text-md mb-4 text-slate-600 dark:text-slate-400">
                             <div className="flex items-center">
-                                <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                                 <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
                             </div>
                             {contest.start_date && (
@@ -378,19 +378,19 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             </div>
                             {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
                                 <div className="flex items-center">
-                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                                     <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                                 </div>
                             )}
                             {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                                 <div className="flex items-center">
-                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                                     <span>Total Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
                                 </div>
                             )}
                             {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null && contest.contest_based_details.leaderboard_contest.total_prize > 0 && (
                                 <div className="flex items-center">
-                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                                     <span>Total Prize Pool: <span className="font-medium text-slate-700 dark:text-slate-300">
                                         {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
                                     </span></span>
@@ -417,7 +417,9 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             </div>
                         )}
 
-                        <Button
+                        <button
+                        
+                                      className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 const href = isAdminView
@@ -425,13 +427,13 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     : `/dashboard/contests/${contest.id}`;
                                 router.push(href);
                             }}
-                            size="sm"
-                            variant="outline"
-                            className="w-full mt-auto"
+                            // size="sm"
+                            // variant="outline"
+                           
                         >
                             <Eye className="h-4 w-4 mr-1" />
                             View Details
-                        </Button>
+                        </button>
                     </CardContent>
                 </Card>
             );
@@ -441,7 +443,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
         return (
             <Card
                 key={contest.id}
-                className="overflow-hidden rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-blue-400 dark:hover:border-blue-500 cursor-pointer"
+                className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-200  flex flex-col group bg-white cursor-pointer"
                 onClick={(e) => {
                     if ((e.target as HTMLElement).closest('button')) {
                         return;
@@ -467,7 +469,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             </div>
                         )}
                         {/* Status badges overlay */}
-                        <div className="absolute top-3 left-3 flex flex-wrap gap-1">
+                        <div className="absolute top-3 right-3 flex flex-wrap gap-1">
                             {getModerationStatusBadge(contest.moderation_status)}
                         </div>
                     </div>

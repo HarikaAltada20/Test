@@ -178,11 +178,11 @@ export function SubscriptionUpgradeModal({
             <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                        {isUpgrade ? (
+                        {/* {isUpgrade ? (
                             <TrendingUp className="h-5 w-5 text-green-600" />
                         ) : (
                             <TrendingDown className="h-5 w-5 text-orange-600" />
-                        )}
+                        )} */}
                         {isUpgrade ? 'Upgrade' : 'Downgrade'} Your Subscription
                     </DialogTitle>
                     <DialogDescription className="text-sm sm:text-base">
@@ -198,15 +198,15 @@ export function SubscriptionUpgradeModal({
                     {/* Plan Comparison */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         {/* Current Plan */}
-                        <Card>
+                        <div className='border rounded-2xl border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]'>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
                                     <div className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(currentPlan.name)} text-white`}>
                                         {getPlanIcon(currentPlan.name)}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <CardTitle className="text-sm text-gray-600">Current Plan</CardTitle>
-                                        <p className="font-semibold truncate">{currentPlan.displayName || currentPlan.name}</p>
+                                        <CardTitle className="text-sm font-bold text-black">Current Plan</CardTitle>
+                                        <p className="font-semibold text-md text-[#B16FF4] truncate">{currentPlan.displayName || currentPlan.name}</p>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -216,18 +216,18 @@ export function SubscriptionUpgradeModal({
                                     <span className="text-sm font-normal text-gray-600">/month</span>
                                 </div>
                             </CardContent>
-                        </Card>
+                        </div>
 
                         {/* Target Plan */}
-                        <Card className="border-2 border-green-200">
+                        <div className='border rounded-2xl border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]'>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
                                     <div className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(targetPlan.name)} text-white`}>
                                         {getPlanIcon(targetPlan.name)}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <CardTitle className="text-sm text-green-600">New Plan</CardTitle>
-                                        <p className="font-semibold truncate">{targetPlan.displayName || targetPlan.name}</p>
+                                        <CardTitle className="text-sm text-black">New Plan</CardTitle>
+                                        <p className="font-semibold text-[#B16FF4] text-md truncate">{targetPlan.displayName || targetPlan.name}</p>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -242,32 +242,32 @@ export function SubscriptionUpgradeModal({
                                     </div>
                                 )}
                             </CardContent>
-                        </Card>
+                        </div>
                     </div>
 
                     {/* Feature Differences */}
                     {getFeatureDifferences().length > 0 && (
                         <div>
                             <h4 className="font-semibold mb-3">What's changing:</h4>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {getFeatureDifferences().map((diff, index) => (
-                                    <div key={index} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 bg-gray-50 rounded-lg gap-2">
-                                        <div className="flex items-center gap-2 min-w-0">
+                                    <div key={index} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg gap-2">
+                                        <div className="flex items-center text-md gap-2 min-w-0">
                                             {diff.icon}
                                             <span className="font-medium truncate">{diff.label}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm flex-shrink-0">
-                                            <Badge variant="outline">{diff.current}</Badge>
+                                        <div className="flex items-center gap-2 text-md flex-shrink-0">
+                                            <p>{diff.current}</p>
                                             <span>→</span>
-                                            <Badge className="bg-green-100 text-green-800">{diff.target}</Badge>
+                                            <p>{diff.target}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )}
-
-                    <Separator />
+{/* 
+                    <Separator /> */}
 
                     {/* Change Options */}
                     <div>
@@ -282,21 +282,21 @@ export function SubscriptionUpgradeModal({
                                     <RadioGroupItem value="scheduled" id="scheduled" className="mt-1" />
                                     <Label htmlFor="scheduled" className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1">
                                         <div className="flex items-center gap-2">
-                                            <Calendar className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                                            <span className="font-medium">
+                                            {/* <Calendar className="h-4 w-4 text-blue-600 flex-shrink-0" /> */}
+                                            <span className="font-medium text-md mt-2">
                                                 Scheduled {isUpgrade ? 'Upgrade' : 'Downgrade'} (Recommended)
                                             </span>
                                         </div>
-                                        <Badge className="bg-blue-100 text-blue-800 w-fit">
+                                        <Badge className="bg-blue-100 hover:bg-blue-100 text-blue-800 w-fit">
                                             {isUpgrade ? 'No time lost' : 'Keep current benefits'}
                                         </Badge>
                                     </Label>
                                 </div>
                                 {upgradeType === 'scheduled' && (
-                                    <Alert className="ml-6">
-                                        <Clock className="h-4 w-4" />
+                                    <Alert className="ml-6 bg-white">
+                                        {/* <Clock className="h-4 w-4" /> */}
                                         <AlertDescription>
-                                            <strong>✅ Recommended:</strong>
+                                            <strong>Recommended:</strong>
                                             <div className="space-y-2 mt-2">
                                                 <div>• Your current plan will <strong>continue until its natural end</strong></div>
                                                 <div>• You <strong>keep all current benefits</strong> until then</div>
@@ -317,21 +317,21 @@ export function SubscriptionUpgradeModal({
                                     <RadioGroupItem value="immediate" id="immediate" className="mt-1" />
                                     <Label htmlFor="immediate" className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1">
                                         <div className="flex items-center gap-2">
-                                            <Zap className="h-4 w-4 text-orange-600 flex-shrink-0" />
-                                            <span className="font-medium">
+                                            {/* <Zap className="h-4 w-4 text-orange-600 flex-shrink-0" /> */}
+                                            <span className="font-medium text-md mt-2">
                                                 Immediate {isUpgrade ? 'Upgrade' : 'Downgrade'}
                                             </span>
                                         </div>
-                                        <Badge className="bg-orange-100 text-orange-800 w-fit">
+                                        <Badge className="bg-orange-100 hover:bg-orange-100 text-orange-800 w-fit">
                                             {isUpgrade ? 'Instant access - lose time' : 'Instant change - lose time'}
                                         </Badge>
                                     </Label>
                                 </div>
                                 {upgradeType === 'immediate' && (
-                                    <Alert className="ml-6">
-                                        <AlertTriangle className="h-4 w-4" />
+                                    <Alert className="ml-6 bg-white">
+                                        {/* <AlertTriangle className="h-4 w-4" /> */}
                                         <AlertDescription>
-                                            <strong>⚠️ Important:</strong> {isUpgrade ? (
+                                            <strong>Important:</strong> {isUpgrade ? (
                                                 <>
                                                     <div className="space-y-2">
                                                         <div>• Your current subscription will be <strong>cancelled immediately</strong></div>
@@ -370,9 +370,9 @@ export function SubscriptionUpgradeModal({
                     </div>
 
                     {/* Success Info */}
-                    <Alert className={`${isUpgrade ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-                        <CheckCircle2 className={`h-4 w-4 ${isUpgrade ? 'text-green-600' : 'text-blue-600'}`} />
-                        <AlertDescription className={isUpgrade ? 'text-green-800' : 'text-blue-800'}>
+                    <Alert className={`${isUpgrade ? 'bg-green-50 border-green-200' : 'bg-[#D9C0FF26] border-[#7F39EC]'}`}>
+                        <CheckCircle2 className={`h-4 w-4 ${isUpgrade ? 'text-green-600' : 'text-[#7F39EC]'}`} />
+                        <AlertDescription className={isUpgrade ? 'text-green-800' : 'text-black'}>
                             {upgradeType === 'scheduled'
                                 ? `Your ${isUpgrade ? 'upgrade' : 'downgrade'} is scheduled for ${new Date(scheduledDate).toLocaleDateString()}. You can cancel this scheduled change anytime before it takes effect.`
                                 : `Your ${isUpgrade ? 'upgrade' : 'downgrade'} will take effect immediately after confirmation.`
@@ -391,17 +391,17 @@ export function SubscriptionUpgradeModal({
                         loadingText="Processing..."
                         className={`w-full sm:w-auto ${isUpgrade
                             ? 'bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700'
-                            : 'bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700'
+                            : 'bg-[#D9C0FF61] hover:bg-[#D9C0FF61] text-[#7F39EC]'
                             }`}
                     >
                         {upgradeType === 'scheduled' ? (
                             <>
-                                <Calendar className="h-4 w-4 mr-2" />
+                                {/* <Calendar className="h-4 w-4 mr-2" /> */}
                                 Schedule {isUpgrade ? 'Upgrade' : 'Downgrade'}
                             </>
                         ) : (
                             <>
-                                <Zap className="h-4 w-4 mr-2" />
+                                {/* <Zap className="h-4 w-4 mr-2" /> */}
                                 {isUpgrade ? 'Upgrade' : 'Downgrade'} Now
                                 {targetPlan.price > 0 && ` - ${formatCurrencyFromCents(targetPlan.price)}`}
                             </>

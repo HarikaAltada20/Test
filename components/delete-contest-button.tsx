@@ -29,7 +29,7 @@ export function DeleteContestButton({
   contestTitle,
   isDeletable,
   variant = "outline",
-  size = "md",
+ 
   className = "",
 }: DeleteContestButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -90,7 +90,7 @@ export function DeleteContestButton({
       <Button
         onClick={() => setIsOpen(true)}
         variant={variant}
-        size={size}
+        size="md"
         className={`text-purple-500 text-md ${className}`}
       >
         <Trash2 className="h-4 w-4 mb-[2px]" />

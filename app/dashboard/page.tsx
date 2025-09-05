@@ -525,7 +525,7 @@ function DashboardPage() {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm sm:text-base font-semibold text-foreground truncate">
+                        <p className="text-sm sm:text-base font-semibold text-foreground break-words">
                           {contest.title}
                         </p>
                         <p className="text-xs sm:text-sm text-muted-foreground mt-1 truncate">
