@@ -401,7 +401,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         {/* Budget Spent Progress Bar for CPM contests */}
                         {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                             <div className="mt-3 mb-3">
-                                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                                <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
                                     <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
                                     <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
                                 </div>
@@ -490,7 +490,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             </Badge>
                         </div>
 
-                        <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 mb-4 flex-grow">
+                        <div className="space-y-2 text-md text-slate-600 dark:text-slate-400 mb-4 flex-grow">
                             {contest.start_date && contest.end_date ? (
                                 <div className="flex items-center gap-1">
                                     <Calendar className="h-3 w-3" />

@@ -183,7 +183,7 @@ export default function RejectionReasonModal({
                     width: 100% !important;
                 }
             `}</style>
-            <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="space-y-3">
                     <div className="flex items-center gap-3">
                         {/* <div className="p-2 bg-red-100 rounded-full">

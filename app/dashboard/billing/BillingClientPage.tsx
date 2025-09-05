@@ -101,6 +101,7 @@ const tabs = [
   { id: "coins", label: "Coin Wallet" },
   { id: "subscription", label: "Subscription" },
 ];
+
 export default function BillingClientPage({
   initialAuthUser,
   initialProfile,
@@ -114,6 +115,7 @@ export default function BillingClientPage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "cash" });
+ 
   // States derived from props, allowing client-side updates
   const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
   const [profile, setProfile] = useState<AdvertiserProfileData | null>(
@@ -892,7 +894,19 @@ export default function BillingClientPage({
                                 ? "destructive"
                                 : "outline"
                             }
-                            className="capitalize"
+                            className={`capitalize px-3 py-1 rounded-full text-sm font-medium
+                              ${
+                                transaction.status === "completed" ||
+                                transaction.status === "credited" ||
+                                transaction.status === "success"
+                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
+                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  : transaction.status === "failed"
+                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                              }
+                            `}
                           >
                             {transaction.status?.replace(/_/g, " ") || "N/A"}
                           </Badge>
@@ -1298,7 +1312,7 @@ export default function BillingClientPage({
           if (!isOpen) resetPayoutForm();
         }}
       >
-        <DialogContent className="sm:max-w-[625px] max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {currentPayoutMethod?.id

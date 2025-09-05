@@ -3450,7 +3450,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         <CardHeader>
           <CardTitle>Edit Contest Details</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <div className="px-3 md:p-6 space-y-6">
           {!datesOnly && (
             <>
               <div className="space-y-2">
@@ -3709,13 +3709,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
           {/* Resources for Participants Section */}
           {!datesOnly && (
-            <div className="mb-12 px-2">
+            <div className="mb-12">
               <div>
-                <CardTitle>
+                <CardTitle className="mb-3 text-lg md:text-2xl">
                   Resources for Participants{" "}
                   <span className="text-red-500">*</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm md:text-[13px]">
                   Provide at least one resource to help participants understand
                   your brand and contest requirements. You can upload assets
                   (logos, guidelines, examples) <b>or</b> add external links
@@ -3725,7 +3725,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   At least one required
                 </span>
               </div>
-              <div className="space-y-6">
+              <div className="mt-1 space-y-6">
                 {/* Asset Upload */}
                 <div className="flex flex-col gap-6">
                   <div
@@ -3859,7 +3859,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   )}
                 </div>
                 {/* Or Separator */}
-                <div className="flex items-center my-4">
+                <div className="flex items-center mt-4">
                   <div className="flex-grow border-t border-gray-300"></div>
                   <span className="mx-4 text-gray-500 font-semibold">Or</span>
                   <div className="flex-grow border-t border-gray-300"></div>
@@ -4301,9 +4301,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
           {/* Inspiration Content Section */}
           {!datesOnly && (
-            <div className="px-2">
+            <div>
               <div>
-                <CardTitle className="mb-2">
+                <CardTitle className="mb-2 text-lg md:text-2xl">
                   Inspiration Content <span className="text-red-500">*</span>
                 </CardTitle>
                 <CardDescription className="mb-6 text-md">
@@ -4354,7 +4354,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                     {inspirationLinks.map((item, index) => (
                       <li
                         key={index}
-                        className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                        className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-gray-800 
+                        border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+       
                       >
                         <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
                               <ExternalLink className="w-6= h-6" />
@@ -4376,7 +4378,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                          
                           
                           onClick={() => removeInspirationLink(index)}
-                            className="text-[#4A00BE] bg-[#D8C3FF]  p-3 mr-2 rounded-full"
+                           className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
                         >
                           <Trash className="h-4 w-4" />
                         </button>
@@ -4494,19 +4496,25 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               <div className="mb-6">
         <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
           <AlertDescription className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-            <Info className="h-4 w-4" />
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Info className="h-4 w-4 shrink-0" />
             <span className="font-medium">Plan Requirements: </span>
-                  Minimum total prize pool:{" "}
+            <span className="whitespace-normal">Minimum total prize pool:{" "}
                   <strong>
                     {formatCurrencyFromCents(planFeatures.minContestBudget)}
                   </strong>
+                  </span>
+                  <span className="whitespace-normal">
                   • Maximum winners:{" "}
-                  <strong>{planFeatures.maxWinnersPerContest}</strong>• Minimum
+                  <strong>{planFeatures.maxWinnersPerContest}</strong>
+                  </span>
+                  <span className="whitespace-normal">
+                    • Minimum
                   per winner:{" "}
                   <strong>
                     {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
                   </strong>
+                  </span>
               </div>
             
            
@@ -4898,7 +4906,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
           )}
-        </CardContent>
+        </div>
         <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
           {/* Show rejection reason banner for rejected contests */}
           {contest?.moderation_status === "rejected" &&

@@ -692,7 +692,7 @@ function DashboardContent({
         >
           {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div
-            className="relative bg-white flex h-20 items-center justify-center border-b"
+           className="relative bg-white dark:bg-gray-900 flex h-16 sm:h-20 items-center justify-center border-b px-3 sm:px-6"
             // style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}
           >
             {/* <div
@@ -1673,7 +1673,7 @@ function DashboardContent({
                     {/* Profile Sidebar Content */}
                     <SheetContent
                       side="right"
-                      className="w-96bg-white p-0 border-l"
+                      className="w-96 bg-white p-0 border-l"
                       // style={{
                       //   background:
                       //     currentMode === "dark"

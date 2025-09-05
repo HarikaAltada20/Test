@@ -4407,8 +4407,8 @@ export default function CreateContestPage({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-            <Trophy className="h-5 w-5 text-white" />
+          <div className="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center">
+            <Trophy className="h-5 w-5 text-purple-600" />
           </div>
           <h2 className="text-xl font-bold">Upgrade Your Plan</h2>
         </div>
@@ -4419,21 +4419,21 @@ export default function CreateContestPage({
         <div className="space-y-3">
           <Button
             onClick={handleSaveDraftAndUpgrade}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
+            className="w-full bg-[#D9C0FF61] rounded-full text-[#7F39EC] font-semibold"
           >
             Save Draft & Upgrade
           </Button>
           <Button
             variant="outline"
             onClick={handleUpgradeWithoutSaving}
-            className="w-full border-2 hover:bg-gray-50"
+            className="w-full border-2 rounded-full border-[#7F39EC] text-[#7F39EC] "
           >
             Upgrade without saving draft
           </Button>
           <Button
-            variant="ghost"
+            variant="outline"
             onClick={handleCancelUpgrade}
-            className="w-full text-gray-600 hover:text-gray-800"
+            className="w-full rounded-full border-[#FF323224] bg-[#FF323224] text-[#E50000]"
           >
             Cancel
           </Button>
