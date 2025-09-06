@@ -3321,7 +3321,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   if (error) {
     return (
       <div className="container mx-auto py-8">
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex  items-center gap-2 mb-6">
           <Button variant="ghost" size="icon" asChild>
             {/* Link back to contests list if contest ID is problematic */}
             <Link
@@ -3944,7 +3944,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                       return (
                         <li
                           key={idx}
-                          className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                          className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-gray-800 
+                        border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
                         >
                           {/* File Type Icons */}
                           {isInternal && isImage && (
@@ -4286,7 +4287,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           <button
                             
                             onClick={() => removeResource(idx)}
-                              className="text-[#4A00BE] bg-[#D8C3FF]  p-3 mr-2 rounded-full"
+                              className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
                           >
                             <Trash className="h-4 w-4" />
                           </button>
@@ -4688,7 +4689,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           {/* CPM Configuration - Conditional for CPM */}
           {!datesOnly && contestType === "cpm" && (
             <div className="space-y-6">
-              <Separator />
+              {/* <Separator /> */}
               <div>
                 <h3 className="text-lg font-medium">CPM Configuration</h3>
                 <p className="text-sm text-muted-foreground">
