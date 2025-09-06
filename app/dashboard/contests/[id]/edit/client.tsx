@@ -3579,7 +3579,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
             {userPlan !== PRODUCT_IDS.CHAMPION && (
-              <Link href="/pricing" className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition">
+              <Link href="/dashboard/billing?tab=subscription" className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition">
                 Upgrade Plan
               </Link>
             )}

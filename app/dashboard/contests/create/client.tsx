@@ -2931,11 +2931,11 @@ export default function CreateContestPage({
                   <div className="flex items-center gap-4">
                     <div
                       className={`p-3 rounded-full ${currentPlan && currentPlan.price === 0
-                          ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
-                          : currentPlan &&
-                            currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                            ? "bg-[#D8C3FF] text-[#4A00BE]" // Bronze plan
-                            : "bg-[#D8C3FF] text-[#4A00BE]" // Higher plans
+                        ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
+                        : currentPlan &&
+                          currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                          ? "bg-[#D8C3FF] text-[#4A00BE]" // Bronze plan
+                          : "bg-[#D8C3FF] text-[#4A00BE]" // Higher plans
                         }`}
                     >
                       <Trophy className="h-8 w-8" />
@@ -2979,10 +2979,10 @@ export default function CreateContestPage({
 
                   <div
                     className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${currentPlan.price === 0
-                        ? "bg-white/90 border-gray-200" // Free plan
-                        : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                          ? "bg-white/90 border-gray-200" // Bronze plan
-                          : "bg-white/90 border-gray-200" // Higher plans
+                      ? "bg-white/90 border-gray-200" // Free plan
+                      : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                        ? "bg-white/90 border-gray-200" // Bronze plan
+                        : "bg-white/90 border-gray-200" // Higher plans
                       }`}
                   >
                     <div className="flex flex-col  lg:flex-row items-start lg:items-center border border-gray-300 rounded-xl p-4 sm:p-6 justify-between gap-6">
@@ -3115,8 +3115,8 @@ export default function CreateContestPage({
                                 </p>
                                 <div
                                   className={`mt-3 text-sm font-medium ${planFeatures.maxWinnersPerContest <= 3
-                                      ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                      : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                    ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                    : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
                                     }`}
                                 >
                                   {planFeatures.maxWinnersPerContest <= 3
@@ -3194,9 +3194,9 @@ export default function CreateContestPage({
                                 <div className="flex items-center gap-2">
                                   <span
                                     className={`text-xl font-bold ${planFeatures.minContestBudget >=
-                                        HIGH_MIN_BUDGET_THRESHOLD
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : "text-green-600 border border-green-600 rounded-full px-6"
+                                      HIGH_MIN_BUDGET_THRESHOLD
+                                      ? "text-green-600 border border-green-600 rounded-full px-6"
+                                      : "text-green-600 border border-green-600 rounded-full px-6"
                                       }`}
                                   >
                                     {formatCurrencyFromCents(
@@ -3218,9 +3218,9 @@ export default function CreateContestPage({
                               </p>
                               <div
                                 className={`mt-4 text-sm font-medium ${planFeatures.minContestBudget >=
-                                    HIGH_MIN_BUDGET_THRESHOLD
-                                    ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                    : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  HIGH_MIN_BUDGET_THRESHOLD
+                                  ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
                                   }`}
                               >
                                 {planFeatures.minContestBudget >=
@@ -3265,10 +3265,10 @@ export default function CreateContestPage({
                                 <div className="flex items-center gap-2">
                                   <span
                                     className={`text-xl font-bold ${planFeatures.maxActiveContests <= 1
+                                      ? "text-green-600 border border-green-600 rounded-full px-6"
+                                      : planFeatures.maxActiveContests <= 5
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : planFeatures.maxActiveContests <= 5
-                                          ? "text-green-600 border border-green-600 rounded-full px-6"
-                                          : "text-green-600 border border-green-600 rounded-full px-6"
+                                        : "text-green-600 border border-green-600 rounded-full px-6"
                                       }`}
                                   >
                                     {planFeatures.maxActiveContests === Infinity
@@ -3278,8 +3278,8 @@ export default function CreateContestPage({
                                   {planFeatures.maxActiveContests <= 5 && (
                                     <span
                                       className={`text-sm ${planFeatures.maxActiveContests <= 1
-                                          ? "text-red-500"
-                                          : "text-orange-500"
+                                        ? "text-red-500"
+                                        : "text-orange-500"
                                         }`}
                                     >
                                       ⚠️
@@ -3294,10 +3294,10 @@ export default function CreateContestPage({
                               </p>
                               <div
                                 className={`mt-4 text-sm font-medium ${planFeatures.maxActiveContests <= 1
+                                  ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  : planFeatures.maxActiveContests <= 5
                                     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                    : planFeatures.maxActiveContests <= 5
-                                      ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                      : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                    : "mt-4 border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
                                   }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
@@ -3343,11 +3343,11 @@ export default function CreateContestPage({
                                 <div className="flex items-center gap-2">
                                   <span
                                     className={`text-xl font-bold ${planFeatures.commissionPercentage >= 40
+                                      ? "text-green-600 border border-green-600 rounded-full px-6"
+                                      : planFeatures.commissionPercentage >=
+                                        20
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : planFeatures.commissionPercentage >=
-                                          20
-                                          ? "text-green-600 border border-green-600 rounded-full px-6"
-                                          : "text-green-600 border border-green-600 rounded-full px-6"
+                                        : "text-green-600 border border-green-600 rounded-full px-6"
                                       }`}
                                   >
                                     {planFeatures.commissionPercentage}%
@@ -3355,8 +3355,8 @@ export default function CreateContestPage({
                                   {planFeatures.commissionPercentage >= 20 && (
                                     <span
                                       className={`text-sm ${planFeatures.commissionPercentage >= 40
-                                          ? "text-red-500"
-                                          : "text-orange-500"
+                                        ? "text-red-500"
+                                        : "text-orange-500"
                                         }`}
                                     >
                                       ⚠️
@@ -3371,10 +3371,10 @@ export default function CreateContestPage({
                               </p>
                               <div
                                 className={`mt-4 text-sm font-medium ${planFeatures.commissionPercentage >= 40
+                                  ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                  : planFeatures.commissionPercentage >= 20
                                     ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                    : planFeatures.commissionPercentage >= 20
-                                      ? "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
-                                      : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
+                                    : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
                                   }`}
                               >
                                 {planFeatures.commissionPercentage >= 40
@@ -3392,10 +3392,10 @@ export default function CreateContestPage({
                   {/* Enhanced Plan Benefits Summary */}
                   <div
                     className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${currentPlan.price === 0
-                        ? "bg-white" // Free plan - modern slate
-                        : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                          ? "bg-white" // Bronze plan - warm
-                          : "bg-white" // Higher plans - premium
+                      ? "bg-white" // Free plan - modern slate
+                      : currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
+                        ? "bg-white" // Bronze plan - warm
+                        : "bg-white" // Higher plans - premium
                       }`}
                   >
                     {/* Background Pattern */}
@@ -3941,16 +3941,16 @@ export default function CreateContestPage({
                 onClick={prevStep}
                 disabled={isLoading}
                 className={`w-full sm:w-auto ${!(formFeedback && formFeedbackType === "error")
-                    ? "sm:mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
-                    : ""
+                  ? "sm:mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                  : ""
                   }`}
               >
                 Back
               </Button>
               <div
                 className={`flex flex-col sm:flex-row gap-3 w-full sm:w-auto ${formFeedback && formFeedbackType === "error"
-                    ? "sm:ml-4"
-                    : "sm:ml-auto"
+                  ? "sm:ml-4"
+                  : "sm:ml-auto"
                   }`}
               >
                 <button
@@ -4554,10 +4554,10 @@ export default function CreateContestPage({
 
                         <div
                           className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 transition-all duration-500 ${isActive
+                            ? "bg-[#7F39EC] border-[#7F39EC] text-white "
+                            : isCompleted
                               ? "bg-[#7F39EC] border-[#7F39EC] text-white "
-                              : isCompleted
-                                ? "bg-[#7F39EC] border-[#7F39EC] text-white "
-                                : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 shadow-md"
+                              : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400 dark:text-slate-500 shadow-md"
                             }`}
                         >
                           {isCompleted ? (
@@ -4586,20 +4586,20 @@ export default function CreateContestPage({
                       <div className="mt-4 text-center max-w-32">
                         <h3
                           className={`text-[14px] font-semibold transition-colors duration-300 ${isActive
+                            ? "text-black text-[14px]"
+                            : isCompleted
                               ? "text-black text-[14px]"
-                              : isCompleted
-                                ? "text-black text-[14px]"
-                                : "text-slate-500 text-md dark:text-slate-400"
+                              : "text-slate-500 text-md dark:text-slate-400"
                             }`}
                         >
                           {stepItem.title}
                         </h3>
                         <p
                           className={`text-[12px] mt-1 transition-colors duration-300 ${isActive
+                            ? "text-black text-[12px]"
+                            : isCompleted
                               ? "text-black text-[12px]"
-                              : isCompleted
-                                ? "text-black text-[12px]"
-                                : "text-slate-400 dark:text-slate-500"
+                              : "text-slate-400 dark:text-slate-500"
                             }`}
                         >
                           {stepItem.description}
@@ -4769,7 +4769,7 @@ export default function CreateContestPage({
                             <div className="mt-2 flex items-center gap-2">
                               {isFreePlan && (
                                 <button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-white text-md px-3 rounded-full py-1 h-8">
-                                  <Link href="/pricing">Upgrade Plan</Link>
+                                  <Link href="/dashboard/billing?tab=subscription">Upgrade Plan</Link>
                                 </button>
                               )}
                               <p className="text-sm text-black font-medium">
@@ -4860,8 +4860,8 @@ export default function CreateContestPage({
                 <Label>Thumbnail</Label>
                 <div
                   className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
-                      ? "border-rose-500 bg-rose-50"
-                      : "border-gray-300 bg-white"
+                    ? "border-rose-500 bg-rose-50"
+                    : "border-gray-300 bg-white"
                     }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
@@ -5151,16 +5151,16 @@ export default function CreateContestPage({
                   onClick={prevStep}
                   disabled={isLoading}
                   className={`${!(formFeedback && formFeedbackType === "error")
-                      ? "mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
-                      : ""
+                    ? "mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                    : ""
                     }`}
                 >
                   Back
                 </button>
                 <div
                   className={`flex gap-2 ${formFeedback && formFeedbackType === "error"
-                      ? "ml-4"
-                      : "ml-auto"
+                    ? "ml-4"
+                    : "ml-auto"
                     }`}
                 >
                   <button
@@ -5226,8 +5226,8 @@ export default function CreateContestPage({
                   <div className="flex flex-col gap-6">
                     <div
                       className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${isDragActive
-                          ? "border-rose-500 bg-rose-50"
-                          : "border-gray-300 bg-white"
+                        ? "border-rose-500 bg-rose-50"
+                        : "border-gray-300 bg-white"
                         }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
