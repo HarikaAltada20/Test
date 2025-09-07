@@ -482,8 +482,8 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
             <Badge
               className={
                 change.type === "upgrade"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-orange-100 text-orange-800"
+                  ? "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
+                  : "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
               }
             >
               {change.type === "upgrade" ? "Upgrading" : "Downgrading"}
@@ -491,12 +491,12 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
           );
         }
         // If all scheduled changes are canceled or no scheduled changes, show "Canceling" since subscription will end
-        return <Badge className="bg-red-100 text-red-800">Canceling</Badge>;
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Canceling</Badge>;
       }
-      return <Badge className="bg-green-100 text-md px-5 text-green-800">Active</Badge>;
+      return <Badge className="border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]">Active</Badge>;
     }
     return (
-      <Badge className="bg-red-100 text-red-800">{subscription.status}</Badge>
+      <Badge className="bg-red-100 text-red-800 hover:bg-red-100">{subscription.status}</Badge>
     );
   };
 
@@ -667,8 +667,8 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                     (change) => change.status !== "canceled"
                   ) ? (
                     // Show plan change information when there are active scheduled changes
-                    <Alert className="border-blue-200 bg-blue-50">
-                      <Info className="h-4 w-4 text-blue-600" />
+                    <Alert className="border-[#7F39EC] bg-[#D9C0FF26]">
+                      <Info className="h-4 w-4 text-black" />
                       <AlertDescription>
                         <strong>Plan Change Scheduled:</strong> Your current
                         plan will end on{" "}
@@ -703,17 +703,17 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
               scheduledChanges.some(
                 (change) => change.status !== "canceled"
               ) && (
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 space-y-4 border border-green-100">
+                <div className="px-2 space-y-6">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-green-600" />
+                    {/* <Clock className="h-5 w-5 text-green-600" /> */}
                     <span className="font-semibold text-gray-900 text-lg">
                       Upcoming Plan Change
                     </span>
                   </div>
 
-                  <Alert className="border-green-200 bg-green-50">
-                    <Info className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
+                  <Alert className="border-[#7F39EC] bg-[#D9C0FF26]">
+                    <Info className="h-4 w-4 text-black" />
+                    <AlertDescription className="text-black">
                       <strong>Important:</strong> Your plan will change on{" "}
                       {billingDetails
                         ? formatDate(billingDetails.nextBillingDate)
@@ -727,10 +727,10 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                     .map((change, index) => (
                       <div key={index} className="space-y-6">
                         {/* Current vs Upcoming Plan Comparison */}
-                        <div className="bg-white rounded-xl p-6 border-2 border-green-200 shadow-lg">
+                        <div className="">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             {/* Current Plan */}
-                            <div className="bg-gray-50 rounded-lg p-4">
+                            <div className="bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] p-5 rounded-xl border border-gray-300">
                               <h4 className="font-bold text-gray-900 mb-4 text-lg">
                                 Current Plan (Until{" "}
                                 {billingDetails
@@ -748,10 +748,10 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                                     {getPlanIcon(currentPlan?.name || "")}
                                   </div>
                                   <div>
-                                    <p className="font-semibold text-gray-900">
+                                    <p className="font-semibold text-[#B16FF4]">
                                       {currentPlan?.displayName}
                                     </p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-xl text-black font-semibold">
                                       {formatCurrencyFromCents(
                                         currentPlan?.price || 0
                                       )}
@@ -759,7 +759,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                                     </p>
                                   </div>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                   {currentPlan &&
                                     getPlanFeatures(currentPlan).map(
                                       (feature, idx) => (
@@ -767,8 +767,8 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                                           key={idx}
                                           className="flex items-center gap-2"
                                         >
-                                          <Check className="h-4 w-4 text-green-600" />
-                                          <span className="text-sm text-gray-700">
+                                          <Check className="h-4 w-4 text-purple-600" />
+                                          <span className="text-md text-black">
                                             {feature}
                                           </span>
                                         </div>
@@ -779,7 +779,8 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                             </div>
 
                             {/* Upcoming Plan */}
-                            <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
+                            <div className="bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] p-5 rounded-xl border border-gray-300">
+                           
                               <h4 className="font-bold text-gray-900 mb-4 text-lg">
                                 Upcoming Plan (From{" "}
                                 {formatDate(change.scheduledDate)})
@@ -794,10 +795,10 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                                     {getPlanIcon(change.targetPlan.name)}
                                   </div>
                                   <div>
-                                    <p className="font-semibold text-gray-900">
+                                    <p className="font-semibold text-[#B16FF4]">
                                       {change.targetPlan.displayName}
                                     </p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-xl text-black font-semibold">
                                       {formatCurrencyFromCents(
                                         change.targetPlan.price
                                       )}
@@ -805,15 +806,15 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                                     </p>
                                   </div>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-3">
                                   {getPlanFeatures(change.targetPlan).map(
                                     (feature, idx) => (
                                       <div
                                         key={idx}
                                         className="flex items-center gap-2"
                                       >
-                                        <Check className="h-3 w-3 text-green-600" />
-                                        <span className="text-xs text-gray-600">
+                                        <Check className="h-3 w-3 text-purple-600" />
+                                        <span className="text-md text-black">
                                           {feature}
                                         </span>
                                       </div>
@@ -825,17 +826,17 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                           </div>
 
                           {/* Price Change Summary */}
-                          <div className="mt-6 pt-6 border-t-2 border-green-200">
-                            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4">
+                          <div className="mt-6 pt-6">
+                            <div className="border rounded-lg py-5 px-4">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   {change.type === "upgrade" ? (
-                                    <div className="p-2 rounded-full bg-green-100">
-                                      <ArrowUp className="h-5 w-5 text-green-600" />
+                                    <div className="p-2 rounded-full bg-[#D8C3FF]">
+                                      <ArrowUp className="h-5 w-5 text-[#4A00BE]" />
                                     </div>
                                   ) : (
-                                    <div className="p-2 rounded-full bg-orange-100">
-                                      <ArrowDown className="h-5 w-5 text-orange-600" />
+                                    <div className="p-2 rounded-full bg-[#D8C3FF]">
+                                      <ArrowDown className="h-5 w-5 text-[#4A00BE]" />
                                     </div>
                                   )}
                                   <div>
@@ -882,7 +883,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                               {isProcessing ? (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                               ) : (
-                                <X className="h-4 w-4 mr-2" />
+                                <X className="h-4 w-4" />
                               )}
                               Cancel Plan Change
                             </Button>
@@ -926,17 +927,17 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
               scheduledChanges.some(
                 (change) => change.status !== "canceled"
               ) && (
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                <div className="px-2 py-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <Calendar className="h-5 w-5 text-blue-600" />
-                    <span className="font-semibold text-gray-900">
+                    {/* <Calendar className="h-5 w-5 text-blue-600" /> */}
+                    <span className="font-semibold text-lg text-gray-900">
                       Next Billing Cycle
                     </span>
                   </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-50">
+                  <div className="bg-white rounded-lg p-4 border">
                     <div className="flex items-center gap-3">
                       <div
-                        className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
+                        className={`p-2 rounded-lg  bg-gradient-to-r ${getPlanColor(
                           scheduledChanges.find(
                             (change) => change.status !== "canceled"
                           )?.targetPlan.name || ""
@@ -956,7 +957,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                             )?.targetPlan.displayName
                           }
                         </p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-xl text-black font-semibold">
                           {formatCurrencyFromCents(
                             scheduledChanges.find(
                               (change) => change.status !== "canceled"
@@ -964,7 +965,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                           )}
                           /month
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-sm text-black">
                           Starting {formatDate(billingDetails.nextBillingDate)}
                         </p>
                       </div>

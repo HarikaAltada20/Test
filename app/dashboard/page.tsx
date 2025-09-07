@@ -569,7 +569,7 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white h-[380px] rounded-xl shadow-md">
+        <div className="bg-white rounded-xl shadow-md">
           <CardHeader>
             <CardTitle>Analytics Overview</CardTitle>
             <CardDescription>

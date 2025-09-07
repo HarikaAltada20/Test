@@ -107,20 +107,23 @@ export function DeleteContestButton({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
+          
             <Button
               variant="destructive"
               onClick={handleDelete}
               loading={isDeleting}
+              className="bg-[#D9C0FF61] text-[#7F39EC] py-2 rounded-full"
               loadingText="Deleting..."
             >
               Delete Contest
+            </Button>
+            <Button
+             className="bg-[#FF323224] text-[#E50000] py-2 rounded-full"
+              variant="destructive"
+              onClick={() => setIsOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
