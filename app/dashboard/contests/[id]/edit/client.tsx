@@ -33,6 +33,8 @@ import {
   Info,
   AlertTriangle,
   File,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
@@ -135,21 +137,22 @@ type ContestData = {
   moderation_status: string;
   rejection_reason: string | null;
   payment_details?: any | null;
+  subscription_info_of_user?: any | null;
   prizes?: { position: number; amount: number }[];
   total_prize?: number;
   winner_count?: number;
 };
 
 export default function EditContestPage({ user, contestId, datesOnly = false, isAdmin = false }: { user: UserResponse["data"]["user"], contestId: string, datesOnly?: boolean, isAdmin?: boolean }) {
-    const router = useRouter()
-    const supabase = createClient()
-    const { toast } = useToast()
+  const router = useRouter()
+  const supabase = createClient()
+  const { toast } = useToast()
 
-    const [isLoading, setIsLoading] = useState(true)
-    const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
-    const [error, setError] = useState<string | null>(null)
-    const [validationError, setValidationError] = useState<string | null>(null)
-    const [contest, setContest] = useState<ContestData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
+  const [error, setError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [contest, setContest] = useState<ContestData | null>(null)
 
   // State for subscription plans and user plan
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -226,6 +229,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   // Payment state management
   const [showPayment, setShowPayment] = useState(false);
   const [isPaymentRequired, setIsPaymentRequired] = useState(false);
+
+  // Refund preview modal state
+  const [showRefundPreview, setShowRefundPreview] = useState(false);
+  const [refundDetails, setRefundDetails] = useState<{
+    prizePoolDecrease: number;
+    commissionRefund: number;
+    totalRefund: number;
+    commissionPercentage: number;
+  } | null>(null);
 
   // Budget change tracking
   const [originalBudget, setOriginalBudget] = useState<number>(0); // Store original budget in cents
@@ -370,11 +382,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           return;
         }
 
-                if (!isAdmin && data && data.advertiser_id !== user.id) {
-                    setError("You do not have permission to edit this contest.");
-                    setIsLoading(false);
-                    return;
-                }
+        if (!isAdmin && data && data.advertiser_id !== user.id) {
+          setError("You do not have permission to edit this contest.");
+          setIsLoading(false);
+          return;
+        }
 
 
         if (data) {
@@ -652,15 +664,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const updateContestResourcesInDB = async (newResources: ResourceItem[]) => {
     if (!user?.id || !contestId) return;
 
-        try {
-            let query = supabase
-                .from("contests")
-                .update({ resources: newResources })
-                .eq("id", contestId);
-            if (!isAdmin) {
-                query = query.eq("advertiser_id", user.id);
-            }
-            const { error } = await query;
+    try {
+      let query = supabase
+        .from("contests")
+        .update({ resources: newResources })
+        .eq("id", contestId);
+      if (!isAdmin) {
+        query = query.eq("advertiser_id", user.id);
+      }
+      const { error } = await query;
 
       if (error) {
         console.error("Error updating resources in DB:", error);
@@ -759,28 +771,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
-        daysUntilStart !== 1 ? "s" : ""
-      }`;
-      if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${
-          hoursUntilStart !== 1 ? "s" : ""
+      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
         }`;
+      if (hoursUntilStart > 0)
+        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+          }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
-        hoursUntilStart !== 1 ? "s" : ""
-      }`;
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${
-      durationDays !== 1 ? "s" : ""
-    }${
-      durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
+      }${durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-    }`;
+      }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -832,16 +839,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-          " and " +
-          disallowed[disallowed.length - 1];
+        " and " +
+        disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${
-      disallowed.length > 1 ? "are" : "is"
-    } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
+      } not allowed.`;
   };
   // Get minimum allowed end date (at least 3 days after the start date)
   const getMinEndDate = () => {
@@ -1030,7 +1036,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -1043,9 +1049,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           if (daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-                MIN_DAYS_UNTIL_START - 1
-              } day gap required).`,
+              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                } day gap required).`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -1156,11 +1161,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too Low",
-            description: `Prize for Winner ${
-              i + 1
-            } must be at least ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
-            )}`,
+            description: `Prize for Winner ${i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1170,9 +1174,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too High",
-            description: `Prize for Winner ${
-              i + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+            description: `Prize for Winner ${i + 1
+              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1329,28 +1332,28 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         updatePayload.resources = resources;
       }
 
-            // For admins, call a secure API that uses the service role to bypass RLS
-            if (isAdmin) {
-                const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updatePayload)
-                });
-                if (!resp.ok) {
-                    const j = await resp.json().catch(() => ({}));
-                    throw new Error(j.error || 'Admin update failed');
-                }
-            } else {
-                let updateQuery = supabase
-                    .from("contests")
-                    .update(updatePayload)
-                    .eq("id", contestId)
-                    .eq("advertiser_id", user.id);
-                const { error: updateError } = await updateQuery;
-                if (updateError) {
-                    throw updateError;
-                }
-            }
+      // For admins, call a secure API that uses the service role to bypass RLS
+      if (isAdmin) {
+        const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatePayload)
+        });
+        if (!resp.ok) {
+          const j = await resp.json().catch(() => ({}));
+          throw new Error(j.error || 'Admin update failed');
+        }
+      } else {
+        let updateQuery = supabase
+          .from("contests")
+          .update(updatePayload)
+          .eq("id", contestId)
+          .eq("advertiser_id", user.id);
+        const { error: updateError } = await updateQuery;
+        if (updateError) {
+          throw updateError;
+        }
+      }
 
 
       // Show success toast
@@ -1393,75 +1396,75 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         return;
       }
 
-            const maxSize = 5 * 1024 * 1024; // 5MB
-            if (file.size > maxSize) {
-                toast({
-                    title: "File Too Large",
-                    description: "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
-                    variant: "destructive"
-                });
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = "";
-                }
-                return;
-            }
-            try {
-                if (!user?.id) {
-                    toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
-                    return;
-                }
-                // Remove any existing thumbnail for this contest (all extensions)
-                const { data: existingFiles } = await supabase.storage
-                    .from("contest-assets")
-                    .list("contest_thumbnails");
-                if (existingFiles) {
-                    const matching = existingFiles.filter(f => f.name.startsWith(`${contestId}_`));
-                    if (matching.length > 0) {
-                        const paths = matching.map(f => `contest_thumbnails/${f.name}`);
-                        await supabase.storage.from("contest-assets").remove(paths);
-                    }
-                }
-                // Get extension and timestamp
-                const ext = file.name.split('.').pop() || 'jpg';
-                const timestamp = Date.now();
-                const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
-                setThumbnail(file);
-                setThumbnailPreview("uploading");
-                const { data: uploadData, error: uploadError } = await supabase.storage
-                    .from("contest-assets")
-                    .upload(fileName, file);
-                if (uploadError) {
-                    throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
-                }
-                const { data: publicUrlData } = supabase.storage
-                    .from("contest-assets")
-                    .getPublicUrl(fileName);
-                const publicUrl = publicUrlData?.publicUrl || "";
-                if (!publicUrl) {
-                    throw new Error("Failed to get public URL for uploaded thumbnail");
-                }
-                setThumbnail(null);
-                setThumbnailPreview(publicUrl);
-                let thumbQuery = supabase
-                    .from("contests")
-                    .update({ thumbnail_url: publicUrl })
-                    .eq("id", contestId);
-                if (!isAdmin) {
-                    thumbQuery = thumbQuery.eq("advertiser_id", user.id);
-                }
-                await thumbQuery;
-                toast({ title: "Success", description: "Thumbnail uploaded successfully!" });
-            } catch (error: any) {
-                console.error("Error uploading thumbnail:", error);
-                setThumbnail(null);
-                setThumbnailPreview(null);
-                toast({ title: "Upload Error", description: `Failed to upload thumbnail: ${error.message}`, variant: "destructive" });
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = "";
-                }
-            }
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        toast({
+          title: "File Too Large",
+          description: "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
+          variant: "destructive"
+        });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
         }
-    };
+        return;
+      }
+      try {
+        if (!user?.id) {
+          toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
+          return;
+        }
+        // Remove any existing thumbnail for this contest (all extensions)
+        const { data: existingFiles } = await supabase.storage
+          .from("contest-assets")
+          .list("contest_thumbnails");
+        if (existingFiles) {
+          const matching = existingFiles.filter(f => f.name.startsWith(`${contestId}_`));
+          if (matching.length > 0) {
+            const paths = matching.map(f => `contest_thumbnails/${f.name}`);
+            await supabase.storage.from("contest-assets").remove(paths);
+          }
+        }
+        // Get extension and timestamp
+        const ext = file.name.split('.').pop() || 'jpg';
+        const timestamp = Date.now();
+        const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
+        setThumbnail(file);
+        setThumbnailPreview("uploading");
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("contest-assets")
+          .upload(fileName, file);
+        if (uploadError) {
+          throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
+        }
+        const { data: publicUrlData } = supabase.storage
+          .from("contest-assets")
+          .getPublicUrl(fileName);
+        const publicUrl = publicUrlData?.publicUrl || "";
+        if (!publicUrl) {
+          throw new Error("Failed to get public URL for uploaded thumbnail");
+        }
+        setThumbnail(null);
+        setThumbnailPreview(publicUrl);
+        let thumbQuery = supabase
+          .from("contests")
+          .update({ thumbnail_url: publicUrl })
+          .eq("id", contestId);
+        if (!isAdmin) {
+          thumbQuery = thumbQuery.eq("advertiser_id", user.id);
+        }
+        await thumbQuery;
+        toast({ title: "Success", description: "Thumbnail uploaded successfully!" });
+      } catch (error: any) {
+        console.error("Error uploading thumbnail:", error);
+        setThumbnail(null);
+        setThumbnailPreview(null);
+        toast({ title: "Upload Error", description: `Failed to upload thumbnail: ${error.message}`, variant: "destructive" });
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    }
+  };
 
   const removeThumbnail = async () => {
     try {
@@ -1472,17 +1475,17 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       ) {
         await deleteFromStorage(thumbnailPreview);
 
-                // Update DB to remove thumbnail URL
-                if (contestId && user) {
-                    let clearThumbQuery = supabase
-                        .from("contests")
-                        .update({ thumbnail_url: null })
-                        .eq("id", contestId);
-                    if (!isAdmin) {
-                        clearThumbQuery = clearThumbQuery.eq("advertiser_id", user.id);
-                    }
-                    await clearThumbQuery;
-                }
+        // Update DB to remove thumbnail URL
+        if (contestId && user) {
+          let clearThumbQuery = supabase
+            .from("contests")
+            .update({ thumbnail_url: null })
+            .eq("id", contestId);
+          if (!isAdmin) {
+            clearThumbQuery = clearThumbQuery.eq("advertiser_id", user.id);
+          }
+          await clearThumbQuery;
+        }
 
         toast({
           title: "Success",
@@ -1965,6 +1968,189 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     }
   };
 
+  // Process refund after user confirmation
+  const processRefund = async () => {
+    if (!refundDetails) return;
+
+    setIsSubmitting(true);
+    try {
+      console.log(
+        `💰 Processing refund: ${refundDetails.prizePoolDecrease} cents prize pool + ${refundDetails.commissionRefund} cents commission (${refundDetails.commissionPercentage}%) = ${refundDetails.totalRefund} cents total`
+      );
+
+      // Call refund API endpoint
+      const response = await fetch("/api/payments/refund", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contestId,
+          refundAmount: refundDetails.totalRefund,
+          reason: "Contest budget decreased",
+        }),
+      });
+
+      const refundResult = await response.json();
+
+      if (!response.ok || !refundResult.success) {
+        throw new Error(refundResult.error || "Failed to process refund");
+      }
+
+      console.log("✅ Refund processed successfully");
+
+      // Update contest_based_details with new prize pool amounts
+      await updateContestDetailsAfterRefund();
+
+      // Show detailed refund breakdown if available
+      const refundMessage = refundResult.breakdown
+        ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
+          2
+        )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
+          2
+        )} + $${refundResult.breakdown.commissionRefund.toFixed(
+          2
+        )} commission (${refundDetails.commissionPercentage}%) = $${refundResult.breakdown.totalRefunded.toFixed(
+          2
+        )} total.`
+        : `$${(refundDetails.totalRefund / 100).toFixed(
+          2
+        )} has been refunded to your wallet (using original ${refundDetails.commissionPercentage}% commission rate)`;
+
+      toast({
+        title: "Refund Processed",
+        description: refundMessage,
+        variant: "default",
+      });
+
+      // Reset budget change tracking since refund is now complete
+      setBudgetChanged(false);
+      setBudgetDifference(0);
+      setRefundDetails(null);
+      setShowRefundPreview(false);
+
+      // Refresh contest data to show updated payment details
+      await refreshContestData();
+
+      // Submit for approval after successful refund
+      await submitForApproval();
+
+    } catch (error: any) {
+      console.error("❌ Error processing refund:", error);
+      toast({
+        title: "Refund Failed",
+        description: `Failed to process refund: ${error.message}`,
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+    }
+  };
+
+  // Update contest details after refund
+  const updateContestDetailsAfterRefund = async () => {
+    if (!refundDetails) return;
+
+    try {
+      const contestBasedDetails = contestType === "leaderboard"
+        ? {
+          leaderboard_contest: {
+            prizes: winnerAmounts.map((amount, index) => ({
+              position: index + 1,
+              amount: amount,
+            })),
+            total_prize: winnerAmounts.reduce(
+              (sum, amount) => sum + amount,
+              0
+            ),
+            winner_count: winnerCount,
+          },
+        }
+        : {
+          cpm_contest: {
+            cpm_rate_usd: parseFloat(cpmRate.toString()),
+            min_views: minViews ? parseInt(minViews.toString()) : null,
+            max_views: maxViews ? parseInt(maxViews.toString()) : null,
+            total_budget: Math.round(
+              parseFloat(totalBudget.toString()) * 100
+            ),
+            terms_conditions: termsConditions,
+          },
+        };
+
+      const { error: updateError } = await supabase
+        .from('contests')
+        .update({
+          contest_based_details: contestBasedDetails,
+          moderation_status: "draft" // Save as draft after successful refund
+        })
+        .eq('id', contestId)
+        .eq('advertiser_id', user?.id);
+
+      if (updateError) {
+        console.error("Error updating contest details after refund:", updateError);
+        throw new Error("Failed to update contest details");
+      }
+
+      console.log("✅ Contest details updated after refund");
+    } catch (error) {
+      console.error("❌ Error updating contest details after refund:", error);
+      throw error;
+    }
+  };
+
+  // Helper function to submit contest for approval with retries
+  const submitForApproval = async (retries = 3, delay = 2000) => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(
+          `Submission attempt ${attempt}/${retries} for contest ${contestId}`
+        );
+
+        const response = await fetch(
+          `/api/contests/${contestId}/moderation`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "submit_for_approval",
+            }),
+          }
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          toast({
+            title: "Success",
+            description: "Contest submitted for approval successfully!",
+            variant: "default",
+          });
+          router.push(`/dashboard/contests/${contestId}`);
+          return;
+        } else {
+          throw new Error(result.error || "Failed to submit for approval");
+        }
+      } catch (error: any) {
+        console.log(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt === retries) {
+          toast({
+            title: "Submission Failed",
+            description: `Failed to submit contest for approval: ${error.message}`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Wait before retrying
+        console.log(`Waiting ${delay}ms before retry ${attempt + 1}...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  };
+
   // Helper function to validate form for submission
   const validateFormForSubmission = (): string | null => {
     if (!title || title.trim() === "") {
@@ -2039,9 +2225,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       if (isNewContest) {
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-            MIN_DAYS_UNTIL_START - 1
-          } day gap required).`;
+          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+            } day gap required).`;
         }
       } else if (startDateTime < now) {
         return "Contest start time must be in the future.";
@@ -2086,14 +2271,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       for (let i = 0; i < winnerCount; i++) {
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${
-            i + 1
-          } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${i + 1
+            } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
         }
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${
-            i + 1
-          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${i + 1
+            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
         }
       }
     }
@@ -2140,78 +2323,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     setIsSubmitting(true);
     setShowPayment(false);
     try {
-      // Handle budget changes - both increases and decreases
-      if (budgetChanged && Math.abs(budgetDifference) > 0) {
-        console.log("🔄 Processing budget change:", {
+      // Handle budget changes - only increases (decreases are handled directly in main flow)
+      if (budgetChanged && budgetDifference > 0) {
+        console.log("🔄 Processing budget increase:", {
           budgetDifference,
           isIncrease: budgetDifference > 0,
-          isDecrease: budgetDifference < 0,
         });
-
-        // Handle budget decrease (refund) - only if not already processed
-        if (budgetDifference < 0 && paymentDetails.paymentMethod !== "refund") {
-          // Calculate total refund amount: prize pool decrease + commission on that decrease
-          const prizePoolDecrease = Math.abs(budgetDifference);
-          const commissionPercentage =
-            getPlanFeatures(userPlan).commissionPercentage;
-          const commissionRefund = Math.round(
-            prizePoolDecrease * (commissionPercentage / 100)
-          );
-          const totalRefundAmount = prizePoolDecrease + commissionRefund;
-
-          console.log(
-            `💰 Processing refund: ${prizePoolDecrease} cents prize pool + ${commissionRefund} cents commission = ${totalRefundAmount} cents total`
-          );
-
-          // Call refund API endpoint
-          const response = await fetch("/api/payments/refund", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              contestId,
-              refundAmount: totalRefundAmount,
-              reason: "Contest budget decreased",
-            }),
-          });
-
-          const refundResult = await response.json();
-
-          if (!response.ok || !refundResult.success) {
-            throw new Error(refundResult.error || "Failed to process refund");
-          }
-
-          console.log("✅ Refund processed successfully");
-
-          // Show detailed refund breakdown if available
-          const refundMessage = refundResult.breakdown
-            ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-                2
-              )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-                2
-              )} + $${refundResult.breakdown.commissionRefund.toFixed(
-                2
-              )} commission = $${refundResult.breakdown.totalRefunded.toFixed(
-                2
-              )} total.`
-            : `$${(totalRefundAmount / 100).toFixed(
-                2
-              )} has been refunded to your wallet`;
-
-          toast({
-            title: "Refund Processed",
-            description: refundMessage,
-            variant: "default",
-          });
-        } else if (
-          budgetDifference < 0 &&
-          paymentDetails.paymentMethod === "refund"
-        ) {
-          console.log(
-            "✅ Refund already processed, skipping duplicate refund processing"
-          );
-        }
 
         // Update ALL contest data in database after payment (including any edits made)
         console.log(
@@ -2221,29 +2338,29 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-                leaderboard_contest: {
-                  prizes: winnerAmounts.map((amount, index) => ({
-                    position: index + 1,
-                    amount: amount,
-                  })),
-                  total_prize: winnerAmounts.reduce(
-                    (sum, amount) => sum + amount,
-                    0
-                  ),
-                  winner_count: winnerCount,
-                },
-              }
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
             : {
-                cpm_contest: {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                },
-              };
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
         // Prepare complete contest update with ALL form data
         const contestUpdate = {
@@ -2296,29 +2413,29 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-                leaderboard_contest: {
-                  prizes: winnerAmounts.map((amount, index) => ({
-                    position: index + 1,
-                    amount: amount,
-                  })),
-                  total_prize: winnerAmounts.reduce(
-                    (sum, amount) => sum + amount,
-                    0
-                  ),
-                  winner_count: winnerCount,
-                },
-              }
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
             : {
-                cpm_contest: {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                },
-              };
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
         const contestUpdate = {
           title: title.trim(),
@@ -2358,10 +2475,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       toast({
         title: "Payment Successful",
         description:
-          budgetChanged && budgetDifference !== 0
-            ? budgetDifference > 0
-              ? "Additional payment processed, contest saved as draft. Submitting for approval..."
-              : "Refund processed, contest saved as draft. Submitting for approval..."
+          budgetChanged && budgetDifference > 0
+            ? "Additional payment processed, contest saved as draft. Submitting for approval..."
             : "Payment completed, contest saved as draft. Submitting for approval...",
         variant: "default",
       });
@@ -2399,59 +2514,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         }
       }, 100);
 
-      // Now submit for approval using the moderation API with retries
-      const submitForApproval = async (retries = 3, delay = 2000) => {
-        for (let attempt = 1; attempt <= retries; attempt++) {
-          try {
-            console.log(
-              `Submission attempt ${attempt}/${retries} for contest ${contestId}`
-            );
-
-            const response = await fetch(
-              `/api/contests/${contestId}/moderation`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  action: "submit_for_approval",
-                }),
-              }
-            );
-
-            const result = await response.json();
-
-            if (response.ok && result.success) {
-              toast({
-                title: "Success",
-                description: "Contest submitted for approval successfully!",
-                variant: "default",
-              });
-              router.push(`/dashboard/contests/${contestId}`);
-              return;
-            } else {
-              throw new Error(result.error || "Failed to submit for approval");
-            }
-          } catch (error: any) {
-            console.log(`Attempt ${attempt} failed:`, error.message);
-
-            if (attempt === retries) {
-              toast({
-                title: "Submission Failed",
-                description: `Failed to submit contest for approval: ${error.message}`,
-                variant: "destructive",
-              });
-              return;
-            }
-
-            // Wait before retrying
-            console.log(`Waiting ${delay}ms before retry ${attempt + 1}...`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-      };
-
+      // Submit for approval using the shared function
       await submitForApproval();
     } catch (error: any) {
       console.error("❌ Error in payment success handler:", error);
@@ -2601,11 +2664,90 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       return;
     }
     // Check if payment/refund processing is required
-    // - New contest (no payment) OR budget increased (need payment) OR budget decreased (need refund)
     const paid = isContestPaid();
-    const paymentProcessingRequired =
-      !paid || (budgetChanged && budgetDifference !== 0);
-    if (paymentProcessingRequired) {
+    const needsPayment = !paid || (budgetChanged && budgetDifference > 0);
+    const needsRefund = budgetChanged && budgetDifference < 0;
+
+    if (needsRefund) {
+      // Show refund preview modal instead of processing directly
+      try {
+        await handleSubmitWithStatus("draft", true); // Save contest data first
+
+        // Calculate refund details for preview
+        const prizePoolDecrease = Math.abs(budgetDifference);
+
+        // Get commission percentage from original payment details, not current plan
+        let commissionPercentage = null;
+
+        // First try to get from payment details (most accurate)
+        if (contest?.payment_details) {
+          try {
+            const paymentDetails = typeof contest.payment_details === "string"
+              ? JSON.parse(contest.payment_details)
+              : contest.payment_details;
+            if (paymentDetails.commission_percentage) {
+              commissionPercentage = paymentDetails.commission_percentage;
+              console.log(`💰 Using original commission percentage from payment details: ${commissionPercentage}%`);
+            }
+          } catch (error) {
+            console.warn("Failed to parse payment details:", error);
+          }
+        }
+
+        // If not found in payment details, try to get from subscription info
+        else if (!commissionPercentage && contest?.subscription_info_of_user) {
+          try {
+            const subscriptionInfo = typeof contest.subscription_info_of_user === "string"
+              ? JSON.parse(contest.subscription_info_of_user)
+              : contest.subscription_info_of_user;
+
+            // Get plan features from the subscription that was active when contest was created
+            // Pass the product_id to getPlanFeatures
+            const subscriptionPlanFeatures = getPlanFeatures(subscriptionInfo.product_id);
+            if (subscriptionPlanFeatures.commissionPercentage) {
+              commissionPercentage = subscriptionPlanFeatures.commissionPercentage;
+              console.log(`💰 Using commission percentage from original subscription (product_id: ${subscriptionInfo.product_id}): ${commissionPercentage}%`);
+            }
+          } catch (error) {
+            console.warn("Failed to parse subscription info:", error);
+          }
+        }
+
+        // Final fallback to current plan (should rarely happen)
+        if (!commissionPercentage) {
+          commissionPercentage = getPlanFeatures(userPlan).commissionPercentage;
+          console.warn(`💰 Using current plan commission as fallback: ${commissionPercentage}%`);
+        }
+
+        const commissionRefund = Math.round(
+          prizePoolDecrease * (commissionPercentage / 100)
+        );
+        const totalRefundAmount = prizePoolDecrease + commissionRefund;
+
+        // Set refund details and show preview modal
+        setRefundDetails({
+          prizePoolDecrease,
+          commissionRefund,
+          totalRefund: totalRefundAmount,
+          commissionPercentage
+        });
+        setShowRefundPreview(true);
+        setIsSubmitting(false);
+        return;
+
+      } catch (error: any) {
+        console.error("❌ Error preparing refund preview:", error);
+        toast({
+          title: "Error",
+          description: `Failed to prepare refund preview: ${error.message}`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    if (needsPayment) {
       try {
         await handleSubmitWithStatus("draft", true); // Skip redirect since we're showing payment modal
         setShowPayment(true);
@@ -2826,7 +2968,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -2839,9 +2981,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           if (daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-                MIN_DAYS_UNTIL_START - 1
-              } day gap required).`,
+              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                } day gap required).`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -2920,43 +3061,43 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       return;
     }
 
-        // Skip contest type validation for datesOnly mode and draft mode
-        if (!datesOnly && !isDraftMode && contestType === 'leaderboard') {
-            const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
-            if (winnerCount > planFeatures.maxWinnersPerContest) {
-                toast({
-                    title: "Plan Limit Exceeded",
-                    description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
-                    variant: "destructive",
-                });
-                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-            }
-            if (currentTotalPrizePool < planFeatures.minContestBudget) {
-                toast({
-                    title: "Prize Pool Too Low",
-                    description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
-                    variant: "destructive",
-                });
-                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-            }
-            for (let i = 0; i < winnerCount; i++) {
-                if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-                    toast({
-                        title: "Prize Amount Too Low",
-                        description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
-                        variant: "destructive",
-                    });
-                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-                }
-                if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-                    toast({
-                        title: "Prize Amount Too High",
-                        description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
-                        variant: "destructive",
-                    });
-                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-                }
-            }
+    // Skip contest type validation for datesOnly mode and draft mode
+    if (!datesOnly && !isDraftMode && contestType === 'leaderboard') {
+      const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+      if (winnerCount > planFeatures.maxWinnersPerContest) {
+        toast({
+          title: "Plan Limit Exceeded",
+          description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+      }
+      if (currentTotalPrizePool < planFeatures.minContestBudget) {
+        toast({
+          title: "Prize Pool Too Low",
+          description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+      }
+      for (let i = 0; i < winnerCount; i++) {
+        if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+          toast({
+            title: "Prize Amount Too Low",
+            description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+        if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+          toast({
+            title: "Prize Amount Too High",
+            description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+      }
 
       contestBasedDetails.leaderboard_contest = {
         prizes: winnerAmounts.slice(0, winnerCount).map((amount, index) => ({
@@ -2970,79 +3111,79 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
-        if (!datesOnly && contestType === 'cpm') {
-            const parsedCpmRate = typeof cpmRate === 'string' ? parseFloat(cpmRate) : cpmRate;
-            const parsedMinViews = minViews ? (typeof minViews === 'string' ? parseInt(minViews) : minViews) : null;
-            const parsedMaxViews = maxViews ? (typeof maxViews === 'string' ? parseInt(maxViews) : maxViews) : null;
-            const parsedTotalBudget = typeof totalBudget === 'string' ? parseFloat(totalBudget) : totalBudget;
+    if (!datesOnly && contestType === 'cpm') {
+      const parsedCpmRate = typeof cpmRate === 'string' ? parseFloat(cpmRate) : cpmRate;
+      const parsedMinViews = minViews ? (typeof minViews === 'string' ? parseInt(minViews) : minViews) : null;
+      const parsedMaxViews = maxViews ? (typeof maxViews === 'string' ? parseInt(maxViews) : maxViews) : null;
+      const parsedTotalBudget = typeof totalBudget === 'string' ? parseFloat(totalBudget) : totalBudget;
 
-            if (!isDraftMode) {
-                if (!parsedCpmRate || parsedCpmRate <= 0) {
-                    toast({
-                        title: "Invalid CPM Rate",
-                        description: "CPM rate must be a positive number.",
-                        variant: "destructive",
-                    });
-                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-                }
-
-                if (parsedCpmRate < MIN_CPM_RATE) {
-                    toast({
-                        title: "CPM Rate Too Low",
-                        description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-                        variant: "destructive",
-                    });
-                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-                }
-
-                if (parsedCpmRate > MAX_CPM_RATE) {
-                    toast({
-                        title: "CPM Rate Too High",
-                        description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-                        variant: "destructive",
-                    });
-                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-                }
-
-            if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
-                toast({
-                    title: "Budget Too Low",
-                    description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
-                    variant: "destructive",
-                });
-                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-            }
-
-            if (parsedMinViews && parsedMaxViews && parsedMinViews >= parsedMaxViews) {
-                toast({
-                    title: "Invalid View Range",
-                    description: "Minimum views must be less than maximum views.",
-                    variant: "destructive",
-                });
-                setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-            }
-
-                if (!termsConditions || termsConditions.trim() === "") {
-                    toast({
-                        title: "Missing Terms & Conditions",
-                        description: "Terms and conditions are required for CPM contests.",
-                        variant: "destructive",
-                    });
-                    setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-                }
-            }
-
-            contestBasedDetails.cpm_contest = {
-                cpm_rate_usd: parsedCpmRate || 0,
-                min_views: parsedMinViews,
-                max_views: parsedMaxViews,
-                total_budget: parsedTotalBudget ? parsedTotalBudget * 100 : 0, // cents
-                budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
-                terms_conditions: (termsConditions || '').trim()
-            };
-            updatePayload.contest_type = 'cpm';
-            updatePayload.contest_based_details = contestBasedDetails;
+      if (!isDraftMode) {
+        if (!parsedCpmRate || parsedCpmRate <= 0) {
+          toast({
+            title: "Invalid CPM Rate",
+            description: "CPM rate must be a positive number.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
         }
+
+        if (parsedCpmRate < MIN_CPM_RATE) {
+          toast({
+            title: "CPM Rate Too Low",
+            description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+
+        if (parsedCpmRate > MAX_CPM_RATE) {
+          toast({
+            title: "CPM Rate Too High",
+            description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+
+        if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
+          toast({
+            title: "Budget Too Low",
+            description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+
+        if (parsedMinViews && parsedMaxViews && parsedMinViews >= parsedMaxViews) {
+          toast({
+            title: "Invalid View Range",
+            description: "Minimum views must be less than maximum views.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+
+        if (!termsConditions || termsConditions.trim() === "") {
+          toast({
+            title: "Missing Terms & Conditions",
+            description: "Terms and conditions are required for CPM contests.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+      }
+
+      contestBasedDetails.cpm_contest = {
+        cpm_rate_usd: parsedCpmRate || 0,
+        min_views: parsedMinViews,
+        max_views: parsedMaxViews,
+        total_budget: parsedTotalBudget ? parsedTotalBudget * 100 : 0, // cents
+        budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
+        terms_conditions: (termsConditions || '').trim()
+      };
+      updatePayload.contest_type = 'cpm';
+      updatePayload.contest_based_details = contestBasedDetails;
+    }
 
     // Validate active contest limits when submitting for approval
     if (moderationStatus === "pending_approval") {
@@ -3108,28 +3249,28 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         updatePayload.resources = resources;
       }
 
-            if (isAdmin) {
-                const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updatePayload)
-                });
-                if (!resp.ok) {
-                    const j = await resp.json().catch(() => ({}));
-                    throw new Error(j.error || 'Admin update failed');
-                }
-            } else {
-                const { error: updateError } = await supabase
-                    .from("contests")
-                    .update(updatePayload)
-                    .eq("id", contestId)
-                    .eq("advertiser_id", user.id);
+      if (isAdmin) {
+        const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatePayload)
+        });
+        if (!resp.ok) {
+          const j = await resp.json().catch(() => ({}));
+          throw new Error(j.error || 'Admin update failed');
+        }
+      } else {
+        const { error: updateError } = await supabase
+          .from("contests")
+          .update(updatePayload)
+          .eq("id", contestId)
+          .eq("advertiser_id", user.id);
 
-                if (updateError) {
-                    console.error("Supabase update error:", updateError);
-                    throw updateError;
-                }
-            }
+        if (updateError) {
+          console.error("Supabase update error:", updateError);
+          throw updateError;
+        }
+      }
 
       // Show appropriate success message
       let successMessage = "Contest updated successfully.";
@@ -3438,7 +3579,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
             {userPlan !== PRODUCT_IDS.CHAMPION && (
-              <Link href="/pricing"   className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition">
+              <Link href="/dashboard/billing?tab=subscription" className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition">
                 Upgrade Plan
               </Link>
             )}
@@ -3505,11 +3646,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                    isDragActive
-                      ? "border-rose-500 bg-rose-50"
-                      : "border-gray-300 bg-white"
-                  }`}
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
+                    ? "border-rose-500 bg-rose-50"
+                    : "border-gray-300 bg-white"
+                    }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -3530,8 +3670,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           {thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
-                              )}MB`
+                              2
+                            )}MB`
                             : ""}
                         </p>
                         <Button
@@ -3593,7 +3733,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 </div>
                 <div className="flex gap-2">
                   <Button
-                  className="bg-[#6C43D0] px-6 py-4 rounded-lg text-md text-white hover:bg-[#6C43D0] hover:text-white"
+                    className="bg-[#6C43D0] px-6 py-4 rounded-lg text-md text-white hover:bg-[#6C43D0] hover:text-white"
                     type="button"
                     variant="outline"
                     size="sm"
@@ -3655,7 +3795,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 </div>
                 <div className="flex gap-2">
                   <Button
-                  className="bg-[#6C43D0] px-6 py-4 rounded-lg text-md text-white hover:bg-[#6C43D0] hover:text-white"
+                    className="bg-[#6C43D0] px-6 py-4 rounded-lg text-md text-white hover:bg-[#6C43D0] hover:text-white"
                     type="button"
                     variant="outline"
                     size="sm"
@@ -3729,11 +3869,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 {/* Asset Upload */}
                 <div className="flex flex-col gap-6">
                   <div
-                    className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${
-                      isDragActive
-                        ? "border-rose-500 bg-rose-50"
-                        : "border-gray-300 bg-white"
-                    }`}
+                    className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${isDragActive
+                      ? "border-rose-500 bg-rose-50"
+                      : "border-gray-300 bg-white"
+                      }`}
                     onClick={() => resourceFileRef.current?.click()}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -3893,7 +4032,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                     disabled={
                       !newExternalResourceUrl || !externalResourceDescription
                     }
-                     className="w-full mt-6 py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                    className="w-full mt-6 py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
                   >
                     Add Link
                   </Button>
@@ -4214,8 +4353,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                             )}
                           {resource.type === "external" && (
                             <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
-                            <ExternalLink className="w-6= h-6" />
-                          </div>
+                              <ExternalLink className="w-6= h-6" />
+                            </div>
                           )}
 
                           <div className="flex-1">
@@ -4285,9 +4424,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                             )}
                           </div>
                           <button
-                            
+
                             onClick={() => removeResource(idx)}
-                              className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
+                            className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
                           >
                             <Trash className="h-4 w-4" />
                           </button>
@@ -4343,7 +4482,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   <Button
                     type="button"
                     onClick={addInspiration}
-                     className="w-full mt-6 py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                    className="w-full mt-6 py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
                     disabled={!newInspirationUrl || !newInspirationDescription}
                   >
                     Add Inspiration
@@ -4357,11 +4496,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         key={index}
                         className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-gray-800 
                         border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
-       
+
                       >
                         <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
-                              <ExternalLink className="w-6= h-6" />
-                            </div>
+                          <ExternalLink className="w-6= h-6" />
+                        </div>
                         <div className="flex-1">
                           <a
                             href={item.url}
@@ -4376,10 +4515,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           </div>
                         </div>
                         <button
-                         
-                          
+
+
                           onClick={() => removeInspirationLink(index)}
-                           className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
+                          className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
                         >
                           <Trash className="h-4 w-4" />
                         </button>
@@ -4495,33 +4634,33 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
 
               <div className="mb-6">
-        <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
-          <AlertDescription className="flex items-center justify-between">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Info className="h-4 w-4 shrink-0" />
-            <span className="font-medium">Plan Requirements: </span>
-            <span className="whitespace-normal">Minimum total prize pool:{" "}
-                  <strong>
-                    {formatCurrencyFromCents(planFeatures.minContestBudget)}
-                  </strong>
-                  </span>
-                  <span className="whitespace-normal">
-                  • Maximum winners:{" "}
-                  <strong>{planFeatures.maxWinnersPerContest}</strong>
-                  </span>
-                  <span className="whitespace-normal">
-                    • Minimum
-                  per winner:{" "}
-                  <strong>
-                    {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
-                  </strong>
-                  </span>
+                <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
+                  <AlertDescription className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Info className="h-4 w-4 shrink-0" />
+                      <span className="font-medium">Plan Requirements: </span>
+                      <span className="whitespace-normal">Minimum total prize pool:{" "}
+                        <strong>
+                          {formatCurrencyFromCents(planFeatures.minContestBudget)}
+                        </strong>
+                      </span>
+                      <span className="whitespace-normal">
+                        • Maximum winners:{" "}
+                        <strong>{planFeatures.maxWinnersPerContest}</strong>
+                      </span>
+                      <span className="whitespace-normal">
+                        • Minimum
+                        per winner:{" "}
+                        <strong>
+                          {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
+                        </strong>
+                      </span>
+                    </div>
+
+
+                  </AlertDescription>
+                </div>
               </div>
-            
-           
-          </AlertDescription>
-        </div>
-      </div>
               {/* <Alert className="border-amber-200 bg-amber-50 text-amber-900">
                 <Info className="h-4 w-4" />
                 <AlertDescription>
@@ -4582,7 +4721,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           const position = newCount;
                           newAmounts.push(
                             DEFAULT_PRIZE_ALLOCATIONS[
-                              position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+                            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
                             ] || MIN_PRIZE_PER_WINNER
                           );
                           setWinnerAmounts(newAmounts);
@@ -4945,20 +5084,18 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             </div>
           )}
           <button
-           
+
             onClick={() => router.back()}
             disabled={isSubmitting} // Disable during submission
-            className={`${
-              !(formFeedback && formFeedbackType === "error") ? "border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto" : "w-full sm:w-auto"
-            }`}
+            className={`${!(formFeedback && formFeedbackType === "error") ? "border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto" : "w-full sm:w-auto"
+              }`}
           >
             Cancel
           </button>
 
           <div
-            className={`flex flex-col sm:flex-row gap-2 w-full sm:w-auto ${
-              formFeedback && formFeedbackType === "error" ? "ml-4" : "ml-auto"
-            }`}
+            className={`flex flex-col sm:flex-row gap-2 w-full sm:w-auto ${formFeedback && formFeedbackType === "error" ? "ml-4" : "ml-auto"
+              }`}
           >
             {datesOnly ? (
               // Dates-only mode: Just save changes (no approval needed)
@@ -4996,11 +5133,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         <div className="text-sm mt-1">
                           {budgetDifference > 0
                             ? `Prize pool increased by ${formatCurrencyFromCents(
-                                budgetDifference
-                              )}. Additional payment (including commission) will be required.`
+                              budgetDifference
+                            )}. Additional payment (including commission) will be required.`
                             : `Prize pool decreased by ${formatCurrencyFromCents(
-                                Math.abs(budgetDifference)
-                              )}. You will be refunded this amount plus commission.`}
+                              Math.abs(budgetDifference)
+                            )}. You will be refunded this amount plus commission.`}
                         </div>
                       </div>
                     </Alert>
@@ -5009,7 +5146,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
                 <button
                   className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
-                 
+
                   onClick={handleSaveAsDraft}
                   disabled={isSubmitting || !!validationError}
                 >
@@ -5025,7 +5162,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 <Button
                   onClick={handleResubmitForApproval}
                   disabled={isSubmitting || !!validationError}
-                 className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE] w-full sm:w-auto"
+                  className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE] w-full sm:w-auto"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">
@@ -5072,6 +5209,96 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         </CardFooter>
       </div>
 
+      {/* Refund Preview Modal */}
+      {showRefundPreview && refundDetails && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Refund Preview
+                </h2>
+                <p className="text-gray-600">
+                  Review the refund details before proceeding
+                </p>
+              </div>
+
+              <div className="mb-6">
+                <Alert className="mb-4 border-green-200 bg-green-50">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Prize Pool Decreased:</strong> Your prize pool
+                    decreased by {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
+                    You will receive a refund of this amount plus commission.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  <h3 className="font-semibold text-gray-900 mb-3">Refund Breakdown</h3>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Prize Pool Reduction:</span>
+                      <span className="font-medium">{formatCurrencyFromCents(refundDetails.prizePoolDecrease)}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm">
+                      <span>Commission Refund ({refundDetails.commissionPercentage}%):</span>
+                      <span className="font-medium">{formatCurrencyFromCents(refundDetails.commissionRefund)}</span>
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex justify-between text-lg font-semibold">
+                      <span>Total Refund Amount:</span>
+                      <span className="text-green-600">{formatCurrencyFromCents(refundDetails.totalRefund)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> This refund will be processed to your wallet balance.
+                    The contest will be saved as draft and submitted for approval after the refund is completed.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowRefundPreview(false);
+                    setRefundDetails(null);
+                    setIsSubmitting(false);
+                  }}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={processRefund}
+                  disabled={isSubmitting}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing Refund...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Process Refund
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payment Modal */}
       {showPayment && contest && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -5102,11 +5329,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                    ? winnerAmounts.reduce(
+                      ? winnerAmounts.reduce(
                         (sum, amount) => sum + (amount || 0),
                         0
                       ) / 100 // Convert cents to dollars
-                    : parseFloat(totalBudget.toString()) || 0
+                      : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
@@ -5117,7 +5344,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 onPaymentError={handlePaymentError}
                 disabled={isSubmitting}
                 isIncrease={budgetChanged && budgetDifference > 0}
-                isDecrease={budgetChanged && budgetDifference < 0}
+                isDecrease={false} // Budget decreases are now handled directly, not through payment modal
               />
 
               <div className="mt-6 flex justify-end">

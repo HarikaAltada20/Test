@@ -289,7 +289,7 @@ export function Nav({
                               className="text-violet-300 hover:text-violet-200 hover:bg-violet-600/10 focus:bg-violet-600/10 focus:text-violet-200 cursor-pointer"
                             >
                               <Link
-                                href="/pricing"
+                                href="/dashboard/billing?tab=subscription"
                                 className="flex items-center"
                               >
                                 <Crown className="mr-2 h-4 w-4" />

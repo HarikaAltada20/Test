@@ -26,19 +26,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify contest ownership and get payment details
+    // Determine if the current user is an admin
+    let isAdmin = false;
+    try {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('user_type')
+        .eq('id', user.id)
+        .single();
+      isAdmin = userRow?.user_type === 'admin';
+    } catch (e) {
+      // If this check fails, default to non-admin; do not block refund later if owner
+      isAdmin = false;
+    }
+
+    // Verify contest access - either owner or admin
     const { data: contest, error: contestError } = await supabase
       .from('contests')
       .select('id, advertiser_id, title, payment_details')
       .eq('id', contestId)
-      .eq('advertiser_id', user.id)
       .single();
 
     if (contestError || !contest) {
       return NextResponse.json(
-        { error: 'Contest not found or access denied' },
+        { error: 'Contest not found' },
         { status: 404 }
       );
+    }
+
+    // Check if user is either the contest owner or an admin
+    if (contest.advertiser_id !== user.id && !isAdmin) {
+      return NextResponse.json(
+        { error: 'Access denied. Only contest owner or admin can process refunds.' },
+        { status: 403 }
+      );
+    }
+
+    // Log admin refunds for audit trail
+    if (isAdmin && contest.advertiser_id !== user.id) {
+      console.log(`🔍 ADMIN REFUND: Admin ${user.id} processing refund for contest ${contestId} (owner: ${contest.advertiser_id})`);
     }
 
     const currentPaymentDetails = contest.payment_details as PaymentDetails;
@@ -80,17 +106,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate breakdown for user-friendly message
+    // refundAmount is the total refund amount (prize pool decrease + commission)
     const commissionRate = currentPaymentDetails.commission_percentage / 100;
     const prizePoolReduction = Math.round(refundAmount / (1 + commissionRate));
     const commissionRefund = refundAmount - prizePoolReduction;
+    const totalRefundAmount = refundAmount;
 
     return NextResponse.json({
       success: true,
-      message: `Prize pool reduced by $${(prizePoolReduction / 100).toFixed(2)}. You have been refunded $${(prizePoolReduction / 100).toFixed(2)} + $${(commissionRefund / 100).toFixed(2)} commission = $${(refundAmount / 100).toFixed(2)} total.`,
+      message: `Prize pool reduced by $${(prizePoolReduction / 100).toFixed(2)}. You have been refunded $${(prizePoolReduction / 100).toFixed(2)} + $${(commissionRefund / 100).toFixed(2)} commission = $${(totalRefundAmount / 100).toFixed(2)} total.`,
       breakdown: {
         prizePoolReduction: prizePoolReduction / 100,
         commissionRefund: commissionRefund / 100,
-        totalRefunded: refundAmount / 100
+        totalRefunded: totalRefundAmount / 100
       },
       newBalance: refundResult.balance,
       contestTitle: contest.title,
