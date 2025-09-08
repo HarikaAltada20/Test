@@ -5,7 +5,7 @@ async function testEdgeCases() {
     console.log('🧪 Testing Registration Edge Cases...');
 
     // Test 1: IP endpoint with various scenarios
-    console.log('\n1. Testing IP endpoint...');
+    console.log('\n1. Testing IP endpoint..');
     try {
         const ipResponse = await fetch('/api/get-ip');
         const ipData = await ipResponse.json();
