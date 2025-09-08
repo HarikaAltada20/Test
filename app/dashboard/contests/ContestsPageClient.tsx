@@ -30,17 +30,18 @@ export function ContestsPageClient({ initialContests, userId }: ContestsPageClie
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-row gap-4 md:items-center md:justify-between">
                 <div className="flex-1">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Contests</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">My Contests</h1>
                 </div>
-                <Button
-                    variant="white"
-                    className="w-full sm:w-auto"
+                <button
+                 className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+                    
+                   
                     onClick={handleCreateContestClick}
                 >
-                    <Plus className="mr-2 h-4 w-4" /> Create Contest
-                </Button>
+                    <Plus className="h-4 w-4" /> Create Contest
+                </button>
             </div>
             <Suspense fallback={<div>Loading contests...</div>}>
                 <ContestListClient

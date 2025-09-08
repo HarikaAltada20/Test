@@ -29,7 +29,7 @@ export function DeleteContestButton({
   contestTitle,
   isDeletable,
   variant = "outline",
-  size = "sm",
+ 
   className = "",
 }: DeleteContestButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -90,10 +90,10 @@ export function DeleteContestButton({
       <Button
         onClick={() => setIsOpen(true)}
         variant={variant}
-        size={size}
-        className={`text-red-500 hover:text-red-700 hover:bg-red-50 ${className}`}
+        size="md"
+        className={`text-purple-500 text-md ${className}`}
       >
-        <Trash2 className="h-4 w-4 mr-1" />
+        <Trash2 className="h-4 w-4 mb-[2px]" />
         Delete
       </Button>
 
@@ -107,20 +107,23 @@ export function DeleteContestButton({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
+          
             <Button
               variant="destructive"
               onClick={handleDelete}
               loading={isDeleting}
+              className="bg-[#D9C0FF61] text-[#7F39EC] py-2 rounded-full"
               loadingText="Deleting..."
             >
               Delete Contest
+            </Button>
+            <Button
+             className="bg-[#FF323224] text-[#E50000] py-2 rounded-full"
+              variant="destructive"
+              onClick={() => setIsOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

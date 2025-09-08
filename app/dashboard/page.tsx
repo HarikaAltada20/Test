@@ -10,7 +10,17 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Trophy, DollarSign, Plus, Video, User, Building, HelpCircle } from "lucide-react";
+import {
+  Trophy,
+  DollarSign,
+  Plus,
+  Video,
+  User,
+  Building,
+  HelpCircle,
+  Eye,
+  Coins,
+} from "lucide-react";
 import { formatLocalDateTime } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
@@ -22,12 +32,15 @@ import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 
 
-
 function DashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
-  const { user, isLoading: isAuthLoading, isAuthenticated } = useClientAuth({
+  const {
+    user,
+    isLoading: isAuthLoading,
+    isAuthenticated,
+  } = useClientAuth({
     redirectTo: "/auth/signin",
   });
   const isMobile = useIsMobile();
@@ -44,21 +57,23 @@ function DashboardPage() {
 
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
-    const success = searchParams.get('success');
-    const sessionId = searchParams.get('session_id');
+    const success = searchParams.get("success");
+    const sessionId = searchParams.get("session_id");
 
-    if (success === 'true' && sessionId && user && !hasProcessedSuccess) {
-      console.log('🎉 Payment successful in dashboard, refreshing profile data...');
+    if (success === "true" && sessionId && user && !hasProcessedSuccess) {
+      console.log(
+        "🎉 Payment successful in dashboard, refreshing profile data..."
+      );
       setHasProcessedSuccess(true);
 
       // Clear URL parameters to prevent refresh loops
       const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState({}, "", newUrl);
 
       // Refresh profile data after a short delay to allow webhook processing
       const refreshProfileData = async () => {
         try {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           // Refetch the profile data to get updated subscription info
           if (user.user_type === "advertiser") {
@@ -70,11 +85,11 @@ function DashboardPage() {
 
             if (advertiserProfile) {
               setProfile(advertiserProfile);
-              console.log('✅ Profile data refreshed after checkout');
+              console.log("✅ Profile data refreshed after checkout");
             }
           }
         } catch (error) {
-          console.error('Error refreshing profile data:', error);
+          console.error("Error refreshing profile data:", error);
         }
       };
 
@@ -156,33 +171,50 @@ function DashboardPage() {
 
           // Calculate actual statistics
           const totalContests = contests?.length || 0;
-          const totalViews = submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) || 0;
-          const totalSpent = contests?.reduce((sum, contest) => {
-            if (contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize) {
-              return sum + contest.contest_based_details.leaderboard_contest.total_prize;
-            } else if (contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget) {
-              return sum + contest.contest_based_details.cpm_contest.total_budget;
-            }
-            return sum;
-          }, 0) || 0;
+          const totalViews =
+            submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) || 0;
+          const totalSpent =
+            contests?.reduce((sum, contest) => {
+              if (
+                contest.contest_type === "leaderboard" &&
+                contest.contest_based_details?.leaderboard_contest?.total_prize
+              ) {
+                return (
+                  sum +
+                  contest.contest_based_details.leaderboard_contest.total_prize
+                );
+              } else if (
+                contest.contest_type === "cpm" &&
+                contest.contest_based_details?.cpm_contest?.total_budget
+              ) {
+                return (
+                  sum + contest.contest_based_details.cpm_contest.total_budget
+                );
+              }
+              return sum;
+            }, 0) || 0;
 
           // Update profile with calculated values
           const updatedProfile = {
             ...advertiserProfile,
             total_contests_run: totalContests,
             total_money_spent: totalSpent,
-            total_views: totalViews
+            total_views: totalViews,
           };
 
           setProfile(updatedProfile);
 
           // Get recent contests for display
-          const recentContests = contests?.slice(0, 3)?.sort((a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          ) || [];
+          const recentContests =
+            contests
+              ?.slice(0, 3)
+              ?.sort(
+                (a, b) =>
+                  new Date(b.created_at).getTime() -
+                  new Date(a.created_at).getTime()
+              ) || [];
 
           setRecentContests(recentContests);
-
         } else if (userType === "creator") {
           const { data: creatorProfile, error: profileError } = await supabase
             .from("creator_profiles")
@@ -270,9 +302,12 @@ function DashboardPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         {isAdvertiser && (
-          <Button variant="white" onClick={handleCreateContestClick}>
-            <Plus className="mr-2 h-4 w-4" /> Create Contest
-          </Button>
+          <button
+            onClick={handleCreateContestClick}
+            className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+          >
+            <Plus className="h-4 w-4" /> Create Contest
+          </button>
         )}
       </div>
 
@@ -280,40 +315,46 @@ function DashboardPage() {
         {isAdvertiser ? (
           <>
             {/* Total Spent Card - Red/Pink */}
-            <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
+            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <DollarSign className="h-5 w-5 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Total Spent</p>
-                    <p className="text-lg font-bold text-red-900 dark:text-red-100">
+                <div className="flex justify-between">
+                  {/* <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600 mb-4">
+                    <DollarSign className="w-5 h-5" />
+                  </div> */}
+                  <div className="flex-1 text-black space-y-2">
+                    <p className="text-lg font-medium">Total Spent</p>
+                    <p className="text-xl font-bold ">
                       {formatCurrencyFromCents(profile?.total_money_spent || 0)}
                     </p>
-                    <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">Money spent on contests</p>
+                    <p className="text-md mt-0.5">Money spent on contests</p>
+                  </div>
+                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                    <DollarSign className="w-5 h-5" />
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </div>
 
             {/* Total Contests Card - Blue */}
-            <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
+            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+                <div className="flex justify-between">
+                  {/* <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                     <Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Contests</p>
-                    <p className="text-lg font-bold text-blue-900 dark:text-blue-100">
+                  </div> */}
+                  <div className="flex-1 text-black space-y-2">
+                    <p className="text-lg font-medium">Total Contests</p>
+                    <p className="text-xl font-bold">
                       {profile?.total_contests_run || 0}
                     </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">Contests created</p>
+                    <p className="text-md mt-0.5">Contests created</p>
+                  </div>
+                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                    <Trophy className="h-5 w-5" />
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </div>
           </>
         ) : (
           <>
@@ -325,11 +366,15 @@ function DashboardPage() {
                     <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Earnings</p>
+                    <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">
+                      Total Earnings
+                    </p>
                     <p className="text-lg font-bold text-green-900 dark:text-green-100">
                       {formatCurrencyFromCents(profile?.total_money_won || 0)}
                     </p>
-                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">Money earned from contests</p>
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                      Money earned from contests
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -343,12 +388,15 @@ function DashboardPage() {
                     <Trophy className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
                   </div>
                   <div className="flex-1">
-                    <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">Contests Won</p>
+                    <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">
+                      Contests Won
+                    </p>
                     <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">
                       {profile?.total_contests_won || 0}
                     </p>
                     <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-0.5">
-                      Out of {profile?.total_contests_participated || 0} participated
+                      Out of {profile?.total_contests_participated || 0}{" "}
+                      participated
                     </p>
                   </div>
                 </div>
@@ -358,32 +406,35 @@ function DashboardPage() {
         )}
 
         {/* Total Views Card - Purple */}
-        <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+        <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+            <div className="flex justify-between">
+              {/* <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                 <Video className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Total Views</p>
-                <p className="text-lg font-bold text-purple-900 dark:text-purple-100">
+              </div> */}
+              <div className="flex-1 text-black space-y-2">
+                <p className="text-lg font-medium">Total Views</p>
+                <p className="text-xl font-bold">
                   {(profile?.total_views || 0).toLocaleString()}
                 </p>
-                <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
+                <p className="text-md  mt-0.5">
                   {isAdvertiser
                     ? "Views on contest content"
                     : "Views on your content"}
                 </p>
               </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                <Eye className="h-6 w-6" />
+              </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
 
         {/* Available Coins Card - Orange */}
-        <Card className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-200 dark:border-orange-700/50 hover:shadow-lg transition-all duration-300">
+        <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
           <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+            <div className="flex justify-between">
+              {/* <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 24 24"
@@ -397,48 +448,53 @@ function DashboardPage() {
                   <circle cx="12" cy="12" r="8" />
                   <path d="M12 8v4l2 2" />
                 </svg>
+              </div> */}
+              <div className="flex-1 text-black space-y-2">
+                <p className="text-lg font-medium">Available Coins</p>
+                <p className="text-lg font-bold">{userCoins}</p>
+                <p className="text-md mt-0.5">Coins to redeem or use</p>
               </div>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-orange-800 dark:text-orange-300 uppercase tracking-wide">Available Coins</p>
-                <p className="text-lg font-bold text-orange-900 dark:text-orange-100">{userCoins}</p>
-                <p className="text-xs text-orange-700 dark:text-orange-400 mt-0.5">Coins to redeem or use</p>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                <Coins className="w-5 h-5" />
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
       </div>
 
       {/* Getting Started Section - Only show for advertisers with no contests */}
-      {isAdvertiser && (!profile?.total_contests_run || profile.total_contests_run === 0) && (
-        <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-700/50">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
-                  <HelpCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+      {isAdvertiser &&
+        (!profile?.total_contests_run || profile.total_contests_run === 0) && (
+          <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-700/50">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+                    <HelpCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                      New to Game Of Creators?
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-300">
+                      Learn about our two contest types: Leaderboard and CPM
+                      contests
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
-                    New to Game Of Creators?
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    Learn about our two contest types: Leaderboard and CPM contests
-                  </p>
-                </div>
+                <Link href="/dashboard/getting-started">
+                  <Button className="bg-purple-600 hover:bg-purple-700 text-white">
+                    <HelpCircle className="w-4 h-4 mr-2" />
+                    Get Started
+                  </Button>
+                </Link>
               </div>
-              <Link href="/dashboard/getting-started">
-                <Button className="bg-purple-600 hover:bg-purple-700 text-white">
-                  <HelpCircle className="w-4 h-4 mr-2" />
-                  Get Started
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
+      <div className="grid gap-6 md:grid-cols-2">
+        <div className="bg-white min-h-[300px] rounded-xl shadow-md flex flex-col">
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
             <CardDescription>
@@ -447,22 +503,33 @@ function DashboardPage() {
                 : "Contests you've participated in recently"}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4">
             {recentContests && recentContests.length > 0 ? (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {recentContests.map((contest) => (
                   <div
                     key={contest.id}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-lg border border-[#D1B7F9]"
                   >
-                    <div className="flex items-center space-x-4 flex-1">
-                      <div className="rounded-full bg-primary/10 p-3 flex-shrink-0">
+                     <div className="flex items-center gap-4 flex-1 min-w-0">
+                      {/* <div className="rounded-full bg-primary/10 p-3 flex-shrink-0">
+                        
                         <Trophy className="h-5 w-5 text-primary" />
+                      </div> */}
+                      
+                      <div className="rounded-full flex-shrink-0 h-8 w-8 md:w-14 md:h-14 overflow-hidden">
+                        <img
+                          src={contest.thumbnail_url}
+                          alt="Thumbnail"
+                          className="w-full h-full object-cover rounded-full"
+                        />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{contest.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {contest.platform} • {" "}
+                        <p className="text-sm sm:text-base font-semibold text-foreground break-words">
+                          {contest.title}
+                        </p>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 truncate">
+                          {contest.platform} •{" "}
                           {formatLocalDateTime(contest.created_at, {
                             year: "numeric",
                             month: "short",
@@ -471,27 +538,38 @@ function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <Button variant="outline" size="sm" className="ml-4 flex-shrink-0" asChild>
-                      <Link href={isAdvertiser ? `/dashboard/contests/${contest.id}` : `/dashboard/opportunities/${contest.id}`}>
+                    <button
+                     
+                     
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#6C43D0] text-white"
+                     
+                    >
+                      <Link
+                        href={
+                          isAdvertiser
+                            ? `/dashboard/contests/${contest.id}`
+                            : `/dashboard/opportunities/${contest.id}`
+                        }
+                      >
                         View
                       </Link>
-                    </Button>
+                    </button>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="flex h-40 items-center justify-center border rounded">
-                <p className="text-sm text-muted-foreground">
+              <div className="text-center">
+                <p className="text-md text-muted-foreground">
                   {isAdvertiser
                     ? "No contests created yet"
                     : "No contest activity yet"}
                 </p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="col-span-3">
+        <div className="bg-white rounded-xl shadow-md">
           <CardHeader>
             <CardTitle>Analytics Overview</CardTitle>
             <CardDescription>
@@ -500,13 +578,13 @@ function DashboardPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex h-40 items-center justify-center border rounded">
-              <p className="text-sm text-muted-foreground">
+            <div className="flex h-[270px] bg-[#7F39EC26] items-center justify-center border border-[#D1B7F9] rounded-xl">
+              <p className="text-lg text-black font-semibold">
                 Detailed analytics available soon
               </p>
             </div>
           </CardContent>
-        </Card>
+        </div>
       </div>
       <ContestCreationModal
         isOpen={showModal}

@@ -815,9 +815,9 @@ export default function SettingsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">
+      <div className="flex flex-col items-center justify-center text-center">
+        <h1 className="text-4xl font-bold">Settings</h1>
+        <p className="mt-3 text-lg text-muted-foreground">
           Manage your account settings and preferences
         </p>
       </div>
@@ -828,7 +828,7 @@ export default function SettingsPage({
           <AlertDescription className="text-red-800">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
-                {connectionError.type === 'youtube' ? (
+                {connectionError.type === "youtube" ? (
                   <SiYoutube className="h-5 w-5 text-red-600" />
                 ) : (
                   <SiInstagram className="h-5 w-5 text-red-600" />
@@ -836,9 +836,7 @@ export default function SettingsPage({
               </div>
               <div>
                 <p className="font-semibold mb-2">{connectionError.message}</p>
-                <p className="text-sm mb-3">
-                  {connectionError.details}
-                </p>
+                <p className="text-sm mb-3">{connectionError.details}</p>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -848,39 +846,65 @@ export default function SettingsPage({
                   >
                     Dismiss
                   </Button>
-                  {connectionError.type === 'youtube' && (connectionError.code === 'no_channel' || (connectionError.details?.toLowerCase().includes('no channel') ?? false)) && (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open('https://www.youtube.com/channel_switcher', '_blank')}
-                          className="text-red-700 border-red-300 hover:bg-red-100"
-                        >
-                          Create YouTube Channel
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open('https://support.google.com/youtube/answer/1646861?hl=en', '_blank')}
-                          className="text-red-700 border-red-300 hover:bg-red-100"
-                        >
-                          Learn How
-                        </Button>
+                  {connectionError.type === "youtube" &&
+                    (connectionError.code === "no_channel" ||
+                      (connectionError.details
+                        ?.toLowerCase()
+                        .includes("no channel") ??
+                        false)) && (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              window.open(
+                                "https://www.youtube.com/channel_switcher",
+                                "_blank"
+                              )
+                            }
+                            className="text-red-700 border-red-300 hover:bg-red-100"
+                          >
+                            Create YouTube Channel
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              window.open(
+                                "https://support.google.com/youtube/answer/1646861?hl=en",
+                                "_blank"
+                              )
+                            }
+                            className="text-red-700 border-red-300 hover:bg-red-100"
+                          >
+                            Learn How
+                          </Button>
+                        </div>
+                        <p className="text-xs text-red-600 mt-2">
+                          💡 Tip: You can also create a channel by uploading
+                          your first video to YouTube. After creating your
+                          channel, return here to connect it.
+                        </p>
+                        <div className="text-xs text-red-600">
+                          <p className="mb-1">📚 Additional Resources:</p>
+                          <ul className="list-disc list-inside space-y-1 ml-2">
+                            <li>
+                              Make sure you're signed into the correct Google
+                              account
+                            </li>
+                            <li>
+                              Ensure your YouTube account has a channel (not
+                              just a personal account)
+                            </li>
+                            <li>
+                              Try refreshing the page after creating your
+                              channel
+                            </li>
+                          </ul>
+                        </div>
                       </div>
-                      <p className="text-xs text-red-600 mt-2">
-                        💡 Tip: You can also create a channel by uploading your first video to YouTube. After creating your channel, return here to connect it.
-                      </p>
-                      <div className="text-xs text-red-600">
-                        <p className="mb-1">📚 Additional Resources:</p>
-                        <ul className="list-disc list-inside space-y-1 ml-2">
-                          <li>Make sure you're signed into the correct Google account</li>
-                          <li>Ensure your YouTube account has a channel (not just a personal account)</li>
-                          <li>Try refreshing the page after creating your channel</li>
-                        </ul>
-                      </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               </div>
             </div>
@@ -907,8 +931,12 @@ export default function SettingsPage({
                   {youtubeConnected ? (
                     <div>
                       <p className="text-sm text-muted-foreground">
-                        Connected as {youtubeAccount?.channel_title || "your YouTube account"}
-                        <span className="ml-2 text-green-600 text-xs">✓ Active</span>
+                        Connected as{" "}
+                        {youtubeAccount?.channel_title ||
+                          "your YouTube account"}
+                        <span className="ml-2 text-green-600 text-xs">
+                          ✓ Active
+                        </span>
                       </p>
                     </div>
                   ) : (
@@ -919,12 +947,24 @@ export default function SettingsPage({
                 </div>
               </div>
               {youtubeConnected ? (
-                <Button variant="outline" onClick={handleYouTubeDisconnect} disabled={isLoadingYouTubeDisconnect}>
-                  {isLoadingYouTubeDisconnect && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}Disconnect
+                <Button
+                  variant="outline"
+                  onClick={handleYouTubeDisconnect}
+                  disabled={isLoadingYouTubeDisconnect}
+                >
+                  {isLoadingYouTubeDisconnect && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Disconnect
                 </Button>
               ) : (
-                <Button onClick={handleYouTubeConnect} disabled={isLoadingYouTube}>
-                  {isLoadingYouTube && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                <Button
+                  onClick={handleYouTubeConnect}
+                  disabled={isLoadingYouTube}
+                >
+                  {isLoadingYouTube && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )}
                   Connect YouTube
                 </Button>
               )}
@@ -934,8 +974,15 @@ export default function SettingsPage({
               <Alert variant="default" className="mt-2">
                 <Bell className="h-4 w-4" />
                 <AlertDescription className="text-xs leading-relaxed">
-                  Connect your YouTube account to allow Game Of Creators to view basic channel information (e.g., name, subscriber count, username). This also enables us to display your videos on the campaign submission page, allowing you to easily select them for opportunities.
-                  Please note that we will only have <span className="font-medium">read-only access</span> and <span className="font-medium">will not</span> be able to upload videos, modify content, or change any of your channel settings.
+                  Connect your YouTube account to allow Game Of Creators to view
+                  basic channel information (e.g., name, subscriber count,
+                  username). This also enables us to display your videos on the
+                  campaign submission page, allowing you to easily select them
+                  for opportunities. Please note that we will only have{" "}
+                  <span className="font-medium">read-only access</span> and{" "}
+                  <span className="font-medium">will not</span> be able to
+                  upload videos, modify content, or change any of your channel
+                  settings.
                 </AlertDescription>
               </Alert>
             )}
@@ -949,8 +996,19 @@ export default function SettingsPage({
                   {instagramConnected ? (
                     <div>
                       <p className="text-sm text-muted-foreground">
-                        Connected as {instagramAccount?.name_of_account || instagramAccount?.username || "your Instagram account"} ({(instagramAccount?.account_type || 'N/A').replace('_', ' ')})
-                        <span className="ml-2 text-green-600 text-xs">✓ Active</span>
+                        Connected as{" "}
+                        {instagramAccount?.name_of_account ||
+                          instagramAccount?.username ||
+                          "your Instagram account"}{" "}
+                        (
+                        {(instagramAccount?.account_type || "N/A").replace(
+                          "_",
+                          " "
+                        )}
+                        )
+                        <span className="ml-2 text-green-600 text-xs">
+                          ✓ Active
+                        </span>
                       </p>
                     </div>
                   ) : (
@@ -961,12 +1019,22 @@ export default function SettingsPage({
                 </div>
               </div>
               {instagramConnected ? (
-                <Button variant="outline" onClick={handleInstagramDisconnect} disabled={isLoading}>
-                  {isLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}Disconnect
+                <Button
+                  variant="outline"
+                  onClick={handleInstagramDisconnect}
+                  disabled={isLoading}
+                >
+                  {isLoading && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Disconnect
                 </Button>
               ) : (
                 <Button onClick={handleInstagramConnect} disabled={isLoading}>
-                  {isLoading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}Connect Instagram
+                  {isLoading && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Connect Instagram
                 </Button>
               )}
             </div>
@@ -975,16 +1043,59 @@ export default function SettingsPage({
               <Alert variant="default" className="mt-2">
                 <Bell className="h-4 w-4" />
                 <AlertDescription className="text-xs leading-relaxed">
-                  To participate in Instagram campaigns, you need to connect an Instagram <strong className="font-semibold">Business or Creator account</strong>. This is required by Instagram for us to fetch your Reels/Videos and their performance insights. We request permissions for basic profile data and to read your media and insights.<br /><br />
-                  <strong className="font-semibold">Important Steps Before Connecting:</strong>
+                  To participate in Instagram campaigns, you need to connect an
+                  Instagram{" "}
+                  <strong className="font-semibold">
+                    Business or Creator account
+                  </strong>
+                  . This is required by Instagram for us to fetch your
+                  Reels/Videos and their performance insights. We request
+                  permissions for basic profile data and to read your media and
+                  insights.
+                  <br />
+                  <br />
+                  <strong className="font-semibold">
+                    Important Steps Before Connecting:
+                  </strong>
                   <ul className="list-disc list-inside mt-1 space-y-0.5">
-                    <li>Ensure your Instagram profile is a <strong className="font-semibold">Business or Creator</strong> account. (To check your Instagram account type, open the Instagram app, go to your profile, tap the menu icon (three horizontal lines), select "Settings and Privacy," then "Account type and tools," and finally, "Switch to professional account". If you see the "Switch to professional account" option, you have a Personal account. If you see "Switch to personal account" or "Switch to creator account," you have a Business or Creator account. )</li>
-                    <li>If your account is not a Business or Creator account, please convert it by going to your profile and clicking on the three dots in the top right corner,then navigate to Settings - Account - Switch to Businees/Creator account.</li>
-                    <li>Please be aware: For contest eligibility and data fetching, only content created <strong className="font-semibold">after</strong> your account has been converted to a Business or Creator account will be valid.</li>
+                    <li>
+                      Ensure your Instagram profile is a{" "}
+                      <strong className="font-semibold">
+                        Business or Creator
+                      </strong>{" "}
+                      account. (To check your Instagram account type, open the
+                      Instagram app, go to your profile, tap the menu icon
+                      (three horizontal lines), select "Settings and Privacy,"
+                      then "Account type and tools," and finally, "Switch to
+                      professional account". If you see the "Switch to
+                      professional account" option, you have a Personal account.
+                      If you see "Switch to personal account" or "Switch to
+                      creator account," you have a Business or Creator account.
+                      )
+                    </li>
+                    <li>
+                      If your account is not a Business or Creator account,
+                      please convert it by going to your profile and clicking on
+                      the three dots in the top right corner,then navigate to
+                      Settings - Account - Switch to Businees/Creator account.
+                    </li>
+                    <li>
+                      Please be aware: For contest eligibility and data
+                      fetching, only content created{" "}
+                      <strong className="font-semibold">after</strong> your
+                      account has been converted to a Business or Creator
+                      account will be valid.
+                    </li>
                   </ul>
                   {/* Replace # with your actual FAQ/help page URL */}
-                  <a href="/instagram-connection-faq" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline hover:text-primary">
-                    Learn more about these requirements <ExternalLink className="inline h-3 w-3 ml-0.5" />
+                  <a
+                    href="/instagram-connection-faq"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block font-semibold underline hover:text-primary"
+                  >
+                    Learn more about these requirements{" "}
+                    <ExternalLink className="inline h-3 w-3 ml-0.5" />
                   </a>
                 </AlertDescription>
               </Alert>
@@ -995,11 +1106,15 @@ export default function SettingsPage({
 
       {/* Company Profile - Only for Advertisers */}
       {userType === "advertiser" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Company Profile</CardTitle>
+        <div>
+         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+              <CardTitle className="text-2xl text-[#7F39EC]">Profile</CardTitle>
+            </div>
+        <div className="bg-white rounded-b-2xl shadow-lg px-2 pb-3">
+          <div className="px-6 py-4">
+            <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
             <CardDescription>Update your company information</CardDescription>
-          </CardHeader>
+          </div>
           <CardContent>
             <form onSubmit={updateCompanyProfile} className="space-y-4">
               <div className="space-y-2">
@@ -1021,12 +1136,13 @@ export default function SettingsPage({
                 />
               </div>
 
-              <Button type="submit" disabled={companyProfileLoading}>
+              <Button type="submit" className="w-full bg-[#6C43D0] text-md" disabled={companyProfileLoading}>
                 {companyProfileLoading ? "Updating..." : "Update Profile"}
               </Button>
             </form>
           </CardContent>
-        </Card>
+        </div>
+        </div>
       )}
 
       {/* Notifications */}
@@ -1084,17 +1200,22 @@ export default function SettingsPage({
 
       {/* Security - Only show for users with email authentication */}
       {hasPassword && (
-        <Card>
-          <CardHeader>
+        <div>
+         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+         <CardTitle className="text-2xl text-[#7F39EC]">Security</CardTitle>
+       </div>
+        <div className="bg-white rounded-b-2xl shadow-lg px-2 py-5">
+          {/* <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>
               Update your password and security settings
             </CardDescription>
-          </CardHeader>
+          </CardHeader> */}
           <CardContent>
             <Alert className="mb-4">
               <AlertDescription>
-                <strong>Multiple Sign-in Methods:</strong> You can sign in with both Google and email/password.
+                <strong>Multiple Sign-in Methods:</strong> You can sign in with
+                both Google and email/password.
               </AlertDescription>
             </Alert>
 
@@ -1116,7 +1237,11 @@ export default function SettingsPage({
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -1139,7 +1264,11 @@ export default function SettingsPage({
                     onClick={() => setShowNewPassword(!showNewPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showNewPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
 
@@ -1169,22 +1298,35 @@ export default function SettingsPage({
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </div>
 
-              <Button type="submit" disabled={passwordChangeLoading || !newPassword || !confirmPassword}>
-                {passwordChangeLoading ? "Updating Password..." : "Update Password"}
+              <Button
+              className="w-full bg-[#6C43D0] text-md"
+                type="submit"
+                disabled={
+                  passwordChangeLoading || !newPassword || !confirmPassword
+                }
+              >
+                {passwordChangeLoading
+                  ? "Updating Password..."
+                  : "Update Password"}
               </Button>
             </form>
           </CardContent>
-        </Card>
+        </div>
+        </div>
       )}
 
-      {/* Referral Links */}
-      {username && (
-        <Card>
+       {/* Referral Links */}
+       {username && (
+        <div className="bg-white rounded-xl shadow-xl">
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
             <CardDescription>
@@ -1195,22 +1337,22 @@ export default function SettingsPage({
             {(() => {
               const links = buildReferralLinks();
               return (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.general} />
-                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.general)}>
+                    <Input readOnly value={links.general} className="border-[#7F39EC] bg-[#D9C0FF26] w-full"/>
+                    <Button type="button" className="bg-[#4A00BE] text-white" variant="outline" onClick={() => copyToClipboard(links.general)}>
                       <Copy className="h-4 w-4 mr-2" />Copy General
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.creators} />
-                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.creators)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy Creators
+                    <Input readOnly value={links.creators}  className="border-[#7F39EC] bg-[#D9C0FF26]" />
+                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white" onClick={() => copyToClipboard(links.creators)}>
+                      <Copy className="h-4 w-4" />Copy Creators
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.brands} />
-                    <Button type="button" variant="outline" onClick={() => copyToClipboard(links.brands)}>
+                    <Input readOnly value={links.brands} className="border-[#7F39EC] bg-[#D9C0FF26]"/>
+                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white"  onClick={() => copyToClipboard(links.brands)}>
                       <Copy className="h-4 w-4 mr-2" />Copy Brands
                     </Button>
                   </div>
@@ -1218,8 +1360,10 @@ export default function SettingsPage({
               );
             })()}
           </CardContent>
-        </Card>
+        </div>
       )}
+
+  
 
       {/* Danger Zone */}
       {/* <Card>

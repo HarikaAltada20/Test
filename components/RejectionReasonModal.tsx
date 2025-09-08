@@ -183,12 +183,12 @@ export default function RejectionReasonModal({
                     width: 100% !important;
                 }
             `}</style>
-            <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
                 <DialogHeader className="space-y-3">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-red-100 rounded-full">
+                        {/* <div className="p-2 bg-red-100 rounded-full">
                             <XCircle className="h-5 w-5 text-red-600" />
-                        </div>
+                        </div> */}
                         <div>
                             <DialogTitle className="text-xl font-semibold">Reject Submission</DialogTitle>
                             <DialogDescription className="text-sm text-muted-foreground mt-1">
@@ -229,9 +229,9 @@ export default function RejectionReasonModal({
 
                     {/* Selected Reason Preview */}
                     {selectedReason && selectedReason !== 'other' && (
-                        <Alert className="border-blue-200 bg-blue-50">
-                            <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                            <AlertDescription className="text-blue-800">
+                        <Alert className="border-[#7F39EC17] bg-[#7F39EC17]">
+                            <CheckCircle2 className="h-4 w-4 text-[#7F39EC]]" />
+                            <AlertDescription className="text-[#7F39EC]">
                                 <div className="space-y-1">
                                     <div className="font-medium">Selected Reason: {getSelectedReasonLabel()}</div>
                                     <div className="text-sm">{getSelectedReasonDescription()}</div>
@@ -327,7 +327,7 @@ export default function RejectionReasonModal({
                     <Button
                         onClick={handleConfirm}
                         disabled={isConfirmDisabled() || isLoading}
-                        className="bg-red-600 hover:bg-red-700 text-white flex-1 sm:flex-none"
+                        className="bg-[#D9C0FF61] text-[#7F39EC] text-md flex-1 sm:flex-none"
                     >
                         {isLoading ? (
                             <>
@@ -336,7 +336,7 @@ export default function RejectionReasonModal({
                             </>
                         ) : (
                             <>
-                                <XCircle className="h-4 w-4 mr-2" />
+                                {/* <XCircle className="h-4 w-4 mr-2" /> */}
                                 Reject Submission
                             </>
                         )}

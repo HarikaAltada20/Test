@@ -246,10 +246,10 @@ const WalletOnlyPayment = ({
                 onClick={handleWalletPayment}
                 loading={isProcessing}
                 loadingText="Processing Payment..."
-                className="w-full"
+                className="w-full bg-[#D9C0FF61] text-[#7F39EC] rounded-full text-md py-6"
                 size="lg"
             >
-                <Wallet className="mr-2 h-4 w-4" />
+                <Wallet className="h-4 w-4" />
                 Pay from Wallet {formatCurrencyFromCents(Math.round(amount * 100))}
             </Button>
         </div>
@@ -387,28 +387,28 @@ export function ContestPaymentSelection({
 
     return (
         <Elements stripe={stripePromise}>
-            <Card className="w-full max-w-2xl mx-auto">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <DollarSign className="h-5 w-5" />
+            <div className="w-full max-w-2xl mx-auto">
+                <div>
+                    <CardTitle className="flex text-xl items-center gap-2">
+                        {/* <DollarSign className="h-5 w-5" /> */}
                         Contest Payment
                     </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
+                </div>
+                <div className="mt-3 space-y-4">
                     {/* Contest Summary */}
-                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                        <h3 className="font-semibold text-blue-900 mb-2">Contest: {contestTitle}</h3>
-                        <div className="space-y-1 text-sm text-blue-800">
+                    <div className="px-1">
+                        <h3 className="font-semibold text-black mb-2">Contest: {contestTitle}</h3>
+                        <div className="space-y-1 text-sm text-black">
                             <div className="flex justify-between">
                                 <span>Prize Pool:</span>
                                 <span className="font-medium">{formatCurrencyFromCents(prizePoolInCents)}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex text-sm justify-between">
                                 <span>Platform Commission ({commissionPercentage}%):</span>
                                 <span className="font-medium">{formatCurrencyFromCents(commissionAmountInCents)}</span>
                             </div>
                             <Separator />
-                            <div className="flex justify-between font-semibold">
+                            <div className="flex text-md justify-between font-semibold">
                                 <span>Total Amount:</span>
                                 <span>{formatCurrencyFromCents(totalAmountInCents)}</span>
                             </div>
@@ -417,10 +417,10 @@ export function ContestPaymentSelection({
                             {(paymentMethod === 'stripe' || paymentMethod === 'split') && (
                                 <>
                                     <Separator className="my-2" />
-                                    <div className="text-xs font-medium text-blue-700 mb-1">Payment Breakdown:</div>
+                                    <div className="text-sm font-medium text-black mb-1">Payment Breakdown:</div>
 
                                     {paymentMethod === 'split' && walletAmount > 0 && (
-                                        <div className="flex justify-between text-xs">
+                                        <div className="flex justify-between text-sm">
                                             <span className="flex items-center gap-1">
                                                 <Wallet className="h-3 w-3" />
                                                 From Wallet:
@@ -430,7 +430,7 @@ export function ContestPaymentSelection({
                                     )}
 
                                     {stripeAmount > 0 && (
-                                        <div className="flex justify-between text-xs">
+                                        <div className="flex justify-between text-sm">
                                             <span className="flex items-center gap-1">
                                                 <CreditCard className="h-3 w-3" />
                                                 {paymentMethod === 'split' ? 'From Card:' : 'Card Payment:'}
@@ -596,17 +596,17 @@ export function ContestPaymentSelection({
                             </div>
 
                             {/* Action Button */}
-                            <Button
+                            <button
                                 onClick={() => setShowPaymentForm(true)}
-                                className="w-full"
-                                size="lg"
+                                className="w-full bg-[#D9C0FF61] text-[#7F39EC] rounded-full text-md py-3"
+                               
                                 disabled={disabled || isLoadingBalance}
                             >
                                 {isLoadingBalance ? 'Loading...' : (needsStripe ? 'Proceed to Payment' : 'Complete Payment')}
-                            </Button>
+                            </button>
 
                             {/* Info Alert */}
-                            <Alert>
+                            <Alert className='bg-[#D9C0FF26] border border-[#7F39EC]'>
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertDescription>
                                     Your contest will be submitted for admin review after successful payment.
@@ -655,8 +655,8 @@ export function ContestPaymentSelection({
                             )}
                         </div>
                     )}
-                </CardContent>
-            </Card>
+                </div>
+            </div>
 
             {/* Payment Animation Overlay */}
             <PaymentAnimation

@@ -17,6 +17,7 @@ import { formatDistanceToNow } from "date-fns";
 interface DraftInfo {
     id: string;
     title: string;
+    thumbnail_url:string;
     created_at: string;
     updated_at: string;
 }
@@ -49,7 +50,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
             setIsLoading(true);
             const { data, error } = await supabase
                 .from("contests")
-                .select("id, title, created_at, updated_at")
+                .select("id, title,thumbnail_url, created_at, updated_at")
                 .eq("advertiser_id", userId)
                 .eq("moderation_status", "draft")
                 .order("updated_at", { ascending: false });
@@ -115,27 +116,41 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
         const draft = drafts[0];
         return (
             <Dialog open={isOpen} onOpenChange={onClose}>
-                <DialogContent className="sm:max-w-md">
+               <DialogContent className="max-w-md md:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Continue with Draft?</DialogTitle>
-                        <DialogDescription>
+                        <DialogTitle className="text-xl">Continue with Draft?</DialogTitle>
+                        <DialogDescription className="text-md">
                             You have an existing draft that you can continue working on.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
-                        <div className="p-4 bg-muted rounded-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                                <FileText className="h-4 w-4 text-muted-foreground" />
-                                <span className="font-medium">{draft.title || "Untitled Draft"}</span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
+                    <div className="p-4 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg">
+                            
+                                {/* <FileText className="h-4 w-4 text-muted-foreground" /> */}
+
+                                <div className="flex items-center gap-4 text-sm">
+                        <div className="rounded-full flex-shrink-0 h-14 w-14 md:w-16 md:h-16 overflow-hidden">
+                        <img
+                          src={draft.thumbnail_url}
+                          alt="Thumbnail"
+                          className="w-full h-full object-cover rounded-full"
+                        />
+                      </div>
+                      <div className="flex-1">
+                                <span className="font-medium text-[13px]">{draft.title || "Untitled Draft"}</span>
+
+                                <p className="text-sm text-muted-foreground">
                                 Last modified {formatDistanceToNow(new Date(draft.updated_at), { addSuffix: true })}
                             </p>
+                            </div>
+                            </div>
+                           
                         </div>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-3">
                             <Button
                                 onClick={() => handleContinueDraft(draft.id)}
-                                className="w-full"
+                                
+                                 className="w-full bg-[#D9C0FF61] text-md py-3 rounded-full text-[#7F39EC]"
                                 disabled={isNavigating}
                             >
                                 {isNavigating ? (
@@ -153,7 +168,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
                             <Button
                                 variant="outline"
                                 onClick={handleCreateNew}
-                                className="w-full"
+                              className="w-full text-md py-3 text-[#7F39EC] border-[#7F39EC] rounded-full"
                                 disabled={isNavigating}
                             >
                                 {isNavigating ? (
@@ -179,30 +194,39 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
     const recentDraft = drafts[0];
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="max-w-md md:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Create Contest</DialogTitle>
-                    <DialogDescription>
+                    <DialogTitle className="text-xl">Create Contest</DialogTitle>
+                    <DialogDescription className="text-md">
                         You have multiple drafts. Choose how you'd like to proceed.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
-                    <div className="p-4 bg-muted rounded-lg">
+                    <div className="p-4 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg">
                         <div className="flex items-center gap-2 mb-2">
-                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            {/* <Clock className="h-4 w-4 text-muted-foreground" /> */}
                             <span className="font-medium">Recent Draft</span>
                         </div>
-                        <div className="text-sm">
-                            <p className="font-medium">{recentDraft.title || "Untitled Draft"}</p>
+                        <div className="flex items-center gap-4 text-sm">
+                        <div className="rounded-full flex-shrink-0 h-14 w-14 md:w-16 md:h-16 overflow-hidden">
+                        <img
+                          src={recentDraft.thumbnail_url}
+                          alt="Thumbnail"
+                          className="w-full h-full object-cover rounded-full"
+                        />
+                      </div>
+                            <div className="flex-1">
+                            <p className="font-medium text-[13px]">{recentDraft.title || "Untitled Draft"}</p>
                             <p className="text-muted-foreground">
                                 Last modified {formatDistanceToNow(new Date(recentDraft.updated_at), { addSuffix: true })}
                             </p>
+                            </div>
                         </div>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-4">
                         <Button
                             onClick={() => handleContinueDraft(recentDraft.id)}
-                            className="w-full"
+                            className="w-full bg-[#D9C0FF61] text-md py-3 rounded-full text-[#7F39EC]"
                             disabled={isNavigating}
                         >
                             {isNavigating ? (
@@ -212,7 +236,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
                                 </>
                             ) : (
                                 <>
-                                    <FileText className="mr-2 h-4 w-4" />
+                                    <FileText className="h-5 w-5" />
                                     Continue with Recent Draft
                                 </>
                             )}
@@ -220,7 +244,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
                         <Button
                             variant="outline"
                             onClick={handleViewAllDrafts}
-                            className="w-full"
+                            className="w-full text-md py-3 text-[#7F39EC] border-[#7F39EC] rounded-full"
                             disabled={isNavigating}
                         >
                             {isNavigating ? (
@@ -230,7 +254,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
                                 </>
                             ) : (
                                 <>
-                                    <Clock className="mr-2 h-4 w-4" />
+                                    <Clock className="h-5 w-5" />
                                     View All Drafts ({drafts.length})
                                 </>
                             )}
@@ -238,7 +262,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
                         <Button
                             variant="outline"
                             onClick={handleCreateNew}
-                            className="w-full"
+                            className="w-full text-md py-3 text-[#7F39EC] border-[#7F39EC] rounded-full"
                             disabled={isNavigating}
                         >
                             {isNavigating ? (
@@ -248,7 +272,7 @@ export function ContestCreationModal({ isOpen, onClose, userId, onViewAllDrafts 
                                 </>
                             ) : (
                                 <>
-                                    <Plus className="mr-2 h-4 w-4" />
+                                    <Plus className="h-5 w-5" />
                                     Create New Contest
                                 </>
                             )}

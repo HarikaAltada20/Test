@@ -176,7 +176,7 @@ export function DashboardSidebar({
 
   return (
     <div
-      className="flex h-full flex-col min-h-0"
+      className="flex h-full flex-col min-h-0 bg-white"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -211,15 +211,11 @@ export function DashboardSidebar({
                     collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
                   )}
                   style={{
-                    backgroundColor: isActive
-                      ? "hsl(var(--primary))"
-                      : "transparent",
+                    backgroundColor: isActive ? "#7F39EC14" : "transparent",
                     borderColor: isActive
                       ? "hsl(var(--primary) / 0.3)"
                       : "transparent",
-                    color: isActive
-                      ? "hsl(var(--primary-foreground))"
-                      : "hsl(var(--foreground))",
+                    color: isActive ? "#4A00BE" : "hsl(var(--foreground))",
                     boxShadow: isActive
                       ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
                       : "none",
@@ -228,8 +224,7 @@ export function DashboardSidebar({
                     if (!isActive) {
                       e.currentTarget.style.borderColor =
                         "hsl(var(--primary) / 0.3)";
-                      e.currentTarget.style.backgroundColor =
-                        "hsl(var(--primary) / 0.1)";
+                      e.currentTarget.style.backgroundColor = "#7F39EC14";
                       e.currentTarget.style.boxShadow =
                         "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
                     }
@@ -249,12 +244,10 @@ export function DashboardSidebar({
                       collapsed ? "w-16 h-12" : "w-10 h-10"
                     )}
                     style={{
-                      backgroundColor: isActive
-                        ? "hsl(var(--primary-foreground) / 0.2)"
-                        : "hsl(var(--primary) / 0.2)",
-                      color: isActive
-                        ? "hsl(var(--primary-foreground))"
-                        : "hsl(var(--primary))",
+                      // backgroundColor: isActive
+                      //   ? "hsl(var(--primary-foreground) / 0.2)"
+                      //   : "hsl(var(--primary) / 0.2)",
+                      color: isActive ? "#4A00BE" : "hsl(var(--primary))",
                     }}
                   >
                     <link.icon
@@ -268,7 +261,7 @@ export function DashboardSidebar({
                           className="font-semibold text-sm"
                           style={{
                             color: isActive
-                              ? "hsl(var(--primary-foreground))"
+                              ? "#4A00BE"
                               : "hsl(var(--foreground))",
                           }}
                         >
@@ -278,7 +271,7 @@ export function DashboardSidebar({
                           className="text-xs truncate transition-colors"
                           style={{
                             color: isActive
-                              ? "hsl(var(--primary-foreground) / 0.8)"
+                              ? "#4A00BE"
                               : "hsl(var(--muted-foreground))",
                           }}
                         >
@@ -292,7 +285,7 @@ export function DashboardSidebar({
                         )}
                         style={{
                           color: isActive
-                            ? "hsl(var(--primary-foreground) / 0.8)"
+                            ? "#4A00BE"
                             : "hsl(var(--muted-foreground))",
                         }}
                       />
@@ -325,34 +318,42 @@ export function DashboardSidebar({
                     Chat with Us
                   </button>
 
-                  {/* Show Book a Call only for advertisers */}
-                  {userRole === "advertiser" && (
-                    <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
-                      <a
-                        href="https://calendly.com/guptavishesh2/30min"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Book a Call
-                      </a>
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <button
-                    onClick={() => setShowChat(true)}
-                    className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
-                  >
-                    <MessageCircle size={18} />
+                {/* Show Book a Call only for advertisers */}
+                {userRole === "advertiser" && (
+                  <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
+                    <a
+                      href="https://calendly.com/guptavishesh2/30min"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Book a Call
+                    </a>
                   </button>
-
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  onClick={onChatOpen}
+                  className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
+                >
+                  <MessageCircle size={18} />
+                </button>
+                {/* Show Book a Call only for advertisers */}
+                {userRole === "advertiser" && (
                   <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
-                    <Phone size={18} className="text-white" />
+                    <a
+                      href="https://calendly.com/guptavishesh2/30min"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Phone size={18} className="text-white" />
+                    </a>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
+          </div>
           )}
         </div>
       </div>

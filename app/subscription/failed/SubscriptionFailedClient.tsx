@@ -7,6 +7,7 @@ import {
     RefreshCw,
     Home,
     CreditCard,
+    Check,
     AlertTriangle,
     HelpCircle,
     Mail,
@@ -121,25 +122,33 @@ export function SubscriptionFailedClient({
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
-            <div className="max-w-2xl w-full space-y-6">
+        <div className="min-h-screen  bg-[#000825] text-white  flex items-center justify-center p-4">
+            <div className="max-w-7xl w-full space-y-8">
                 {/* Error Header */}
                 <div className="text-center space-y-4">
                     <div className="flex justify-center">
-                        <div className="bg-red-100 p-4 rounded-full">
-                            <XCircle className="h-16 w-16 text-red-600" />
+                        <div className="bg-purple-100 p-4 rounded-full">
+                            <XCircle className="h-16 w-16 text-purple-600" />
                         </div>
                     </div>
-                    <h1 className="text-3xl font-bold text-gray-900">
+                    <h1 className="text-4xl mt-3 font-bold"
+                     style={{
+                        background:
+                          "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+        
+                        }}>
                         {errorDetails.title}
                     </h1>
-                    <p className="text-lg text-gray-600">
+                    <p className="text-lg text-white">
                         {errorDetails.message}
                     </p>
                 </div>
 
                 {/* Error Details Card */}
-                <Card className="shadow-lg">
+                <Card className="bg-[#000825] border border-gray-600">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-red-600">
                             <AlertTriangle className="h-5 w-5" />
@@ -147,8 +156,8 @@ export function SubscriptionFailedClient({
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <Alert>
-                            <HelpCircle className="h-4 w-4" />
+                        <Alert className='bg-[#000825] border border-gray-600 text-white'>
+                            {/* <HelpCircle className="h-4 w-4 text-white" /> */}
                             <AlertDescription>
                                 {errorDetails.message}
                             </AlertDescription>
@@ -172,18 +181,24 @@ export function SubscriptionFailedClient({
                 </Card>
 
                 {/* Suggestions Card */}
-                <Card className="shadow-lg">
+                <Card className="bg-[#000825] border border-gray-600 text-white shadow-lg">
                     <CardHeader>
                         <CardTitle>How to fix this</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <ul className="space-y-2">
+                        <ul className="space-y-4 ">
                             {errorDetails.suggestions.map((suggestion, index) => (
-                                <li key={index} className="flex items-start gap-2">
-                                    <div className="bg-blue-100 p-1 rounded-full mt-1">
-                                        <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
-                                    </div>
-                                    <span className="text-gray-700">{suggestion}</span>
+                                <li key={index} className="flex items-center gap-2">
+                                    <div
+                    className="rounded-full p-3 flex items-center justify-center"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                    }}
+                  >
+                    <Check className="h-4 w-4 text-white" />
+                  </div>
+                                    <span className="text-gray-300 text-md">{suggestion}</span>
                                 </li>
                             ))}
                         </ul>
@@ -192,17 +207,17 @@ export function SubscriptionFailedClient({
 
                 {/* Current Subscription Status */}
                 {currentSubscription && (
-                    <Card className="shadow-lg">
+                    <Card className="bg-[#000825] border border-gray-600">
                         <CardHeader>
-                            <CardTitle>Your Current Plan</CardTitle>
+                            <CardTitle className='text-white'>Your Current Plan</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <p className="font-semibold">
+                                    <p className="font-semibold text-white">
                                         {subscriptionPlans.find(p => p.id === currentSubscription.product_id)?.displayName || 'Current Plan'}
                                     </p>
-                                    <p className="text-gray-600 text-sm">
+                                    <p className="text-gray-400 text-sm">
                                         Your current subscription remains active
                                     </p>
                                 </div>
@@ -215,11 +230,15 @@ export function SubscriptionFailedClient({
                 )}
 
                 {/* Action Buttons */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <Button
                         onClick={handleRetryPayment}
                         disabled={isRetrying}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="rounded-3xl relative text-white text-white font-bold px-8 py-6 text-lg overflow-hidden"
+                style={{
+                  background:
+                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                }}
                     >
                         <RefreshCw className={`h-4 w-4 mr-2 ${isRetrying ? 'animate-spin' : ''}`} />
                         Try Again
@@ -227,8 +246,12 @@ export function SubscriptionFailedClient({
 
                     <Button
                         onClick={handleContactSupport}
-                        variant="outline"
-                        className="border-orange-600 text-orange-600 hover:bg-orange-50"
+                       
+                        className="rounded-3xl relative text-white text-white font-bold px-8 py-6 text-lg overflow-hidden"
+                style={{
+                  background:
+                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                }}
                     >
                         <Mail className="h-4 w-4 mr-2" />
                         Contact Support
@@ -236,7 +259,11 @@ export function SubscriptionFailedClient({
 
                     <Button
                         onClick={handleGoHome}
-                        variant="outline"
+                        className="rounded-3xl relative text-white text-white font-bold px-8 py-6 text-lg overflow-hidden"
+                style={{
+                  background:
+                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                }}
                     >
                         <Home className="h-4 w-4 mr-2" />
                         Go to Dashboard
@@ -244,15 +271,15 @@ export function SubscriptionFailedClient({
                 </div>
 
                 {/* Support Information */}
-                <Card className="shadow-lg bg-blue-50">
+                <Card className="bg-[#7F39EC52] border-[#7F39EC]">
                     <CardContent className="pt-6">
                         <div className="text-center space-y-3">
-                            <h3 className="font-semibold text-blue-900">Need Help?</h3>
-                            <p className="text-blue-700 text-sm">
+                            <h3 className="font-semibold text-white">Need Help?</h3>
+                            <p className="text-white text-sm">
                                 Our support team is here to help you resolve this issue
                             </p>
                             <div className="flex justify-center gap-6 text-sm">
-                                <div className="flex items-center gap-1 text-blue-600">
+                                <div className="flex items-center gap-1 text-white">
                                     <Mail className="h-4 w-4" />
                                     support@gameofcreators.com
                                 </div>
