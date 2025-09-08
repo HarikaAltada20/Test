@@ -894,7 +894,7 @@ export default function ContestDetailClient({
 
   return (
     <div>
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
+      <div className="flex flex-col px-1 lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
      
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <Button className="cursor-pointer" variant="ghost" size="icon" asChild>
@@ -3067,27 +3067,29 @@ export default function ContestDetailClient({
         open={!!confirmReversal}
         onOpenChange={(open) => !open && setConfirmReversal(null)}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Revert payment and update status?</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 text-sm text-muted-foreground">
+          <div className="space-y-3 text-md ">
             <p>
               Changing status from Paid will reverse the credited amount from
               the creator's wallet and remove related reward transactions.
             </p>
             <p className="font-medium">This action cannot be undone.</p>
           </div>
-          <div className="flex justify-end gap-2 pt-4">
-            <Button variant="outline" onClick={() => setConfirmReversal(null)}>
-              Cancel
-            </Button>
-            <Button
+          <div className="flex flex-col gap-3 pt-4">
+          <Button
               onClick={handleConfirmReversal}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-[#D9C0FF61] rounded-full text-[#7F39EC]"
             >
               Confirm Reversal
             </Button>
+            <Button onClick={() => setConfirmReversal(null)}
+              className="bg-[#FF323224] rounded-full text-[#E50000]">
+              Cancel
+            </Button>
+            
           </div>
         </DialogContent>
       </Dialog>

@@ -423,6 +423,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                             <div className="flex items-center justify-between">
                                 <h3 className="font-medium">Complete Payment</h3>
                                 <Button
+                                className="text-[#4A00BE] border border-[#4A00BE]"
                                     variant="outline"
                                     size="sm"
                                     onClick={() => setShowPaymentForm(false)}
