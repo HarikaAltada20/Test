@@ -4341,13 +4341,16 @@ export default function CreateContestPage({
 
   // Custom Back Modal component
   const BackModal = () => (
+    
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+
         <h2 className="text-xl font-bold mb-4">Leave Contest Creation?</h2>
         <p className="mb-6">
           Do you want to save this contest as a draft or delete it? All progress
           will be lost if you delete.
         </p>
+        
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
@@ -5934,12 +5937,13 @@ export default function CreateContestPage({
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
+                
                 disabled={isLoading}
               />
 
-              <div className="mt-6 flex justify-end">
+              <div className="w-full mt-4">
                 <Button
-                  variant="outline"
+                 className="w-full bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
                   onClick={() => setShowPayment(false)}
                   disabled={isLoading}
                 >

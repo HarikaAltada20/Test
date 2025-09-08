@@ -277,13 +277,14 @@ export function SubscriptionUpgradeModal({
                         <RadioGroup value={upgradeType} onValueChange={(value) => setUpgradeType(value as UpgradeType)}>
 
                             {/* Scheduled Change Option */}
-                            <div className="space-y-3">
-                                <div className="flex items-start space-x-2">
-                                    <RadioGroupItem value="scheduled" id="scheduled" className="mt-1" />
+                            <div className="space-y-4">
+                                <div className="flex items-center space-x-2">
+                                
+                                    <RadioGroupItem value="scheduled" id="scheduled"  />
                                     <Label htmlFor="scheduled" className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1">
                                         <div className="flex items-center gap-2">
                                             {/* <Calendar className="h-4 w-4 text-blue-600 flex-shrink-0" /> */}
-                                            <span className="font-medium text-md mt-2">
+                                            <span className="font-medium text-md">
                                                 Scheduled {isUpgrade ? 'Upgrade' : 'Downgrade'} (Recommended)
                                             </span>
                                         </div>
@@ -313,12 +314,12 @@ export function SubscriptionUpgradeModal({
 
                             {/* Immediate Change Option */}
                             <div className="space-y-3">
-                                <div className="flex items-start space-x-2">
-                                    <RadioGroupItem value="immediate" id="immediate" className="mt-1" />
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="immediate" id="immediate" className="" />
                                     <Label htmlFor="immediate" className="flex flex-col sm:flex-row sm:items-center gap-2 cursor-pointer flex-1">
                                         <div className="flex items-center gap-2">
                                             {/* <Zap className="h-4 w-4 text-orange-600 flex-shrink-0" /> */}
-                                            <span className="font-medium text-md mt-2">
+                                            <span className="font-medium text-md">
                                                 Immediate {isUpgrade ? 'Upgrade' : 'Downgrade'}
                                             </span>
                                         </div>
@@ -381,18 +382,13 @@ export function SubscriptionUpgradeModal({
                     </Alert>
                 </div>
 
-                <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3">
-                    <Button variant="outline" onClick={onClose} disabled={isProcessing} className="w-full sm:w-auto">
-                        Cancel
-                    </Button>
+                <DialogFooter className="flex flex-col gap-4">
+                    
                     <Button
                         onClick={handleUpgrade}
                         loading={isProcessing}
                         loadingText="Processing..."
-                        className={`w-full sm:w-auto ${isUpgrade
-                            ? 'bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700'
-                            : 'bg-[#D9C0FF61] hover:bg-[#D9C0FF61] text-[#7F39EC]'
-                            }`}
+                        className="w-full bg-[#D9C0FF61] py-6 rounded-full text-md hover:bg-[#D9C0FF61] text-[#7F39EC]"
                     >
                         {upgradeType === 'scheduled' ? (
                             <>
@@ -406,6 +402,9 @@ export function SubscriptionUpgradeModal({
                                 {targetPlan.price > 0 && ` - ${formatCurrencyFromCents(targetPlan.price)}`}
                             </>
                         )}
+                    </Button>
+                    <Button onClick={onClose} disabled={isProcessing} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+                        Cancel
                     </Button>
                 </DialogFooter>
             </DialogContent>

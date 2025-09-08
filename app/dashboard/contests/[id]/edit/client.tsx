@@ -5347,9 +5347,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 isDecrease={false} // Budget decreases are now handled directly, not through payment modal
               />
 
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6">
                 <Button
-                  variant="outline"
+                 
+                  className="w-full bg-[#FF323224] text-[#E50000] py-6 text-md rounded-full"
                   onClick={() => setShowPayment(false)}
                   disabled={isSubmitting}
                 >

@@ -607,7 +607,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                     variant="outline"
                     onClick={handleCustomerPortal}
                     disabled={isProcessing}
-                    className="border bg-[#4A00BE] text-white hover:border-gray-300 transition-colors"
+                    className="border bg-[#4A00BE] text-md text-white hover:border-gray-300 transition-colors"
                   >
                     {isProcessing ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -727,7 +727,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                     .map((change, index) => (
                       <div key={index} className="space-y-6">
                         {/* Current vs Upcoming Plan Comparison */}
-                        <div className="">
+                        <div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             {/* Current Plan */}
                             <div className="bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] p-5 rounded-xl border border-gray-300">
@@ -828,8 +828,8 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                           {/* Price Change Summary */}
                           <div className="mt-6 pt-6">
                             <div className="border rounded-lg py-5 px-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="flex items-start sm:items-center gap-3">
                                   {change.type === "upgrade" ? (
                                     <div className="p-2 rounded-full bg-[#D8C3FF]">
                                       <ArrowUp className="h-5 w-5 text-[#4A00BE]" />
@@ -852,7 +852,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                                     </p>
                                   </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-left sm:text-right">
                                   <p className="font-bold text-xl text-gray-900">
                                     {change.priceDifference > 0 ? "+" : ""}
                                     {formatCurrencyFromCents(
@@ -880,6 +880,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                               disabled={isProcessing}
                               className="border-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 transition-colors"
                             >
+                               <div className="scan-line"></div>
                               {isProcessing ? (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                               ) : (
@@ -970,7 +971,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="mt-3 pt-3">
                       <p className="text-sm text-gray-600">
                         {scheduledChanges.find(
                           (change) => change.status !== "canceled"
@@ -989,14 +990,14 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                 !scheduledChanges.some(
                   (change) => change.status !== "canceled"
                 )) && (
-                <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl p-4 border border-red-100">
+                <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                    {/* <AlertTriangle className="h-5 w-5 text-red-600" /> */}
                     <span className="font-semibold text-gray-900">
                       Subscription Ending
                     </span>
                   </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-red-50">
+                  <div className="border border-gray-400 py-4 px-5 rounded-xl">
                     <div className="flex items-center gap-3">
                       <div
                         className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
@@ -1017,7 +1018,7 @@ export const SubscriptionManagementBilling = memo(function SubscriptionManagemen
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="mt-3 pt-3">
                       <p className="text-sm text-gray-600">
                         Your subscription will end and you'll lose access to
                         premium features.

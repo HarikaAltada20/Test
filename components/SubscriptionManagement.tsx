@@ -482,8 +482,8 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
             <Badge
               className={
                 change.type === "upgrade"
-                  ? "bg-green-100 text-green-800"
-                  : "bg-orange-100 text-orange-800"
+                  ? "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
+                  : "border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]"
               }
             >
               {change.type === "upgrade" ? "Upgrading" : "Downgrading"}
@@ -491,19 +491,14 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
           );
         }
         // If all scheduled changes are canceled or no scheduled changes, show "Canceling" since subscription will end
-        return <Badge className="bg-red-100 text-red-800">Canceling</Badge>;
+        return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Canceling</Badge>;
       }
-      return (
-        <Badge className="bg-green-100 text-md px-5 text-green-800">
-          Active
-        </Badge>
-      );
+      return <Badge className="border bg-[#4A00BE] rounded-lg px-4 py-1.5 text-md text-white hover:bg-[#4A00BE]">Active</Badge>;
     }
     return (
-      <Badge className="bg-red-100 text-red-800">{subscription.status}</Badge>
+      <Badge className="bg-red-100 text-red-800 hover:bg-red-100">{subscription.status}</Badge>
     );
   };
-
   if (isLoading) {
     return (
       <div className="space-y-8">
@@ -584,7 +579,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Plan Details */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
               <div className="flex items-center gap-4">
                 <div
                   className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
@@ -617,6 +612,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                         "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                     }}
                   >
+                     <div className="scan-line"></div>
                     {isProcessing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -673,8 +669,11 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     (change) => change.status !== "canceled"
                   ) ? (
                     // Show plan change information when there are active scheduled changes
-                    <Alert className="border-blue-200 bg-blue-50">
-                      <Info className="h-4 w-4 text-blue-600" />
+                    <Alert className="border-[#7F39EC] text-white bg-[#D9C0FF26]">
+                      <Info
+                        className="h-4 w-4 text-white !text-white"
+                        stroke="currentColor"
+                      />
                       <AlertDescription>
                         <strong>Plan Change Scheduled:</strong> Your current
                         plan will end on{" "}
@@ -709,17 +708,20 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
               scheduledChanges.some(
                 (change) => change.status !== "canceled"
               ) && (
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 space-y-4 border border-green-100">
+                <div className="space-y-6">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-green-600" />
-                    <span className="font-semibold text-gray-900 text-lg">
+                    {/* <Clock className="h-5 w-5 text-green-600" /> */}
+                    <span className="font-semibold text-white text-lg">
                       Upcoming Plan Change
                     </span>
                   </div>
 
-                  <Alert className="border-green-200 bg-green-50">
-                    <Info className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
+                  <Alert className="border-[#7F39EC] bg-[#D9C0FF26]">
+                    <Info
+                      className="h-4 w-4 text-white !text-white"
+                      stroke="currentColor"
+                    />
+                    <AlertDescription className="text-white">
                       <strong>Important:</strong> Your plan will change on{" "}
                       {billingDetails
                         ? formatDate(billingDetails.nextBillingDate)
@@ -733,18 +735,18 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                     .map((change, index) => (
                       <div key={index} className="space-y-6">
                         {/* Current vs Upcoming Plan Comparison */}
-                        <div className="bg-white rounded-xl p-6 border-2 border-green-200 shadow-lg">
+                        <div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             {/* Current Plan */}
-                            <div className="bg-gray-50 rounded-lg p-4">
-                              <h4 className="font-bold text-gray-900 mb-4 text-lg">
+                            <div className="bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] p-5 rounded-xl border border-gray-600">
+                              <h4 className="font-bold text-white  mb-4 text-lg">
                                 Current Plan (Until{" "}
                                 {billingDetails
                                   ? formatDate(billingDetails.nextBillingDate)
                                   : "next billing"}
                                 )
                               </h4>
-                              <div className="space-y-3">
+                              <div className="space-y-4">
                                 <div className="flex items-center gap-2">
                                   <div
                                     className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
@@ -754,10 +756,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                     {getPlanIcon(currentPlan?.name || "")}
                                   </div>
                                   <div>
-                                    <p className="font-semibold text-gray-900">
+                                    <p className="font-semibold text-[#B16FF4]">
                                       {currentPlan?.displayName}
                                     </p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-xl text-white  font-semibold">
                                       {formatCurrencyFromCents(
                                         currentPlan?.price || 0
                                       )}
@@ -765,7 +767,7 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                     </p>
                                   </div>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-4">
                                   {currentPlan &&
                                     getPlanFeatures(currentPlan).map(
                                       (feature, idx) => (
@@ -773,8 +775,19 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                           key={idx}
                                           className="flex items-center gap-2"
                                         >
-                                          <Check className="h-4 w-4 text-green-600" />
-                                          <span className="text-sm text-gray-700">
+                                          <div
+                                            className="rounded-full p-2 flex items-center justify-center"
+                                            style={{
+                                              backgroundImage:
+                                                "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                                            }}
+                                          >
+                                            <Check
+                                              className="h-4 w-4 text-white"
+                                              strokeWidth={3}
+                                            />
+                                          </div>
+                                          <span className="text-md text-white ">
                                             {feature}
                                           </span>
                                         </div>
@@ -785,12 +798,12 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                             </div>
 
                             {/* Upcoming Plan */}
-                            <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
-                              <h4 className="font-bold text-gray-900 mb-4 text-lg">
+                            <div className="bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] p-5 rounded-xl border border-gray-600">
+                              <h4 className="font-bold text-white  mb-4 text-lg">
                                 Upcoming Plan (From{" "}
                                 {formatDate(change.scheduledDate)})
                               </h4>
-                              <div className="space-y-3">
+                              <div className="space-y-4">
                                 <div className="flex items-center gap-2">
                                   <div
                                     className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
@@ -800,10 +813,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                     {getPlanIcon(change.targetPlan.name)}
                                   </div>
                                   <div>
-                                    <p className="font-semibold text-gray-900">
+                                    <p className="font-semibold text-[#B16FF4]">
                                       {change.targetPlan.displayName}
                                     </p>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-xl text-white font-semibold">
                                       {formatCurrencyFromCents(
                                         change.targetPlan.price
                                       )}
@@ -811,15 +824,26 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                                     </p>
                                   </div>
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-4">
                                   {getPlanFeatures(change.targetPlan).map(
                                     (feature, idx) => (
                                       <div
                                         key={idx}
                                         className="flex items-center gap-2"
                                       >
-                                        <Check className="h-3 w-3 text-green-600" />
-                                        <span className="text-xs text-gray-600">
+                                        <div
+                                          className="rounded-full p-2 flex items-center justify-center"
+                                          style={{
+                                            backgroundImage:
+                                              "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
+                                          }}
+                                        >
+                                          <Check
+                                            className="h-4 w-4 text-white"
+                                            strokeWidth={3}
+                                          />
+                                        </div>
+                                        <span className="text-md text-white ">
                                           {feature}
                                         </span>
                                       </div>
@@ -831,41 +855,41 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                           </div>
 
                           {/* Price Change Summary */}
-                          <div className="mt-6 pt-6 border-t-2 border-green-200">
-                            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                          <div className="mt-6 pt-6">
+                            <div className="border border-gray-600 rounded-lg py-5 px-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="flex items-start sm:items-center gap-3">
                                   {change.type === "upgrade" ? (
-                                    <div className="p-2 rounded-full bg-green-100">
-                                      <ArrowUp className="h-5 w-5 text-green-600" />
+                                    <div className="p-2 rounded-full bg-[#D8C3FF]">
+                                      <ArrowUp className="h-5 w-5 text-[#4A00BE]" />
                                     </div>
                                   ) : (
-                                    <div className="p-2 rounded-full bg-orange-100">
-                                      <ArrowDown className="h-5 w-5 text-orange-600" />
+                                    <div className="p-2 rounded-full bg-[#D8C3FF]">
+                                      <ArrowDown className="h-5 w-5 text-[#4A00BE]" />
                                     </div>
                                   )}
                                   <div>
-                                    <span className="font-bold text-gray-900 text-lg">
+                                    <span className="font-bold text-white text-lg">
                                       {change.type === "upgrade"
                                         ? "Upgrade"
                                         : "Downgrade"}{" "}
                                       Summary
                                     </span>
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-sm text-white">
                                       Effective from{" "}
                                       {formatDate(change.scheduledDate)}
                                     </p>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="font-bold text-xl text-gray-900">
+                                <div className="text-left sm:text-right">
+                                  <p className="font-bold text-xl text-white ">
                                     {change.priceDifference > 0 ? "+" : ""}
                                     {formatCurrencyFromCents(
                                       change.priceDifference
                                     )}
                                     /month
                                   </p>
-                                  <p className="text-sm text-gray-600">
+                                  <p className="text-sm text-white">
                                     price change
                                   </p>
                                 </div>
@@ -878,17 +902,22 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                         {change.status !== "canceled" && (
                           <div className="flex justify-end pt-4">
                             <Button
-                              variant="outline"
+                             
                               onClick={() =>
                                 handleCancelScheduledChange(change.id)
                               }
                               disabled={isProcessing}
-                              className="border-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 transition-colors"
+                              className="rounded-3xl relative text-white font-bold px-4 py-2 text-md overflow-hidden flex items-center justify-center gap-2"
+                              style={{
+                                background:
+                                  "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+                              }}
                             >
+                               <div className="scan-line"></div>
                               {isProcessing ? (
                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                               ) : (
-                                <X className="h-4 w-4 mr-2" />
+                                <X className="h-4 w-4" />
                               )}
                               Cancel Plan Change
                             </Button>
@@ -910,22 +939,22 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
               )}
 
             {/* Plan Features */}
-            <div className="space-y-5">
+            <div className="pl-2 space-y-5">
               <h4 className="font-medium text-lg text-white">
                 Current Plan Features
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {getPlanFeatures(currentPlan).map((feature, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div
+                  <div key={index} className="flex p-2 rounded-full border border-gray-600 justify-center items-center gap-3">
+                    {/* <div
                       className="rounded-full p-3 flex items-center justify-center"
                       style={{
                         backgroundImage:
                           "linear-gradient(180deg, #7F39EC 0%, #4C238D 100%)",
                       }}
-                    >
+                    > */}
                       <Check className="h-6 w-6 text-white" strokeWidth={3} />
-                    </div>
+                    {/* </div> */}
                     <span className="text-lg text-gray-300">{feature}</span>
                   </div>
                 ))}
@@ -938,17 +967,17 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
               scheduledChanges.some(
                 (change) => change.status !== "canceled"
               ) && (
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                <div className="px-2 py-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <Calendar className="h-5 w-5 text-blue-600" />
-                    <span className="font-semibold text-gray-900">
+                    {/* <Calendar className="h-5 w-5 text-blue-600" /> */}
+                    <span className="font-semibold text-lg text-white">
                       Next Billing Cycle
                     </span>
                   </div>
-                  <div className="bg-white rounded-lg p-4 shadow-sm border border-blue-50">
+                  <div className="rounded-lg p-4 border border-gray-600">
                     <div className="flex items-center gap-3">
                       <div
-                        className={`p-2 rounded-lg bg-gradient-to-r ${getPlanColor(
+                        className={`p-2 rounded-lg  bg-gradient-to-r ${getPlanColor(
                           scheduledChanges.find(
                             (change) => change.status !== "canceled"
                           )?.targetPlan.name || ""
@@ -961,14 +990,14 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                         )}
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900">
+                        <p className="font-semibold text-white">
                           {
                             scheduledChanges.find(
                               (change) => change.status !== "canceled"
                             )?.targetPlan.displayName
                           }
                         </p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-xl text-white font-semibold">
                           {formatCurrencyFromCents(
                             scheduledChanges.find(
                               (change) => change.status !== "canceled"
@@ -976,13 +1005,13 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
                           )}
                           /month
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-sm text-white">
                           Starting {formatDate(billingDetails.nextBillingDate)}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <p className="text-sm text-gray-600">
+                    <div className="mt-3 pt-3">
+                      <p className="text-sm text-white">
                         {scheduledChanges.find(
                           (change) => change.status !== "canceled"
                         )?.type === "upgrade"

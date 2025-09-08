@@ -628,7 +628,7 @@ export default function BillingClientPage({
 
 
   return (
-    <div className="container max-w-[1200px] mx-auto py-8 md:px-6">
+    <div className="container mx-auto py-8 md:px-6">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Billing & Account</h1>
       </div>
@@ -1357,10 +1357,10 @@ export default function BillingClientPage({
               className="w-full"
             >
               {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="upi">UPI</TabsTrigger>
-                  <TabsTrigger value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-3 gap-4">
+                  <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500"value="bank_transfer">Bank Transfer</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="crypto">BNB (BEP20)</TabsTrigger>
                 </TabsList>
               ) : (
                 <TabsList className="grid w-full grid-cols-1">
@@ -1368,7 +1368,8 @@ export default function BillingClientPage({
                 </TabsList>
               )}
 
-              <TabsContent value="crypto" className="pt-4 space-y-3">
+              <TabsContent value="crypto" className="pt-4 space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
                 <Input
                   id="payoutFriendlyNameCrypto"
@@ -1377,6 +1378,8 @@ export default function BillingClientPage({
                   placeholder="e.g., My Binance USDT"
                   disabled={isLoading}
                 />
+                </div>
+                <div className="space-y-1">
                 <Label htmlFor="cryptoNetwork">Network</Label>
                 <Select
                   value={cryptoNetwork}
@@ -1392,6 +1395,8 @@ export default function BillingClientPage({
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                </div>
+                <div className="space-y-1">
                 <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
                 <Input
                   id="cryptoAddress"
@@ -1400,6 +1405,7 @@ export default function BillingClientPage({
                   placeholder={`Enter your ${cryptoNetwork} wallet address`}
                   disabled={isLoading}
                 />
+                </div>
                 <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
                   We only support BNB Smart Chain (BEP20). Do not enter
                   ERC20/other chain addresses. Wrong address = funds lost.
@@ -1412,17 +1418,20 @@ export default function BillingClientPage({
               </TabsContent>
 
               {/* Bank Transfer Form (India) */}
-              <TabsContent value="bank_transfer" className="pt-4 space-y-3">
+              <TabsContent value="bank_transfer" className="pt-4 space-y-2">
+              <div className="space-y-1">
                 <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                 <Input
                   id="payoutFriendlyNameBank"
+                 
                   value={payoutFriendlyName}
                   onChange={(e) => setPayoutFriendlyName(e.target.value)}
                   placeholder="e.g., Primary Savings"
                   disabled={isLoading}
                 />
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
+                  <div className="space-y-1">
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1433,7 +1442,7 @@ export default function BillingClientPage({
                       disabled={isLoading}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
@@ -1442,7 +1451,7 @@ export default function BillingClientPage({
                       disabled={isLoading}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
@@ -1451,7 +1460,7 @@ export default function BillingClientPage({
                       disabled={isLoading}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
@@ -1470,6 +1479,7 @@ export default function BillingClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
+              <div className="space-y-1">
                 <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
                 <Input
                   id="payoutFriendlyNameUpi"
@@ -1478,6 +1488,8 @@ export default function BillingClientPage({
                   placeholder="e.g., My UPI"
                   disabled={isLoading}
                 />
+                </div>
+                <div className="space-y-1">
                 <Label htmlFor="upiHolder">Account Holder Name</Label>
                 <Input
                   id="upiHolder"
@@ -1486,6 +1498,8 @@ export default function BillingClientPage({
                   placeholder="e.g., Rahul Kumar"
                   disabled={isLoading}
                 />
+                </div>
+                <div className="space-y-1">
                 <Label htmlFor="upiId">UPI ID</Label>
                 <Input
                   id="upiId"
@@ -1494,6 +1508,7 @@ export default function BillingClientPage({
                   placeholder="yourname@bank"
                   disabled={isLoading}
                 />
+                </div>
                 <p className="text-xs text-muted-foreground">
                   UPI withdrawals are instant and usually free. You are
                   responsible for declaring your earnings and paying any taxes
@@ -1502,19 +1517,21 @@ export default function BillingClientPage({
               </TabsContent>
             </Tabs>
           </div>
-          <DialogFooter className="sm:justify-between">
-            <DialogClose asChild>
-              <Button variant="outline" disabled={isLoading}>
-                Cancel
-              </Button>
-            </DialogClose>
-            <Button onClick={handleSavePayoutMethod} disabled={isLoading}>
+          <DialogFooter>
+          <Button  onClick={handleSavePayoutMethod} disabled={isLoading}
+             className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
                   ? "Save Changes"
                   : "Add Method"}
             </Button>
+            <DialogClose asChild>
+              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+                Cancel
+              </Button>
+            </DialogClose>
+            
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
@@ -1696,12 +1713,9 @@ export default function BillingClientPage({
             )}
           </div>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" disabled={isLoading}>
-                Cancel
-              </Button>
-            </DialogClose>
+           
             <Button
+            className="w-full py-6 rounded-full text-md"
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
               loadingText="Processing..."
@@ -1723,6 +1737,11 @@ export default function BillingClientPage({
             >
               Request Withdrawal
             </Button>
+            <DialogClose asChild>
+              <Button disabled={isLoading}  className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+                Cancel
+              </Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>

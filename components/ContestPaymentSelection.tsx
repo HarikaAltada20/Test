@@ -246,10 +246,10 @@ const WalletOnlyPayment = ({
                 onClick={handleWalletPayment}
                 loading={isProcessing}
                 loadingText="Processing Payment..."
-                className="w-full"
+                className="w-full bg-[#D9C0FF61] text-[#7F39EC] rounded-full text-md py-6"
                 size="lg"
             >
-                <Wallet className="mr-2 h-4 w-4" />
+                <Wallet className="h-4 w-4" />
                 Pay from Wallet {formatCurrencyFromCents(Math.round(amount * 100))}
             </Button>
         </div>
@@ -606,7 +606,7 @@ export function ContestPaymentSelection({
                             </button>
 
                             {/* Info Alert */}
-                            <Alert>
+                            <Alert className='bg-[#D9C0FF26] border border-[#7F39EC]'>
                                 <AlertCircle className="h-4 w-4" />
                                 <AlertDescription>
                                     Your contest will be submitted for admin review after successful payment.
