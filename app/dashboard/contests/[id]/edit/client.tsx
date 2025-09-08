@@ -3563,9 +3563,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       {/* Current Plan Information */}
       <div className="mb-6">
-        <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
-          <AlertDescription className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+      <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
+      <AlertDescription className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="flex items-start sm:items-center gap-2 ">
               <Crown className="h-5 w-5 text-[#7F39EC]" />
 
               <div>
@@ -3579,7 +3579,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
             {userPlan !== PRODUCT_IDS.CHAMPION && (
-              <Link href="/dashboard/billing?tab=subscription" className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition">
+              <Link href="/dashboard/billing?tab=subscription"  className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition text-center">
                 Upgrade Plan
               </Link>
             )}
@@ -4620,7 +4620,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           {/* Prize Distribution - Conditional for Leaderboard */}
           {!datesOnly && contestType === "leaderboard" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center flex-col gap-3 md:flex-row md:justify-between">
                 <h3 className="text-lg font-medium">Prize distribution</h3>
                 <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
                   <span className="text-sm font-medium">Total Prize Pool:</span>
@@ -4680,7 +4680,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
               <div className="bg-gray-50 p-4 rounded-lg">
                 <div className="flex items-center gap-4 mb-4">
-                  <Label className="w-48">
+                  <Label className="w-32 md:w-48">
                     Number of Winners{" "}
                     <span className="text-xs text-gray-500">(Required)</span>
                   </Label>
@@ -4749,8 +4749,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 </div>
 
                 {Array.from({ length: winnerCount }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-4 mb-2">
-                    <Label className="w-48">Winner {i + 1}</Label>
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-4">
+                    <Label className="w-40 md:w-48">Winner {i + 1}</Label>
                     <Input
                       type="number"
                       step="1"
@@ -4801,9 +4801,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         }
                       }}
                       min={MIN_PRIZE_PER_WINNER / 100}
-                      className="w-48"
+                     className="w-full sm:w-40 md:w-48"
                     />
-                    <div className="text-sm text-gray-500">
+                    <div className="text-xs sm:text-sm text-gray-500">
                       <span>
                         Min: {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
                       </span>
@@ -5047,7 +5047,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             </div>
           )}
         </div>
-        <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
+        <CardFooter className="flex flex-col sm:flex-row sm:items-center gap-4 pt-6">
           {/* Show rejection reason banner for rejected contests */}
           {contest?.moderation_status === "rejected" &&
             contest?.rejection_reason && (
@@ -5094,7 +5094,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           </button>
 
           <div
-            className={`flex flex-col sm:flex-row gap-2 w-full sm:w-auto ${formFeedback && formFeedbackType === "error" ? "ml-4" : "ml-auto"
+            className={`flex flex-col items-center sm:flex-row gap-2 w-full sm:w-auto ${formFeedback && formFeedbackType === "error" ? "ml-4" : "ml-auto"
               }`}
           >
             {datesOnly ? (
@@ -5118,12 +5118,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               <>
                 {/* Prize Pool Change Warning */}
                 {budgetChanged && isContestPaid() && (
-                  <div className="w-full mb-4">
+                  <div className="mb-4">
                     <Alert
                       variant={budgetDifference > 0 ? "destructive" : "default"}
                       className={
                         budgetDifference > 0
-                          ? "border-orange-200 bg-orange-50"
+                          ? "md:w-[600px] border-orange-200 bg-orange-50"
                           : "border-green-200 bg-green-50"
                       }
                     >
@@ -5145,7 +5145,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 )}
 
                 <button
-                  className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
+                  className="border h-[38px] font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
 
                   onClick={handleSaveAsDraft}
                   disabled={isSubmitting || !!validationError}

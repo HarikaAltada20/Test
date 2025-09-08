@@ -628,7 +628,7 @@ export default function BillingClientPage({
 
 
   return (
-    <div className="container mx-auto py-8 md:px-6">
+    <div className="container mx-auto py-8 xl:px-4">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Billing & Account</h1>
       </div>
@@ -656,7 +656,7 @@ export default function BillingClientPage({
       {/* Cash Account Tab */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-10">
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
             {/*Total Spent*/}
             <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4 flex justify-between">
