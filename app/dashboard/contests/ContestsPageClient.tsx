@@ -32,7 +32,7 @@ export function ContestsPageClient({ initialContests, userId }: ContestsPageClie
         <div className="space-y-6">
             <div className="flex flex-row gap-4 md:items-center md:justify-between">
                 <div className="flex-1">
-                    <h1 className="text-2xl md:text-3xl font-bold tracking-tight">My Contests</h1>
+                    <h1 className="text-2xl md:text-2xl font-bold tracking-tight">My Contests</h1>
                 </div>
                 <button
                  className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"

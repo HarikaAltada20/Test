@@ -628,7 +628,7 @@ export default function BillingClientPage({
 
 
   return (
-    <div className="container mx-auto py-8 xl:px-4">
+    <div className="max-w-[1200px] mx-auto py-8">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Billing & Account</h1>
       </div>
@@ -1541,7 +1541,7 @@ export default function BillingClientPage({
                 {payoutMethods.map((method) => (
                   <div
                     key={method.id}
-                    className="flex items-center justify-between p-3 border rounded-md bg-slate-50 dark:bg-slate-800"
+                    className="flex items-center justify-between p-3 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg"
                   >
                     <div className="flex items-center">
                       <PayoutMethodIcon type={method.method_type} />
@@ -1556,11 +1556,12 @@ export default function BillingClientPage({
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-3">
                       {!method.is_default && (
                         <Button
                           variant="ghost"
                           size="sm"
+                           className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
                           onClick={() =>
                             handleSetDefaultPayoutMethod(method.id)
                           }
@@ -1574,13 +1575,14 @@ export default function BillingClientPage({
                         size="icon"
                         onClick={() => handleEditPayoutMethod(method)}
                         disabled={isLoading}
+                         className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
                       >
                         <Edit3 className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-red-500 hover:text-red-600"
+                        className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
                         onClick={() => handleDeletePayoutMethod(method.id)}
                         disabled={isLoading}
                       >

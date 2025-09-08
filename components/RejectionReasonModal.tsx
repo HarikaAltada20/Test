@@ -316,18 +316,10 @@ export default function RejectionReasonModal({
                 </div>
 
                 <DialogFooter className="gap-3 pt-6 border-t mt-6">
-                    <Button
-                        variant="outline"
-                        onClick={handleClose}
-                        disabled={isLoading}
-                        className="flex-1 sm:flex-none"
-                    >
-                        Cancel
-                    </Button>
-                    <Button
+                <Button
                         onClick={handleConfirm}
                         disabled={isConfirmDisabled() || isLoading}
-                        className="bg-[#D9C0FF61] text-[#7F39EC] text-md flex-1 sm:flex-none"
+                        className="bg-[#D9C0FF61] text-[#7F39EC] text-md rounded-full py-6 flex-1 sm:flex-none"
                     >
                         {isLoading ? (
                             <>
@@ -341,6 +333,16 @@ export default function RejectionReasonModal({
                             </>
                         )}
                     </Button>
+                    <Button
+                      
+                        onClick={handleClose}
+                        className="bg-[#FF323224] text-[#E50000] rounded-full py-6 text-md flex-1 sm:flex-none"
+                        disabled={isLoading}
+                        
+                    >
+                        Cancel
+                    </Button>
+                  
                 </DialogFooter>
             </DialogContent>
         </Dialog>
