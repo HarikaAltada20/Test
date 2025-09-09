@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset
       xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+      xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-            http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+            http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd
+            http://www.google.com/schemas/sitemap-image/1.1
+            http://www.google.com/schemas/sitemap-image/1.1/sitemap-image.xsd">
 <!-- Optimized sitemap for Game Of Creators - Strategic SEO Implementation -->
 
 <!-- Homepage - Maximum Priority -->
@@ -12,6 +15,14 @@
   <lastmod>2025-01-07T14:00:00+00:00</lastmod>
   <priority>1.00</priority>
   <changefreq>weekly</changefreq>
+  <image:image>
+    <image:loc>https://www.gameofcreators.com/favicon.ico</image:loc>
+    <image:title>Game Of Creators Favicon</image:title>
+  </image:image>
+  <image:image>
+    <image:loc>https://www.gameofcreators.com/goc.png</image:loc>
+    <image:title>Game Of Creators Logo</image:title>
+  </image:image>
 </url>
 
 <!-- Primary Landing Pages - High Commercial Value -->
