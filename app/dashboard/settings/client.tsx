@@ -914,7 +914,11 @@ export default function SettingsPage({
 
       {/* Connected Accounts - Only for Creators */}
       {userType === "creator" && (
-        <Card>
+        <div>
+          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+         <CardTitle className="text-2xl text-[#7F39EC]">Manage Your Account</CardTitle>
+       </div>
+       <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg" >
           <CardHeader>
             <CardTitle className="text-lg">Social Accounts</CardTitle>
             <CardDescription>
@@ -1101,7 +1105,8 @@ export default function SettingsPage({
               </Alert>
             )}
           </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Company Profile - Only for Advertisers */}

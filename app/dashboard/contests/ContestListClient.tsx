@@ -334,7 +334,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     contest.status === "active" && "bg-[#7F39EC] text-white",
                                     contest.status === "upcoming" && "bg-[#7F39EC] text-white",
                                     contest.status === "ended" && "bg-[#7F39EC] text-white",
-                                    !["active", "upcoming", "ended"].includes(contest.status || "") && "bg-yellow-400 border-yellow-400 text-yellow-900"
+                                    !["active", "upcoming", "ended"].includes(contest.status || "") && "bg-[#7F39EC] text-white"
                                 )}
                             >
                                 {contest.status === "active" ? "Live" : (contest.status || "Unknown")}
