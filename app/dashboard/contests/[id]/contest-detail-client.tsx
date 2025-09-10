@@ -88,6 +88,7 @@ import {
   Share2,
   Eye,
   CheckCircle2,
+  CheckCircle,
   XCircle,
   AlertTriangle,
   Trophy,
@@ -102,6 +103,8 @@ import {
   Play,
   Settings,
   Wallet,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 
 // --- Local Type Definitions ---
@@ -228,6 +231,9 @@ export default function ContestDetailClient({
   const [activeStatusTab, setActiveStatusTab] = useState<
     "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
   >("all");
+  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<
+    "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
+  >("all");
   const [sortOption, setSortOption] = useState<
     "views_desc" | "views_asc" | "time_desc" | "time_asc"
   >("views_desc");
@@ -243,6 +249,15 @@ export default function ContestDetailClient({
       return submission.status === "verified" || submission.status === "paid";
     }
     return submission.status === activeStatusTab;
+  });
+
+  // Filter submissions for analytics based on active analytics tab
+  const filteredAnalyticsSubmissions = currentSubmissions.filter((submission) => {
+    if (activeAnalyticsTab === "all") return true;
+    if (activeAnalyticsTab === "verified_or_paid") {
+      return submission.status === "verified" || submission.status === "paid";
+    }
+    return submission.status === activeAnalyticsTab;
   });
 
   useEffect(() => {
@@ -2952,6 +2967,37 @@ export default function ContestDetailClient({
             <div className="bg-white rounded-xl shadow-md p-2">
               <CardHeader>
                 <CardTitle>Contest Analytics</CardTitle>
+                {/* Analytics Filter Tabs */}
+                <div className="mt-4">
+                  <Tabs
+                    value={activeAnalyticsTab}
+                    onValueChange={(value) =>
+                      setActiveAnalyticsTab(value as any)
+                    }
+                    className="w-full"
+                  >
+                    <TabsList className="grid w-full grid-cols-6">
+                      <TabsTrigger value="all" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        All ({currentSubmissions?.length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="verified" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Verified ({currentSubmissions?.filter(s => s.status === "verified").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="paid" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Paid ({currentSubmissions?.filter(s => s.status === "paid").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="pending" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Pending ({currentSubmissions?.filter(s => s.status === "pending").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="rejected" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Rejected ({currentSubmissions?.filter(s => s.status === "rejected").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="verified_or_paid" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Verified/Paid ({currentSubmissions?.filter(s => s.status === "verified" || s.status === "paid").length || 0})
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -2987,7 +3033,7 @@ export default function ContestDetailClient({
                         <p className="text-xl font-bold">
                           {" "}
                           {currentSubmissions?.filter(
-                            (s) => s.status === "verified"
+                            (s) => s.status === "verified" || s.status === "paid"
                           ).length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
@@ -3038,12 +3084,314 @@ export default function ContestDetailClient({
                 {/* <Separator className="my-6" /> */}
 
                 <div className="space-y-6">
+                  {/* Views Statistics */}
+                  <div>
+                    <h3 className="font-medium mb-4">Views Statistics</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                      {/* Total Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Views</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0).toLocaleString() || 0}
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                            <Eye className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Average Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Avg Views</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.length > 0
+                                ? Math.round(filteredAnalyticsSubmissions.reduce((sum, s) => sum + (s.views || 0), 0) / filteredAnalyticsSubmissions.length).toLocaleString()
+                                : 0
+                              }
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 text-green-600">
+                            <BarChart3 className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Top Submission Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Highest Views</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.length > 0
+                                ? Math.max(...filteredAnalyticsSubmissions.map(s => s.views || 0)).toLocaleString()
+                                : 0
+                              }
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-yellow-100 text-yellow-600">
+                            <TrendingUp className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Filtered Submissions Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">
+                              {activeAnalyticsTab === "verified" ? "Verified Views" :
+                                activeAnalyticsTab === "paid" ? "Paid Views" :
+                                  activeAnalyticsTab === "pending" ? "Pending Views" :
+                                    activeAnalyticsTab === "rejected" ? "Rejected Views" :
+                                      activeAnalyticsTab === "verified_or_paid" ? "Verified/Paid Views" :
+                                        "Filtered Views"}
+                            </p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0).toLocaleString() || 0}
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                            <CheckCircle className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ROI/Benefit Analysis - Collapsible Section */}
+                  <div className="mt-8">
+                    <details className="group">
+                      <summary className="flex items-center justify-between cursor-pointer p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <h3 className="font-medium text-gray-800">ROI & Benefit Analysis</h3>
+                        <ChevronDown className="h-5 w-5 text-gray-500 group-open:rotate-180 transition-transform" />
+                      </summary>
+                      <div className="mt-4 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* Total Investment */}
+                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Total Investment</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {(() => {
+                                    if (currentContest.contest_type === "leaderboard") {
+                                      const totalPrize = currentContest.contest_based_details?.leaderboard_contest?.total_prize || 0;
+                                      return formatMoney(totalPrize);
+                                    } else if (currentContest.contest_type === "cpm") {
+                                      // Calculate total paid for CPM contest
+                                      const totalPaid = filteredAnalyticsSubmissions
+                                        ?.filter(s => s.status === "paid")
+                                        .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+                                      return formatMoney(totalPaid);
+                                    }
+                                    return formatMoney(0);
+                                  })()}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {currentContest.contest_type === "leaderboard" ? "Prize Pool" : "Total Paid"}
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-red-100 text-red-600">
+                                <DollarSign className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Views Generated */}
+                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Views Generated</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0).toLocaleString() || 0}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {activeAnalyticsTab === "all" ? "All Submissions" :
+                                    activeAnalyticsTab === "verified" ? "Verified Only" :
+                                      activeAnalyticsTab === "paid" ? "Paid Only" :
+                                        activeAnalyticsTab === "pending" ? "Pending Only" :
+                                          activeAnalyticsTab === "rejected" ? "Rejected Only" :
+                                            activeAnalyticsTab === "verified_or_paid" ? "Verified/Paid" : "Filtered"}
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                                <Eye className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Cost Per View */}
+                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Cost Per View</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {(() => {
+                                    const totalViews = filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0) || 0;
+                                    if (totalViews === 0) return "$0.00";
+
+                                    let totalCost = 0;
+                                    if (currentContest.contest_type === "leaderboard") {
+                                      totalCost = currentContest.contest_based_details?.leaderboard_contest?.total_prize || 0;
+                                    } else if (currentContest.contest_type === "cpm") {
+                                      totalCost = filteredAnalyticsSubmissions
+                                        ?.filter(s => s.status === "paid")
+                                        .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+                                    }
+
+                                    // Convert cents to dollars for calculation
+                                    const totalCostDollars = totalCost / 100;
+                                    const costPerView = totalCostDollars / totalViews;
+                                    return `$${costPerView.toFixed(4)}`;
+                                  })()}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {currentContest.contest_type === "leaderboard" ? "Prize Pool ÷ Views" : "Paid ÷ Views"}
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 text-green-600">
+                                <BarChart3 className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CPM Contest Specific Metrics */}
+                        {currentContest.contest_type === "cpm" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* CPM Rate */}
+                            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-600">CPM Rate</p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    ${currentContest.contest_based_details?.cpm_contest?.cpm_rate_usd?.toFixed(2) || "0.00"}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">Per 1,000 views</p>
+                                </div>
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                                  <TrendingUp className="h-5 w-5" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Effective CPM */}
+                            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-600">Effective CPM</p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {(() => {
+                                      const totalViews = filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0) || 0;
+                                      const totalPaid = filteredAnalyticsSubmissions
+                                        ?.filter(s => s.status === "paid")
+                                        .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+
+                                      if (totalViews === 0) return "$0.00";
+                                      // Convert cents to dollars for calculation
+                                      const totalPaidDollars = totalPaid / 100;
+                                      const effectiveCPM = (totalPaidDollars / totalViews) * 1000;
+                                      return `$${effectiveCPM.toFixed(2)}`;
+                                    })()}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">Actual rate achieved</p>
+                                </div>
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                                  <BarChart3 className="h-5 w-5" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Summary Card */}
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200">
+                          <h4 className="font-semibold text-lg mb-3 text-gray-800">Performance Summary</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600 mb-1">Investment Efficiency</p>
+                              <p className="text-lg font-semibold text-gray-800">
+                                {(() => {
+                                  const totalViews = filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0) || 0;
+                                  let totalCost = 0;
+                                  if (currentContest.contest_type === "leaderboard") {
+                                    totalCost = currentContest.contest_based_details?.leaderboard_contest?.total_prize || 0;
+                                  } else if (currentContest.contest_type === "cpm") {
+                                    totalCost = filteredAnalyticsSubmissions
+                                      ?.filter(s => s.status === "paid")
+                                      .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+                                  }
+
+                                  if (totalCost === 0) return "N/A";
+                                  // Convert cents to dollars for calculation
+                                  const totalCostDollars = totalCost / 100;
+                                  const efficiency = totalViews / (totalCostDollars / 100); // Views per $100 spent
+                                  return `${efficiency.toFixed(0)} views per $100`;
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 mb-1">Contest Type</p>
+                              <p className="text-lg font-semibold text-gray-800 capitalize">
+                                {currentContest.contest_type} Contest
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+
+                  {/* Views Distribution Chart */}
                   <div>
                     <h3 className="font-medium mb-4">Views Distribution</h3>
-                    <div className="h-40 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <p className="text-muted-foreground">
-                        Analytics visualization would appear here
-                      </p>
+                    <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6">
+                      {filteredAnalyticsSubmissions?.length > 0 ? (
+                        <div className="space-y-4">
+                          {/* Simple bar chart representation */}
+                          {filteredAnalyticsSubmissions
+                            .sort((a, b) => (b.views || 0) - (a.views || 0))
+                            .slice(0, 10) // Show top 10 submissions
+                            .map((submission, index) => {
+                              const maxViews = Math.max(...filteredAnalyticsSubmissions.map(s => s.views || 0));
+                              const views = submission.views || 0;
+                              const percentage = maxViews > 0 ? (views / maxViews) * 100 : 0;
+
+                              return (
+                                <div key={submission.id} className="flex items-center space-x-4">
+                                  <div className="w-8 text-sm font-medium text-gray-600">
+                                    #{index + 1}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex justify-between text-sm mb-1">
+                                      <span className="text-gray-600">
+                                        {submission.creator_username || submission.creator_display_name || 'Unknown Creator'}
+                                      </span>
+                                      <span className="font-medium">
+                                        {views.toLocaleString()} views
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${percentage}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      ) : (
+                        <div className="h-40 flex items-center justify-center">
+                          <p className="text-gray-500">No submissions to display</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
