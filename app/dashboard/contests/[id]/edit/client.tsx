@@ -3563,9 +3563,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       {/* Current Plan Information */}
       <div className="mb-6">
-      <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
-      <AlertDescription className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-      <div className="flex items-start sm:items-center gap-2 ">
+        <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
+          <AlertDescription className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-2 ">
               <Crown className="h-5 w-5 text-[#7F39EC]" />
 
               <div>
@@ -3579,7 +3579,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
             {userPlan !== PRODUCT_IDS.CHAMPION && (
-              <Link href="/dashboard/billing?tab=subscription"  className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition text-center">
+              <Link href="/dashboard/billing?tab=subscription" className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition text-center">
                 Upgrade Plan
               </Link>
             )}
@@ -4459,7 +4459,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   </div>
                 )}
                 <div className="flex flex-col gap-2">
-                  <Label htmlFor="inspirationUrlInput">Inspiration Link</Label>
+                  <Label htmlFor="inspirationUrlInput">
+                    Inspiration Link{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="inspirationUrlInput"
                     type="url"
@@ -4801,7 +4804,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         }
                       }}
                       min={MIN_PRIZE_PER_WINNER / 100}
-                     className="w-full sm:w-40 md:w-48"
+                      className="w-full sm:w-40 md:w-48"
                     />
                     <div className="text-xs sm:text-sm text-gray-500">
                       <span>
@@ -5349,7 +5352,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
               <div className="mt-6">
                 <Button
-                 
+
                   className="w-full bg-[#FF323224] text-[#E50000] py-6 text-md rounded-full"
                   onClick={() => setShowPayment(false)}
                   disabled={isSubmitting}
