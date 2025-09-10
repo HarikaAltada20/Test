@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, RefreshCw, ExternalLink, Check } from "lucide-react";
+import { ArrowLeft, RefreshCw, ExternalLink, Check, Eye, MessageSquare, ThumbsUp } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import { redirect } from "next/navigation";
@@ -1259,7 +1259,7 @@ export default function SubmitContentPage({
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-7xl">
+    <div className="container mx-auto py-8 md:px-4 max-w-[1200px]">
       <div className="flex items-baseline gap-2 mb-6">
         <Button
           variant="ghost"
@@ -1274,13 +1274,8 @@ export default function SubmitContentPage({
         </h1>
       </div>
 
-      <Card className="max-w-6xl mx-auto p-4 sm:p-6 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Content Submission</CardTitle>
-          <CardDescription>
-            Submit your {contestPlatform === 'youtube' ? 'YouTube video/short' : 'Instagram Reel/video'} for this contest.
-          </CardDescription>
-        </CardHeader>
+      <div className="max-w-[1200px] bg-white rounded-xl shadow-lg mx-auto p-2 md:p-4 overflow-hidden">
+       
         <CardContent className="overflow-x-hidden">
           {error && (
             <Alert variant="destructive" className="mb-4">
@@ -1294,8 +1289,15 @@ export default function SubmitContentPage({
           )}
 
           {/* Submit and Cancel Buttons - Moved to top */}
-          <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 mb-6">
-            <Button variant="outline" onClick={() => router.back()} className="w-full sm:w-auto">
+          <div className="flex flex-col gap-4 sm:flex-row items-center justify-between py-6 mb-6">
+          <div>
+          <CardTitle className="mb-1">Content Submission</CardTitle>
+          <CardDescription>
+            Submit your {contestPlatform === 'youtube' ? 'YouTube video/short' : 'Instagram Reel/video'} for this contest.
+          </CardDescription>
+        </div> 
+        <div className="flex items-center gap-3 flex-row">
+            <Button variant="outline" onClick={() => router.back()} className="w-full bg-[#C90808] text-white sm:w-auto">
               Cancel
             </Button>
             <Button
@@ -1312,6 +1314,7 @@ export default function SubmitContentPage({
               {isLoading ? <RefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
               Submit Content
             </Button>
+            </div>
           </div>
 
           {/* YOUTUBE UI BLOCK */}
@@ -1347,41 +1350,87 @@ export default function SubmitContentPage({
                 </Alert>
               )}
               {!youtubeAccount && !isTokenExpired && (
-                <Alert variant="default" className="mb-4 text-center">
-                  <AlertDescription>Connect your YouTube account to submit content.</AlertDescription>
+                <Alert variant="default" className="mb-4 text-center border border-[#7F39EC] bg-[#D9C0FF26]">
+                  <AlertDescription className="text-md">Connect your YouTube account to submit content.</AlertDescription>
                   <Link href="/dashboard/settings">
-                    <Button variant="link" className="mt-1">Connect YouTube in Settings</Button>
+                    <Button variant="link" className="mt-1 text-[#7F39EC]">Connect YouTube in Settings</Button>
                   </Link>
                 </Alert>
               )}
 
               {youtubeAccount && !isTokenExpired && (
+                // <Tabs defaultValue="youtube-library" className="w-full">
+                // <TabsList className="flex w-full p-1.5 bg-[#E4E4E4] rounded-full shadow-sm gap-2">
+                //   <TabsTrigger
+                //     value="youtube-library"
+                //     className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm font-medium 
+                //       rounded-full transition-all duration-200
+                //       data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
+                //       data-[state=active]:shadow-sm text-gray-700 hover:text-gray-800 hover:bg-gray-200"
+                //   >
+                //     <span className="hidden sm:inline">Your Videos & Shorts</span>
+                //     <span className="sm:hidden">Library</span>
+                //   </TabsTrigger>
+              
+                //   <TabsTrigger
+                //     value="youtube-link"
+                //     className="flex items-center justify-center gap-2 px-4 sm:px-6 py-2 sm:py-3 text-sm font-medium 
+                //       rounded-full transition-all duration-200
+                //       data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
+                //       data-[state=active]:shadow-sm text-gray-700 hover:text-gray-800 hover:bg-gray-200"
+                //   >
+                //     <span className="hidden sm:inline">Link</span>
+                //     <span className="sm:hidden">Link</span>
+                //   </TabsTrigger>
+                // </TabsList>
+              
                 <Tabs defaultValue="youtube-library" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2 h-12 sm:h-14 p-1.5 bg-muted/30 border border-border/50 shadow-sm">
-                    <TabsTrigger
-                      value="youtube-library"
-                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300 text-xs sm:text-sm"
-                    >
-                      <span className="hidden sm:inline">Your Videos & Shorts</span>
-                      <span className="sm:hidden">Library</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="youtube-link"
-                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:font-bold data-[state=active]:shadow-lg data-[state=active]:border data-[state=active]:border-primary/30 text-muted-foreground data-[state=active]:scale-105 transition-all duration-300 text-xs sm:text-sm"
-                    >
-                      <span className="hidden sm:inline">Link</span>
-                      <span className="sm:hidden">Link</span>
-                    </TabsTrigger>
-                  </TabsList>
+                <TabsList className="flex w-full p-1.5 bg-[#E4E4E4] rounded-full shadow-sm">
+                  {["youtube-library", "youtube-link"].map((tab, index, arr) => {
+                    const isFirst = index === 0;
+                    const isLast = index === arr.length - 1;
+              
+                    return (
+                      <TabsTrigger
+                        key={tab}
+                        value={tab}
+                        className={`
+                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium 
+                          transition-all duration-200
+                          data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
+                          data-[state=active]:shadow-sm
+                          text-gray-700 hover:text-gray-800 hover:bg-gray-200
+                          ${isFirst ? "data-[state=active]:rounded-l-full" : ""}
+                          ${isLast ? "data-[state=active]:rounded-r-full" : ""}
+                          ${arr.length === 1 ? "data-[state=active]:rounded-full" : ""}
+                        `}
+                      >
+                        {tab === "youtube-library" ? (
+                          <>
+                            <span className="hidden sm:inline">Your Videos & Shorts</span>
+                            <span className="sm:hidden">Library</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="hidden sm:inline">Link</span>
+                            <span className="sm:hidden">Link</span>
+                          </>
+                        )}
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+             
+              
 
                   {/* Informational text for creators */}
-                  <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <p className="text-sm text-blue-800 dark:text-blue-200 text-center">
+                  <div className="mt-8 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
+                    <p className="text-md text-black text-center">
                       💡 <strong>Tip for creators:</strong> You can fetch videos from your YouTube account by entering their URL in the "Link" tab.
                     </p>
                   </div>
 
-                  <TabsContent value="youtube-library" className="mt-4">
+                  <TabsContent value="youtube-library" className="mt-8">
                     {isLoadingVideos ? (
                       <div className="text-center py-4"><RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />Loading YouTube videos...</div>
                     ) : userVideos.length === 0 ? (
@@ -1392,8 +1441,8 @@ export default function SubmitContentPage({
                       ) : (
                         <div className="text-center py-4">
                           <p>No videos found in your YouTube channel.</p>
-                          <Button variant="outline" onClick={() => fetchYouTubeVideos()} className="mt-2" disabled={isLoadingVideos}>
-                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingVideos ? 'animate-spin' : ''}`} /> Reload Videos
+                          <Button variant="outline" onClick={() => fetchYouTubeVideos()} className="mt-2 bg-[#4A00BE] text-white" disabled={isLoadingVideos}>
+                            <RefreshCw className={`h-4 w-4 ${isLoadingVideos ? 'animate-spin' : ''}`} /> Reload Videos
                           </Button>
                         </div>
                       )
@@ -1427,11 +1476,11 @@ export default function SubmitContentPage({
                         )}
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
                           {paginatedUserVideos.map((video, index) => (
-                            <Card
+                            <div
                               key={video.id.videoId}
-                              className={`cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] max-w-4xl mx-auto ${index === 0 ? 'mt-4' : ''} ${index === paginatedUserVideos.length - 1 ? 'mb-4' : ''} ${selectedVideo?.id.videoId === video.id.videoId
-                                ? "border-4 border-blue-600 ring-8 ring-blue-600/40 bg-blue-600/10 shadow-2xl shadow-blue-600/40 scale-[1.02] transform dark:border-blue-400 dark:ring-blue-400/40 dark:bg-blue-400/10 dark:shadow-blue-400/40"
-                                : "border-2 border-border hover:border-primary/60 hover:shadow-md"
+                              className={`cursor-pointer max-w-[1200px] mx-auto ${index === 0 ? 'mt-4' : ''} ${index === paginatedUserVideos.length - 1 ? 'mb-4' : ''} ${selectedVideo?.id.videoId === video.id.videoId
+                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                                : "border-2 border-[#7F39EC] rounded-lg"
                                 }`}
                               onClick={() => {
                                 setSelectedVideo(video);
@@ -1443,7 +1492,7 @@ export default function SubmitContentPage({
                             >
                               <CardContent className="p-4 sm:p-6 relative">
                                 {selectedVideo?.id.videoId === video.id.videoId && (
-                                  <div className="absolute top-2 right-2 z-10 bg-primary text-primary-foreground rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
+                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
                                     <Check className="h-4 w-4" />
                                   </div>
                                 )}
@@ -1462,9 +1511,9 @@ export default function SubmitContentPage({
                                   {/* Content */}
                                   <div className="flex-1 min-w-0 space-y-2 sm:space-y-3">
                                     {/* Title */}
-                                    <div className="space-y-1">
+                                    <div className="space-y-2">
                                       <h3
-                                        className="font-medium text-sm leading-5 text-center sm:text-left line-clamp-2"
+                                        className="font-medium text-lg leading-5 text-center sm:text-left line-clamp-2"
                                         title={video.snippet.title}
                                       >
                                         {video.snippet.title}
@@ -1474,7 +1523,7 @@ export default function SubmitContentPage({
                                           href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center text-xs text-red-600 hover:text-red-800 hover:underline"
+                                          className="inline-flex items-center text-sm text-[#4A00BE] hover:underline"
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <ExternalLink className="h-3 w-3 mr-1" />
@@ -1484,28 +1533,31 @@ export default function SubmitContentPage({
                                     </div>
 
                                     {/* Date */}
-                                    <p className="text-xs text-muted-foreground text-center sm:text-left">
+                                    <p className="text-md text-muted-foreground text-center sm:text-left">
                                       Published: {dayjs(video.snippet.publishedAt).format('MMM D, YYYY [at] h:mm A')}
                                     </p>
 
                                     {/* Statistics */}
                                     {video.statistics && (
-                                      <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                      <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md text-muted-foreground">
                                         {video.statistics.viewCount && (
-                                          <div className="flex items-center">
-                                            <span className="font-medium">👁️ {parseInt(video.statistics.viewCount.toString()).toLocaleString()}</span>
-                                            <span className="ml-1">views</span>
+                                          <div className="flex items-center gap-1">
+                                          <Eye className="h-4 w-4" />
+                                          <span className="font-medium">{parseInt(video.statistics.viewCount.toString()).toLocaleString()}</span>
+                                            <span>views</span>
                                           </div>
                                         )}
                                         {video.statistics.likeCount && (
-                                          <div className="flex items-center">
-                                            <span className="font-medium">👍 {parseInt(video.statistics.likeCount.toString()).toLocaleString()}</span>
-                                            <span className="ml-1">likes</span>
+                                           <div className="flex items-center gap-1">
+                                           <ThumbsUp className="h-4 w-4" />
+                                           <span className="font-medium">{parseInt(video.statistics.likeCount.toString()).toLocaleString()}</span>
+                                            <span>likes</span>
                                           </div>
                                         )}
                                         {video.statistics.commentCount && (
-                                          <div className="flex items-center">
-                                            <span className="font-medium">💬 {parseInt(video.statistics.commentCount.toString()).toLocaleString()}</span>
+                                          <div className="flex items-center gap-1">
+                                          <MessageSquare className="h-4 w-4" />
+                                          <span className="font-medium"> {parseInt(video.statistics.commentCount.toString()).toLocaleString()}</span>
                                             <span className="ml-1">comments</span>
                                           </div>
                                         )}
@@ -1514,14 +1566,14 @@ export default function SubmitContentPage({
                                   </div>
                                 </div>
                               </CardContent>
-                            </Card>
+                            </div>
                           ))}
                         </div>
                       </>
                     )}
                   </TabsContent>
-                  <TabsContent value="youtube-link" className="mt-4">
-                    <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 p-4 bg-muted/30 rounded-lg border">
+                  <TabsContent value="youtube-link" className="mt-6">
+                    <div className="flex flex-col items-center sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 py-4 ">
                       <Input
                         type="text"
                         placeholder="Enter YouTube video URL"
@@ -1541,9 +1593,9 @@ export default function SubmitContentPage({
                     </div>
                     {videoPreview && (
                       <Card
-                        className={`mt-6 cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] max-w-4xl mx-auto ${selectedVideo?.id.videoId === videoPreview.id.videoId
-                          ? "border-4 border-blue-600 ring-8 ring-blue-600/40 bg-blue-600/10 shadow-2xl shadow-blue-600/40 scale-[1.02] transform dark:border-blue-400 dark:ring-blue-400/40 dark:bg-blue-400/10 dark:shadow-blue-400/40"
-                          : "border-2 border-border hover:border-primary/60 hover:shadow-md"
+                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${selectedVideo?.id.videoId === videoPreview.id.videoId
+                          ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                          : "border-2 border-[#7F39EC] rounded-lg "
                           }`}
                         onClick={() => {
                           setSelectedVideo(videoPreview);
@@ -1553,12 +1605,12 @@ export default function SubmitContentPage({
                           // Keep videoPreview to show the card remains visible when selected
                         }}
                       >
-                        <CardHeader>
+                        <div className="p-3 md:p-4">
                           <CardTitle className="text-base">Video Preview</CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4 sm:p-6 relative">
+                        </div>
+                        <CardContent className="p-3 sm:p-4 relative">
                           {selectedVideo?.id.videoId === videoPreview.id.videoId && (
-                            <div className="absolute top-2 right-2 z-10 bg-primary text-primary-foreground rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
+                            <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
                               <Check className="h-4 w-4" />
                             </div>
                           )}
@@ -1579,7 +1631,7 @@ export default function SubmitContentPage({
                               {/* Title */}
                               <div className="space-y-1">
                                 <h3
-                                  className="font-medium text-sm leading-5 text-center sm:text-left line-clamp-2"
+                                  className="font-medium text-lg leading-5 text-center sm:text-left line-clamp-2"
                                   title={videoPreview.snippet.title}
                                 >
                                   {videoPreview.snippet.title}
@@ -1589,7 +1641,7 @@ export default function SubmitContentPage({
                                     href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center text-xs text-red-600 hover:text-red-800 hover:underline"
+                                    className="inline-flex items-center text-sm text-purple-600 hover:underline"
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <ExternalLink className="h-3 w-3 mr-1" />
@@ -1599,29 +1651,32 @@ export default function SubmitContentPage({
                               </div>
 
                               {/* Date */}
-                              <p className="text-xs text-muted-foreground text-center sm:text-left">
+                              <p className="text-md text-muted-foreground text-center sm:text-left">
                                 Published: {dayjs(videoPreview.snippet.publishedAt).format('MMM D, YYYY [at] h:mm A')}
                               </p>
 
                               {/* Statistics */}
                               {videoPreview.statistics && (
-                                <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <div className="flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md text-muted-foreground">
                                   {videoPreview.statistics.viewCount && (
-                                    <div className="flex items-center">
-                                      <span className="font-medium">👁️ {parseInt(videoPreview.statistics.viewCount.toString()).toLocaleString()}</span>
-                                      <span className="ml-1">views</span>
+                                      <div className="flex items-center gap-1">
+                                      <Eye className="h-4 w-4" />
+                                      <span className="font-medium"> {parseInt(videoPreview.statistics.viewCount.toString()).toLocaleString()}</span>
+                                      <span >views</span>
                                     </div>
                                   )}
                                   {videoPreview.statistics.likeCount && (
-                                    <div className="flex items-center">
-                                      <span className="font-medium">👍 {parseInt(videoPreview.statistics.likeCount.toString()).toLocaleString()}</span>
-                                      <span className="ml-1">likes</span>
+                                      <div className="flex items-center gap-1">
+                                      <ThumbsUp className="h-4 w-4" />
+                                      <span className="font-medium">{parseInt(videoPreview.statistics.likeCount.toString()).toLocaleString()}</span>
+                                      <span >likes</span>
                                     </div>
                                   )}
                                   {videoPreview.statistics.commentCount && (
-                                    <div className="flex items-center">
-                                      <span className="font-medium">💬 {parseInt(videoPreview.statistics.commentCount.toString()).toLocaleString()}</span>
-                                      <span className="ml-1">comments</span>
+                                      <div className="flex items-center gap-1">
+                                      <MessageSquare className="h-4 w-4" />
+                                      <span className="font-medium">{parseInt(videoPreview.statistics.commentCount.toString()).toLocaleString()}</span>
+                                      <span>comments</span>
                                     </div>
                                   )}
                                 </div>
@@ -1672,10 +1727,10 @@ export default function SubmitContentPage({
                 </Alert>
               )}
               {!instagramAccount && !isInstagramTokenExpired && (
-                <Alert variant="default" className="mb-4 text-center">
-                  <AlertDescription>Connect your Instagram account to submit content.</AlertDescription>
+                <Alert variant="default" className="mb-4 border border-[#7F39EC] bg-[#D9C0FF26] text-center">
+                  <AlertDescription className="text-md" >Connect your Instagram account to submit content.</AlertDescription>
                   <Link href="/dashboard/settings">
-                    <Button variant="link" className="mt-1">Connect Instagram in Settings</Button>
+                    <Button variant="link" className="mt-1 text-[#7F39EC]">Connect Instagram in Settings</Button>
                   </Link>
                 </Alert>
               )}
@@ -1940,7 +1995,7 @@ export default function SubmitContentPage({
             </>
           )}
         </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

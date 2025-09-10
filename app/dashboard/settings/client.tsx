@@ -952,7 +952,8 @@ export default function SettingsPage({
               </div>
               {youtubeConnected ? (
                 <Button
-                  variant="outline"
+                 
+                  className="bg-[#C90808] text-white"
                   onClick={handleYouTubeDisconnect}
                   disabled={isLoadingYouTubeDisconnect}
                 >
@@ -975,9 +976,9 @@ export default function SettingsPage({
             </div>
             {/* YouTube Connection Information - Display if not connected */}
             {!youtubeConnected && (
-              <Alert variant="default" className="mt-2">
+              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
                 <Bell className="h-4 w-4" />
-                <AlertDescription className="text-xs leading-relaxed">
+                <AlertDescription className="text-sm leading-relaxed">
                   Connect your YouTube account to allow Game Of Creators to view
                   basic channel information (e.g., name, subscriber count,
                   username). This also enables us to display your videos on the
@@ -1044,9 +1045,9 @@ export default function SettingsPage({
             </div>
             {/* Instagram Connection Information - Display if not connected */}
             {!instagramConnected && (
-              <Alert variant="default" className="mt-2">
+              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
                 <Bell className="h-4 w-4" />
-                <AlertDescription className="text-xs leading-relaxed">
+                <AlertDescription className="text-sm leading-relaxed">
                   To participate in Instagram campaigns, you need to connect an
                   Instagram{" "}
                   <strong className="font-semibold">

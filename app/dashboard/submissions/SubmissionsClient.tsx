@@ -296,7 +296,16 @@ export default function SubmissionsClient({
             <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
                 <h1 className="text-2xl font-bold">My Submissions</h1>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                    <Select value={contestTypeFilter} onValueChange={(value) => setContestTypeFilter(value as ContestTypeFilter)}>
+                  
+                   
+                    <Button asChild className="w-full text-md py-3 sm:w-auto">
+                        <Link href="/dashboard/opportunities">Find Opportunities</Link>
+                    </Button>
+                </div>
+            </div>
+
+<div className='flex flex-col sm:flex-row items-center gap-4 mb-3'>
+<Select value={contestTypeFilter} onValueChange={(value) => setContestTypeFilter(value as ContestTypeFilter)}>
                         <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="Filter by Type" />
                         </SelectTrigger>
@@ -316,45 +325,41 @@ export default function SubmissionsClient({
                             <SelectItem value="instagram">Instagram</SelectItem>
                         </SelectContent>
                     </Select>
-                    {/* Consider replacing Button with Tabs for status filters for better UX */}
-                    <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                        <Filter className="h-4 w-4 mr-2" />
-                        <span>Filter by Status (Soon)</span>
-                    </Button>
-                    <Button size="sm" asChild className="w-full sm:w-auto">
-                        <Link href="/dashboard/opportunities">Find Opportunities</Link>
-                    </Button>
-                </div>
-            </div>
+                     {/* Consider replacing Button with Tabs for status filters for better UX */}
+                     <button className="w-full sm:w-auto py-2.5 px-4 border rounded-md flex items-center">
+  <Filter className="h-4 w-4 mr-2" />
+  <span>Filter by Status (Soon)</span>
+</button>
 
+</div>
             {/* Enhanced Tabs with better visual distinction and responsive design */}
             <Tabs defaultValue="all" value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)} className="mb-8">
-                <TabsList>
-                    <TabsTrigger value="all">
+                <TabsList className="flex gap-4">
+                    <TabsTrigger value="all" className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         All
                     </TabsTrigger>
-                    <TabsTrigger value="active">
+                    <TabsTrigger value="active" className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         Active
                     </TabsTrigger>
-                    <TabsTrigger value="pending">
+                    <TabsTrigger value="pending" className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         Pending
                     </TabsTrigger>
-                    <TabsTrigger value="verified">
+                    <TabsTrigger value="verified" className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         Verified
                     </TabsTrigger>
-                    <TabsTrigger value="rejected">
+                    <TabsTrigger value="rejected" className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         Rejected
                     </TabsTrigger>
-                    <TabsTrigger value="ended">
+                    <TabsTrigger value="ended" className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         Ended
                     </TabsTrigger>
-                    <TabsTrigger value="paid">
+                    <TabsTrigger value="paid"  className="border border-[#7F39EC] text-md text-[#7F39EC]">
                         Paid
                     </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value={statusFilter} className="space-y-4">
-                    <Card className="shadow-sm">
+                    <div >
                         <CardHeader className="pb-4">
                             <div className="flex items-center justify-between">
                                 <div>
@@ -583,7 +588,7 @@ export default function SubmissionsClient({
                                 })}
                             </div>
                         </CardContent>
-                    </Card>
+                    </div>
 
                     {filteredSubmissions.length === 0 && (
                         <div className="col-span-full text-center py-12">

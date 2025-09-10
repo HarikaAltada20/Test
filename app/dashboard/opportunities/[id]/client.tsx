@@ -13,6 +13,8 @@ import {
   ExternalLink,
   Info,
   Trophy,
+  Youtube,
+  Instagram,
   User,
   Users,
   Share2,
@@ -29,19 +31,29 @@ import {
   Monitor,
   Play,
   FileText,
-  DollarSign
+  DollarSign,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
+import {
+  EnhancedTabs as Tabs,
+  EnhancedTabsContent as TabsContent,
+  EnhancedTabsList as TabsList,
+  EnhancedTabsTrigger as TabsTrigger,
+} from "@/components/ui/enhanced-tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createClient } from "@/utils/supabase/client";
-import { getMetricsRefreshCooldownInfoOpportunities, formatRemainingTime } from "@/lib/constants";
+import {
+  getMetricsRefreshCooldownInfoOpportunities,
+  formatRemainingTime,
+} from "@/lib/constants";
 import type { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
-
+import { EnhancedTabs } from "@/components/ui/enhancedTabs";
+import { TabContent, TabPanel } from "@/components/ui/tab-content";
+import { useTabState } from "@/components/ui/tab-utils";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -53,7 +65,11 @@ type PrizeInfo = {
   position: number;
   amount: number;
 };
-
+const tabs = [
+  { id: "details", label: "Contest Details" },
+  { id: "leaderboard", label: "Leaderboard" },
+ 
+] 
 // LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
   id: string;
@@ -73,11 +89,20 @@ type LeaderboardEntry = {
 };
 
 // Store for generated dummy data to avoid re-computation if count doesn't change
-let generatedDummyDataCache: { entries: LeaderboardEntry[], myRank: number | null, count: number } | null = null;
+let generatedDummyDataCache: {
+  entries: LeaderboardEntry[];
+  myRank: number | null;
+  count: number;
+} | null = null;
 
-const generateAllDummyLeaderboardData = (count: number): { entries: LeaderboardEntry[], myRank: number | null } => {
+const generateAllDummyLeaderboardData = (
+  count: number
+): { entries: LeaderboardEntry[]; myRank: number | null } => {
   if (generatedDummyDataCache && generatedDummyDataCache.count === count) {
-    return { entries: generatedDummyDataCache.entries, myRank: generatedDummyDataCache.myRank };
+    return {
+      entries: generatedDummyDataCache.entries,
+      myRank: generatedDummyDataCache.myRank,
+    };
   }
 
   const entries: LeaderboardEntry[] = [];
@@ -85,8 +110,10 @@ const generateAllDummyLeaderboardData = (count: number): { entries: LeaderboardE
   let tempMyRank: number | null = null;
 
   for (let i = 0; i < count; i++) {
-    const isMyEntry = (i === Math.floor(count / 4)); // Place 'my' entry deterministically
-    const creatorId = isMyEntry ? MY_DUMMY_SUBMISSION_USER_ID : `user_dummy_${i}`;
+    const isMyEntry = i === Math.floor(count / 4); // Place 'my' entry deterministically
+    const creatorId = isMyEntry
+      ? MY_DUMMY_SUBMISSION_USER_ID
+      : `user_dummy_${i}`;
     const username = isMyEntry ? "MyAwesomeSelf" : `Creator${i}`;
     const views = Math.floor(Math.random() * 750000) + 500; // Random views, wider range
 
@@ -98,11 +125,15 @@ const generateAllDummyLeaderboardData = (count: number): { entries: LeaderboardE
       views: views,
       earnings: Math.random() > 0.65 ? Math.floor(Math.random() * 150) + 10 : 0,
       status: "approved",
-      created_at: new Date(Date.now() - Math.random() * 45 * 24 * 60 * 60 * 1000).toISOString(), // random date in last 45 days
+      created_at: new Date(
+        Date.now() - Math.random() * 45 * 24 * 60 * 60 * 1000
+      ).toISOString(), // random date in last 45 days
       content_link: "https://www.example.com/watch?v=dQw4w9WgXcQ", // A familiar link for all :)
       platform: platforms[i % platforms.length],
       user_platform_username: username,
-      user_full_name: `${isMyEntry ? 'The One And Only' : 'Talented'} ${username.replace(/\d+/g, '')}`,
+      user_full_name: `${
+        isMyEntry ? "The One And Only" : "Talented"
+      } ${username.replace(/\d+/g, "")}`,
       creator_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}`,
       user_platform_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}_platform`,
     });
@@ -113,7 +144,9 @@ const generateAllDummyLeaderboardData = (count: number): { entries: LeaderboardE
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
   });
 
-  const myEntryIndex = entries.findIndex(e => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID);
+  const myEntryIndex = entries.findIndex(
+    (e) => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID
+  );
   if (myEntryIndex !== -1) {
     tempMyRank = myEntryIndex + 1;
   }
@@ -140,7 +173,7 @@ export function ContestClientPage({
   const router = useRouter();
   const supabase = createClient();
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [activeTab, setActiveTab] = useState("details"); // State for controlling active tab
+  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "details" });
 
   // Pagination state for leaderboard
   const [leaderboardCurrentPage, setLeaderboardCurrentPage] = useState(1);
@@ -149,7 +182,9 @@ export function ContestClientPage({
   const [totalLeaderboardPages, setTotalLeaderboardPages] = useState(0);
 
   // State for logged-in user's submission and rank
-  const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<(LeaderboardEntry & { rank: number }) | null>(null);
+  const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<
+    (LeaderboardEntry & { rank: number }) | null
+  >(null);
   const [loadingMySubmission, setLoadingMySubmission] = useState(false);
   const [contestType, setContestType] = useState<string | null>(null); // Track contest type for verification badges
 
@@ -157,7 +192,9 @@ export function ContestClientPage({
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
   // Post-contest status state for creator transparency
-  const [postContestStatus, setPostContestStatus] = useState<string | null>(null);
+  const [postContestStatus, setPostContestStatus] = useState<string | null>(
+    null
+  );
 
   const { toast } = useToast();
 
@@ -167,35 +204,38 @@ export function ContestClientPage({
     setIsRefreshingMetrics(true);
 
     try {
-      const response = await fetch(`/api/contests/${contest.id}/refresh-metrics`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-refresh-source': 'opportunities', // Identify this as opportunities refresh
-        },
-      });
+      const response = await fetch(
+        `/api/contests/${contest.id}/refresh-metrics`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-refresh-source": "opportunities", // Identify this as opportunities refresh
+          },
+        }
+      );
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to refresh metrics');
+        throw new Error(result.error || "Failed to refresh metrics");
       }
 
       // Update contest with new last_metrics_updated timestamp
-      const newTimestamp = result.lastMetricsUpdated || new Date().toISOString();
+      const newTimestamp =
+        result.lastMetricsUpdated || new Date().toISOString();
       setContest((prev: any) => ({
         ...prev,
-        last_metrics_updated: newTimestamp
+        last_metrics_updated: newTimestamp,
       }));
 
       // Refresh BOTH the leaderboard AND the user's own submission data
       await Promise.all([
         fetchLeaderboard(leaderboardCurrentPage),
-        fetchMySubmissionData()
+        fetchMySubmissionData(),
       ]);
-
     } catch (error: any) {
-      console.error('Failed to refresh metrics:', error);
+      console.error("Failed to refresh metrics:", error);
       // In opportunities page, we'll silently handle errors or show a subtle notification
     } finally {
       setIsRefreshingMetrics(false);
@@ -207,7 +247,8 @@ export function ContestClientPage({
     setLoadingLeaderboard(true);
 
     if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
-      const { entries: allEntries } = generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
+      const { entries: allEntries } =
+        generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
       const totalEntries = allEntries.length;
       const totalPages = Math.ceil(totalEntries / leaderboardItemsPerPage);
       const startIndex = (pageToFetch - 1) * leaderboardItemsPerPage;
@@ -221,7 +262,7 @@ export function ContestClientPage({
           setLeaderboardCurrentPage(pageToFetch);
           setTotalLeaderboardPages(totalPages);
           setTotalLeaderboardEntries(totalEntries);
-          setContestType('leaderboard'); // Set dummy contest type
+          setContestType("leaderboard"); // Set dummy contest type
           setLoadingLeaderboard(false);
         }
       }, 300);
@@ -231,7 +272,9 @@ export function ContestClientPage({
     // Real API Call
     let leaderboardFetchError = null;
     try {
-      const response = await fetch(`/api/leaderboard/${contestId}?page=${pageToFetch}&limit=${leaderboardItemsPerPage}`);
+      const response = await fetch(
+        `/api/leaderboard/${contestId}?page=${pageToFetch}&limit=${leaderboardItemsPerPage}`
+      );
       const data = await response.json();
       if (!response.ok) {
         leaderboardFetchError = data.error || "Failed to fetch leaderboard";
@@ -257,10 +300,10 @@ export function ContestClientPage({
 
   // Helper function to render verification badge
   const renderVerificationBadge = (status: string) => {
-    if (contestType !== 'cpm') return null; // Only show for CPM contests
+    if (contestType !== "cpm") return null; // Only show for CPM contests
 
     switch (status) {
-      case 'verified':
+      case "verified":
         return (
           <Badge
             variant="default"
@@ -270,7 +313,7 @@ export function ContestClientPage({
             Verified
           </Badge>
         );
-      case 'pending':
+      case "pending":
         return (
           <Badge
             variant="secondary"
@@ -280,7 +323,7 @@ export function ContestClientPage({
             Pending
           </Badge>
         );
-      case 'rejected':
+      case "rejected":
         return (
           <Badge
             variant="destructive"
@@ -364,14 +407,21 @@ export function ContestClientPage({
     setLoadingMySubmission(true);
 
     if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
-      const { entries: allEntries, myRank } = generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
-      const myEntryData = allEntries.find(e => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID);
+      const { entries: allEntries, myRank } =
+        generateAllDummyLeaderboardData(DUMMY_ENTRIES_COUNT);
+      const myEntryData = allEntries.find(
+        (e) => e.creator_id === MY_DUMMY_SUBMISSION_USER_ID
+      );
 
       setTimeout(() => {
         if (isMounted) {
           if (myEntryData && myRank !== null) {
             // Add dummy verified status for testing
-            setMyLeaderboardEntry({ ...myEntryData, rank: myRank, status: 'verified' });
+            setMyLeaderboardEntry({
+              ...myEntryData,
+              rank: myRank,
+              status: "verified",
+            });
           } else {
             setMyLeaderboardEntry(null);
           }
@@ -387,10 +437,15 @@ export function ContestClientPage({
       return;
     }
     try {
-      const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+      const response = await fetch(
+        `/api/leaderboard/${contestId}/my-submission`
+      );
       const data = await response.json();
       if (!response.ok) {
-        console.warn('Failed to fetch user submission data:', data.error || "Unknown error");
+        console.warn(
+          "Failed to fetch user submission data:",
+          data.error || "Unknown error"
+        );
         if (isMounted) setMyLeaderboardEntry(null);
         return;
       }
@@ -414,13 +469,13 @@ export function ContestClientPage({
 
     try {
       const { data: contestData, error } = await supabase
-        .from('contests')
-        .select('post_contest_status')
-        .eq('id', contestId)
+        .from("contests")
+        .select("post_contest_status")
+        .eq("id", contestId)
         .single();
 
       if (error) {
-        console.error('Error fetching post-contest status:', error);
+        console.error("Error fetching post-contest status:", error);
         return;
       }
 
@@ -428,7 +483,7 @@ export function ContestClientPage({
         setPostContestStatus(contestData?.post_contest_status || null);
       }
     } catch (error) {
-      console.error('Error fetching post-contest status:', error);
+      console.error("Error fetching post-contest status:", error);
     }
   };
 
@@ -459,12 +514,12 @@ export function ContestClientPage({
         if (!contestData) throw new Error("Contest not found.");
 
         // Only published contests should be available to creators
-        if (contestData.moderation_status !== 'published') {
+        if (contestData.moderation_status !== "published") {
           throw new Error("This contest is not available.");
         }
 
         // Check if published contest has valid dates
-        if (contestData.status === 'incomplete') {
+        if (contestData.status === "incomplete") {
           throw new Error("This contest has incomplete information.");
         }
         if (isMounted) {
@@ -476,14 +531,19 @@ export function ContestClientPage({
         // Fetch existing submission status for the current user (if logged in)
         // This is separate from the main leaderboard logic.
         if (user) {
-          const { data: submissionData, error: submissionError } = await supabase
-            .from("submissions")
-            .select("id, created_at")
-            .eq("contest_id", contestId)
-            .eq("creator_id", user.id)
-            .limit(1);
+          const { data: submissionData, error: submissionError } =
+            await supabase
+              .from("submissions")
+              .select("id, created_at")
+              .eq("contest_id", contestId)
+              .eq("creator_id", user.id)
+              .limit(1);
 
-          if (submissionError) console.error("Error checking existing submission:", submissionError);
+          if (submissionError)
+            console.error(
+              "Error checking existing submission:",
+              submissionError
+            );
           else if (submissionData && submissionData.length > 0 && isMounted) {
             setHasSubmitted(true);
             setExistingSubmission(submissionData[0]);
@@ -507,7 +567,12 @@ export function ContestClientPage({
 
     // Auto-refresh for leaderboard (only if NOT using dummy data)
     const intervalId = setInterval(() => {
-      if (isMounted && lastUpdated && !loadingLeaderboard && !USE_DUMMY_DATA_FOR_LEADERBOARD) {
+      if (
+        isMounted &&
+        lastUpdated &&
+        !loadingLeaderboard &&
+        !USE_DUMMY_DATA_FOR_LEADERBOARD
+      ) {
         const lastUpdateTime = new Date(lastUpdated).getTime();
         const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
         if (lastUpdateTime < fiveMinutesAgo) {
@@ -517,10 +582,10 @@ export function ContestClientPage({
     }, 60 * 1000);
 
     // Check for URL hash to set active tab
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const hash = window.location.hash;
-      if (hash === '#leaderboard') {
-        if (isMounted) setActiveTab('leaderboard');
+      if (hash === "#leaderboard") {
+        if (isMounted) setActiveTab("leaderboard");
       }
     }
 
@@ -540,7 +605,6 @@ export function ContestClientPage({
   };
 
   // Helper to format time ago
-
 
   // Show loading state ONLY when fetching data (loading state)
   if (loading) {
@@ -573,19 +637,21 @@ export function ContestClientPage({
   }
 
   const handleShare = async () => {
-    if (contest.status === 'ended') {
+    if (contest.status === "ended") {
       toast({
-        title: 'Opportunity Ended',
-        description: 'This opportunity has ended. Creators can no longer submit entries.',
-        variant: 'destructive',
+        title: "Opportunity Ended",
+        description:
+          "This opportunity has ended. Creators can no longer submit entries.",
+        variant: "destructive",
       });
       return;
     }
-    if (contest.status === 'upcoming') {
+    if (contest.status === "upcoming") {
       toast({
-        title: 'Not Live Yet',
-        description: "This opportunity is not live yet. You can share it, but creators won't be able to participate until the start date.",
-        variant: 'default',
+        title: "Not Live Yet",
+        description:
+          "This opportunity is not live yet. You can share it, but creators won't be able to participate until the start date.",
+        variant: "default",
       });
       // Allow sharing to proceed
     }
@@ -599,17 +665,17 @@ export function ContestClientPage({
       } else {
         await navigator.clipboard.writeText(window.location.href);
         toast({
-          title: 'Link Copied',
-          description: 'Opportunity link copied to clipboard!',
-          variant: 'default',
+          title: "Link Copied",
+          description: "Opportunity link copied to clipboard!",
+          variant: "default",
         });
       }
     } catch (error) {
-      console.error('Error sharing:', error);
+      console.error("Error sharing:", error);
       toast({
-        title: 'Share Failed',
-        description: 'There was an error trying to share this opportunity.',
-        variant: 'destructive',
+        title: "Share Failed",
+        description: "There was an error trying to share this opportunity.",
+        variant: "destructive",
       });
     }
   };
@@ -617,7 +683,7 @@ export function ContestClientPage({
   // Render main content
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto py-8 px-2 lg:px-4">
         {/* Improved Header Navigation */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
@@ -628,7 +694,9 @@ export function ContestClientPage({
               onClick={() => router.push("/dashboard/opportunities")}
             >
               <ArrowLeft className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-              <span className="hidden sm:inline text-slate-600 dark:text-slate-300 font-medium">Back to Opportunities</span>
+              <span className="hidden sm:inline text-slate-600 dark:text-slate-300 font-medium">
+                Back to Opportunities
+              </span>
             </Button>
             <Button
               variant="outline"
@@ -642,29 +710,30 @@ export function ContestClientPage({
           </div>
 
           {/* Enhanced Contest Header Section */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-rose-500 via-pink-500 to-purple-600 dark:from-rose-600 dark:via-pink-600 dark:to-purple-700 shadow-2xl">
+          <div className="relative overflow-hidden rounded-xl bg-[#7F39EC] shadow-lg">
             {/* Decorative background pattern */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+            {/* <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full transform translate-x-16 -translate-y-16"></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/5 rounded-full transform -translate-x-24 translate-y-24"></div>
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/5 rounded-full transform -translate-x-24 translate-y-24"></div> */}
 
             <div className="relative p-8">
               <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
                 <div className="flex-1 min-w-0">
                   {/* Contest Title */}
-                  <h1 className="text-4xl lg:text-5xl font-bold tracking-tight mb-6 text-white drop-shadow-sm leading-tight">
+                  <h1 className="text-2xl lg:text-3xl font-bold tracking-tight mb-6 text-white drop-shadow-sm leading-tight">
                     {contest.title}
                   </h1>
 
                   {/* Status and Type Badges */}
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <Badge
-                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
-                        ? "bg-green-400/90 text-green-900"
-                        : contest.status === "upcoming"
+                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${
+                        contest.status === "active"
+                          ? "bg-green-400/90 text-green-900"
+                          : contest.status === "upcoming"
                           ? "bg-blue-400/90 text-blue-900"
                           : "bg-slate-400/90 text-slate-900"
-                        }`}
+                      }`}
                     >
                       <span className="flex items-center gap-1.5">
                         {contest.status === "active" ? (
@@ -674,18 +743,22 @@ export function ContestClientPage({
                         ) : (
                           <Calendar className="w-3 h-3" />
                         )}
-                        {contest.status === "active" ? "LIVE" : contest.status.toUpperCase()}
+                        {contest.status === "active"
+                          ? "LIVE"
+                          : contest.status.toUpperCase()}
                       </span>
                     </Badge>
                     {contest.contest_type && (
-                      <Badge
-                        className="capitalize text-sm px-4 py-2 font-semibold rounded-full shadow-lg bg-white/20 backdrop-blur-sm border-2 border-white/30 text-white"
-                      >
-                        {contest.contest_type === 'cpm' ? 'Performance Based' : 'Competition Based'}
+                      <Badge className="capitalize text-sm px-4 py-2 font-semibold rounded-full shadow-lg bg-white/20 backdrop-blur-sm border-2 border-white/30 text-white">
+                        {contest.contest_type === "cpm"
+                          ? "Performance Based"
+                          : "Competition Based"}
                       </Badge>
                     )}
                     {/* Post-contest status badge for ended contests */}
-                    {contest.status === "ended" && postContestStatus && renderPostContestStatusBadge(postContestStatus)}
+                    {contest.status === "ended" &&
+                      postContestStatus &&
+                      renderPostContestStatusBadge(postContestStatus)}
                   </div>
 
                   {/* Contest Duration */}
@@ -695,13 +768,15 @@ export function ContestClientPage({
                         <Calendar className="w-4 h-4" />
                         <span>
                           {formatLocalDateTime(contest.start_date, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                          })} - {formatLocalDateTime(contest.end_date, {
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}{" "}
+                          -{" "}
+                          {formatLocalDateTime(contest.end_date, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
                           })}
                         </span>
                       </p>
@@ -713,27 +788,53 @@ export function ContestClientPage({
                 <div className="flex-shrink-0 lg:text-right">
                   <div className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/25 shadow-xl">
                     <div className="text-white/80 text-sm font-medium mb-2 uppercase tracking-wide">
-                      {contest.contest_type === 'cpm' ? 'Total Budget' : 'Prize Pool'}
+                      {contest.contest_type === "cpm"
+                        ? "Total Budget"
+                        : "Prize Pool"}
                     </div>
                     <div className="text-3xl lg:text-4xl font-bold text-white mb-1">
-                      {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest
-                        ? formatMoney(contest.contest_based_details.cpm_contest.total_budget)
-                        : contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest
-                          ? formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)
-                          : contest.total_prize
-                            ? formatMoney(contest.total_prize || 0)
-                            : "$0.00"}
+                      {contest.contest_type === "cpm" &&
+                      contest.contest_based_details?.cpm_contest
+                        ? formatMoney(
+                            contest.contest_based_details.cpm_contest
+                              .total_budget
+                          )
+                        : contest.contest_type === "leaderboard" &&
+                          contest.contest_based_details?.leaderboard_contest
+                        ? formatMoney(
+                            contest.contest_based_details.leaderboard_contest
+                              .total_prize
+                          )
+                        : contest.total_prize
+                        ? formatMoney(contest.total_prize || 0)
+                        : "$0.00"}
                     </div>
-                    {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.winner_count && (
-                      <div className="text-white/70 text-xs font-medium">
-                        {contest.contest_based_details.leaderboard_contest.winner_count} winner{contest.contest_based_details.leaderboard_contest.winner_count !== 1 ? 's' : ''}
-                      </div>
-                    )}
-                    {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd && (
-                      <div className="text-white/70 text-xs font-medium">
-                        {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views
-                      </div>
-                    )}
+                    {contest.contest_type === "leaderboard" &&
+                      contest.contest_based_details?.leaderboard_contest
+                        ?.winner_count && (
+                        <div className="text-white/70 text-xs font-medium">
+                          {
+                            contest.contest_based_details.leaderboard_contest
+                              .winner_count
+                          }{" "}
+                          winner
+                          {contest.contest_based_details.leaderboard_contest
+                            .winner_count !== 1
+                            ? "s"
+                            : ""}
+                        </div>
+                      )}
+                    {contest.contest_type === "cpm" &&
+                      contest.contest_based_details?.cpm_contest
+                        ?.cpm_rate_usd && (
+                        <div className="text-white/70 text-xs font-medium">
+                          {formatMoney(
+                            contest.contest_based_details.cpm_contest
+                              .cpm_rate_usd * 100
+                          )}{" "}
+                          per 1000 views
+                        </div>
+                      )}
                   </div>
                 </div>
               </div>
@@ -742,12 +843,12 @@ export function ContestClientPage({
         </div>
 
         {contest.thumbnail_url && (
-          <div className="mb-8 aspect-video w-full max-w-5xl mx-auto relative overflow-hidden rounded-xl shadow-xl border-4 border-white dark:border-slate-700">
+          <div className="mb-8 aspect-video w-full mx-auto relative overflow-hidden rounded-xl shadow-lg">
             <Image
               src={contest.thumbnail_url}
               alt={`${contest.title} thumbnail`}
               fill
-              style={{ objectFit: "contain" }} // Changed to contain to ensure full image visibility
+              style={{ objectFit: "cover" }} // cover makes sure it fills width
               priority
               className="bg-slate-100 dark:bg-slate-800"
             />
@@ -755,11 +856,11 @@ export function ContestClientPage({
         )}
 
         {/* Enhanced Action Card: Submit or Status */}
-        <Card className="mb-8 shadow-2xl border-slate-200 dark:border-slate-700 bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-800 dark:via-slate-800 dark:to-slate-900 overflow-hidden">
+        <Card className="mb-8 border border-[#7F39EC] bg-[#D9C0FF26] overflow-hidden">
           <CardContent className="p-8 text-center relative">
             {/* Decorative background elements */}
-            <div className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-rose-200/30 to-purple-200/30 dark:from-rose-500/10 dark:to-purple-500/10 rounded-full blur-xl transform -translate-x-16 -translate-y-16"></div>
-            <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-tl from-blue-200/30 to-cyan-200/30 dark:from-blue-500/10 dark:to-cyan-500/10 rounded-full blur-xl transform translate-x-20 translate-y-20"></div>
+            {/* <div className="absolute top-0 left-0 w-32 h-32 bg-gradient-to-br from-rose-200/30 to-purple-200/30 dark:from-rose-500/10 dark:to-purple-500/10 rounded-full blur-xl transform -translate-x-16 -translate-y-16"></div>
+            <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-tl from-blue-200/30 to-cyan-200/30 dark:from-blue-500/10 dark:to-cyan-500/10 rounded-full blur-xl transform translate-x-20 translate-y-20"></div> */}
 
             <div className="relative z-10">
               {hasSubmitted ? (
@@ -788,13 +889,12 @@ export function ContestClientPage({
                     <h2 className="text-3xl font-bold bg-gradient-to-r from-rose-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-3">
                       Ready to Showcase Your Talent?
                     </h2>
-                    <p className="text-lg text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
+                    <p className="text-lg text-black max-w-md mx-auto leading-relaxed">
                       {contest.status === "active"
                         ? "The stage is yours! Submit your content and let your creativity shine."
                         : contest.status === "upcoming"
-                          ? "Get ready! This opportunity hasn't started yet, but you can prepare."
-                          : "This opportunity has ended or is no longer active."
-                      }
+                        ? "Get ready! This opportunity hasn't started yet, but you can prepare."
+                        : "This opportunity has ended or is no longer active."}
                     </p>
                   </div>
 
@@ -802,10 +902,11 @@ export function ContestClientPage({
                     size="lg"
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
-                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                      ? "bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 hover:from-rose-600 hover:via-pink-600 hover:to-purple-700 text-white border-0 hover:shadow-2xl hover:scale-105 active:scale-95"
-                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                      }`}
+                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
+                      contest.status?.toLowerCase() === "active"
+                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
+                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                    }`}
                   >
                     {/* Animated shine effect for active button */}
                     {contest.status?.toLowerCase() === "active" && (
@@ -818,7 +919,8 @@ export function ContestClientPage({
                           <Clock className="h-6 w-6" />
                           <span>Contest Not Started</span>
                         </>
-                      ) : contest.status?.toLowerCase() === "ended" || contest.status?.toLowerCase() === "completed" ? (
+                      ) : contest.status?.toLowerCase() === "ended" ||
+                        contest.status?.toLowerCase() === "completed" ? (
                         <>
                           <Calendar className="h-6 w-6" />
                           <span>Contest Ended</span>
@@ -838,7 +940,7 @@ export function ContestClientPage({
                   </Button>
 
                   {contest.status?.toLowerCase() === "active" && (
-                    <div className="text-sm text-slate-500 dark:text-slate-400 mt-4 flex items-center justify-center gap-2">
+                    <div className="text-sm text-black mt-4 flex items-center justify-center gap-2">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                       Contest is live! Join now to compete
                     </div>
@@ -852,24 +954,85 @@ export function ContestClientPage({
         {/* Colorful Contest Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {/* Platform Card */}
-          <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                  <Share2 className="h-5 w-5 text-red-600 dark:text-red-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">Platform</p>
-                  <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">
-                    {contest.platform || "Not specified"}
-                  </p>
-                </div>
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <CardContent className="p-4 flex justify-between">
+              <div className="flex-1 text-black space-y-3">
+                <p className="text-lg font-medium">Platform</p>
+                <p className="text-xl font-bold">
+                  {contest.platform || "Not specified"}
+                </p>
+              </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                {contest.platform?.toLowerCase() === "youtube" ? (
+                  <Youtube className="h-5 w-5 text-[#4A00BE] " />
+                ) : contest.platform?.toLowerCase() === "instagram" ? (
+                  <Instagram className="h-5 w-5 text-[#4A00BE]" />
+                ) : (
+                  <Share2 className="h-5 w-5 text-[#4A00BE]" />
+                )}
               </div>
             </CardContent>
-          </Card>
-
+          </div>
+          {/* <Card className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
+  <CardContent className="p-4">
+    <div className="flex items-center gap-3">
+      <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+        {contest.platform?.toLowerCase() === "youtube" ? (
+          <Youtube className="h-5 w-5 text-red-600 dark:text-red-400" />
+        ) : contest.platform?.toLowerCase() === "instagram" ? (
+          <Instagram className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+        ) : (
+          <Share2 className="h-5 w-5 text-red-600 dark:text-red-400" />
+        )}
+      </div>
+      <div className="flex-1">
+        <p className="text-xs font-medium text-red-800 dark:text-red-300 uppercase tracking-wide">
+          Platform
+        </p>
+        <p className="text-lg font-bold text-red-900 dark:text-red-100 capitalize">
+          {contest.platform || "Not specified"}
+        </p>
+      </div>
+    </div>
+  </CardContent>
+</Card> */}
           {/* Duration Card */}
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <CardContent className="p-4 flex justify-between">
+              <div className="flex-1 text-black space-y-3">
+                <p className="text-lg font-medium">Duration</p>
+                <p className="text-xl font-bold">
+                  {(() => {
+                    if (!contest.start_date || !contest.end_date)
+                      return "Not specified";
+                    const start = new Date(contest.start_date);
+                    const end = new Date(contest.end_date);
+                    const diffTime = Math.abs(end.getTime() - start.getTime());
+                    const diffDays = Math.ceil(
+                      diffTime / (1000 * 60 * 60 * 24)
+                    );
+                    return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
+                  })()}
+                </p>
+                <p className="text-md">
+                  {" "}
+                  {contest.start_date && contest.end_date
+                    ? `${formatLocalDateTime(contest.start_date, {
+                        month: "short",
+                        day: "numeric",
+                      })} - ${formatLocalDateTime(contest.end_date, {
+                        month: "short",
+                        day: "numeric",
+                      })}`
+                    : "Dates TBD"}
+                </p>
+              </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <Calendar className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </div>
+          {/* <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -901,10 +1064,54 @@ export function ContestClientPage({
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           {/* Prize Pool Card */}
-          <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <CardContent className="p-4 flex justify-between">
+              <div className="flex-1 text-black space-y-3">
+                <p className="text-lg font-medium">Prize Pool</p>
+                <p className="text-xl font-bold">
+                  {contest.contest_type === "cpm" &&
+                  contest.contest_based_details?.cpm_contest
+                    ? formatMoney(
+                        contest.contest_based_details.cpm_contest.total_budget
+                      )
+                    : contest.contest_type === "leaderboard" &&
+                      contest.contest_based_details?.leaderboard_contest
+                    ? formatMoney(
+                        contest.contest_based_details.leaderboard_contest
+                          .total_prize
+                      )
+                    : contest.total_prize // Fallback to old field if necessary for older data
+                    ? formatMoney(contest.total_prize || 0)
+                    : "$0.00"}
+                </p>
+                <p className="text-md">
+                  {" "}
+                  {contest.contest_type === "leaderboard" &&
+                  contest.contest_based_details?.leaderboard_contest
+                    ?.winner_count
+                    ? `${
+                        contest.contest_based_details.leaderboard_contest
+                          .winner_count
+                      } winner${
+                        contest.contest_based_details.leaderboard_contest
+                          .winner_count !== 1
+                          ? "s"
+                          : ""
+                      }`
+                    : contest.contest_type === "cpm"
+                    ? "CPM based"
+                    : "Total prize"}
+                </p>
+              </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <Trophy className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </div>
+          {/* <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -931,10 +1138,27 @@ export function ContestClientPage({
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
 
           {/* Submissions Card */}
-          <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <CardContent className="p-4 flex justify-between">
+              <div className="flex-1 text-black space-y-3">
+                <p className="text-lg font-medium">Submissions</p>
+                <p className="text-xl font-bold">
+                  {contest.live_submission_count !== null &&
+                  contest.live_submission_count >= 0
+                    ? contest.live_submission_count
+                    : 0}
+                </p>
+                <p className="text-md">Total entries</p>
+              </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <Users className="h-5 w-5" />
+              </div>
+            </CardContent>
+          </div>
+          {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -951,7 +1175,7 @@ export function ContestClientPage({
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         {/* Post-Contest Status Section for Ended Contests */}
@@ -967,20 +1191,23 @@ export function ContestClientPage({
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Current Status:</h3>
+                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Current Status:
+                    </h3>
                     {renderPostContestStatusBadge(postContestStatus)}
                   </div>
                   <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
                     {getPostContestStatusDescription(postContestStatus)}
                   </p>
-                  {postContestStatus === 'payouts_processed' && (
+                  {postContestStatus === "payouts_processed" && (
                     <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-lg">
                       <div className="flex items-center gap-2 text-green-800 dark:text-green-300">
                         <CheckCircle className="h-5 w-5" />
                         <span className="font-medium">Contest Complete!</span>
                       </div>
                       <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-                        All verification and payout processes have been completed for this contest.
+                        All verification and payout processes have been
+                        completed for this contest.
                       </p>
                     </div>
                   )}
@@ -992,11 +1219,13 @@ export function ContestClientPage({
                         Contest Ended
                       </div>
                       <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {contest.end_date ? formatLocalDateTime(contest.end_date, {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        }) : "Date not specified"}
+                        {contest.end_date
+                          ? formatLocalDateTime(contest.end_date, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : "Date not specified"}
                       </div>
                     </div>
                   </div>
@@ -1006,38 +1235,72 @@ export function ContestClientPage({
           </Card>
         )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList>
-            <TabsTrigger value="details">
-              Contest Details
-            </TabsTrigger>
-            <TabsTrigger value="leaderboard">
-              Leaderboard {contest?.contest_type === 'leaderboard' && totalLeaderboardEntries > 0 && (
-                <Badge variant="secondary" className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">
-                  {totalLeaderboardEntries}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="details" className="mt-6 space-y-6">
-            <Card className="shadow-sm">
-              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b">
+  {/* Tabs */}
+  <EnhancedTabs
+  tabs={tabs.map((tab) => ({
+    ...tab,
+    label: (
+      <div className="flex text-center items-center">
+        {tab.label}
+        {tab.id === "leaderboard" &&
+          contest?.contest_type === "leaderboard" &&
+          totalLeaderboardEntries > 0 && (
+            <Badge
+              variant="secondary"
+               className="ml-2 bg-gray-200 text-sm text-gray-700data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+            >
+              {totalLeaderboardEntries}
+            </Badge>
+          )}
+      </div>
+    ),
+  }))}
+  activeTab={activeTab}
+  onTabChange={setActiveTab}
+  className="mt-12 mb-6"
+/>
+
+        {/* <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList>
+            <TabsTrigger value="details">Contest Details</TabsTrigger>
+            <TabsTrigger value="leaderboard">
+              Leaderboard{" "}
+              {contest?.contest_type === "leaderboard" &&
+                totalLeaderboardEntries > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 px-1.5 py-0.5 text-xs data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                  >
+                    {totalLeaderboardEntries}
+                  </Badge>
+                )}
+            </TabsTrigger>
+          </TabsList> */}
+
+          <TabContent activeTab={activeTab}>
+          <TabPanel value="details" activeTab={activeTab}>
+            <div className="bg-white rounded-xl shadow-xl">
+              <CardHeader className="border-b">
                 <CardTitle className="text-gray-800 flex items-center gap-2">
-                  <ScrollText className="h-5 w-5 text-blue-500" />
+                  {/* <ScrollText className="h-5 w-5 text-blue-500" /> */}
                   Contest Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="pt-4">
-                  <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">Brief</h3>
+                  <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
+                    Brief
+                  </h3>
                   {contest.brief_html ? (
                     <div
                       className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
                       dangerouslySetInnerHTML={{ __html: contest.brief_html }}
                     />
                   ) : (
-                    <p className="text-slate-600 dark:text-slate-400 text-sm">No brief provided</p>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm">
+                      No brief provided
+                    </p>
                   )}
                 </div>
                 <Separator />
@@ -1045,20 +1308,22 @@ export function ContestClientPage({
                 {/* Contest Details Section */}
                 <div className="space-y-4">
                   <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    {/* <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" /> */}
                     Contest Details
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Start Date Card */}
-                    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+                    <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                            <Play className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
+                            <Play className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Start Date & Time</p>
-                            <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
+                              Start Date & Time
+                            </p>
+                            <p className="text-lg font-bold text-black">
                               {contest.start_date
                                 ? formatLocalDateTime(contest.start_date)
                                 : "Not specified"}
@@ -1066,18 +1331,20 @@ export function ContestClientPage({
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
+                    </div>
 
                     {/* End Date Card */}
-                    <Card className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 border-orange-200 dark:border-orange-700/50 hover:shadow-lg transition-all duration-300">
+                    <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                            <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
+                            <Clock className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs font-medium text-orange-800 dark:text-orange-300 uppercase tracking-wide">End Date & Time</p>
-                            <p className="text-lg font-bold text-orange-900 dark:text-orange-100">
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
+                              End Date & Time
+                            </p>
+                            <p className="text-lg font-bold text-black">
                               {contest.end_date
                                 ? formatLocalDateTime(contest.end_date)
                                 : "Not specified"}
@@ -1085,41 +1352,45 @@ export function ContestClientPage({
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
+                    </div>
 
                     {/* Platform Card */}
-                    <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
+                    <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                            <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
+                            <Monitor className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Platform</p>
-                            <p className="text-lg font-bold text-blue-900 dark:text-blue-100 capitalize">
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
+                              Platform
+                            </p>
+                            <p className="text-lg font-bold text-black capitalize">
                               {contest.platform || "Not specified"}
                             </p>
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
+                    </div>
 
                     {/* Status Card */}
-                    <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
+                    <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                            <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
+                            <Info className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">Status</p>
-                            <p className="text-lg font-bold text-purple-900 dark:text-purple-100 capitalize">
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
+                              Status
+                            </p>
+                            <p className="text-lg font-bold text-black capitalize">
                               {contest.status || "Not specified"}
                             </p>
                           </div>
                         </div>
                       </CardContent>
-                    </Card>
+                    </div>
 
                     {/* Sponsor Card */}
                     {/* <Card className="md:col-span-2 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-700/50 hover:shadow-lg transition-all duration-300">
@@ -1138,65 +1409,87 @@ export function ContestClientPage({
                         </div>
                       </CardContent>
                     </Card> */}
-
                   </div>
                 </div>
                 <Separator />
                 <div>
                   <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">
-                    {contest.contest_type === 'cpm' ? 'Earnings & Budget' : 'Prize Structure'}
+                    {contest.contest_type === "cpm"
+                      ? "Earnings & Budget"
+                      : "Prize Structure"}
                   </h3>
-                  {contest.contest_type === 'leaderboard' && (
-                    Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && contest.contest_based_details.leaderboard_contest.prizes.length > 0 ? (
+                  {contest.contest_type === "leaderboard" &&
+                    (Array.isArray(
+                      contest.contest_based_details?.leaderboard_contest?.prizes
+                    ) &&
+                    contest.contest_based_details.leaderboard_contest.prizes
+                      .length > 0 ? (
                       <div className="space-y-4">
                         {/* Prize Pool Summary */}
-                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-700/50 rounded-xl p-4">
+                       
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
-                                <Trophy className="h-5 w-5 text-green-600 dark:text-green-400" />
+                            
+                          <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
+                            <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
+                                <Trophy className="h-5 w-5" />
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">Total Prize Pool</p>
-                                <p className="text-xl font-bold text-green-900 dark:text-green-100">
-                                  {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
+                                <p className="text-sm font-medium text-black uppercase tracking-wide">
+                                  Total Prize Pool
+                                </p>
+                                <p className="text-xl font-bold text-black">
+                                  {formatMoney(
+                                    contest.contest_based_details
+                                      .leaderboard_contest.total_prize
+                                  )}
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
-                                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
+                              <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
+                                <Users className="h-5 w-5" />
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">Total Winners</p>
-                                <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
-                                  {contest.contest_based_details.leaderboard_contest.winner_count}
+                                <p className="text-sm font-medium text-black uppercase tracking-wide">
+                                  Total Winners
+                                </p>
+                                <p className="text-xl font-bold text-black">
+                                  {
+                                    contest.contest_based_details
+                                      .leaderboard_contest.winner_count
+                                  }
                                 </p>
                               </div>
                             </div>
                           </div>
-                        </div>
+                      
 
                         {/* Prize Distribution */}
-                        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
-                          <h4 className="font-medium text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
-                            <ListOrdered className="h-4 w-4" />
+                        <div className="py-4">
+                          <h4 className="font-medium text-md text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                            {/* <ListOrdered className="h-4 w-4" /> */}
                             Prize Distribution
                           </h4>
-                          <ul className="space-y-2">
-                            {[...(contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])]
+                          <ul className="space-y-3">
+                            {[
+                              ...(contest.contest_based_details
+                                .leaderboard_contest.prizes as PrizeInfo[]),
+                            ]
                               .sort((a, b) => a.position - b.position)
                               .map((prize) => (
-                                <li key={prize.position} className="flex items-center justify-between py-3 px-3 bg-white dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600/50">
+                                <li
+                                  key={prize.position}
+                                  className="flex items-center justify-between py-3 px-3 bg-white dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600/50"
+                                >
                                   <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                    <div className="w-8 h-8 border border-gray-300 rounded-full flex items-center justify-center text-black font-bold text-sm">
                                       {prize.position}
                                     </div>
                                     <span className="font-medium text-slate-800 dark:text-slate-200">
                                       Position {prize.position}
                                     </span>
                                   </div>
-                                  <span className="font-bold text-green-600 dark:text-green-400 text-lg">
+                                  <span className="font-bold text-black text-lg">
                                     {formatMoney(prize.amount)}
                                   </span>
                                 </li>
@@ -1208,54 +1501,78 @@ export function ContestClientPage({
                       <p className="text-sm text-slate-600 dark:text-slate-400">
                         No prize structure defined for this leaderboard contest.
                       </p>
-                    )
-                  )}
-                  {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest && (
-                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">Pay Rate:</span>
-                          <span className="font-semibold text-slate-900 dark:text-slate-100">
-                            {formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} per 1000 views
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">Total Budget:</span>
-                          <span className="font-bold text-green-600 dark:text-green-400">
-                            {formatMoney(contest.contest_based_details.cpm_contest.total_budget)}
-                          </span>
-                        </div>
-                        {contest.contest_based_details.cpm_contest.min_views != null && (
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium text-slate-800 dark:text-slate-200">Minimum Views Required:</span>
+                    ))}
+                  {contest.contest_type === "cpm" &&
+                    contest.contest_based_details?.cpm_contest && (
+                      <div className="py-4 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                            <span className="font-medium text-slate-800 dark:text-slate-200">
+                              Pay Rate:
+                            </span>
                             <span className="font-semibold text-slate-900 dark:text-slate-100">
-                              {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                              {formatMoney(
+                                contest.contest_based_details.cpm_contest
+                                  .cpm_rate_usd * 100
+                              )}{" "}
+                              per 1000 views
                             </span>
                           </div>
-                        )}
-                        {contest.contest_based_details.cpm_contest.max_views != null && (
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium text-slate-800 dark:text-slate-200">Maximum Views Counted:</span>
-                            <span className="font-semibold text-slate-900 dark:text-slate-100">
-                              {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                          <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                            <span className="font-medium text-slate-800 dark:text-slate-200">
+                              Total Budget:
+                            </span>
+                            <span className="font-bold text-green-600 dark:text-green-400">
+                              {formatMoney(
+                                contest.contest_based_details.cpm_contest
+                                  .total_budget
+                              )}
                             </span>
                           </div>
-                        )}
-                      </div>
-                      <Separator />
-                      <div>
-                        <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">Terms & Conditions:</h4>
-                        <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-200 dark:border-slate-700">
-                          <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
-                            {contest.contest_based_details.cpm_contest.terms_conditions || "No specific terms provided."}
-                          </pre>
+                          {contest.contest_based_details.cpm_contest
+                            .min_views != null && (
+                              <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                              <span className="font-medium text-slate-800 dark:text-slate-200">
+                                Minimum Views Required:
+                              </span>
+                              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                          {contest.contest_based_details.cpm_contest
+                            .max_views != null && (
+                              <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                              <span className="font-medium text-slate-800 dark:text-slate-200">
+                                Maximum Views Counted:
+                              </span>
+                              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <Separator />
+                        <div>
+                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
+                            Terms & Conditions:
+                          </h4>
+                          <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-200 dark:border-slate-700">
+                            <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
+                              {contest.contest_based_details.cpm_contest
+                                .terms_conditions ||
+                                "No specific terms provided."}
+                            </pre>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {contest.contest_type !== 'leaderboard' && contest.contest_type !== 'cpm' && (
-                    <p className="text-sm text-slate-600 dark:text-slate-400">Contest type details not available.</p>
-                  )}
+                    )}
+                  {contest.contest_type !== "leaderboard" &&
+                    contest.contest_type !== "cpm" && (
+                      <p className="text-sm text-slate-600 dark:text-slate-400">
+                        Contest type details not available.
+                      </p>
+                    )}
                 </div>
 
                 <Separator />
@@ -1263,14 +1580,17 @@ export function ContestClientPage({
                 {/* Rules Section - Always Show */}
                 <div>
                   <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <ScrollText className="h-5 w-5" /> Rules & Guidelines
+                    {/* <ScrollText className="h-5 w-5" />  */}
+                    Rules & Guidelines
                   </h3>
-                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-4">
+                  <div className="border border-gray-300 rounded-xl p-4">
                     {/* Check multiple possible rule fields */}
                     {(contest as any).rules_html ? (
                       <div
                         className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
-                        dangerouslySetInnerHTML={{ __html: (contest as any).rules_html }}
+                        dangerouslySetInnerHTML={{
+                          __html: (contest as any).rules_html,
+                        }}
                       />
                     ) : contest.rules ? (
                       <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
@@ -1287,24 +1607,60 @@ export function ContestClientPage({
                     ) : (
                       <div className="space-y-3">
                         <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
-                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">📋 General Rules:</h4>
+                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
+                             General Rules:
+                          </h4>
                           <ul className="space-y-2 ml-4 list-disc text-slate-600 dark:text-slate-400">
-                            <li><strong>Eligibility:</strong> Only registered creators are eligible to participate in contests.</li>
-                            <li><strong>Age Requirement:</strong> Contestants must be at least 18 years old.</li>
-                            <li><strong>Content Standards:</strong> Content must adhere to the platform's content guidelines and community standards.</li>
-                            <li><strong>Original Work:</strong> All submissions must be original content created by the participant.</li>
-                            <li><strong>Submission Deadline:</strong> Entries must be submitted before the contest end date and time.</li>
-                            <li><strong>Platform Compliance:</strong> Content must comply with the rules and policies of the specified platform (YouTube, Instagram, etc.).</li>
+                            <li>
+                              <strong>Eligibility:</strong> Only registered
+                              creators are eligible to participate in contests.
+                            </li>
+                            <li>
+                              <strong>Age Requirement:</strong> Contestants must
+                              be at least 18 years old.
+                            </li>
+                            <li>
+                              <strong>Content Standards:</strong> Content must
+                              adhere to the platform's content guidelines and
+                              community standards.
+                            </li>
+                            <li>
+                              <strong>Original Work:</strong> All submissions
+                              must be original content created by the
+                              participant.
+                            </li>
+                            <li>
+                              <strong>Submission Deadline:</strong> Entries must
+                              be submitted before the contest end date and time.
+                            </li>
+                            <li>
+                              <strong>Platform Compliance:</strong> Content must
+                              comply with the rules and policies of the
+                              specified platform (YouTube, Instagram, etc.).
+                            </li>
                           </ul>
                         </div>
 
                         <div className="border-t border-slate-200 dark:border-slate-600 pt-3">
-                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">⚠️ Important Notes:</h4>
+                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
+                            ⚠️ Important Notes:
+                          </h4>
                           <ul className="space-y-1 ml-4 list-disc text-slate-600 dark:text-slate-400 text-sm">
-                            <li>Violation of rules may result in disqualification</li>
-                            <li>Contest organizers reserve the right to verify submissions</li>
-                            <li>Winners will be contacted through their registered email</li>
-                            <li>Prize distribution is subject to verification and approval</li>
+                            <li>
+                              Violation of rules may result in disqualification
+                            </li>
+                            <li>
+                              Contest organizers reserve the right to verify
+                              submissions
+                            </li>
+                            <li>
+                              Winners will be contacted through their registered
+                              email
+                            </li>
+                            <li>
+                              Prize distribution is subject to verification and
+                              approval
+                            </li>
                           </ul>
                         </div>
                       </div>
@@ -1317,78 +1673,133 @@ export function ContestClientPage({
                 {/* Resources Section - Always Show */}
                 <div className="space-y-6">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    {/* <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                       <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Resources</h3>
+                    </div> */}
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                      Resources
+                    </h3>
                   </div>
 
                   {contest.resources &&
-                    ((Array.isArray(contest.resources) && contest.resources.length > 0) ||
-                      (typeof contest.resources === 'object' && Object.keys(contest.resources).length > 0)) ? (
+                  ((Array.isArray(contest.resources) &&
+                    contest.resources.length > 0) ||
+                    (typeof contest.resources === "object" &&
+                      Object.keys(contest.resources).length > 0)) ? (
                     <div className="grid gap-4">
                       {(Array.isArray(contest.resources)
                         ? contest.resources
-                        : Object.entries(contest.resources).map(([description, url]) => ({ url, description, type: 'external' }))
+                        : Object.entries(contest.resources).map(
+                            ([description, url]) => ({
+                              url,
+                              description,
+                              type: "external",
+                            })
+                          )
                       ).map((resource: any, idx: number) => {
-                        const isImage = resource.url && (resource.url.startsWith('data:image') || /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(resource.url));
-                        const isPdf = resource.url && /\.pdf$/i.test(resource.url);
-                        const isVideo = resource.url && /\.(mp4|mov|avi|webm)$/i.test(resource.url);
+                        const isImage =
+                          resource.url &&
+                          (resource.url.startsWith("data:image") ||
+                            /\.(jpg|jpeg|png|gif|jfif|webp)$/i.test(
+                              resource.url
+                            ));
+                        const isPdf =
+                          resource.url && /\.pdf$/i.test(resource.url);
+                        const isVideo =
+                          resource.url &&
+                          /\.(mp4|mov|avi|webm)$/i.test(resource.url);
                         const isInternal = resource.type === "internal";
                         return (
                           <div
                             key={idx}
-                            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200"
+                            className="border border-gray-300 rounded-xl p-5"
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-4">
+                           <div className="flex flex-col md:flex-row justify-between">
+
+<div className="flex items-center gap-4 flex-1 min-w-0">
                                 {isInternal && isImage && !isPdf ? (
-                                  <img src={resource.url} alt={resource.description} className="w-12 h-12 object-cover rounded-lg border border-gray-200 dark:border-gray-600" />
+                                  <img
+                                    src={resource.url}
+                                    alt={resource.description}
+                                    className="w-12 h-12 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
+                                  />
                                 ) : isInternal && isPdf ? (
                                   <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center border border-red-200 dark:border-red-700">
-                                    <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                    <svg
+                                      className="w-6 h-6 text-red-600 dark:text-red-400"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                                        clipRule="evenodd"
+                                      />
                                     </svg>
                                   </div>
                                 ) : isInternal && isVideo ? (
                                   <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center border border-blue-200 dark:border-blue-700">
-                                    <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <svg
+                                      className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
                                       <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
                                     </svg>
                                   </div>
-                                ) : isInternal && !isImage && !isPdf && !isVideo ? (
+                                ) : isInternal &&
+                                  !isImage &&
+                                  !isPdf &&
+                                  !isVideo ? (
                                   <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center border border-green-200 dark:border-green-700">
-                                    <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                    <svg
+                                      className="w-6 h-6 text-green-600 dark:text-green-400"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z"
+                                        clipRule="evenodd"
+                                      />
                                     </svg>
                                   </div>
                                 ) : (
-                                  <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-200 dark:border-gray-600">
-                                    <ExternalLink className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-                                  </div>
+                                  <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
+                                  <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                </div>
                                 )}
                                 <div className="min-w-0">
                                   <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
                                     {resource.description}
                                   </h4>
                                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    {resource.type === "external" ? "External Link" : "Uploaded File"}
+                                    {resource.type === "external"
+                                      ? "External Link"
+                                      : "Uploaded File"}
                                   </p>
                                 </div>
                               </div>
                               <Button
-                                variant="outline"
+                               
                                 size="sm"
                                 asChild
-                                className="border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+                                 className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
                               >
                                 <a
                                   href={resource.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
+                                  className="flex items-center"
                                 >
                                   <ExternalLink className="w-4 h-4 mr-2" />
-                                  {isPdf ? "Open PDF" : isVideo ? "Play Video" : isImage ? "View Image" : "View Resource"}
+                                  {isPdf
+                                    ? "Open PDF"
+                                    : isVideo
+                                    ? "Play Video"
+                                    : isImage
+                                    ? "View Image"
+                                    : "View Resource"}
                                 </a>
                               </Button>
                             </div>
@@ -1405,7 +1816,8 @@ export function ContestClientPage({
                         No additional resources provided
                       </h4>
                       <p className="text-gray-600 dark:text-gray-400">
-                        Check the brief and rules above for all contest requirements.
+                        Check the brief and rules above for all contest
+                        requirements.
                       </p>
                     </div>
                   )}
@@ -1421,50 +1833,57 @@ export function ContestClientPage({
                       <Separator className="my-8" />
                       <div className="space-y-6">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                          {/* <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                             <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                          </div>
-                          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Inspiration Links</h3>
+                          </div> */}
+                          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            Inspiration Links
+                          </h3>
                         </div>
 
                         <div className="grid gap-4">
-                          {links.map((item: { url: string; description: string }, index: number) => (
-                            <div
-                              key={index}
-                              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 hover:shadow-lg transition-all duration-200"
-                            >
-                              <div className="flex items-start gap-4">
-                                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex-shrink-0">
-                                  <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <a
-                                    href={item.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
-                                  >
-                                    {item.url}
-                                  </a>
-                                  {item.description && (
-                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                      {item.description}
-                                    </p>
-                                  )}
+                          {links.map(
+                            (
+                              item: { url: string; description: string },
+                              index: number
+                            ) => (
+                              <div
+                                key={index}
+                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
+                              >
+                                <div className="flex items-start gap-4">
+                                  <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
+                                    <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <a
+                                      href={item.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
+                                    >
+                                      {item.url}
+                                    </a>
+                                    {item.description && (
+                                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          )}
                         </div>
                       </div>
                     </>
                   ) : null;
                 })()}
               </CardContent>
-            </Card>
-          </TabsContent>
+            </div>
+          </TabPanel>
 
-          <TabsContent value="leaderboard">
+          <TabPanel value="leaderboard" activeTab={activeTab}>
             {loadingLeaderboard ? (
               <p className="text-center py-4">Loading leaderboard...</p>
             ) : error ? (
@@ -1473,7 +1892,9 @@ export function ContestClientPage({
               </Alert>
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
               <div className="text-center py-8">
-                <p className="text-slate-600 dark:text-slate-400 mb-2">No submissions yet. Be the first!</p>
+                <p className="text-slate-600 dark:text-slate-400 mb-2">
+                  No submissions yet. Be the first!
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1484,30 +1905,42 @@ export function ContestClientPage({
                   </div>
                 )}
                 {myLeaderboardEntry && (
-                  <Card key={`my-rank-${myLeaderboardEntry.id}`} className="shadow-lg border-2 border-primary/50 bg-primary/5 dark:bg-primary/10 overflow-hidden mb-6">
+                  <Card
+                    key={`my-rank-${myLeaderboardEntry.id}`}
+                    className="shadow-lg border-2 border-primary/50 bg-primary/5 dark:bg-primary/10 overflow-hidden mb-6"
+                  >
                     <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
                       <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
                         #{myLeaderboardEntry.rank}
                       </div>
                       <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
                         <AvatarImage
-                          src={myLeaderboardEntry.creator_pfp_url ?? myLeaderboardEntry.user_platform_pfp_url ?? undefined}
+                          src={
+                            myLeaderboardEntry.creator_pfp_url ??
+                            myLeaderboardEntry.user_platform_pfp_url ??
+                            undefined
+                          }
                           alt={myLeaderboardEntry.user_platform_username}
                         />
                         <AvatarFallback className="bg-primary/20 text-primary">
-                          {myLeaderboardEntry.user_platform_username?.[0]?.toUpperCase() || "U"}
+                          {myLeaderboardEntry.user_platform_username?.[0]?.toUpperCase() ||
+                            "U"}
                         </AvatarFallback>
                       </Avatar>
 
                       <div className="flex-grow min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate" title={myLeaderboardEntry.user_platform_username}>
+                          <p
+                            className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate"
+                            title={myLeaderboardEntry.user_platform_username}
+                          >
                             {myLeaderboardEntry.user_platform_username} (You)
                           </p>
                           {renderVerificationBadge(myLeaderboardEntry.status)}
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Submitted: {formatTimeAgo(myLeaderboardEntry.created_at)}
+                          Submitted:{" "}
+                          {formatTimeAgo(myLeaderboardEntry.created_at)}
                         </p>
                       </div>
 
@@ -1517,8 +1950,18 @@ export function ContestClientPage({
                             {myLeaderboardEntry.views.toLocaleString()} views
                           </p>
                           {myLeaderboardEntry.content_link && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground" asChild>
-                              <Link href={myLeaderboardEntry.content_link} target="_blank" rel="noopener noreferrer" title="View Your Content">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground"
+                              asChild
+                            >
+                              <Link
+                                href={myLeaderboardEntry.content_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="View Your Content"
+                              >
                                 <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                               </Link>
                             </Button>
@@ -1528,14 +1971,37 @@ export function ContestClientPage({
                           let prizeDisplay = null;
                           if (myLeaderboardEntry.earnings > 0) {
                             // Show actual earnings for verified or paid submissions; otherwise show expected
-                            const isEarned = myLeaderboardEntry.status === 'verified' || myLeaderboardEntry.status === 'paid';
-                            const earningsLabel = isEarned ? 'Earned' : 'Expected';
-                            prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">{earningsLabel}: {formatMoney(myLeaderboardEntry.earnings)}</span>;
-                          } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes) && myLeaderboardEntry.rank) {
-                            const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
-                              .find(p => p.position === myLeaderboardEntry.rank);
+                            const isEarned =
+                              myLeaderboardEntry.status === "verified" ||
+                              myLeaderboardEntry.status === "paid";
+                            const earningsLabel = isEarned
+                              ? "Earned"
+                              : "Expected";
+                            prizeDisplay = (
+                              <span className="font-semibold text-green-600 dark:text-green-400">
+                                {earningsLabel}:{" "}
+                                {formatMoney(myLeaderboardEntry.earnings)}
+                              </span>
+                            );
+                          } else if (
+                            contest.contest_type === "leaderboard" &&
+                            Array.isArray(
+                              contest.contest_based_details?.leaderboard_contest
+                                ?.prizes
+                            ) &&
+                            myLeaderboardEntry.rank
+                          ) {
+                            const prizeInfo = (
+                              contest.contest_based_details.leaderboard_contest
+                                .prizes as PrizeInfo[]
+                            ).find(
+                              (p) => p.position === myLeaderboardEntry.rank
+                            );
                             if (prizeInfo) {
-                              const prizeText = contest.status === 'active' ? "Winning Zone" : "Prize";
+                              const prizeText =
+                                contest.status === "active"
+                                  ? "Winning Zone"
+                                  : "Prize";
                               prizeDisplay = (
                                 <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
                                   <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -1544,7 +2010,11 @@ export function ContestClientPage({
                               );
                             }
                           }
-                          return prizeDisplay ? <div className="text-xs sm:text-sm">{prizeDisplay}</div> : null;
+                          return prizeDisplay ? (
+                            <div className="text-xs sm:text-sm">
+                              {prizeDisplay}
+                            </div>
+                          ) : null;
                         })()}
                       </div>
                     </CardContent>
@@ -1553,55 +2023,101 @@ export function ContestClientPage({
 
                 {/* Main Leaderboard List */}
                 <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm text-muted-foreground">
-                    Last updated: {contest?.last_metrics_updated ? formatTimeAgo(contest.last_metrics_updated) : (lastUpdated ? formatTimeAgo(lastUpdated) : "Never")}
+                  <div className="text-md text-black">
+                    Last updated:{" "}
+                    {contest?.last_metrics_updated
+                      ? formatTimeAgo(contest.last_metrics_updated)
+                      : lastUpdated
+                      ? formatTimeAgo(lastUpdated)
+                      : "Never"}
                     {totalLeaderboardEntries > 0 && (
-                      <span className="ml-2">| Total Submissions: {totalLeaderboardEntries.toLocaleString()}</span>
+                      <span className="ml-2">
+                        | Total Submissions:{" "}
+                        {totalLeaderboardEntries.toLocaleString()}
+                      </span>
                     )}
                   </div>
 
                   {/* Refresh Metrics Button - Only show for active contests with submissions */}
-                  {contest?.status === 'active' && totalLeaderboardEntries > 0 && (() => {
-                    const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(contest?.last_metrics_updated);
+                  {contest?.status === "active" &&
+                    totalLeaderboardEntries > 0 &&
+                    (() => {
+                      const cooldownInfo =
+                        getMetricsRefreshCooldownInfoOpportunities(
+                          contest?.last_metrics_updated
+                        );
 
-                    return (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRefreshMetrics}
-                        disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                        className="ml-2"
-                        title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
-                      >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
-                        {isRefreshingMetrics
-                          ? 'Updating...'
-                          : !cooldownInfo.canRefresh
-                            ? `Wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
-                            : 'Refresh Metrics'
-                        }
-                      </Button>
-                    );
-                  })()}
+                      return (
+                        <Button
+                        
+                          size="sm"
+                          onClick={handleRefreshMetrics}
+                          disabled={
+                            isRefreshingMetrics || !cooldownInfo.canRefresh
+                          }
+                          className="ml-2 text-md py-3 bg-[#6C43D0] text-white hover:bg-[#6C43D0] "
+                          title={
+                            !cooldownInfo.canRefresh
+                              ? `Available in ${formatRemainingTime(
+                                  cooldownInfo.remainingMs
+                                )}`
+                              : "Refresh metrics now"
+                          }
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 ${
+                              isRefreshingMetrics ? "animate-spin" : ""
+                            }`}
+                          />
+                          {isRefreshingMetrics
+                            ? "Updating..."
+                            : !cooldownInfo.canRefresh
+                            ? `Wait ${formatRemainingTime(
+                                cooldownInfo.remainingMs
+                              )}`
+                            : "Refresh Metrics"}
+                        </Button>
+                      );
+                    })()}
                 </div>
                 {leaderboard.map((entry, index) => {
-                  const rank = ((leaderboardCurrentPage - 1) * leaderboardItemsPerPage) + index + 1;
+                  const rank =
+                    (leaderboardCurrentPage - 1) * leaderboardItemsPerPage +
+                    index +
+                    1;
                   let prizeDisplay = null;
 
                   if (entry.earnings > 0) {
                     // For CPM contests, show Expected vs Earned based on verification/paid status
-                    if (contestType === 'cpm') {
-                      const isEarned = entry.status === 'verified' || entry.status === 'paid';
-                      const earningsLabel = isEarned ? 'Earned' : 'Expected';
-                      prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">{earningsLabel}: {formatMoney(entry.earnings)}</span>;
+                    if (contestType === "cpm") {
+                      const isEarned =
+                        entry.status === "verified" || entry.status === "paid";
+                      const earningsLabel = isEarned ? "Earned" : "Expected";
+                      prizeDisplay = (
+                        <span className="font-semibold text-green-600 dark:text-green-400">
+                          {earningsLabel}: {formatMoney(entry.earnings)}
+                        </span>
+                      );
                     } else {
-                      prizeDisplay = <span className="font-semibold text-green-600 dark:text-green-400">Earned: {formatMoney(entry.earnings)}</span>;
+                      prizeDisplay = (
+                        <span className="font-semibold text-green-600 dark:text-green-400">
+                          Earned: {formatMoney(entry.earnings)}
+                        </span>
+                      );
                     }
-                  } else if (contest.contest_type === 'leaderboard' && Array.isArray(contest.contest_based_details?.leaderboard_contest?.prizes)) {
-                    const prizeInfo = (contest.contest_based_details.leaderboard_contest.prizes as PrizeInfo[])
-                      .find(p => p.position === rank);
+                  } else if (
+                    contest.contest_type === "leaderboard" &&
+                    Array.isArray(
+                      contest.contest_based_details?.leaderboard_contest?.prizes
+                    )
+                  ) {
+                    const prizeInfo = (
+                      contest.contest_based_details.leaderboard_contest
+                        .prizes as PrizeInfo[]
+                    ).find((p) => p.position === rank);
                     if (prizeInfo) {
-                      const prizeText = contest.status === 'active' ? "Winning Zone" : "Prize";
+                      const prizeText =
+                        contest.status === "active" ? "Winning Zone" : "Prize";
                       prizeDisplay = (
                         <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
                           <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
@@ -1612,16 +2128,26 @@ export function ContestClientPage({
                   }
 
                   return (
-                    <Card key={entry.id} className="shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                    <div
+                      key={entry.id}
+                      className="border border-[#D1B7F9] rounded-xl overflow-hidden"
+                    >
                       <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
-                        <div className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">{rank}</div>
+                        <div className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                          {rank}
+                        </div>
                         <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
                           <AvatarImage
-                            src={entry.creator_pfp_url ?? entry.user_platform_pfp_url ?? undefined}
+                            src={
+                              entry.creator_pfp_url ??
+                              entry.user_platform_pfp_url ??
+                              undefined
+                            }
                             alt={entry.user_platform_username}
                           />
                           <AvatarFallback>
-                            {entry.user_platform_username?.[0]?.toUpperCase() || "U"}
+                            {entry.user_platform_username?.[0]?.toUpperCase() ||
+                              "U"}
                           </AvatarFallback>
                         </Avatar>
 
@@ -1643,8 +2169,18 @@ export function ContestClientPage({
                               {entry.views.toLocaleString()} views
                             </p>
                             {entry.content_link && (
-                              <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-primary" asChild>
-                                <Link href={entry.content_link} target="_blank" rel="noopener noreferrer" title="View Content">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 sm:h-8 sm:w-8 text-slate-500 hover:text-primary dark:text-slate-400 dark:hover:text-primary"
+                                asChild
+                              >
+                                <Link
+                                  href={entry.content_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View Content"
+                                >
                                   <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                                 </Link>
                               </Button>
@@ -1657,7 +2193,7 @@ export function ContestClientPage({
                           )}
                         </div>
                       </CardContent>
-                    </Card>
+                    </div>
                   );
                 })}
 
@@ -1667,7 +2203,9 @@ export function ContestClientPage({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => fetchLeaderboard(leaderboardCurrentPage - 1)}
+                      onClick={() =>
+                        fetchLeaderboard(leaderboardCurrentPage - 1)
+                      }
                       disabled={leaderboardCurrentPage <= 1}
                     >
                       Previous
@@ -1678,7 +2216,9 @@ export function ContestClientPage({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => fetchLeaderboard(leaderboardCurrentPage + 1)}
+                      onClick={() =>
+                        fetchLeaderboard(leaderboardCurrentPage + 1)
+                      }
                       disabled={leaderboardCurrentPage >= totalLeaderboardPages}
                     >
                       Next
@@ -1687,8 +2227,8 @@ export function ContestClientPage({
                 )}
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+          </TabPanel>
+        </TabContent>
       </div>
     </div>
   );

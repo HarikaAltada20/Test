@@ -817,7 +817,7 @@ export default function ProfilePage({
                 >
                   Email
                 </label>
-                <div className="bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="bg-background rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                   <p
                     className="text-base text-[15px]  text-muted-foreground truncate min-w-0"
                     title={userData.email}
@@ -834,7 +834,7 @@ export default function ProfilePage({
                 >
                   Username / Referral Code
                 </label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4 bg-background  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                   <p
                     className="text-base text-[15px] text-muted-foreground truncate min-w-0"
                     title={userData.username}
@@ -864,7 +864,7 @@ export default function ProfilePage({
                 >
                   Account Type
                 </label>
-                <div className="bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-sm text-gray-900">
+                <div className="bg-background  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-sm text-gray-900">
                   <p
                     className={`inline-flex items-center px-3 py-1 rounded-full font-medium capitalize ${
                       userData.user_type === "creator"
@@ -931,7 +931,7 @@ export default function ProfilePage({
               >
                 Referred By
               </label>
-              <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 bg-background rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                 <p
                   className="text-base text-[15px]  text-muted-foreground truncate min-w-0"
                   title={referrer || "Not referred"}
@@ -948,7 +948,7 @@ export default function ProfilePage({
               >
                 Available Coins
               </label>
-              <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 bg-background  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                 <p className="text-base text-[15px]  text-muted-foreground truncate min-w-0">
                   {userData.coins.toLocaleString()}
                 </p>
@@ -972,7 +972,7 @@ export default function ProfilePage({
               >
                 Creators Referred
               </label>
-              <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 bg-background rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                 <p className="text-base text-[15px]  text-muted-foreground truncate min-w-0">
                   {userData.creators_referred}
                 </p>
@@ -996,7 +996,7 @@ export default function ProfilePage({
               >
                 Advertisers Referred
               </label>
-              <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 bg-background border  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                 <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                   {userData.advertisers_referred}
                 </p>
@@ -1017,16 +1017,29 @@ export default function ProfilePage({
       </div>
 
       {creatorProfile && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg font-semibold">
+        <div className="bg-white rounded-2xl shadow-lg px-2 pb-5">
+          <CardHeader className="mb-3">
+            <CardTitle className="text-xl font-semibold">
               Creator Profile
             </CardTitle>
-            <CardDescription>Your creator statistics</CardDescription>
+            <CardDescription className="text-md">Your creator statistics</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-6">
-              <div className="space-y-3 min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
+            <div className="relative w-full">
+              <label
+                htmlFor="floating"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+              >
+                Contests Participated
+              </label>
+              <div className="p-4 bg-background border  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
+                {creatorProfile.total_contests_participated}
+                </p>
+              </div>
+            </div>
+              {/* <div className="space-y-3 min-w-0">
                 <Label className="text-sm font-semibold text-foreground">
                   Contests Participated
                 </Label>
@@ -1035,8 +1048,21 @@ export default function ProfilePage({
                     {creatorProfile.total_contests_participated}
                   </p>
                 </div>
+              </div> */}
+               <div className="relative w-full">
+              <label
+                htmlFor="floating"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+              >
+                Contests Won
+              </label>
+              <div className="p-4 bg-background border  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
+                {creatorProfile.total_contests_won}
+                </p>
               </div>
-              <div className="space-y-3 min-w-0">
+            </div>
+              {/* <div className="space-y-3 min-w-0">
                 <Label className="text-sm font-semibold text-foreground">
                   Contests Won
                 </Label>
@@ -1045,8 +1071,21 @@ export default function ProfilePage({
                     {creatorProfile.total_contests_won}
                   </p>
                 </div>
+              </div> */}
+           <div className="relative w-full">
+              <label
+                htmlFor="floating"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+              >
+                Total Money Won
+              </label>
+              <div className="p-4 bg-background border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
+                {formatMoney(creatorProfile.total_money_won)}
+                </p>
               </div>
-              <div className="space-y-3 min-w-0">
+            </div>   
+              {/* <div className="space-y-3 min-w-0">
                 <Label className="text-sm font-semibold text-foreground">
                   Total Money Won
                 </Label>
@@ -1055,8 +1094,21 @@ export default function ProfilePage({
                     {formatMoney(creatorProfile.total_money_won)}
                   </p>
                 </div>
+              </div> */}
+               <div className="relative w-full">
+              <label
+                htmlFor="floating"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+              >
+                 Withdrawable Balance
+              </label>
+              <div className="p-4 bg-background border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
+                {formatMoney(creatorProfile.withdrawable_balance)}
+                </p>
               </div>
-              <div className="space-y-3 min-w-0">
+            </div>   
+              {/* <div className="space-y-3 min-w-0">
                 <Label className="text-sm font-semibold text-foreground">
                   Withdrawable Balance
                 </Label>
@@ -1065,10 +1117,10 @@ export default function ProfilePage({
                     {formatMoney(creatorProfile.withdrawable_balance)}
                   </p>
                 </div>
-              </div>
+              </div> */}
             </div>
           </CardContent>
-        </Card>
+        </div>
       )}
 
       {advertiserProfile && (
