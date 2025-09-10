@@ -4341,7 +4341,7 @@ export default function CreateContestPage({
 
   // Custom Back Modal component
   const BackModal = () => (
-    
+
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
 
@@ -4350,7 +4350,7 @@ export default function CreateContestPage({
           Do you want to save this contest as a draft or delete it? All progress
           will be lost if you delete.
         </p>
-        
+
         <div className="flex justify-end gap-2">
           <Button
             variant="outline"
@@ -5772,7 +5772,8 @@ export default function CreateContestPage({
                   <CardContent className="space-y-4">
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
-                        Inspiration Link
+                        Inspiration Link{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="inspirationUrlInput"
@@ -5937,13 +5938,13 @@ export default function CreateContestPage({
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
-                
+
                 disabled={isLoading}
               />
 
               <div className="w-full mt-4">
                 <Button
-                 className="w-full bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+                  className="w-full bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
                   onClick={() => setShowPayment(false)}
                   disabled={isLoading}
                 >
