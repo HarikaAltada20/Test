@@ -162,6 +162,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [isUserPlanLoading, setIsUserPlanLoading] = useState(true);
 
+  // State for plan information
+  const [contestCommissionRate, setContestCommissionRate] = useState<number | null>(null);
+  const [currentPlanCommissionRate, setCurrentPlanCommissionRate] = useState<number | null>(null);
+
   // Common contest fields
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("technology"); // Or consider platform if that's more accurate
@@ -390,6 +394,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
 
         if (data) {
+          // Extract commission rate from contest payment details
+          if (data.payment_details) {
+            try {
+              const paymentDetails = typeof data.payment_details === "string"
+                ? JSON.parse(data.payment_details)
+                : data.payment_details;
+              if (paymentDetails.commission_percentage) {
+                setContestCommissionRate(paymentDetails.commission_percentage);
+              }
+            } catch (error) {
+              console.error('Error parsing payment details:', error);
+            }
+          }
+
+          // Note: Current plan commission rate will be set in a separate useEffect
+          // after both userPlan and contest data are loaded
+
           // Simplified logic: Only check dates if contest is published
           let canEdit = true;
 
@@ -555,6 +576,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       checkBudgetChange();
     }
   }, [originalBudget, contestType]);
+
+  // Set current plan commission rate when userPlan is available
+  useEffect(() => {
+    if (userPlan && !isUserPlanLoading) {
+      const planFeatures = getPlanFeatures(userPlan);
+      if (planFeatures?.commissionPercentage) {
+        setCurrentPlanCommissionRate(planFeatures.commissionPercentage);
+      }
+    }
+  }, [userPlan, isUserPlanLoading]);
 
   // Refresh contest data function
   const refreshContestData = async () => {
@@ -3587,6 +3618,22 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         </div>
       </div>
 
+      {/* Commission Rate Information */}
+      {contestCommissionRate !== null && currentPlanCommissionRate !== null &&
+        contestCommissionRate !== currentPlanCommissionRate && (
+          <Alert className="mb-6 border-blue-200 bg-blue-50 w-full">
+            <Info className="h-4 w-4 flex-shrink-0" />
+            <AlertDescription className="min-w-0">
+              <strong>Commission Rate Notice:</strong> This contest was created with a {contestCommissionRate}% commission rate.
+              Your current plan has a {currentPlanCommissionRate}% commission rate.
+              <br />
+              <span className="text-sm text-gray-600">
+                If you want to use your new plan's commission rate, you'll need to create a new contest.
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
       <div className="mx-auto bg-white rounded-xl shadow-xl px-2 py-4">
         <CardHeader>
           <CardTitle>Edit Contest Details</CardTitle>
@@ -5324,6 +5371,22 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 </p>
               </div>
 
+              {/* Plan Commission Rate Information */}
+              {contestCommissionRate !== null && currentPlanCommissionRate !== null &&
+                contestCommissionRate !== currentPlanCommissionRate && (
+                  <Alert className="mb-4 border-blue-200 bg-blue-50 w-full">
+                    <Info className="h-4 w-4 flex-shrink-0" />
+                    <AlertDescription className="min-w-0">
+                      <strong>Commission Rate Notice:</strong> This contest was created with a {contestCommissionRate}% commission rate.
+                      Your current plan has a {currentPlanCommissionRate}% commission rate.
+                      <br />
+                      <span className="text-sm text-gray-600">
+                        If you want to use your new plan's commission rate, you'll need to create a new contest.
+                      </span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
               {budgetChanged && budgetDifference > 0 && (
                 <Alert className="mb-4 border-orange-200 bg-orange-50 w-full">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -5354,7 +5417,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
                 commissionPercentage={
-                  getPlanFeatures(userPlan).commissionPercentage
+                  contestCommissionRate !== null ? contestCommissionRate : getPlanFeatures(userPlan).commissionPercentage
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
