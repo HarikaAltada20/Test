@@ -1560,29 +1560,33 @@ export function ContestClientPage({
                     )}
                   </div>
 
-                  {/* Refresh Metrics Button - Only show for active contests with submissions */}
-                  {contest?.status === 'active' && totalLeaderboardEntries > 0 && (() => {
-                    const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(contest?.last_metrics_updated);
+                  {/* Refresh Metrics Button - Only show for active contests with submissions and not finalized */}
+                  {contest?.status === 'active' &&
+                    totalLeaderboardEntries > 0 &&
+                    contest?.post_contest_status !== 'in_review' &&
+                    contest?.post_contest_status !== 'verification_complete' &&
+                    contest?.post_contest_status !== 'payouts_processed' && (() => {
+                      const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(contest?.last_metrics_updated);
 
-                    return (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRefreshMetrics}
-                        disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                        className="ml-2"
-                        title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
-                      >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
-                        {isRefreshingMetrics
-                          ? 'Updating...'
-                          : !cooldownInfo.canRefresh
-                            ? `Wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
-                            : 'Refresh Metrics'
-                        }
-                      </Button>
-                    );
-                  })()}
+                      return (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRefreshMetrics}
+                          disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
+                          className="ml-2"
+                          title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
+                          {isRefreshingMetrics
+                            ? 'Updating...'
+                            : !cooldownInfo.canRefresh
+                              ? `Wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
+                              : 'Refresh Metrics'
+                          }
+                        </Button>
+                      );
+                    })()}
                 </div>
                 {leaderboard.map((entry, index) => {
                   const rank = ((leaderboardCurrentPage - 1) * leaderboardItemsPerPage) + index + 1;

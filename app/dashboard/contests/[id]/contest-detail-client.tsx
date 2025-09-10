@@ -2131,7 +2131,10 @@ export default function ContestDetailClient({
                           (currentContest.status === "active" ||
                             currentContest.status === "ended") &&
                           currentSubmissions &&
-                          currentSubmissions.length > 0 && (
+                          currentSubmissions.length > 0 &&
+                          currentContest.post_contest_status !== "in_review" &&
+                          currentContest.post_contest_status !== "verification_complete" &&
+                          currentContest.post_contest_status !== "payouts_processed" && (
                             <button
 
 
@@ -2778,11 +2781,16 @@ export default function ContestDetailClient({
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent className="bg-white" align="end">
-                                        <DropdownMenuLabel className="text-purple-500">
-                                          Change Status
-                                        </DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
+                                        {currentContest.post_contest_status !== "payouts_processed" && (
+                                          <>
+                                            <DropdownMenuLabel className="text-purple-500">
+                                              Change Status
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                          </>
+                                        )}
                                         {submission.status !== "verified" &&
+                                          currentContest.post_contest_status !== "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2809,6 +2817,7 @@ export default function ContestDetailClient({
                                             </DropdownMenuItem>
                                           ))}
                                         {submission.status !== "rejected" &&
+                                          currentContest.post_contest_status !== "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2837,6 +2846,7 @@ export default function ContestDetailClient({
                                             </DropdownMenuItem>
                                           ))}
                                         {submission.status !== "pending" &&
+                                          currentContest.post_contest_status !== "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2865,6 +2875,8 @@ export default function ContestDetailClient({
                                         {submission.status !== "paid" &&
                                           isAdminView &&
                                           (currentContest.post_contest_status ===
+                                            "in_review" ||
+                                            currentContest.post_contest_status ===
                                             "verification_complete" ||
                                             currentContest.post_contest_status ===
                                             "payouts_processed") && (
@@ -2892,7 +2904,9 @@ export default function ContestDetailClient({
                                               </DropdownMenuItem>
                                             </>
                                           )}
-                                        <DropdownMenuSeparator />
+                                        {currentContest.post_contest_status !== "payouts_processed" && (
+                                          <DropdownMenuSeparator />
+                                        )}
                                         <DropdownMenuItem asChild>
                                           <a
                                             href={submission.content_link}
