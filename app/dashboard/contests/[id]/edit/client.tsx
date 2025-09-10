@@ -5050,11 +5050,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             </div>
           )}
         </div>
-        <CardFooter className="flex flex-col sm:flex-row sm:items-center gap-4 pt-6">
+        <CardFooter className="flex flex-col gap-4 pt-6">
           {/* Show rejection reason banner for rejected contests */}
           {contest?.moderation_status === "rejected" &&
             contest?.rejection_reason && (
-              <div className="w-full mb-4">
+              <div className="w-full">
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <div>
@@ -5086,72 +5086,54 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
           )}
-          <button
 
-            onClick={() => router.back()}
-            disabled={isSubmitting} // Disable during submission
-            className={`${!(formFeedback && formFeedbackType === "error") ? "border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto" : "w-full sm:w-auto"
-              }`}
-          >
-            Cancel
-          </button>
-
-          <div
-            className={`flex flex-col items-center sm:flex-row gap-2 w-full sm:w-auto ${formFeedback && formFeedbackType === "error" ? "ml-4" : "ml-auto"
-              }`}
-          >
-            {datesOnly ? (
-              // Dates-only mode: Just save changes (no approval needed)
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting || !!validationError}
-                className="bg-rose-600 hover:bg-rose-700 text-white"
+          {/* Prize Pool Change Warning - Moved above all buttons for better responsive layout */}
+          {budgetChanged && isContestPaid() && (
+            <div className="w-full">
+              <Alert
+                variant={budgetDifference > 0 ? "destructive" : "default"}
+                className={
+                  budgetDifference > 0
+                    ? "w-full border-orange-200 bg-orange-50"
+                    : "w-full border-green-200 bg-green-50"
+                }
               >
-                {isSubmitting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Saving...</span>
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-medium">Prize Pool Changed</div>
+                  <div className="text-sm mt-1 break-words">
+                    {budgetDifference > 0
+                      ? `Prize pool increased by ${formatCurrencyFromCents(
+                        budgetDifference
+                      )}. Original: ${formatCurrencyFromCents(originalBudget)} → New Total: ${formatCurrencyFromCents(originalBudget + budgetDifference)}. Additional payment (including commission) will be required.`
+                      : `Prize pool decreased by ${formatCurrencyFromCents(
+                        Math.abs(budgetDifference)
+                      )}. You will be refunded this amount plus commission.`}
                   </div>
-                ) : (
-                  "Save Changes"
-                )}
-              </Button>
-            ) : contest?.moderation_status !== "published" ? (
-              // Full edit mode for non-published contests: Draft/Save and Submit buttons
-              <>
-                {/* Prize Pool Change Warning */}
-                {budgetChanged && isContestPaid() && (
-                  <div className="mb-4">
-                    <Alert
-                      variant={budgetDifference > 0 ? "destructive" : "default"}
-                      className={
-                        budgetDifference > 0
-                          ? "md:w-[600px] border-orange-200 bg-orange-50"
-                          : "border-green-200 bg-green-50"
-                      }
-                    >
-                      <AlertTriangle className="h-4 w-4" />
-                      <div>
-                        <div className="font-medium">Prize Pool Changed</div>
-                        <div className="text-sm mt-1">
-                          {budgetDifference > 0
-                            ? `Prize pool increased by ${formatCurrencyFromCents(
-                              budgetDifference
-                            )}. Additional payment (including commission) will be required.`
-                            : `Prize pool decreased by ${formatCurrencyFromCents(
-                              Math.abs(budgetDifference)
-                            )}. You will be refunded this amount plus commission.`}
-                        </div>
-                      </div>
-                    </Alert>
-                  </div>
-                )}
+                </div>
+              </Alert>
+            </div>
+          )}
 
-                <button
-                  className="border h-[38px] font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
+          {/* Button Row - Cancel on left, Save/Submit on right */}
+          <div className="flex flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2 w-full">
+            {/* Cancel button on the left */}
+            <button
+              onClick={() => router.back()}
+              disabled={isSubmitting}
+              className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
+            >
+              Cancel
+            </button>
 
-                  onClick={handleSaveAsDraft}
+            {/* Save/Submit buttons on the right */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              {datesOnly ? (
+                // Dates-only mode: Just save changes (no approval needed)
+                <Button
+                  onClick={handleSubmit}
                   disabled={isSubmitting || !!validationError}
+                  className="bg-rose-600 hover:bg-rose-700 text-white"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">
@@ -5159,55 +5141,81 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                       <span>Saving...</span>
                     </div>
                   ) : (
-                    "Save as Draft"
+                    "Save Changes"
                   )}
-                </button>
+                </Button>
+              ) : contest?.moderation_status !== "published" ? (
+                // Full edit mode for non-published contests: Draft/Save and Submit buttons
+                <>
+
+                  <div className="flex flex-col sm:flex-row gap-2 w-full">
+                    <button
+                      className="border h-[38px] font-semibold border-[#4A00BE] px-3 sm:px-4 py-2 rounded-lg text-sm text-[#4A00BE] w-full sm:w-auto flex-shrink-0 whitespace-nowrap"
+                      onClick={handleSaveAsDraft}
+                      disabled={isSubmitting || !!validationError}
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Saving...</span>
+                        </div>
+                      ) : (
+                        "Save as Draft"
+                      )}
+                    </button>
+                    <Button
+                      onClick={handleResubmitForApproval}
+                      disabled={isSubmitting || !!validationError}
+                      className="bg-[#4A00BE] cursor-pointer px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm text-white hover:bg-[#4A00BE] w-full sm:w-auto sm:min-w-[160px] flex-shrink-0 whitespace-nowrap"
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Processing...</span>
+                        </div>
+                      ) : contest?.moderation_status === "pending_approval" ? (
+                        <>
+                          <span className="hidden xl:inline">Update & Resubmit for Approval</span>
+                          <span className="hidden md:inline xl:hidden">Update & Resubmit</span>
+                          <span className="hidden sm:inline md:hidden">Update & Submit</span>
+                          <span className="sm:hidden">Update</span>
+                        </>
+                      ) : contest && isContestPaid() && !budgetChanged ? (
+                        "Submit for Approval"
+                      ) : contest &&
+                        isContestPaid() &&
+                        budgetChanged &&
+                        budgetDifference > 0 ? (
+                        "Update & Pay"
+                      ) : contest &&
+                        isContestPaid() &&
+                        budgetChanged &&
+                        budgetDifference < 0 ? (
+                        "Update Contest"
+                      ) : (
+                        "Submit & Pay"
+                      )}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                // Full edit mode for published contests: Just save changes (should rarely happen)
                 <Button
-                  onClick={handleResubmitForApproval}
+                  onClick={handleSubmit}
                   disabled={isSubmitting || !!validationError}
-                  className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE] w-full sm:w-auto"
+                  className="bg-rose-600 hover:bg-rose-700 text-white"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Processing...</span>
+                      <span>Saving...</span>
                     </div>
-                  ) : contest?.moderation_status === "pending_approval" ? (
-                    "Update & Resubmit for Approval"
-                  ) : contest && isContestPaid() && !budgetChanged ? (
-                    "Submit for Approval"
-                  ) : contest &&
-                    isContestPaid() &&
-                    budgetChanged &&
-                    budgetDifference > 0 ? (
-                    "Update & Pay"
-                  ) : contest &&
-                    isContestPaid() &&
-                    budgetChanged &&
-                    budgetDifference < 0 ? (
-                    "Update Contest"
                   ) : (
-                    "Submit & Pay"
+                    "Save Changes"
                   )}
                 </Button>
-              </>
-            ) : (
-              // Full edit mode for published contests: Just save changes (should rarely happen)
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting || !!validationError}
-                className="bg-rose-600 hover:bg-rose-700 text-white"
-              >
-                {isSubmitting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Saving...</span>
-                  </div>
-                ) : (
-                  "Save Changes"
-                )}
-              </Button>
-            )}
+              )}
+            </div>
           </div>
         </CardFooter>
       </div>
@@ -5317,11 +5325,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
 
               {budgetChanged && budgetDifference > 0 && (
-                <Alert className="mb-4 border-orange-200 bg-orange-50">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
+                <Alert className="mb-4 border-orange-200 bg-orange-50 w-full">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <AlertDescription className="min-w-0">
                     <strong>Prize Pool Increased:</strong> Your prize pool
                     increased by {formatCurrencyFromCents(budgetDifference)}.
+                    <br />
+                    <span className="text-sm text-gray-600 break-words">
+                      Original: {formatCurrencyFromCents(originalBudget)} → New Total: {formatCurrencyFromCents(originalBudget + budgetDifference)}
+                    </span>
+                    <br />
                     The payment below includes this amount plus commission.
                   </AlertDescription>
                 </Alert>

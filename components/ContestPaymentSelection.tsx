@@ -400,7 +400,7 @@ export function ContestPaymentSelection({
                         <h3 className="font-semibold text-black mb-2">Contest: {contestTitle}</h3>
                         <div className="space-y-1 text-sm text-black">
                             <div className="flex justify-between">
-                                <span>Prize Pool:</span>
+                                <span>{isIncrease ? "Prize Pool Increased:" : "Prize Pool:"}</span>
                                 <span className="font-medium">{formatCurrencyFromCents(prizePoolInCents)}</span>
                             </div>
                             <div className="flex text-sm justify-between">
@@ -599,7 +599,7 @@ export function ContestPaymentSelection({
                             <button
                                 onClick={() => setShowPaymentForm(true)}
                                 className="w-full bg-[#D9C0FF61] text-[#7F39EC] rounded-full text-md py-3"
-                               
+
                                 disabled={disabled || isLoadingBalance}
                             >
                                 {isLoadingBalance ? 'Loading...' : (needsStripe ? 'Proceed to Payment' : 'Complete Payment')}
