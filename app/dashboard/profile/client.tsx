@@ -812,12 +812,12 @@ export default function ProfilePage({
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
-                  className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A] 
+                  className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500 
                "
                 >
                   Email
                 </label>
-                <div className="bg-background rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                   <p
                     className="text-base text-[15px]  text-muted-foreground truncate min-w-0"
                     title={userData.email}
@@ -830,11 +830,11 @@ export default function ProfilePage({
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
-                  className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                  className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
                 >
                   Username / Referral Code
                 </label>
-                <div className="p-4 bg-background  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                   <p
                     className="text-base text-[15px] text-muted-foreground truncate min-w-0"
                     title={userData.username}
@@ -860,11 +860,11 @@ export default function ProfilePage({
               <div className="relative w-full">
                 <label
                   htmlFor="floating"
-                  className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[13px] text-[#1A1A1A]"
+                  className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[13px] text-gray-500"
                 >
                   Account Type
                 </label>
-                <div className="bg-background  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-sm text-gray-900">
+                <div className="rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-sm text-gray-500">
                   <p
                     className={`inline-flex items-center px-3 py-1 rounded-full font-medium capitalize ${
                       userData.user_type === "creator"
@@ -927,11 +927,11 @@ export default function ProfilePage({
             <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Referred By
               </label>
-              <div className="p-4 bg-background rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p
                   className="text-base text-[15px]  text-muted-foreground truncate min-w-0"
                   title={referrer || "Not referred"}
@@ -944,11 +944,11 @@ export default function ProfilePage({
             <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Available Coins
               </label>
-              <div className="p-4 bg-background  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p className="text-base text-[15px]  text-muted-foreground truncate min-w-0">
                   {userData.coins.toLocaleString()}
                 </p>
@@ -968,11 +968,11 @@ export default function ProfilePage({
             <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Creators Referred
               </label>
-              <div className="p-4 bg-background rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p className="text-base text-[15px]  text-muted-foreground truncate min-w-0">
                   {userData.creators_referred}
                 </p>
@@ -992,11 +992,11 @@ export default function ProfilePage({
             <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Advertisers Referred
               </label>
-              <div className="p-4 bg-background border  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                   {userData.advertisers_referred}
                 </p>
@@ -1029,11 +1029,11 @@ export default function ProfilePage({
             <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Contests Participated
               </label>
-              <div className="p-4 bg-background border  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
                 <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                 {creatorProfile.total_contests_participated}
                 </p>
@@ -1052,11 +1052,11 @@ export default function ProfilePage({
                <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Contests Won
               </label>
-              <div className="p-4 bg-background border  rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                 {creatorProfile.total_contests_won}
                 </p>
@@ -1075,11 +1075,11 @@ export default function ProfilePage({
            <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                 Total Money Won
               </label>
-              <div className="p-4 bg-background border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                 {formatMoney(creatorProfile.total_money_won)}
                 </p>
@@ -1098,11 +1098,11 @@ export default function ProfilePage({
                <div className="relative w-full">
               <label
                 htmlFor="floating"
-                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]"
+                className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500"
               >
                  Withdrawable Balance
               </label>
-              <div className="p-4 bg-background border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+              <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                 <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                 {formatMoney(creatorProfile.withdrawable_balance)}
                 </p>
@@ -1377,10 +1377,10 @@ export default function ProfilePage({
               </div>
 
               <div className="relative w-full">
-                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]">
+                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500">
                   Subscription Plan
                 </label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                   <p
                     className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                       advertiserProfile?.subscription_info?.product_id
@@ -1421,10 +1421,10 @@ export default function ProfilePage({
                 </div>
               </div> */}
               <div className="relative w-full">
-                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]">
+                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500">
                   Contests Run
                 </label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                   <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                     {advertiserProfile.total_contests_run}
                   </p>
@@ -1443,10 +1443,10 @@ export default function ProfilePage({
               </div> */}
 
               <div className="relative w-full">
-                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]">
+                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500">
                   Total Money Spent
                 </label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                   <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                     {formatMoney(advertiserProfile.total_money_spent)}
                   </p>
@@ -1464,10 +1464,10 @@ export default function ProfilePage({
               </div> */}
 
               <div className="relative w-full">
-                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]">
+                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500">
                   Withdrawable Balance
                 </label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                   <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                     {formatMoney(advertiserProfile.withdrawable_balance)}
                   </p>
@@ -1485,10 +1485,10 @@ export default function ProfilePage({
               </div> */}
 
               <div className="relative w-full">
-                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-[#1A1A1A]">
+                <label className="absolute font-medium left-2.5 top-0 -translate-y-1/2 bg-white px-1 text-[14px] text-gray-500">
                 Available Deposit Balance
                 </label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-900">
+                <div className="p-4 rounded-lg min-w-0 peer block w-full rounded-lg border border-gray-300 px-3 pt-5 pb-2 text-gray-500">
                   <p className="text-base text-[15px] text-muted-foreground truncate min-w-0">
                   {formatMoney(advertiserProfile.available_deposit_balance)}
                   </p>

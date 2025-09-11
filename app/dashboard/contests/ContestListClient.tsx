@@ -407,7 +407,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                 </div>
                                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                                     <div
-                                        className="bg-rose-500 h-2 rounded-full transition-all duration-500 ease-out"
+                                        className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
                                         style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
                                     ></div>
                                 </div>

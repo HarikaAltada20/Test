@@ -701,7 +701,7 @@ export function ContestClientPage({
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 transition-all duration-200 hover:scale-105"
+              className="flex items-center gap-2 bg-[#4A00BE] text-md text-white"
               onClick={handleShare}
             >
               <Share2 className="h-4 w-4" />
@@ -2022,7 +2022,7 @@ export function ContestClientPage({
                 )}
 
                 {/* Main Leaderboard List */}
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-4">
                   <div className="text-md text-black">
                     Last updated:{" "}
                     {contest?.last_metrics_updated
@@ -2132,10 +2132,11 @@ export function ContestClientPage({
                       key={entry.id}
                       className="border border-[#D1B7F9] rounded-xl overflow-hidden"
                     >
-                      <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
-                        <div className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                      <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
+                       <div className="flex items-center space-x-3 md:space-x-4">
+                        <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
                           {rank}
-                        </div>
+                        </h2>
                         <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
                           <AvatarImage
                             src={
@@ -2162,7 +2163,7 @@ export function ContestClientPage({
                             Submitted: {formatTimeAgo(entry.created_at)}
                           </p>
                         </div>
-
+                        </div>
                         <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                           <div className="flex items-center space-x-2">
                             <p className="text-base sm:text-lg font-bold text-slate-700 dark:text-slate-200">

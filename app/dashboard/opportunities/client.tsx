@@ -318,26 +318,29 @@ export default function OpportunitiesPage({
       </div>
 
 
-      {/* Tabs */}
-      <EnhancedTabs
-        tabs={tabs.map((tab) => ({
-          ...tab,
-          label: (
-            <div className="flex text-center items-center">
-              {tab.label}
-              <Badge
-                variant="secondary"
-                className="ml-2 bg-gray-200 text-sm text-gray-700data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-              >
-                {tab.count}
-              </Badge>
-            </div>
-          ),
-        }))}
-        activeTab={statusFilter}
-        onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
-        className="mt-10 mb-8"
-      />
+    {/* Tabs */}
+<EnhancedTabs
+  tabs={tabs.map((tab) => ({
+    ...tab,
+    label: (
+      <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
+        <span className="truncate">{tab.label}</span>
+        {tab.count !== undefined && (
+          <Badge
+            variant="secondary"
+            className="ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm bg-gray-200 text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+          >
+            {tab.count}
+          </Badge>
+        )}
+      </div>
+    ),
+  }))}
+  activeTab={statusFilter}
+  onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
+  className="mt-10 mb-8 w-full overflow-x-auto scrollbar-hide"
+/>
+
 
       
       {/* Enhanced Status Filter Tabs with better visual distinction */}

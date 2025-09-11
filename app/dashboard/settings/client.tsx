@@ -887,7 +887,7 @@ export default function SettingsPage({
                           channel, return here to connect it.
                         </p>
                         <div className="text-xs text-red-600">
-                          <p className="mb-1">📚 Additional Resources:</p>
+                          <p className="mb-1">Additional Resources:</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
                             <li>
                               Make sure you're signed into the correct Google
@@ -1026,6 +1026,7 @@ export default function SettingsPage({
               {instagramConnected ? (
                 <Button
                   variant="outline"
+                   className="bg-[#C90808] text-white"
                   onClick={handleInstagramDisconnect}
                   disabled={isLoading}
                 >
@@ -1218,7 +1219,7 @@ export default function SettingsPage({
             </CardDescription>
           </CardHeader> */}
           <CardContent>
-            <Alert className="mb-4">
+            <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
               <AlertDescription>
                 <strong>Multiple Sign-in Methods:</strong> You can sign in with
                 both Google and email/password.
@@ -1345,19 +1346,19 @@ export default function SettingsPage({
               return (
                 <div className="space-y-4">
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.general} className="border-[#7F39EC] bg-[#D9C0FF26] w-full"/>
+                    <Input readOnly value={links.general} className="border-gray-400 w-full"/>
                     <Button type="button" className="bg-[#4A00BE] text-white" variant="outline" onClick={() => copyToClipboard(links.general)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy General
+                      <Copy className="h-4 w-4 mr-1" />Copy General
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.creators}  className="border-[#7F39EC] bg-[#D9C0FF26]" />
+                    <Input readOnly value={links.creators}  className="border-gray-400" />
                     <Button type="button" variant="outline" className="bg-[#4A00BE] text-white" onClick={() => copyToClipboard(links.creators)}>
                       <Copy className="h-4 w-4" />Copy Creators
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.brands} className="border-[#7F39EC] bg-[#D9C0FF26]"/>
+                    <Input readOnly value={links.brands} className="border-gray-400"/>
                     <Button type="button" variant="outline" className="bg-[#4A00BE] text-white"  onClick={() => copyToClipboard(links.brands)}>
                       <Copy className="h-4 w-4 mr-2" />Copy Brands
                     </Button>
