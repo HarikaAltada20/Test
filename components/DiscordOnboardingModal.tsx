@@ -2,7 +2,7 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Instagram, Youtube, Twitter, Linkedin, MessageCircle } from "lucide-react";
+import { ExternalLink, Instagram, Youtube, Twitter, Linkedin, MessageCircle, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
@@ -32,7 +32,7 @@ export function DiscordOnboardingModal({ isOpen, onClose, discordInviteUrl }: Di
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-[560px]">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
+                    <DialogTitle className="flex items-center text-xl gap-2">
                         Stay connected with us
                     </DialogTitle>
                     <DialogDescription>
@@ -42,24 +42,24 @@ export function DiscordOnboardingModal({ isOpen, onClose, discordInviteUrl }: Di
 
                 <div className="space-y-6">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <Link href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md border hover:bg-accent/40 transition-colors">
-                            <Instagram className="h-4 w-4" /> <span className="text-sm">Instagram</span>
+                        <Link href={SOCIAL_LINKS.instagram} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md text-[#4A00BE] border  border-[#4A00BE] hover:bg-[#4A00BE] hover:text-white transition-colors">
+                            <Instagram className="h-4 w-4" /> <span className="text-md">Instagram</span>
                         </Link>
-                        <Link href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md border hover:bg-accent/40 transition-colors">
-                            <Youtube className="h-4 w-4" /> <span className="text-sm">YouTube</span>
+                        <Link href={SOCIAL_LINKS.youtube} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md text-[#4A00BE] border  border-[#4A00BE] hover:bg-[#4A00BE] hover:text-white transition-colors">
+                            <Youtube className="h-4 w-4" /> <span className="text-md">YouTube</span>
                         </Link>
-                        <Link href={SOCIAL_LINKS.twitter} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md border hover:bg-accent/40 transition-colors">
-                            <Twitter className="h-4 w-4" /> <span className="text-sm">Twitter</span>
+                        <Link href={SOCIAL_LINKS.twitter} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md text-[#4A00BE] border  border-[#4A00BE] hover:bg-[#4A00BE] hover:text-white transition-colors">
+                            <Twitter className="h-4 w-4" /> <span className="text-md">Twitter</span>
                         </Link>
-                        <Link href={SOCIAL_LINKS.linkedin} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md border hover:bg-accent/40 transition-colors">
-                            <Linkedin className="h-4 w-4" /> <span className="text-sm">LinkedIn</span>
+                        <Link href={SOCIAL_LINKS.linkedin} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-2 rounded-md text-[#4A00BE] border  border-[#4A00BE] hover:bg-[#4A00BE] hover:text-white transition-colors">
+                            <Linkedin className="h-4 w-4" /> <span className="text-md">LinkedIn</span>
                         </Link>
                     </div>
 
-                    <div className="p-5 rounded-lg border bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-                        <div className="flex items-start gap-3">
-                            <div className="p-2 rounded-md bg-white dark:bg-slate-800 border">
-                                <MessageCircle className="h-5 w-5 text-indigo-600" />
+                    <div className="p-5 rounded-lg border bg-[#D9C0FF26] border-[#7F39EC] dark:to-purple-900/20">
+                        <div className="flex items-start gap-4">
+                            <div>
+                                <MessagesSquare className="h-5 w-5 text-[#7F39EC]" />
                             </div>
                             <div className="flex-1">
                                 <p className="text-sm mb-2">

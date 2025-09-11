@@ -887,7 +887,7 @@ export default function SettingsPage({
                           channel, return here to connect it.
                         </p>
                         <div className="text-xs text-red-600">
-                          <p className="mb-1">📚 Additional Resources:</p>
+                          <p className="mb-1">Additional Resources:</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
                             <li>
                               Make sure you're signed into the correct Google
@@ -914,7 +914,11 @@ export default function SettingsPage({
 
       {/* Connected Accounts - Only for Creators */}
       {userType === "creator" && (
-        <Card>
+        <div>
+          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+         <CardTitle className="text-2xl text-[#7F39EC]">Manage Your Account</CardTitle>
+       </div>
+       <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg" >
           <CardHeader>
             <CardTitle className="text-lg">Social Accounts</CardTitle>
             <CardDescription>
@@ -948,7 +952,8 @@ export default function SettingsPage({
               </div>
               {youtubeConnected ? (
                 <Button
-                  variant="outline"
+                 
+                  className="bg-[#C90808] text-white"
                   onClick={handleYouTubeDisconnect}
                   disabled={isLoadingYouTubeDisconnect}
                 >
@@ -971,9 +976,9 @@ export default function SettingsPage({
             </div>
             {/* YouTube Connection Information - Display if not connected */}
             {!youtubeConnected && (
-              <Alert variant="default" className="mt-2">
+              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
                 <Bell className="h-4 w-4" />
-                <AlertDescription className="text-xs leading-relaxed">
+                <AlertDescription className="text-sm leading-relaxed">
                   Connect your YouTube account to allow Game Of Creators to view
                   basic channel information (e.g., name, subscriber count,
                   username). This also enables us to display your videos on the
@@ -1021,6 +1026,7 @@ export default function SettingsPage({
               {instagramConnected ? (
                 <Button
                   variant="outline"
+                   className="bg-[#C90808] text-white"
                   onClick={handleInstagramDisconnect}
                   disabled={isLoading}
                 >
@@ -1040,9 +1046,9 @@ export default function SettingsPage({
             </div>
             {/* Instagram Connection Information - Display if not connected */}
             {!instagramConnected && (
-              <Alert variant="default" className="mt-2">
+              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
                 <Bell className="h-4 w-4" />
-                <AlertDescription className="text-xs leading-relaxed">
+                <AlertDescription className="text-sm leading-relaxed">
                   To participate in Instagram campaigns, you need to connect an
                   Instagram{" "}
                   <strong className="font-semibold">
@@ -1101,7 +1107,8 @@ export default function SettingsPage({
               </Alert>
             )}
           </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* Company Profile - Only for Advertisers */}
@@ -1212,7 +1219,7 @@ export default function SettingsPage({
             </CardDescription>
           </CardHeader> */}
           <CardContent>
-            <Alert className="mb-4">
+            <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
               <AlertDescription>
                 <strong>Multiple Sign-in Methods:</strong> You can sign in with
                 both Google and email/password.
@@ -1339,19 +1346,19 @@ export default function SettingsPage({
               return (
                 <div className="space-y-4">
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.general} className="border-[#7F39EC] bg-[#D9C0FF26] w-full"/>
+                    <Input readOnly value={links.general} className="border-gray-400 w-full"/>
                     <Button type="button" className="bg-[#4A00BE] text-white" variant="outline" onClick={() => copyToClipboard(links.general)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy General
+                      <Copy className="h-4 w-4 mr-1" />Copy General
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.creators}  className="border-[#7F39EC] bg-[#D9C0FF26]" />
+                    <Input readOnly value={links.creators}  className="border-gray-400" />
                     <Button type="button" variant="outline" className="bg-[#4A00BE] text-white" onClick={() => copyToClipboard(links.creators)}>
                       <Copy className="h-4 w-4" />Copy Creators
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.brands} className="border-[#7F39EC] bg-[#D9C0FF26]"/>
+                    <Input readOnly value={links.brands} className="border-gray-400"/>
                     <Button type="button" variant="outline" className="bg-[#4A00BE] text-white"  onClick={() => copyToClipboard(links.brands)}>
                       <Copy className="h-4 w-4 mr-2" />Copy Brands
                     </Button>

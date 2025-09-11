@@ -10,6 +10,9 @@ import { formatLocalDateTime } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
 import { cn } from "@/lib/utils";
+import { EnhancedTabs } from "@/components/ui/enhancedTabs";
+import { TabContent, TabPanel } from "@/components/ui/tab-content";
+import { useTabState } from "@/components/ui/tab-utils"
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
@@ -25,6 +28,8 @@ type SortOptionType =
   'cpm_rate_desc' | 'cpm_rate_asc' |
   'submissions_desc' | 'submissions_asc';
 
+  
+
 export default function OpportunitiesPage({
   user,
 }: {
@@ -38,6 +43,14 @@ export default function OpportunitiesPage({
   const router = useRouter();
   const supabase = createClient();
 
+  const tabs = [
+    { id: "all", label: "All", count: availableContests.filter(c => c.moderation_status === "published" && c.status).length },
+    { id: "live", label: "Live", count: availableContests.filter(c => c.moderation_status === "published" && c.status === "active").length },
+    { id: "upcoming", label: "Upcoming", count: availableContests.filter(c => c.moderation_status === "published" && c.status === "upcoming").length },
+    { id: "completed", label: "Completed", count: availableContests.filter(c => c.moderation_status === "published" && c.post_contest_status === "payouts_processed").length },
+  ]
+  
+  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
   const [platformFilter, setPlatformFilter] = useState<PlatformFilterType>('all');
@@ -304,8 +317,34 @@ export default function OpportunitiesPage({
         {/* Filters and Sorters will go here - Old filter button removed */}
       </div>
 
+
+    {/* Tabs */}
+<EnhancedTabs
+  tabs={tabs.map((tab) => ({
+    ...tab,
+    label: (
+      <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
+        <span className="truncate">{tab.label}</span>
+        {tab.count !== undefined && (
+          <Badge
+            variant="secondary"
+            className="ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm bg-gray-200 text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+          >
+            {tab.count}
+          </Badge>
+        )}
+      </div>
+    ),
+  }))}
+  activeTab={statusFilter}
+  onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
+  className="mt-10 mb-8 w-full overflow-x-auto scrollbar-hide"
+/>
+
+
+      
       {/* Enhanced Status Filter Tabs with better visual distinction */}
-      <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-8">
+      {/* <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-8">
         <TabsList>
           <TabsTrigger value="all">
             All <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.status).length}</Badge>
@@ -320,10 +359,10 @@ export default function OpportunitiesPage({
             Completed <Badge variant="secondary" className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground">{availableContests.filter(c => c.moderation_status === 'published' && c.post_contest_status === 'payouts_processed').length}</Badge>
           </TabsTrigger>
         </TabsList>
-      </Tabs>
+      </Tabs> */}
 
       {/* Enhanced Filter and Sort Select Dropdowns */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
         {/* Platform Filter */}
         <Select value={platformFilter} onValueChange={(value) => setPlatformFilter(value as PlatformFilterType)}>
           <SelectTrigger className="font-medium">
@@ -374,7 +413,7 @@ export default function OpportunitiesPage({
           displayedContests.map((contest) => (
             <Card
               key={contest.id}
-              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white dark:bg-slate-850 hover:border-rose-500 dark:hover:border-rose-500 w-full"
+              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full"
             >
               <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
                 {contest.thumbnail_url ? (
@@ -389,31 +428,31 @@ export default function OpportunitiesPage({
                 <div className="absolute top-2 right-2 flex gap-2">
                   <Badge
                     className={cn(
-                      "capitalize text-xs px-2 py-0.5 font-medium border",
-                      contest.status === "active" && "bg-green-500 border-green-500 text-white",
-                      contest.status === "upcoming" && "bg-blue-500 border-blue-500 text-white",
-                      contest.status === "ended" && "bg-slate-500 border-slate-500 text-white",
-                      !["active", "upcoming", "ended"].includes(contest.status) && "bg-yellow-400 border-yellow-400 text-yellow-900"
+                      "capitalize text-sm px-3 py-1 font-medium border",
+                      contest.status === "active" && "bg-[#7F39EC] text-white",
+                      contest.status === "upcoming" && "bg-[#7F39EC] text-white",
+                      contest.status === "ended" && "bg-[#7F39EC] text-white",
+                      !["active", "upcoming", "ended"].includes(contest.status) && "bg-[#7F39EC] text-white"
                     )}
                   >
                     {contest.status === "active" ? "Live" : contest.status}
                   </Badge>
                   {contest.post_contest_status === 'payouts_processed' && (
-                    <Badge className="text-xs px-2 py-0.5 font-medium border bg-emerald-600 border-emerald-600 text-white">
+                    <Badge className="font-medium capitalize text-sm px-3 py-1 border bg-[#7F39EC] text-white">
                       Completed
                     </Badge>
                   )}
                 </div>
               </div>
               <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors duration-300 mr-2 leading-tight">
+                <CardTitle className="text-lg font-bold text-slate-800 transition-colors duration-300 mr-2 leading-tight">
                   {contest.title}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                <div className="space-y-1.5 text-sm mb-3 text-slate-600 dark:text-slate-400">
+                <div className="space-y-2 text-md mb-3 text-slate-600 dark:text-slate-400">
                   <div className="flex items-center">
-                    <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                    <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-gray500" />
                     <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
                   </div>
                   {contest.start_date && (
@@ -442,19 +481,19 @@ export default function OpportunitiesPage({
                   </div>
                   {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
                     <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                       <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                     </div>
                   )}
                   {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                     <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                       <span>Total Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
                     </div>
                   )}
                   {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null && contest.contest_based_details.leaderboard_contest.total_prize > 0 && (
                     <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-rose-500" />
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
                       <span>Total Prize Pool: <span className="font-medium text-slate-700 dark:text-slate-300">
                         {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
                       </span></span>
@@ -465,13 +504,13 @@ export default function OpportunitiesPage({
                 {/* Budget Spent Progress Bar for CPM contests */}
                 {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                   <div className="mt-3 mb-3">
-                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mb-1">
+                    <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
                       <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
                       <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                       <div
-                        className="bg-rose-500 h-2 rounded-full transition-all duration-500 ease-out"
+                        className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
                       ></div>
                     </div>
@@ -481,14 +520,14 @@ export default function OpportunitiesPage({
                   </div>
                 )}
 
-                <Button
+                <button
                   onClick={() => handleViewDetails(contest.id)}
-                  size="sm"
-                  variant="white"
-                  className="w-full mt-auto"
+                  // size="sm"
+                  // variant="white"
+                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                 >
                   View Details
-                </Button>
+                </button>
               </CardContent>
             </Card>
           )).slice(0, 50) // Limit to 50 contests for performance

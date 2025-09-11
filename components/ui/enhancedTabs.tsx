@@ -1,14 +1,16 @@
 import React from 'react';
 
-interface Tab {
+export interface Tab {
   id: string;
-  label: string;
+  label: React.ReactNode; 
+  count?: number;
 }
+
 
 interface EnhancedTabsProps {
   tabs: Tab[];
   activeTab: string;
-  onTabChange: (tabId: string) => void;
+  onTabChange: (id: string) => void;
   className?: string;
 }
 
@@ -29,12 +31,14 @@ export function EnhancedTabs({ tabs, activeTab, onTabChange, className = '' }: E
       }
     }
     
-    const baseClasses = `flex-1 px-4 sm:px-6 py-2 sm:py-3.5 font-medium transition-all duration-200 ${roundedClasses}`;
+    const baseClasses = `flex items-center justify-center gap-2 
+  flex-1 px-4 sm:px-6 py-2 sm:py-3.5 font-medium transition-all duration-200 ${roundedClasses}`;
+
     
     if (isActive) {
       return `${baseClasses} bg-[#662EBD] text-white shadow-sm`;
     } else {
-      return `${baseClasses} text-gray-600 hover:text-gray-800 hover:bg-gray-200 hover:rounded-full`;
+      return `${baseClasses} text-gray-700 hover:text-gray-800 hover:bg-gray-200 hover:rounded-full`;
     }
   };
 

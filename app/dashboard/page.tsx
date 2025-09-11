@@ -359,7 +359,26 @@ function DashboardPage() {
         ) : (
           <>
             {/* Total Earnings Card - Green */}
-            <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
+
+            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+          <CardContent className="p-4">
+            <div className="flex justify-between">
+              <div className="flex-1 text-black space-y-2">
+                <p className="text-lg font-medium">Total Earnings</p>
+                <p className="text-xl font-bold">
+                {formatCurrencyFromCents(profile?.total_money_won || 0)}
+                </p>
+                <p className="text-md  mt-0.5">
+                Money earned from contests
+                </p>
+              </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                <DollarSign className="h-6 w-6" />
+              </div>
+            </div>
+          </CardContent>
+        </div>
+            {/* <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -378,10 +397,31 @@ function DashboardPage() {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Contests Won Card - Yellow/Gold */}
-            <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
+
+            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+          <CardContent className="p-4">
+            <div className="flex justify-between">
+             
+              <div className="flex-1 text-black space-y-2">
+                <p className="text-lg font-medium">Contests Won</p>
+                <p className="text-xl font-bold">
+                {profile?.total_contests_won || 0}
+                </p>
+                <p className="text-md  mt-0.5">
+                Out of {profile?.total_contests_participated || 0}{" "}
+                participated
+                </p>
+              </div>
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                <Trophy className="h-6 w-6" />
+              </div>
+            </div>
+          </CardContent>
+        </div>
+            {/* <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
@@ -401,7 +441,7 @@ function DashboardPage() {
                   </div>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
           </>
         )}
 

@@ -334,7 +334,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     contest.status === "active" && "bg-[#7F39EC] text-white",
                                     contest.status === "upcoming" && "bg-[#7F39EC] text-white",
                                     contest.status === "ended" && "bg-[#7F39EC] text-white",
-                                    !["active", "upcoming", "ended"].includes(contest.status || "") && "bg-yellow-400 border-yellow-400 text-yellow-900"
+                                    !["active", "upcoming", "ended"].includes(contest.status || "") && "bg-[#7F39EC] text-white"
                                 )}
                             >
                                 {contest.status === "active" ? "Live" : (contest.status || "Unknown")}
@@ -407,7 +407,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                 </div>
                                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
                                     <div
-                                        className="bg-rose-500 h-2 rounded-full transition-all duration-500 ease-out"
+                                        className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
                                         style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
                                     ></div>
                                 </div>
