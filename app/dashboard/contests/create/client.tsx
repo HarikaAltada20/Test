@@ -424,6 +424,9 @@ export default function CreateContestPage({
     }
   };
 
+
+
+  
   // Helper function to create a draft contest in DB
   const createDraftContest = async (): Promise<string | null> => {
     if (!user?.id) return null;

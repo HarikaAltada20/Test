@@ -18,6 +18,7 @@ import {
   Star,
   Shield,
   Check,
+  Info,
 } from "lucide-react";
 import { FaDiscord } from "react-icons/fa";
 import Link from "next/link";
@@ -361,7 +362,18 @@ export default function GettingStartedClient({
                       <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                         <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                       </div>
-                      <h3 className="font-bold text-lg">CPM Contests</h3>
+                      <h3 className="font-bold text-lg flex items-center">
+                        CPM Contests
+                        {/* Info Icon with hover tooltip */}
+                        <div className="ml-2 relative group">
+                          <Info className="w-4 h-4 text-black cursor-pointer" />
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 text-sm text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                            <strong>CPM</strong> stands for{" "}
+                            <em>COST PER MILE</em>
+                          </div>
+                        </div>
+                      </h3>
+
                       <Badge
                         variant="outline"
                         className="bg-[#ECE1FC] text-purple-700"
@@ -857,7 +869,7 @@ export default function GettingStartedClient({
 
                     {/* Visual Earnings Examples */}
                     <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
                         <div className="flex items-center space-x-3">
                           <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
                             <Video className="w-5 h-5 text-black" />
@@ -869,9 +881,9 @@ export default function GettingStartedClient({
                         </span>
                       </div>
                       <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
-                      <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
-                            <Video className="w-5 h-5 text-black"  />
+                        <div className="flex items-center space-x-3">
+                          <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
+                            <Video className="w-5 h-5 text-black" />
                           </div>
                           <span className="font-medium">50K views</span>
                         </div>
@@ -879,10 +891,10 @@ export default function GettingStartedClient({
                           $250
                         </span>
                       </div>
-                   <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
-                   <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
-                            <Video className="w-5 h-5 text-black"  />
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-gray-400">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
+                            <Video className="w-5 h-5 text-black" />
                           </div>
                           <span className="font-medium">100K views</span>
                         </div>
@@ -915,26 +927,27 @@ export default function GettingStartedClient({
                     Content Verification Process
                   </h2>
                   <div className="text-md text-center mb-6">
-                  <p className="text-black">
-                    After you submit your content, it goes through a
-                    verification process to ensure quality and compliance.
-                  </p>
-                </div>
-
+                    <p className="text-black">
+                      After you submit your content, it goes through a
+                      verification process to ensure quality and compliance.
+                    </p>
+                  </div>
                 </div>
               </CardHeader>
 
               <div className="space-y-6 md:px-2 mb-6">
-                
                 <div className="grid md:grid-cols-3 gap-6">
-                <div className="p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                  <div className="p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
                     <h3 className="font-semibold text-center text-xl mb-3 text-black">
-                    What We Review:
+                      What We Review:
                     </h3>
                     <ul className="space-y-3 text-[13px] text-gray-700 dark:text-gray-300">
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                        <span> Content follows contest brief, rules and guidelines</span>
+                        <span>
+                          {" "}
+                          Content follows contest brief, rules and guidelines
+                        </span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
@@ -967,9 +980,9 @@ export default function GettingStartedClient({
                       </li>
                     </ul>
                   </div> */}
-                   <div className="p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                  <div className="p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
                     <h3 className="font-semibold text-center text-xl mb-3 text-black">
-                    If Approved (Verified):
+                      If Approved (Verified):
                     </h3>
                     <ul className="space-y-3 text-[13px] text-gray-700 dark:text-gray-300">
                       <li className="flex items-start space-x-2">
@@ -982,7 +995,9 @@ export default function GettingStartedClient({
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                        <span>Performance tracking continues for contest rankings</span>
+                        <span>
+                          Performance tracking continues for contest rankings
+                        </span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
@@ -1016,9 +1031,9 @@ export default function GettingStartedClient({
                     </ul>
                   </div> */}
 
-<div className="p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                  <div className="p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
                     <h3 className="font-semibold text-center text-xl mb-3 text-black">
-                    If Not Approved (Rejected):
+                      If Not Approved (Rejected):
                     </h3>
                     <ul className="space-y-3 text-[13px] text-gray-700 dark:text-gray-300">
                       <li className="flex items-start space-x-2">
@@ -1031,13 +1046,18 @@ export default function GettingStartedClient({
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                        <span>But you can still see all your submissions in "My
-                        Submissions" section</span>
+                        <span>
+                          But you can still see all your submissions in "My
+                          Submissions" section
+                        </span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                        <span> You will not be eligible for any winnings for that
-                        contest</span>
+                        <span>
+                          {" "}
+                          You will not be eligible for any winnings for that
+                          contest
+                        </span>
                       </li>
                     </ul>
                   </div>
@@ -1075,7 +1095,7 @@ export default function GettingStartedClient({
                 </div>
 
                 <div className="bg-[#D9C0FF26] p-4 rounded-lg border border-[#7F39EC]">
-                <div className="flex items-start space-x-3">
+                  <div className="flex items-start space-x-3">
                     {/* <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg flex-shrink-0">
                       <MessageCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     </div> */}
