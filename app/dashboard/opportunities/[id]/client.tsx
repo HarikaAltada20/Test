@@ -2052,10 +2052,10 @@ export function ContestClientPage({
                           size="sm"
                           onClick={handleRefreshMetrics}
                           disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                          className="ml-2"
+                          className="ml-2 py-2 rounded-lg text-md bg-[#4A00BE] text-white"
                           title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
                         >
-                          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`h-4 w-4 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
                           {isRefreshingMetrics
                             ? 'Updating...'
                             : !cooldownInfo.canRefresh
