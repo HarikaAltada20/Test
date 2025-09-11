@@ -795,27 +795,39 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         </Badge>
                     </TabsTrigger>
                 </TabsList>
-
                 {Object.keys(contestsByStatus).map((tabValue) => (
-                    <TabsContent key={tabValue} value={tabValue} className="mt-4">
-                        <div className="grid gap-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
-                            {displayContests.length > 0 ? (
-                                displayContests.map((contest) => renderContestCard(contest))
-                            ) : (
-                                <div className="col-span-full text-center py-12">
-                                    <h3 className="text-lg font-semibold">No Contests Found</h3>
-                                    <p className="text-slate-500 mt-2">
-                                        {platformFilter !== "all" || contestStatusFilter !== "all" || contestTypeFilter !== "all"
-                                            ? `No contests match the current filters for ${tabValue} status.`
-                                            : `No contests found for ${tabValue} status.`
-                                        }
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </TabsContent>
-                ))}
+          <TabsContent key={tabValue} value={tabValue} className="mt-4">
+            <div
+              className="grid gap-6"
+              style={{
+                gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+              }}
+            >
+              {displayContests.length > 0 ? (
+                displayContests.map((contest) => renderContestCard(contest))
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <h3 className="text-lg font-semibold">No Contests Found</h3>
+                  <p className="text-slate-500 mt-2">
+                    {platformFilter !== "all" ||
+                    contestStatusFilter !== "all" ||
+                    contestTypeFilter !== "all"
+                      ? `No contests match the current filters for ${tabValue
+                          .split("_")
+                          .join(" ")} status.`
+                      : `No contests found for ${tabValue
+                          .split("_")
+                          .join(" ")} status.`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        ))}
             </Tabs>
         </div>
     );
 }
+
+
+
