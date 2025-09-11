@@ -68,8 +68,8 @@ type PrizeInfo = {
 const tabs = [
   { id: "details", label: "Contest Details" },
   { id: "leaderboard", label: "Leaderboard" },
- 
-] 
+
+]
 // LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
   id: string;
@@ -131,9 +131,8 @@ const generateAllDummyLeaderboardData = (
       content_link: "https://www.example.com/watch?v=dQw4w9WgXcQ", // A familiar link for all :)
       platform: platforms[i % platforms.length],
       user_platform_username: username,
-      user_full_name: `${
-        isMyEntry ? "The One And Only" : "Talented"
-      } ${username.replace(/\d+/g, "")}`,
+      user_full_name: `${isMyEntry ? "The One And Only" : "Talented"
+        } ${username.replace(/\d+/g, "")}`,
       creator_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}`,
       user_platform_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}_platform`,
     });
@@ -639,12 +638,12 @@ export function ContestClientPage({
   const handleShare = async () => {
     if (contest.status === "ended") {
       toast({
-        title: "Opportunity Ended",
+        title: "Opportunity Completed",
         description:
-          "This opportunity has ended. Creators can no longer submit entries.",
-        variant: "destructive",
+          "This opportunity has ended. You can still share it to showcase the results and winners.",
+        variant: "default",
       });
-      return;
+      // Allow sharing to proceed for completed opportunities
     }
     if (contest.status === "upcoming") {
       toast({
@@ -727,13 +726,12 @@ export function ContestClientPage({
                   {/* Status and Type Badges */}
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <Badge
-                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${
-                        contest.status === "active"
+                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
                           ? "bg-green-400/90 text-green-900"
                           : contest.status === "upcoming"
-                          ? "bg-blue-400/90 text-blue-900"
-                          : "bg-slate-400/90 text-slate-900"
-                      }`}
+                            ? "bg-blue-400/90 text-blue-900"
+                            : "bg-slate-400/90 text-slate-900"
+                        }`}
                     >
                       <span className="flex items-center gap-1.5">
                         {contest.status === "active" ? (
@@ -794,20 +792,20 @@ export function ContestClientPage({
                     </div>
                     <div className="text-3xl lg:text-4xl font-bold text-white mb-1">
                       {contest.contest_type === "cpm" &&
-                      contest.contest_based_details?.cpm_contest
+                        contest.contest_based_details?.cpm_contest
                         ? formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .total_budget
-                          )
+                          contest.contest_based_details.cpm_contest
+                            .total_budget
+                        )
                         : contest.contest_type === "leaderboard" &&
                           contest.contest_based_details?.leaderboard_contest
-                        ? formatMoney(
+                          ? formatMoney(
                             contest.contest_based_details.leaderboard_contest
                               .total_prize
                           )
-                        : contest.total_prize
-                        ? formatMoney(contest.total_prize || 0)
-                        : "$0.00"}
+                          : contest.total_prize
+                            ? formatMoney(contest.total_prize || 0)
+                            : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
@@ -893,8 +891,8 @@ export function ContestClientPage({
                       {contest.status === "active"
                         ? "The stage is yours! Submit your content and let your creativity shine."
                         : contest.status === "upcoming"
-                        ? "Get ready! This opportunity hasn't started yet, but you can prepare."
-                        : "This opportunity has ended or is no longer active."}
+                          ? "Get ready! This opportunity hasn't started yet, but you can prepare."
+                          : "This opportunity has ended or is no longer active."}
                     </p>
                   </div>
 
@@ -902,11 +900,10 @@ export function ContestClientPage({
                     size="lg"
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
-                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
-                      contest.status?.toLowerCase() === "active"
+                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
                         ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
                         : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                      }`}
                   >
                     {/* Animated shine effect for active button */}
                     {contest.status?.toLowerCase() === "active" && (
@@ -1018,12 +1015,12 @@ export function ContestClientPage({
                   {" "}
                   {contest.start_date && contest.end_date
                     ? `${formatLocalDateTime(contest.start_date, {
-                        month: "short",
-                        day: "numeric",
-                      })} - ${formatLocalDateTime(contest.end_date, {
-                        month: "short",
-                        day: "numeric",
-                      })}`
+                      month: "short",
+                      day: "numeric",
+                    })} - ${formatLocalDateTime(contest.end_date, {
+                      month: "short",
+                      day: "numeric",
+                    })}`
                     : "Dates TBD"}
                 </p>
               </div>
@@ -1073,37 +1070,35 @@ export function ContestClientPage({
                 <p className="text-lg font-medium">Prize Pool</p>
                 <p className="text-xl font-bold">
                   {contest.contest_type === "cpm" &&
-                  contest.contest_based_details?.cpm_contest
+                    contest.contest_based_details?.cpm_contest
                     ? formatMoney(
-                        contest.contest_based_details.cpm_contest.total_budget
-                      )
+                      contest.contest_based_details.cpm_contest.total_budget
+                    )
                     : contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
-                    ? formatMoney(
+                      ? formatMoney(
                         contest.contest_based_details.leaderboard_contest
                           .total_prize
                       )
-                    : contest.total_prize // Fallback to old field if necessary for older data
-                    ? formatMoney(contest.total_prize || 0)
-                    : "$0.00"}
+                      : contest.total_prize // Fallback to old field if necessary for older data
+                        ? formatMoney(contest.total_prize || 0)
+                        : "$0.00"}
                 </p>
                 <p className="text-md">
                   {" "}
                   {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.winner_count
-                    ? `${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count
-                      } winner${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count !== 1
-                          ? "s"
-                          : ""
-                      }`
+                    contest.contest_based_details?.leaderboard_contest
+                      ?.winner_count
+                    ? `${contest.contest_based_details.leaderboard_contest
+                      .winner_count
+                    } winner${contest.contest_based_details.leaderboard_contest
+                      .winner_count !== 1
+                      ? "s"
+                      : ""
+                    }`
                     : contest.contest_type === "cpm"
-                    ? "CPM based"
-                    : "Total prize"}
+                      ? "CPM based"
+                      : "Total prize"}
                 </p>
               </div>
               <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
@@ -1147,7 +1142,7 @@ export function ContestClientPage({
                 <p className="text-lg font-medium">Submissions</p>
                 <p className="text-xl font-bold">
                   {contest.live_submission_count !== null &&
-                  contest.live_submission_count >= 0
+                    contest.live_submission_count >= 0
                     ? contest.live_submission_count
                     : 0}
                 </p>
@@ -1221,10 +1216,10 @@ export function ContestClientPage({
                       <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {contest.end_date
                           ? formatLocalDateTime(contest.end_date, {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
                           : "Date not specified"}
                       </div>
                     </div>
@@ -1236,30 +1231,30 @@ export function ContestClientPage({
         )}
 
 
-  {/* Tabs */}
-  <EnhancedTabs
-  tabs={tabs.map((tab) => ({
-    ...tab,
-    label: (
-      <div className="flex text-center items-center">
-        {tab.label}
-        {tab.id === "leaderboard" &&
-          contest?.contest_type === "leaderboard" &&
-          totalLeaderboardEntries > 0 && (
-            <Badge
-              variant="secondary"
-               className="ml-2 bg-gray-200 text-sm text-gray-700data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-            >
-              {totalLeaderboardEntries}
-            </Badge>
-          )}
-      </div>
-    ),
-  }))}
-  activeTab={activeTab}
-  onTabChange={setActiveTab}
-  className="mt-12 mb-6"
-/>
+        {/* Tabs */}
+        <EnhancedTabs
+          tabs={tabs.map((tab) => ({
+            ...tab,
+            label: (
+              <div className="flex text-center items-center">
+                {tab.label}
+                {tab.id === "leaderboard" &&
+                  contest?.contest_type === "leaderboard" &&
+                  totalLeaderboardEntries > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="ml-2 bg-gray-200 text-sm text-gray-700data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                    >
+                      {totalLeaderboardEntries}
+                    </Badge>
+                  )}
+              </div>
+            ),
+          }))}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          className="mt-12 mb-6"
+        />
 
         {/* <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList>
@@ -1278,7 +1273,7 @@ export function ContestClientPage({
             </TabsTrigger>
           </TabsList> */}
 
-          <TabContent activeTab={activeTab}>
+        <TabContent activeTab={activeTab}>
           <TabPanel value="details" activeTab={activeTab}>
             <div className="bg-white rounded-xl shadow-xl">
               <CardHeader className="border-b">
@@ -1422,47 +1417,47 @@ export function ContestClientPage({
                     (Array.isArray(
                       contest.contest_based_details?.leaderboard_contest?.prizes
                     ) &&
-                    contest.contest_based_details.leaderboard_contest.prizes
-                      .length > 0 ? (
+                      contest.contest_based_details.leaderboard_contest.prizes
+                        .length > 0 ? (
                       <div className="space-y-4">
                         {/* Prize Pool Summary */}
-                       
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                           <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
                             <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
-                                <Trophy className="h-5 w-5" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-black uppercase tracking-wide">
-                                  Total Prize Pool
-                                </p>
-                                <p className="text-xl font-bold text-black">
-                                  {formatMoney(
-                                    contest.contest_based_details
-                                      .leaderboard_contest.total_prize
-                                  )}
-                                </p>
-                              </div>
+                              <Trophy className="h-5 w-5" />
                             </div>
-                            <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
-                              <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
-                                <Users className="h-5 w-5" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-black uppercase tracking-wide">
-                                  Total Winners
-                                </p>
-                                <p className="text-xl font-bold text-black">
-                                  {
-                                    contest.contest_based_details
-                                      .leaderboard_contest.winner_count
-                                  }
-                                </p>
-                              </div>
+                            <div>
+                              <p className="text-sm font-medium text-black uppercase tracking-wide">
+                                Total Prize Pool
+                              </p>
+                              <p className="text-xl font-bold text-black">
+                                {formatMoney(
+                                  contest.contest_based_details
+                                    .leaderboard_contest.total_prize
+                                )}
+                              </p>
                             </div>
                           </div>
-                      
+                          <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
+                            <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
+                              <Users className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-black uppercase tracking-wide">
+                                Total Winners
+                              </p>
+                              <p className="text-xl font-bold text-black">
+                                {
+                                  contest.contest_based_details
+                                    .leaderboard_contest.winner_count
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
 
                         {/* Prize Distribution */}
                         <div className="py-4">
@@ -1532,25 +1527,25 @@ export function ContestClientPage({
                           {contest.contest_based_details.cpm_contest
                             .min_views != null && (
                               <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                Minimum Views Required:
-                              </span>
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Minimum Views Required:
+                                </span>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
                           {contest.contest_based_details.cpm_contest
                             .max_views != null && (
                               <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                Maximum Views Counted:
-                              </span>
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Maximum Views Counted:
+                                </span>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
                         </div>
                         <Separator />
                         <div>
@@ -1608,7 +1603,7 @@ export function ContestClientPage({
                       <div className="space-y-3">
                         <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
                           <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
-                             General Rules:
+                            General Rules:
                           </h4>
                           <ul className="space-y-2 ml-4 list-disc text-slate-600 dark:text-slate-400">
                             <li>
@@ -1682,20 +1677,20 @@ export function ContestClientPage({
                   </div>
 
                   {contest.resources &&
-                  ((Array.isArray(contest.resources) &&
-                    contest.resources.length > 0) ||
-                    (typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0)) ? (
+                    ((Array.isArray(contest.resources) &&
+                      contest.resources.length > 0) ||
+                      (typeof contest.resources === "object" &&
+                        Object.keys(contest.resources).length > 0)) ? (
                     <div className="grid gap-4">
                       {(Array.isArray(contest.resources)
                         ? contest.resources
                         : Object.entries(contest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            })
-                          )
+                          ([description, url]) => ({
+                            url,
+                            description,
+                            type: "external",
+                          })
+                        )
                       ).map((resource: any, idx: number) => {
                         const isImage =
                           resource.url &&
@@ -1714,9 +1709,9 @@ export function ContestClientPage({
                             key={idx}
                             className="border border-gray-300 rounded-xl p-5"
                           >
-                           <div className="flex flex-col md:flex-row justify-between">
+                            <div className="flex flex-col md:flex-row justify-between">
 
-<div className="flex items-center gap-4 flex-1 min-w-0">
+                              <div className="flex items-center gap-4 flex-1 min-w-0">
                                 {isInternal && isImage && !isPdf ? (
                                   <img
                                     src={resource.url}
@@ -1766,8 +1761,8 @@ export function ContestClientPage({
                                   </div>
                                 ) : (
                                   <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
-                                  <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                </div>
+                                    <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                  </div>
                                 )}
                                 <div className="min-w-0">
                                   <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">
@@ -1781,10 +1776,10 @@ export function ContestClientPage({
                                 </div>
                               </div>
                               <Button
-                               
+
                                 size="sm"
                                 asChild
-                                 className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
+                                className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
                               >
                                 <a
                                   href={resource.url}
@@ -1796,10 +1791,10 @@ export function ContestClientPage({
                                   {isPdf
                                     ? "Open PDF"
                                     : isVideo
-                                    ? "Play Video"
-                                    : isImage
-                                    ? "View Image"
-                                    : "View Resource"}
+                                      ? "Play Video"
+                                      : isImage
+                                        ? "View Image"
+                                        : "View Resource"}
                                 </a>
                               </Button>
                             </div>
@@ -2028,8 +2023,8 @@ export function ContestClientPage({
                     {contest?.last_metrics_updated
                       ? formatTimeAgo(contest.last_metrics_updated)
                       : lastUpdated
-                      ? formatTimeAgo(lastUpdated)
-                      : "Never"}
+                        ? formatTimeAgo(lastUpdated)
+                        : "Never"}
                     {totalLeaderboardEntries > 0 && (
                       <span className="ml-2">
                         | Total Submissions:{" "}
@@ -2119,36 +2114,36 @@ export function ContestClientPage({
                       className="border border-[#D1B7F9] rounded-xl overflow-hidden"
                     >
                       <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                       <div className="flex items-center space-x-3 md:space-x-4">
-                        <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                          {rank}
-                        </h2>
-                        <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                          <AvatarImage
-                            src={
-                              entry.creator_pfp_url ??
-                              entry.user_platform_pfp_url ??
-                              undefined
-                            }
-                            alt={entry.user_platform_username}
-                          />
-                          <AvatarFallback>
-                            {entry.user_platform_username?.[0]?.toUpperCase() ||
-                              "U"}
-                          </AvatarFallback>
-                        </Avatar>
+                        <div className="flex items-center space-x-3 md:space-x-4">
+                          <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
+                            {rank}
+                          </h2>
+                          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                            <AvatarImage
+                              src={
+                                entry.creator_pfp_url ??
+                                entry.user_platform_pfp_url ??
+                                undefined
+                              }
+                              alt={entry.user_platform_username}
+                            />
+                            <AvatarFallback>
+                              {entry.user_platform_username?.[0]?.toUpperCase() ||
+                                "U"}
+                            </AvatarFallback>
+                          </Avatar>
 
-                        <div className="flex-grow min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm sm:text-base font-semibold truncate text-slate-800 dark:text-slate-100">
-                              {entry.user_platform_username}
+                          <div className="flex-grow min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-sm sm:text-base font-semibold truncate text-slate-800 dark:text-slate-100">
+                                {entry.user_platform_username}
+                              </p>
+                              {renderVerificationBadge(entry.status)}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Submitted: {formatTimeAgo(entry.created_at)}
                             </p>
-                            {renderVerificationBadge(entry.status)}
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Submitted: {formatTimeAgo(entry.created_at)}
-                          </p>
-                        </div>
                         </div>
                         <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                           <div className="flex items-center space-x-2">
