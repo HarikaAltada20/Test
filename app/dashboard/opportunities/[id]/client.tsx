@@ -2038,44 +2038,30 @@ export function ContestClientPage({
                     )}
                   </div>
 
-                  {/* Refresh Metrics Button - Only show for active contests with submissions */}
-                  {contest?.status === "active" &&
+                  {/* Refresh Metrics Button - Only show for active contests with submissions and not finalized */}
+                  {contest?.status === 'active' &&
                     totalLeaderboardEntries > 0 &&
-                    (() => {
-                      const cooldownInfo =
-                        getMetricsRefreshCooldownInfoOpportunities(
-                          contest?.last_metrics_updated
-                        );
+                    contest?.post_contest_status !== 'in_review' &&
+                    contest?.post_contest_status !== 'verification_complete' &&
+                    contest?.post_contest_status !== 'payouts_processed' && (() => {
+                      const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(contest?.last_metrics_updated);
 
                       return (
                         <Button
-                        
+                          variant="outline"
                           size="sm"
                           onClick={handleRefreshMetrics}
-                          disabled={
-                            isRefreshingMetrics || !cooldownInfo.canRefresh
-                          }
-                          className="ml-2 text-md py-3 bg-[#6C43D0] text-white hover:bg-[#6C43D0] "
-                          title={
-                            !cooldownInfo.canRefresh
-                              ? `Available in ${formatRemainingTime(
-                                  cooldownInfo.remainingMs
-                                )}`
-                              : "Refresh metrics now"
-                          }
+                          disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
+                          className="ml-2"
+                          title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
                         >
-                          <RefreshCw
-                            className={`h-4 w-4 ${
-                              isRefreshingMetrics ? "animate-spin" : ""
-                            }`}
-                          />
+                          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
                           {isRefreshingMetrics
-                            ? "Updating..."
+                            ? 'Updating...'
                             : !cooldownInfo.canRefresh
-                            ? `Wait ${formatRemainingTime(
-                                cooldownInfo.remainingMs
-                              )}`
-                            : "Refresh Metrics"}
+                              ? `Wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
+                              : 'Refresh Metrics'
+                          }
                         </Button>
                       );
                     })()}

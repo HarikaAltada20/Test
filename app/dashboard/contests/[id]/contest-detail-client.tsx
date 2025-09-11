@@ -88,6 +88,7 @@ import {
   Share2,
   Eye,
   CheckCircle2,
+  CheckCircle,
   XCircle,
   AlertTriangle,
   Trophy,
@@ -102,6 +103,8 @@ import {
   Play,
   Settings,
   Wallet,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 
 // --- Local Type Definitions ---
@@ -110,20 +113,20 @@ interface Contest {
   title: string;
   // Moderation status (admin workflow)
   moderation_status:
-    | "draft"
-    | "pending_approval"
-    | "approved"
-    | "published"
-    | "rejected";
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "published"
+  | "rejected";
   // Contest lifecycle status (only for published contests)
   status: "upcoming" | "active" | "ended" | "incomplete" | "unknown" | null;
   // Post-contest status for ended contests
   post_contest_status?:
-    | "pending_review"
-    | "in_review"
-    | "verification_complete"
-    | "payouts_processed"
-    | null;
+  | "pending_review"
+  | "in_review"
+  | "verification_complete"
+  | "payouts_processed"
+  | null;
   contest_type?: "leaderboard" | "cpm" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
@@ -228,6 +231,9 @@ export default function ContestDetailClient({
   const [activeStatusTab, setActiveStatusTab] = useState<
     "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
   >("all");
+  const [activeAnalyticsTab, setActiveAnalyticsTab] = useState<
+    "all" | "pending" | "verified" | "rejected" | "paid" | "verified_or_paid"
+  >("all");
   const [sortOption, setSortOption] = useState<
     "views_desc" | "views_asc" | "time_desc" | "time_asc"
   >("views_desc");
@@ -243,6 +249,15 @@ export default function ContestDetailClient({
       return submission.status === "verified" || submission.status === "paid";
     }
     return submission.status === activeStatusTab;
+  });
+
+  // Filter submissions for analytics based on active analytics tab
+  const filteredAnalyticsSubmissions = currentSubmissions.filter((submission) => {
+    if (activeAnalyticsTab === "all") return true;
+    if (activeAnalyticsTab === "verified_or_paid") {
+      return submission.status === "verified" || submission.status === "paid";
+    }
+    return submission.status === activeAnalyticsTab;
   });
 
   useEffect(() => {
@@ -403,7 +418,7 @@ export default function ContestDetailClient({
           typeof result === "string" && result.trim().length > 0
             ? result
             : result?.error ||
-              `Failed to update submission status (HTTP ${response.status})`;
+            `Failed to update submission status (HTTP ${response.status})`;
         throw new Error(message);
       }
 
@@ -704,9 +719,8 @@ export default function ContestDetailClient({
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${
-          cooldownInfo.remainingMinutes
-        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${cooldownInfo.remainingMinutes
+          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -838,12 +852,12 @@ export default function ContestDetailClient({
   const handleShare = async () => {
     if (contest.status === "ended") {
       toast({
-        title: "Opportunity Ended",
+        title: "Contest Completed",
         description:
-          "This opportunity has ended. Creators can no longer submit entries.",
-        variant: "destructive",
+          "This contest has ended. You can still share it to showcase the results and winners.",
+        variant: "default",
       });
-      return;
+      // Allow sharing to proceed for completed contests
     }
 
     if (contest.status === "upcoming") {
@@ -862,14 +876,18 @@ export default function ContestDetailClient({
       if (navigator.share) {
         await navigator.share({
           title: contest.title,
-          text: `Check out this opportunity: ${contest.title}`,
+          text: contest.status === "ended"
+            ? `Check out this completed contest: ${contest.title}`
+            : `Check out this opportunity: ${contest.title}`,
           url: shareUrl,
         });
       } else {
         await navigator.clipboard.writeText(shareUrl);
         toast({
           title: "Link Copied",
-          description: "Opportunity link copied to clipboard!",
+          description: contest.status === "ended"
+            ? "Contest link copied to clipboard!"
+            : "Opportunity link copied to clipboard!",
           variant: "default",
         });
       }
@@ -886,56 +904,58 @@ export default function ContestDetailClient({
   const isContestEditable =
     currentContest.moderation_status === "draft" ||
     currentContest.moderation_status === "rejected" ||
+    currentContest.moderation_status === "pending_approval" ||
     (currentContest.moderation_status === "approved" &&
       currentContest.status === "upcoming");
   const isContestDeletable =
     currentContest.moderation_status === "draft" ||
-    currentContest.moderation_status === "rejected";
+    currentContest.moderation_status === "rejected" ||
+    currentContest.moderation_status === "pending_approval";
 
   return (
     <div>
       <div className="flex flex-col px-1 lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
-     
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <Button className="cursor-pointer" variant="ghost" size="icon" asChild>
-          <Link
-            href={
-              isAdminView ? "/dashboard/admin/contests" : "/dashboard/contests"
-            }
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </Button>
-        <div className="flex flex-wrap items-center gap-2">
-        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 break-words">
-          {currentContest.title}
-        </h1>
-        
 
-         {/* Status + Contest type */}
-        
-        <div
-          className={cn(
-            contestStatusBadgeInfo.className,
-            "capitalize bg-[#FDD36F57] text-sm px-3 py-1 rounded-full text-[#A87313]"
-          )}
-        >
-          {contestStatusBadgeInfo.text}
-        </div>
-        {currentContest.contest_type && (
-          <div
-            // variant={
-            //   currentContest.contest_type === "cpm" ? "secondary" : "default"
-            // }
-            className="capitalize bg-[#7F39EC3B] text-sm px-3 py-1 rounded-full text-[#4A00BE]"
-          >
-            {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Button className="cursor-pointer" variant="ghost" size="icon" asChild>
+            <Link
+              href={
+                isAdminView ? "/dashboard/admin/contests" : "/dashboard/contests"
+              }
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 break-words">
+              {currentContest.title}
+            </h1>
+
+
+            {/* Status + Contest type */}
+
+            <div
+              className={cn(
+                contestStatusBadgeInfo.className,
+                "capitalize bg-[#FDD36F57] text-sm px-3 py-1 rounded-full text-[#A87313]"
+              )}
+            >
+              {contestStatusBadgeInfo.text}
+            </div>
+            {currentContest.contest_type && (
+              <div
+                // variant={
+                //   currentContest.contest_type === "cpm" ? "secondary" : "default"
+                // }
+                className="capitalize bg-[#7F39EC3B] text-sm px-3 py-1 rounded-full text-[#4A00BE]"
+              >
+                {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
+              </div>
+            )}
           </div>
-        )}
         </div>
-        </div>
-         {/* Quick Actions Bar */}
-         <div className="flex gap-4 items-center mb-3">
+        {/* Quick Actions Bar */}
+        <div className="flex gap-4 items-center mb-3">
           {/* Contest Status Update Button */}
           {canUpdateContestStatus() && (
             <Dialog
@@ -1030,21 +1050,23 @@ export default function ContestDetailClient({
             </Dialog>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
-            onClick={handleShare}
-          >
-            <Share2 className="h-4 w-4" />
-            <span className="hidden sm:inline font-medium">Share</span>
-          </Button>
+          {currentContest.moderation_status === "published" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              onClick={handleShare}
+            >
+              <Share2 className="h-4 w-4" />
+              <span className="hidden sm:inline font-medium">Share</span>
+            </Button>
+          )}
 
           {isContestEditable && (
             <Button
               size="sm"
               variant="outline"
-               className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
               asChild
             >
               <Link
@@ -1062,20 +1084,20 @@ export default function ContestDetailClient({
           )}
 
           {isContestDeletable && (
-          
-              <DeleteContestButton
-                contestId={contestId}
-                contestTitle={currentContest.title || "this contest"}
-                isDeletable={isContestDeletable}
-              />
-          
+
+            <DeleteContestButton
+              contestId={contestId}
+              contestTitle={currentContest.title || "this contest"}
+              isDeletable={isContestDeletable}
+            />
+
           )}
         </div>
       </div>
 
       {/* Modern Contest Overview - Redesigned for better UX */}
       <div className="space-y-6 mb-8">
-       
+
 
         {/* Colorful Contest Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1202,31 +1224,31 @@ export default function ContestDetailClient({
 
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-              null && (
-                  <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-                  <CardContent className="p-4 flex justify-between">
-                    <div className="flex-1 text-black space-y-3">
-                      <p className="text-lg font-medium"> Total Budget</p>
-                      <p className="text-xl font-bold">
+            null && (
+              <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+                <CardContent className="p-4 flex justify-between">
+                  <div className="flex-1 text-black space-y-3">
+                    <p className="text-lg font-medium"> Total Budget</p>
+                    <p className="text-xl font-bold">
                       {formatMoney(
-                            currentContest.contest_based_details.cpm_contest
-                              .total_budget
-                          )}
-                      </p>
-                      <p className="text-md">
-                          $
-                          {
-                            currentContest.contest_based_details.cpm_contest
-                              .cpm_rate_usd
-                          }{" "}
-                          CPM
-                        </p>
-                    </div>
-                    <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                        currentContest.contest_based_details.cpm_contest
+                          .total_budget
+                      )}
+                    </p>
+                    <p className="text-md">
+                      $
+                      {
+                        currentContest.contest_based_details.cpm_contest
+                          .cpm_rate_usd
+                      }{" "}
+                      CPM
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
                     <DollarSign className="h-5 w-5" />
-                    </div>
-                  </CardContent>
-                </div>
+                  </div>
+                </CardContent>
+              </div>
               // <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
               //   <CardContent className="p-4">
               //     <div className="flex items-center gap-3">
@@ -1577,7 +1599,7 @@ export default function ContestDetailClient({
                       </h3>
                       <div className="grid grid-col-1 md:grid-cols-2 gap-4">
                         <div className="flex justify-between items-center p-3  rounded border">
-                        <span className="text-md font-medium text-black">
+                          <span className="text-md font-medium text-black">
                             CPM Rate:
                           </span>
                           <span className="font-semibold text-md text-foreground">
@@ -1590,7 +1612,7 @@ export default function ContestDetailClient({
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-3 rounded border">
-                        <span className="text-md font-medium text-black">
+                          <span className="text-md font-medium text-black">
                             Total Budget:
                           </span>
                           <span className="font-semibold text-md text-foreground">
@@ -1602,26 +1624,26 @@ export default function ContestDetailClient({
                         </div>
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
-                          <div className="flex justify-between items-center p-3 rounded border">
-                            <span className="text-md font-medium text-black">
-                              Min Views:
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
+                            <div className="flex justify-between items-center p-3 rounded border">
+                              <span className="text-md font-medium text-black">
+                                Min Views:
+                              </span>
+                              <span className="font-semibold text-md text-foreground">
+                                {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                         {currentContest.contest_based_details.cpm_contest
                           .max_views != null && (
-                          <div className="flex justify-between items-center p-3 rounded border">
-                            <span className="text-md font-medium text-black">
-                              Max Views (Cap):
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                            </span>
-                          </div>
-                        )}
+                            <div className="flex justify-between items-center p-3 rounded border">
+                              <span className="text-md font-medium text-black">
+                                Max Views (Cap):
+                              </span>
+                              <span className="font-semibold text-md text-foreground">
+                                {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                         {/* <div>
                           <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
                             Terms & Conditions
@@ -1636,17 +1658,17 @@ export default function ContestDetailClient({
                         </div> */}
                       </div>
                       <div>
-                          <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
-                            Terms & Conditions
-                          </h4>
-                          <div className="p-3 border rounded-lg text-[13px] text-black">
-                            <div className="whitespace-pre-wrap break-words">
-                              {currentContest.contest_based_details.cpm_contest
-                                .terms_conditions ||
-                                "No specific terms provided."}
-                            </div>
+                        <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
+                          Terms & Conditions
+                        </h4>
+                        <div className="p-3 border rounded-lg text-[13px] text-black">
+                          <div className="whitespace-pre-wrap break-words">
+                            {currentContest.contest_based_details.cpm_contest
+                              .terms_conditions ||
+                              "No specific terms provided."}
                           </div>
                         </div>
+                      </div>
                     </div>
                   )}
 
@@ -1673,8 +1695,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
-                                      )
+                                      (currentContest as any).payment_details
+                                    )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.total_prize_pool || 0
@@ -1696,8 +1718,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
-                                      )
+                                      (currentContest as any).payment_details
+                                    )
                                     : (currentContest as any).payment_details;
                                 return (
                                   paymentDetails.commission_percentage || 0
@@ -1711,8 +1733,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
-                                      )
+                                      (currentContest as any).payment_details
+                                    )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.commission_amount || 0
@@ -1740,9 +1762,9 @@ export default function ContestDetailClient({
                                     typeof (currentContest as any)
                                       .payment_details === "string"
                                       ? JSON.parse(
-                                          (currentContest as any)
-                                            .payment_details
-                                        )
+                                        (currentContest as any)
+                                          .payment_details
+                                      )
                                       : (currentContest as any).payment_details;
                                   return formatMoney(
                                     paymentDetails.total_amount_paid || 0
@@ -1755,10 +1777,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                              "string"
+                                "string"
                                 ? JSON.parse(
-                                    (currentContest as any).payment_details
-                                  )
+                                  (currentContest as any).payment_details
+                                )
                                 : (currentContest as any).payment_details;
                             const walletUsed =
                               paymentDetails.wallet_amount_used || 0;
@@ -1847,8 +1869,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                        (currentContest as any).payment_details
-                                      )
+                                      (currentContest as any).payment_details
+                                    )
                                     : (currentContest as any).payment_details;
                                 return paymentDetails.payment_status ===
                                   "completed"
@@ -1860,10 +1882,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                              "string"
+                                "string"
                                 ? JSON.parse(
-                                    (currentContest as any).payment_details
-                                  )
+                                  (currentContest as any).payment_details
+                                )
                                 : (currentContest as any).payment_details;
                             return paymentDetails.paid_at ? (
                               <span className="text-xs text-blue-700 dark:text-blue-400">
@@ -1962,12 +1984,12 @@ export default function ContestDetailClient({
                         {(Array.isArray(currentContest.resources)
                           ? currentContest.resources
                           : Object.entries(currentContest.resources).map(
-                              ([description, url]) => ({
-                                url,
-                                description,
-                                type: "external",
-                              })
-                            )
+                            ([description, url]) => ({
+                              url,
+                              description,
+                              type: "external",
+                            })
+                          )
                         ).map((resource, idx) => {
                           const isImage =
                             resource.url.startsWith("data:image") ||
@@ -1986,7 +2008,7 @@ export default function ContestDetailClient({
                             >
                               <div className="flex flex-col md:flex-row justify-between">
 
-  <div className="flex items-center gap-4 flex-1 min-w-0">
+                                <div className="flex items-center gap-4 flex-1 min-w-0">
                                   {isInternal && isImage && !isPdf ? (
                                     <img
                                       src={resource.url}
@@ -2066,10 +2088,10 @@ export default function ContestDetailClient({
                                     {isPdf
                                       ? "Open PDF"
                                       : isVideo
-                                      ? "Play Video"
-                                      : isImage
-                                      ? "View Image"
-                                      : "View Resource"}
+                                        ? "Play Video"
+                                        : isImage
+                                          ? "View Image"
+                                          : "View Resource"}
                                   </a>
                                 </Button>
                               </div>
@@ -2124,28 +2146,28 @@ export default function ContestDetailClient({
                           (currentContest.status === "active" ||
                             currentContest.status === "ended") &&
                           currentSubmissions &&
-                          currentSubmissions.length > 0 && (
+                          currentSubmissions.length > 0 &&
+                          currentContest.post_contest_status !== "in_review" &&
+                          currentContest.post_contest_status !== "verification_complete" &&
+                          currentContest.post_contest_status !== "payouts_processed" && (
                             <button
-                            
-                              
+
+
                               onClick={handleRefreshMetrics}
                               disabled={
                                 isRefreshingMetrics || !cooldownInfo.canRefresh
                               }
-                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${
-                                cooldownInfo.canRefresh && !isRefreshingMetrics
-                                  ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
-                                  : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
-                              }`}
+                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${cooldownInfo.canRefresh && !isRefreshingMetrics
+                                ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                                : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                                }`}
                               title={
                                 !cooldownInfo.canRefresh
-                                  ? `Please wait ${
-                                      cooldownInfo.remainingMinutes
-                                    } more minute${
-                                      cooldownInfo.remainingMinutes !== 1
-                                        ? "s"
-                                        : ""
-                                    }`
+                                  ? `Please wait ${cooldownInfo.remainingMinutes
+                                  } more minute${cooldownInfo.remainingMinutes !== 1
+                                    ? "s"
+                                    : ""
+                                  }`
                                   : undefined
                               }
                             >
@@ -2157,8 +2179,8 @@ export default function ContestDetailClient({
                               {isRefreshingMetrics
                                 ? "Updating..."
                                 : !cooldownInfo.canRefresh
-                                ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                : "Refresh Metrics"}
+                                  ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                  : "Refresh Metrics"}
                             </button>
                           )}
                       </div>
@@ -2225,7 +2247,7 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                              className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2236,7 +2258,7 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="verified"
-                        className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
+                          className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
@@ -2246,7 +2268,7 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                           className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2257,7 +2279,7 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="rejected"
-                        className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
+                          className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
                             <XCircle className="h-3.5 w-3.5 mr-1" />
@@ -2278,7 +2300,7 @@ export default function ContestDetailClient({
                         </TabsTrigger>
                         <TabsTrigger
                           value="paid"
-                       className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
+                          className="flex-1 gap-3 items-center px-1 border text-[#7F39EC] border-[#7F39EC]"
                         >
                           <div className="flex items-center gap-1">
                             <Wallet className="h-3.5 w-3.5 mr-1" />
@@ -2286,7 +2308,7 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                             className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
                           >
                             {
                               currentSubmissions.filter(
@@ -2346,22 +2368,22 @@ export default function ContestDetailClient({
                             {currentContest.platform
                               ?.toLowerCase()
                               .includes("instagram") && (
-                              <>
-                                <TableHead className="text-center">
-                                  Shares
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Saves
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Reach
-                                </TableHead>
-                                <TableHead className="text-center">
-                                  Interactions
-                                </TableHead>
-                                {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
-                              </>
-                            )}
+                                <>
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Saves
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Reach
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Interactions
+                                  </TableHead>
+                                  {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
+                                </>
+                              )}
                             <TableHead className="text-center">
                               Expected Reward
                             </TableHead>
@@ -2545,7 +2567,7 @@ export default function ContestDetailClient({
                                   className={cn(
                                     "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200",
                                     rank <= 3 &&
-                                      "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
+                                    "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
                                   )}
                                 >
                                   <TableCell className="font-bold text-center">
@@ -2557,8 +2579,8 @@ export default function ContestDetailClient({
                                             rank === 1
                                               ? "text-yellow-500"
                                               : rank === 2
-                                              ? "text-gray-400"
-                                              : "text-amber-600"
+                                                ? "text-gray-400"
+                                                : "text-amber-600"
                                           )}
                                         />
                                       )}
@@ -2651,33 +2673,33 @@ export default function ContestDetailClient({
                                   {currentContest.platform
                                     ?.toLowerCase()
                                     .includes("instagram") && (
-                                    <>
-                                      <TableCell className="text-center font-mono text-sm">
-                                        <div className="flex items-center justify-center gap-1">
-                                          <Share2 className="h-3 w-3 text-purple-500" />
-                                          {formatMetricValue(metrics.shares)}
-                                        </div>
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono text-sm">
-                                        {formatMetricValue(
-                                          (metrics as any).saves
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono text-sm">
-                                        {formatMetricValue(
-                                          (metrics as any).reach
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="text-center font-mono text-sm">
-                                        {formatMetricValue(
-                                          (metrics as any).total_interactions
-                                        )}
-                                      </TableCell>
-                                      {/* <TableCell className="text-center font-mono text-sm">
+                                      <>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <Share2 className="h-3 w-3 text-purple-500" />
+                                            {formatMetricValue(metrics.shares)}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {formatMetricValue(
+                                            (metrics as any).saves
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {formatMetricValue(
+                                            (metrics as any).reach
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {formatMetricValue(
+                                            (metrics as any).total_interactions
+                                          )}
+                                        </TableCell>
+                                        {/* <TableCell className="text-center font-mono text-sm">
                                                                             {formatMetricValue(metrics.engagement_rate, true)}
                                                                         </TableCell> */}
-                                    </>
-                                  )}
+                                      </>
+                                    )}
                                   <TableCell className="text-center">
                                     <div className="flex flex-col items-center">
                                       <div className="flex flex-col items-center">
@@ -2773,12 +2795,17 @@ export default function ContestDetailClient({
                                           </span>
                                         </Button>
                                       </DropdownMenuTrigger>
-                                      <DropdownMenuContent  className="bg-white" align="end">
-                                        <DropdownMenuLabel className="text-purple-500">
-                                          Change Status
-                                        </DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
+                                      <DropdownMenuContent className="bg-white" align="end">
+                                        {currentContest.post_contest_status !== "payouts_processed" && (
+                                          <>
+                                            <DropdownMenuLabel className="text-purple-500">
+                                              Change Status
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                          </>
+                                        )}
                                         {submission.status !== "verified" &&
+                                          currentContest.post_contest_status !== "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2805,6 +2832,7 @@ export default function ContestDetailClient({
                                             </DropdownMenuItem>
                                           ))}
                                         {submission.status !== "rejected" &&
+                                          currentContest.post_contest_status !== "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2833,6 +2861,7 @@ export default function ContestDetailClient({
                                             </DropdownMenuItem>
                                           ))}
                                         {submission.status !== "pending" &&
+                                          currentContest.post_contest_status !== "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2861,9 +2890,11 @@ export default function ContestDetailClient({
                                         {submission.status !== "paid" &&
                                           isAdminView &&
                                           (currentContest.post_contest_status ===
+                                            "in_review" ||
+                                            currentContest.post_contest_status ===
                                             "verification_complete" ||
                                             currentContest.post_contest_status ===
-                                              "payouts_processed") && (
+                                            "payouts_processed") && (
                                             <>
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -2888,7 +2919,9 @@ export default function ContestDetailClient({
                                               </DropdownMenuItem>
                                             </>
                                           )}
-                                        <DropdownMenuSeparator />
+                                        {currentContest.post_contest_status !== "payouts_processed" && (
+                                          <DropdownMenuSeparator />
+                                        )}
                                         <DropdownMenuItem asChild>
                                           <a
                                             href={submission.content_link}
@@ -2934,6 +2967,37 @@ export default function ContestDetailClient({
             <div className="bg-white rounded-xl shadow-md p-2">
               <CardHeader>
                 <CardTitle>Contest Analytics</CardTitle>
+                {/* Analytics Filter Tabs */}
+                <div className="mt-4">
+                  <Tabs
+                    value={activeAnalyticsTab}
+                    onValueChange={(value) =>
+                      setActiveAnalyticsTab(value as any)
+                    }
+                    className="w-full"
+                  >
+                    <TabsList className="grid w-full grid-cols-6">
+                      <TabsTrigger value="all" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        All ({currentSubmissions?.length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="verified" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Verified ({currentSubmissions?.filter(s => s.status === "verified").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="paid" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Paid ({currentSubmissions?.filter(s => s.status === "paid").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="pending" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Pending ({currentSubmissions?.filter(s => s.status === "pending").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="rejected" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Rejected ({currentSubmissions?.filter(s => s.status === "rejected").length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger value="verified_or_paid" className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600">
+                        Verified/Paid ({currentSubmissions?.filter(s => s.status === "verified" || s.status === "paid").length || 0})
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -2969,7 +3033,7 @@ export default function ContestDetailClient({
                         <p className="text-xl font-bold">
                           {" "}
                           {currentSubmissions?.filter(
-                            (s) => s.status === "verified"
+                            (s) => s.status === "verified" || s.status === "paid"
                           ).length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
@@ -3020,12 +3084,314 @@ export default function ContestDetailClient({
                 {/* <Separator className="my-6" /> */}
 
                 <div className="space-y-6">
+                  {/* Views Statistics */}
+                  <div>
+                    <h3 className="font-medium mb-4">Views Statistics</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                      {/* Total Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Total Views</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0).toLocaleString() || 0}
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                            <Eye className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Average Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Avg Views</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.length > 0
+                                ? Math.round(filteredAnalyticsSubmissions.reduce((sum, s) => sum + (s.views || 0), 0) / filteredAnalyticsSubmissions.length).toLocaleString()
+                                : 0
+                              }
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 text-green-600">
+                            <BarChart3 className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Top Submission Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">Highest Views</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.length > 0
+                                ? Math.max(...filteredAnalyticsSubmissions.map(s => s.views || 0)).toLocaleString()
+                                : 0
+                              }
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-yellow-100 text-yellow-600">
+                            <TrendingUp className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Filtered Submissions Views */}
+                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-gray-600">
+                              {activeAnalyticsTab === "verified" ? "Verified Views" :
+                                activeAnalyticsTab === "paid" ? "Paid Views" :
+                                  activeAnalyticsTab === "pending" ? "Pending Views" :
+                                    activeAnalyticsTab === "rejected" ? "Rejected Views" :
+                                      activeAnalyticsTab === "verified_or_paid" ? "Verified/Paid Views" :
+                                        "Filtered Views"}
+                            </p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0).toLocaleString() || 0}
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                            <CheckCircle className="h-5 w-5" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ROI/Benefit Analysis - Collapsible Section */}
+                  <div className="mt-8">
+                    <details className="group">
+                      <summary className="flex items-center justify-between cursor-pointer p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                        <h3 className="font-medium text-gray-800">ROI & Benefit Analysis</h3>
+                        <ChevronDown className="h-5 w-5 text-gray-500 group-open:rotate-180 transition-transform" />
+                      </summary>
+                      <div className="mt-4 space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* Total Investment */}
+                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Total Investment</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {(() => {
+                                    if (currentContest.contest_type === "leaderboard") {
+                                      const totalPrize = currentContest.contest_based_details?.leaderboard_contest?.total_prize || 0;
+                                      return formatMoney(totalPrize);
+                                    } else if (currentContest.contest_type === "cpm") {
+                                      // Calculate total paid for CPM contest
+                                      const totalPaid = filteredAnalyticsSubmissions
+                                        ?.filter(s => s.status === "paid")
+                                        .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+                                      return formatMoney(totalPaid);
+                                    }
+                                    return formatMoney(0);
+                                  })()}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {currentContest.contest_type === "leaderboard" ? "Prize Pool" : "Total Paid"}
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-red-100 text-red-600">
+                                <DollarSign className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Views Generated */}
+                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Views Generated</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0).toLocaleString() || 0}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {activeAnalyticsTab === "all" ? "All Submissions" :
+                                    activeAnalyticsTab === "verified" ? "Verified Only" :
+                                      activeAnalyticsTab === "paid" ? "Paid Only" :
+                                        activeAnalyticsTab === "pending" ? "Pending Only" :
+                                          activeAnalyticsTab === "rejected" ? "Rejected Only" :
+                                            activeAnalyticsTab === "verified_or_paid" ? "Verified/Paid" : "Filtered"}
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                                <Eye className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Cost Per View */}
+                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-medium text-gray-600">Cost Per View</p>
+                                <p className="text-2xl font-bold text-gray-900">
+                                  {(() => {
+                                    const totalViews = filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0) || 0;
+                                    if (totalViews === 0) return "$0.00";
+
+                                    let totalCost = 0;
+                                    if (currentContest.contest_type === "leaderboard") {
+                                      totalCost = currentContest.contest_based_details?.leaderboard_contest?.total_prize || 0;
+                                    } else if (currentContest.contest_type === "cpm") {
+                                      totalCost = filteredAnalyticsSubmissions
+                                        ?.filter(s => s.status === "paid")
+                                        .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+                                    }
+
+                                    // Convert cents to dollars for calculation
+                                    const totalCostDollars = totalCost / 100;
+                                    const costPerView = totalCostDollars / totalViews;
+                                    return `$${costPerView.toFixed(4)}`;
+                                  })()}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {currentContest.contest_type === "leaderboard" ? "Prize Pool ÷ Views" : "Paid ÷ Views"}
+                                </p>
+                              </div>
+                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 text-green-600">
+                                <BarChart3 className="h-5 w-5" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CPM Contest Specific Metrics */}
+                        {currentContest.contest_type === "cpm" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* CPM Rate */}
+                            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-600">CPM Rate</p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    ${currentContest.contest_based_details?.cpm_contest?.cpm_rate_usd?.toFixed(2) || "0.00"}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">Per 1,000 views</p>
+                                </div>
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                                  <TrendingUp className="h-5 w-5" />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Effective CPM */}
+                            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-600">Effective CPM</p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {(() => {
+                                      const totalViews = filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0) || 0;
+                                      const totalPaid = filteredAnalyticsSubmissions
+                                        ?.filter(s => s.status === "paid")
+                                        .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+
+                                      if (totalViews === 0) return "$0.00";
+                                      // Convert cents to dollars for calculation
+                                      const totalPaidDollars = totalPaid / 100;
+                                      const effectiveCPM = (totalPaidDollars / totalViews) * 1000;
+                                      return `$${effectiveCPM.toFixed(2)}`;
+                                    })()}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">Actual rate achieved</p>
+                                </div>
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                                  <BarChart3 className="h-5 w-5" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Summary Card */}
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200">
+                          <h4 className="font-semibold text-lg mb-3 text-gray-800">Performance Summary</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-gray-600 mb-1">Investment Efficiency</p>
+                              <p className="text-lg font-semibold text-gray-800">
+                                {(() => {
+                                  const totalViews = filteredAnalyticsSubmissions?.reduce((sum, s) => sum + (s.views || 0), 0) || 0;
+                                  let totalCost = 0;
+                                  if (currentContest.contest_type === "leaderboard") {
+                                    totalCost = currentContest.contest_based_details?.leaderboard_contest?.total_prize || 0;
+                                  } else if (currentContest.contest_type === "cpm") {
+                                    totalCost = filteredAnalyticsSubmissions
+                                      ?.filter(s => s.status === "paid")
+                                      .reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+                                  }
+
+                                  if (totalCost === 0) return "N/A";
+                                  // Convert cents to dollars for calculation
+                                  const totalCostDollars = totalCost / 100;
+                                  const efficiency = totalViews / (totalCostDollars / 100); // Views per $100 spent
+                                  return `${efficiency.toFixed(0)} views per $100`;
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-gray-600 mb-1">Contest Type</p>
+                              <p className="text-lg font-semibold text-gray-800 capitalize">
+                                {currentContest.contest_type} Contest
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+
+                  {/* Views Distribution Chart */}
                   <div>
                     <h3 className="font-medium mb-4">Views Distribution</h3>
-                    <div className="h-40 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <p className="text-muted-foreground">
-                        Analytics visualization would appear here
-                      </p>
+                    <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6">
+                      {filteredAnalyticsSubmissions?.length > 0 ? (
+                        <div className="space-y-4">
+                          {/* Simple bar chart representation */}
+                          {filteredAnalyticsSubmissions
+                            .sort((a, b) => (b.views || 0) - (a.views || 0))
+                            .slice(0, 10) // Show top 10 submissions
+                            .map((submission, index) => {
+                              const maxViews = Math.max(...filteredAnalyticsSubmissions.map(s => s.views || 0));
+                              const views = submission.views || 0;
+                              const percentage = maxViews > 0 ? (views / maxViews) * 100 : 0;
+
+                              return (
+                                <div key={submission.id} className="flex items-center space-x-4">
+                                  <div className="w-8 text-sm font-medium text-gray-600">
+                                    #{index + 1}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex justify-between text-sm mb-1">
+                                      <span className="text-gray-600">
+                                        {submission.creator_username || submission.creator_display_name || 'Unknown Creator'}
+                                      </span>
+                                      <span className="font-medium">
+                                        {views.toLocaleString()} views
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                                        style={{ width: `${percentage}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      ) : (
+                        <div className="h-40 flex items-center justify-center">
+                          <p className="text-gray-500">No submissions to display</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3079,7 +3445,7 @@ export default function ContestDetailClient({
             <p className="font-medium">This action cannot be undone.</p>
           </div>
           <div className="flex flex-col gap-3 pt-4">
-          <Button
+            <Button
               onClick={handleConfirmReversal}
               className="bg-[#D9C0FF61] rounded-full text-[#7F39EC]"
             >
@@ -3089,7 +3455,7 @@ export default function ContestDetailClient({
               className="bg-[#FF323224] rounded-full text-[#E50000]">
               Cancel
             </Button>
-            
+
           </div>
         </DialogContent>
       </Dialog>

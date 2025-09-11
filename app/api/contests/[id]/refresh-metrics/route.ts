@@ -30,10 +30,10 @@ export async function POST(
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
     }
 
-    // Hard lock: once verification complete or payouts processed, do not refresh
-    if (contest.post_contest_status === 'verification_complete' || contest.post_contest_status === 'payouts_processed') {
+    // Hard lock: once in review, verification complete, or payouts processed, do not refresh
+    if (contest.post_contest_status === 'in_review' || contest.post_contest_status === 'verification_complete' || contest.post_contest_status === 'payouts_processed') {
       return NextResponse.json({
-        error: 'Metrics are locked after verification. No further refresh allowed.',
+        error: 'Metrics are locked after contest review begins. No further refresh allowed.',
       }, { status: 400 });
     }
 

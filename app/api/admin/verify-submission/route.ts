@@ -74,15 +74,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Submission not found' }, { status: 404 });
     }
 
-    // Fetch the contest to check its type
+    // Fetch the contest to check its type and status
     const { data: contest, error: contestError } = await supabase
       .from('contests')
-      .select('title, contest_type, contest_based_details')
+      .select('title, contest_type, contest_based_details, post_contest_status')
       .eq('id', submission.contest_id)
       .single();
 
     if (contestError || !contest) {
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });
+    }
+
+    // Prevent submission status changes only after payouts are processed
+    if (contest.post_contest_status === 'payouts_processed') {
+      return NextResponse.json({ 
+        error: 'Submission status cannot be changed after payouts are processed. Contest is fully finalized.' 
+      }, { status: 400 });
     }
 
     // Allow status updates for both leaderboard and CPM contests
