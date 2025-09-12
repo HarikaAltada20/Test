@@ -3601,7 +3601,7 @@ export default function CreateContestPage({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full"
+                   className="w-full"
                 />
               </div>
               <div className="space-y-2">
@@ -4313,7 +4313,7 @@ export default function CreateContestPage({
     setShowBackModal(true);
   };
 
-  
+
   // Handler for Save as Draft in modal
   const handleSaveDraftAndBack = async () => {
     await handleSaveDraft();

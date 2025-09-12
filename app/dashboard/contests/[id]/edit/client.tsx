@@ -4597,7 +4597,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             </div>
           )}
 
-          <Separator />
+          {/* <Separator /> */}
 
           {/* Contest Type Display (Read-Only) */}
           {!datesOnly && (
@@ -5197,7 +5197,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !!validationError}
-                  className="bg-rose-600 hover:bg-rose-700 text-white"
+                  className="text-white"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">

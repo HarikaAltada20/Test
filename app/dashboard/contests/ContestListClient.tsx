@@ -524,9 +524,9 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                        <div className="flex gap-2 items-center">
                             {contest.moderation_status === 'approved' ? (
                                 <>
-                                    <Button
-                                        size="sm"
-                                        className="flex-1 bg-green-600 hover:bg-green-700"
+                                    <button
+                                        className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                                     
                                         onClick={async (e) => {
                                             e.stopPropagation();
                                             try {
@@ -546,22 +546,24 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     >
                                         <PlayCircle className="h-4 w-4 mr-1" />
                                         Publish
-                                    </Button>
+                                    </button>
                                     <Button
                                         variant="outline"
-                                        size="sm"
+                                          size="md"
+                                          className="text-purple-500 text-[13px]"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             router.push(`/dashboard/contests/${contest.id}/edit?dates=true`);
                                         }}
                                     >
-                                        <Calendar className="h-4 w-4 mr-1" />
+                                        <Calendar className="h-4 w-4" />
                                         Edit Dates
                                     </Button>
                                 </>
                             ) : contest.moderation_status !== 'published' ? (
                                 // Non-published contests: Show Edit Contest button
                                 <button
+                                
                                    
                                       className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                                     onClick={(e) => {
