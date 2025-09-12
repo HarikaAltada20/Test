@@ -365,13 +365,13 @@ export default function GettingStartedClient({
                       <h3 className="font-bold text-lg flex items-center">
                         CPM Contests
                         {/* Info Icon with hover tooltip */}
-                        <div className="ml-2 relative group">
+                        {/* <div className="ml-2 relative group">
                           <Info className="w-4 h-4 text-black cursor-pointer" />
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 text-sm text-gray-800 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                             <strong>CPM</strong> stands for{" "}
                             <em>COST PER MILE</em>
                           </div>
-                        </div>
+                        </div> */}
                       </h3>
 
                       <Badge

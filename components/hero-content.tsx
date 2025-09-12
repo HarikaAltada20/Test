@@ -281,37 +281,28 @@ export default function HeroContent() {
         {/* Buttons */}
 
         <div className="flex flex-col sm:flex-row gap-4 mt-8 sm:mt-10 relative">
-          <button
-            className="rounded-3xl relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"
-            style={{
-              background:
-                "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-            }}
-          >
-            <Link
-              href="/brands"
-              passHref
-              className="relative z-10 flex items-center gap-2"
+          <Link href="/brands" passHref>
+            <button
+              className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2"
+              style={{
+                background:
+                  "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+              }}
             >
               <div className="scan-line"></div>
               <Crown className="h-5 w-5" />
               I'm a Brand
               <ArrowRight className="h-5 w-5" />
-            </Link>
-          </button>
-
-          <button className="rounded-3xl relative bg-gradient-to-r from-orange-500 to-orange-700 text-white text-white font-bold px-8 py-3 text-lg overflow-hidden">
-            <Link
-              href="/creators"
-              passHref
-              className="relative z-10 flex items-center gap-2"
-            >
+            </button>
+          </Link>
+          <Link href="/creators" passHref>
+            <button className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700">
               <div className="scan-line"></div>
               <Sparkles className="h-5 w-5" />
               I'm a Creator
               <ArrowRight className="h-5 w-5" />
-            </Link>
-          </button>
+            </button>
+          </Link>
         </div>
       </section>
       {/* <div className="ellipse-design"></div> */}
@@ -581,7 +572,6 @@ export default function HeroContent() {
         </div>
       </section>
 
-  
       {/* Reasons to Select Us */}
 
       <section ref={reasonsRef} className="text-white px-10 py-20">
@@ -742,7 +732,6 @@ export default function HeroContent() {
                   backgroundImage:
                     "url('/images/b4273c077c336d85dd75502201d73084ea5fba73.avif')",
                 }}
-               
               ></div>
               <div className="absolute inset-0 bg-[#000825]/70 group-hover:opacity-0 transition-opacity duration-300"></div>
               <Users2 className="text-white mb-4 relative z-10" size={26} />
@@ -798,7 +787,6 @@ export default function HeroContent() {
                 }}
               ></div>
 
-
               <Globe className="text-white mb-4 relative z-10" size={30} />
               <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
                 Democratised Brands Deals
@@ -818,7 +806,7 @@ export default function HeroContent() {
                     "url('/images/f1dc449ff317e5ede74929b2af2d4ef5b82c298f.avif')",
                 }}
               ></div>
-           
+
               <Headset className="text-white mb-4 relative z-10" size={30} />
               <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">
                 24/7 Support
@@ -837,7 +825,6 @@ export default function HeroContent() {
                     "url('/images/5ce917bc44f4c6db1590e3478c916a367eacfe8a.avif')",
                 }}
               ></div>
-            
 
               <Palette className="text-white mb-4 relative z-10" size={30} />
               <h3 className="text-lg md:text-2xl font-semibold mb-3 relative z-10">

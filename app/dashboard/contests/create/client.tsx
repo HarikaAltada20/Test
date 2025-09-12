@@ -188,6 +188,23 @@ export default function CreateContestPage({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRefreshWarning, setShowRefreshWarning] = useState(false);
 
+
+  useEffect(() => {
+    if (showPayment) {
+      // Disable background scroll
+      document.body.style.overflow = "hidden";
+    } else {
+      // Re-enable background scroll
+      document.body.style.overflow = "";
+    }
+  
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showPayment]);
+
+  
   // Refresh protection - track changes and warn before refresh
   useEffect(() => {
     // Check if there are any unsaved changes
@@ -2923,7 +2940,7 @@ export default function CreateContestPage({
             <div>
               {/* Header Section */}
 
-              <div className="px-6 pt-6 pb-4 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
+              <div className="px-6 pt-6 pb-5 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
                 <h2 className="text-purple-600 font-semibold text-xl">
                   Rewards & Timeline
                 </h2>
@@ -2944,10 +2961,10 @@ export default function CreateContestPage({
                       <Trophy className="h-8 w-8" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                      <h3 className="text-2xl font-bold text-gray-900">
                         Your Current Subscription Plan
                       </h3>
-                      <p className="text-gray-600 text-sm leading-relaxed">
+                      <p className="text-gray-600 text-md leading-relaxed">
                         {currentPlan && currentPlan.price === 0 ? (
                           <>
                             Get started with basic features.{" "}
@@ -4267,11 +4284,36 @@ export default function CreateContestPage({
   };
 
   // Handler for Back to Contests button
+  // const handleBackToContests = (e?: React.MouseEvent) => {
+  //   if (e) e.preventDefault();
+  //   setShowBackModal(true);
+  // };
+
+  useEffect(() => {
+    // Push dummy state so we can trap the back button
+    window.history.pushState(null, "", window.location.pathname);
+
+    const handlePopState = (e: PopStateEvent) => {
+      e.preventDefault();
+      setShowBackModal(true); // ✅ Show modal instead of navigating
+      // Push dummy state again to cancel the back navigation
+      window.history.pushState(null, "", window.location.pathname);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  // In-app Back button → show modal
   const handleBackToContests = (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     setShowBackModal(true);
   };
 
+  
   // Handler for Save as Draft in modal
   const handleSaveDraftAndBack = async () => {
     await handleSaveDraft();
@@ -5211,7 +5253,7 @@ export default function CreateContestPage({
                   Add Resources
                 </h2>
               </div>
-              <div className="space-y-6 px-1 rounded-bl-xl rounded-br-xl bg-white shadow-xl">
+              <div className="space-y-6 px-1 rounded-b-xl pb-5 bg-white shadow-xl">
                 <CardHeader>
                   <CardTitle>
                     Resources for Participants{" "}
@@ -5854,7 +5896,7 @@ export default function CreateContestPage({
                       </ul>
                     )}
                   </CardContent>
-                  <CardFooter className="py-6 px-4">
+                  <CardFooter className="py-6 px-6">
                     <button
                       className="mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
                       type="button"

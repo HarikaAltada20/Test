@@ -129,11 +129,8 @@ export default function CtcBanner() {
 
       {/* CTA Button */}
       <div className="flex justify-center items-center mt-12">
-        <button
-          className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden"
-          style={{ backgroundImage: theme.btnGradient }}
-        >
-          <div className="scan-line"></div>
+        
+         
           <Link
             href="/auth/signup"
             className="relative z-10 flex items-center gap-2"
@@ -149,7 +146,10 @@ export default function CtcBanner() {
                 localStorage.setItem('signupRole', 'brand');
               }
             }}
+            className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2"
+            style={{ backgroundImage: theme.btnGradient }}
           >
+             <div className="scan-line"></div>
             <Rocket className="w-4 h-4" />
             {isHome
               ? "Join Game Of Creators"
@@ -158,7 +158,7 @@ export default function CtcBanner() {
                 : "Launch a Contest"}
             <ArrowRight className="h-5 w-5" />
           </Link>
-        </button>
+       
       </div>
 
       {/* Feature Buttons for Home */}
