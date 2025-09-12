@@ -301,18 +301,20 @@ export default function CreatorsClient() {
 
             {/* Call-to-Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
-              <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
-                <Link
+            <Link
                   href="/auth/signup"
-                  className="relative z-10 flex items-center gap-2"
+                
                   onClick={() => {
                     localStorage.setItem("signupRole", "creator");
                   }}
                 >
+              <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
+              
                   <Sparkles className="h-4 w-4" />
                   <span>Get Started →</span>
-                </Link>
+                
               </Button>
+              </Link>
 
               <Button
                 variant="outline"

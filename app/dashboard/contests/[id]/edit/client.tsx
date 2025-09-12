@@ -257,6 +257,22 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const [isUploadingAsset, setIsUploadingAsset] = useState(false);
 
   console.log({ isLoading, isPlansLoading, isUserPlanLoading, error, contest });
+
+  useEffect(() => {
+    if (showPayment) {
+      // Disable background scroll
+      document.body.style.overflow = "hidden";
+    } else {
+      // Re-enable background scroll
+      document.body.style.overflow = "";
+    }
+  
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showPayment]);
+  
   // Load subscription plans from constants (new system)
   const loadSubscriptionPlans = async () => {
     setIsPlansLoading(true);
@@ -3560,6 +3576,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     );
   }
 
+
   // Get plan features for the current user for UI elements
   const planFeatures = getPlanFeatures(userPlan);
   const totalPrizePool = winnerAmounts.reduce(
@@ -5163,7 +5180,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           )}
 
           {/* Button Row - Cancel on left, Save/Submit on right */}
-          <div className="flex flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2 w-full">
+          <div className="flex px-4 flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2 w-full">
             {/* Cancel button on the left */}
             <button
               onClick={() => router.back()}
@@ -5213,7 +5230,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                     <Button
                       onClick={handleResubmitForApproval}
                       disabled={isSubmitting || !!validationError}
-                      className="bg-[#4A00BE] cursor-pointer px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm text-white hover:bg-[#4A00BE] w-full sm:w-auto sm:min-w-[160px] flex-shrink-0 whitespace-nowrap"
+                      className="bg-[#4A00BE] h-[38px] cursor-pointer py-2 px-4 rounded-lg text-sm text-white hover:bg-[#4A00BE] w-full sm:w-auto flex-shrink-0 whitespace-nowrap"
                     >
                       {isSubmitting ? (
                         <div className="flex items-center gap-2">
