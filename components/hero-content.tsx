@@ -527,6 +527,12 @@ export default function HeroContent() {
                   {steps[activeIndex].description}
                 </p>
 
+
+
+                <Link
+                    href="/dashboard"
+                    className="flex items-center gap-2 relative z-10"
+                  >
                 <button
                   className="px-5 mb-4 sm:px-6 py-1.5 sm:py-2 relative rounded-full inline-flex items-center gap-2 overflow-hidden self-start text-sm md:text-lg sm:text-base"
                   style={{
@@ -534,15 +540,13 @@ export default function HeroContent() {
                       "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
                   }}
                 >
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center gap-2 relative z-10"
-                  >
+                  
                     <div className="scan-line"></div>
                     Start Now
                     <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
-                  </Link>
+                  
                 </button>
+                </Link>
               </div>
             </div>
 

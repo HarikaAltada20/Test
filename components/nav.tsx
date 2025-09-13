@@ -312,7 +312,7 @@ export function Nav({
               ) : (
                 <>
                   {/* Enhanced Sign In Button */}
-
+                  <Link href="/auth/signin" className="hidden sm:block">
                   <Button
                     variant="outline"
                     aria-label="Sign in"
@@ -323,13 +323,14 @@ export function Nav({
                         : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
                     )}
                   >
-                    <Link href="/auth/signin" className="hidden sm:block">
+                    
                       Sign In
-                    </Link>
+                    
                   </Button>
+                  </Link>
 
 
-
+                  <Link href="/auth/signup">
                   <Button
                     className={cn(
                       "hidden md:flex px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
@@ -338,13 +339,14 @@ export function Nav({
                         : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
                     )}
                   >
-                    <Link href="/auth/signup">
+                    
                       {/* Scan line */}
                       <div className="scan-line"></div>
 
                       <span className="relative z-10">Get Started</span>
-                    </Link>
+                    
                   </Button>
+                  </Link>
 
                 </>
               )}
@@ -373,7 +375,7 @@ export function Nav({
                         Main navigation menu for Game of Creators platform
                       </SheetDescription>
                     </SheetHeader>
-
+                    <div className="flex-1 overflow-y-auto">
                     {/* Mobile Logo */}
                     <Link
                       href="/"
@@ -486,6 +488,7 @@ export function Nav({
                         </Button>
                       </div>
                     )}
+                    </div>
                   </SheetContent>
                 </Sheet>
               </div>
