@@ -1160,24 +1160,21 @@ export default function PricingClient() {
                 questions answered and start launching impactful campaigns.
               </p>
 
-              <button
-                className="rounded-3xl mt-8 relative text-white text-white font-bold px-8 py-3 text-lg overflow-hidden"
-                style={{
-                  background:
-                    "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
-                }}
-              >
-                <div className="scan-line"></div>
-                <a
-                  href="https://calendly.com/guptavishesh2/30min"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 justify-center"
-                >
-                  Book a Demo
-                  <ArrowRight className="h-5 w-5" />
-                </a>
-              </button>
+              <a
+  href="https://calendly.com/guptavishesh2/30min"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="inline-flex items-center gap-2 justify-center rounded-3xl mt-8 relative text-white font-bold px-8 py-3 text-lg overflow-hidden"
+  style={{
+    background:
+      "linear-gradient(90deg, #4C238D 0%, #7F39EC 50%, #4C238D 100%)",
+  }}
+>
+  <div className="scan-line pointer-events-none"></div>
+  Book a Demo
+  <ArrowRight className="h-5 w-5" />
+</a>
+
             </div>
 
             {/* Image Section */}

@@ -20,6 +20,7 @@ import {
   HelpCircle,
   Eye,
   Coins,
+  Loader2,
 } from "lucide-react";
 import { formatLocalDateTime } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -30,7 +31,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
-
 
 function DashboardPage() {
   const router = useRouter();
@@ -52,7 +52,7 @@ function DashboardPage() {
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
-
+  const [loading, setLoading] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
 
   // Handle checkout success - with protection against infinite loops
@@ -100,8 +100,6 @@ function DashboardPage() {
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-
 
   useEffect(() => {
     let isMounted = true;
@@ -289,9 +287,11 @@ function DashboardPage() {
   }
 
   const handleCreateContestClick = async () => {
+    setLoading(true);
     const shouldShowModal = await handleCreateContest();
     if (shouldShowModal) {
       setShowModal(true);
+      setLoading(false);
     }
   };
 
@@ -300,13 +300,25 @@ function DashboardPage() {
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h2 className="pl-2 text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h2>
+        <h2 className="pl-2 text-2xl md:text-3xl font-bold tracking-tight">
+          Dashboard
+        </h2>
         {isAdvertiser && (
           <button
             onClick={handleCreateContestClick}
+            disabled={loading}
             className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
           >
-            <Plus className="h-4 w-4" /> Create Contest
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" /> Create Contest
+              </>
+            )}
           </button>
         )}
       </div>
@@ -361,23 +373,23 @@ function DashboardPage() {
             {/* Total Earnings Card - Green */}
 
             <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-          <CardContent className="p-4">
-            <div className="flex justify-between">
-              <div className="flex-1 text-black space-y-2">
-                <p className="text-lg font-medium">Total Earnings</p>
-                <p className="text-xl font-bold">
-                {formatCurrencyFromCents(profile?.total_money_won || 0)}
-                </p>
-                <p className="text-md  mt-0.5">
-                Money earned from contests
-                </p>
-              </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
-                <DollarSign className="h-6 w-6" />
-              </div>
+              <CardContent className="p-4">
+                <div className="flex justify-between">
+                  <div className="flex-1 text-black space-y-2">
+                    <p className="text-lg font-medium">Total Earnings</p>
+                    <p className="text-xl font-bold">
+                      {formatCurrencyFromCents(profile?.total_money_won || 0)}
+                    </p>
+                    <p className="text-md  mt-0.5">
+                      Money earned from contests
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                    <DollarSign className="h-6 w-6" />
+                  </div>
+                </div>
+              </CardContent>
             </div>
-          </CardContent>
-        </div>
             {/* <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -402,25 +414,24 @@ function DashboardPage() {
             {/* Contests Won Card - Yellow/Gold */}
 
             <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-          <CardContent className="p-4">
-            <div className="flex justify-between">
-             
-              <div className="flex-1 text-black space-y-2">
-                <p className="text-lg font-medium">Contests Won</p>
-                <p className="text-xl font-bold">
-                {profile?.total_contests_won || 0}
-                </p>
-                <p className="text-md  mt-0.5">
-                Out of {profile?.total_contests_participated || 0}{" "}
-                participated
-                </p>
-              </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
-                <Trophy className="h-6 w-6" />
-              </div>
+              <CardContent className="p-4">
+                <div className="flex justify-between">
+                  <div className="flex-1 text-black space-y-2">
+                    <p className="text-lg font-medium">Contests Won</p>
+                    <p className="text-xl font-bold">
+                      {profile?.total_contests_won || 0}
+                    </p>
+                    <p className="text-md  mt-0.5">
+                      Out of {profile?.total_contests_participated || 0}{" "}
+                      participated
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                    <Trophy className="h-6 w-6" />
+                  </div>
+                </div>
+              </CardContent>
             </div>
-          </CardContent>
-        </div>
             {/* <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -551,12 +562,12 @@ function DashboardPage() {
                     key={contest.id}
                     className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-lg border border-[#D1B7F9]"
                   >
-                     <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
                       {/* <div className="rounded-full bg-primary/10 p-3 flex-shrink-0">
                         
                         <Trophy className="h-5 w-5 text-primary" />
                       </div> */}
-                      
+
                       <div className="rounded-full flex-shrink-0 h-8 w-8 md:w-14 md:h-14 overflow-hidden">
                         <img
                           src={contest.thumbnail_url}
@@ -578,22 +589,17 @@ function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <button
-                     
-                     
-                    className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#6C43D0] text-white"
-                     
+                    <Link
+                      href={
+                        isAdvertiser
+                          ? `/dashboard/contests/${contest.id}`
+                          : `/dashboard/opportunities/${contest.id}`
+                      }
                     >
-                      <Link
-                        href={
-                          isAdvertiser
-                            ? `/dashboard/contests/${contest.id}`
-                            : `/dashboard/opportunities/${contest.id}`
-                        }
-                      >
+                      <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
                         View
-                      </Link>
-                    </button>
+                      </button>
+                    </Link>
                   </div>
                 ))}
               </div>
@@ -631,7 +637,6 @@ function DashboardPage() {
         onClose={() => setShowModal(false)}
         userId={user?.id || ""}
       />
-
     </div>
   );
 }

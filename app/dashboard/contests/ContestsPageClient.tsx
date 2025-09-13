@@ -3,7 +3,7 @@
 import React, { Suspense, useState } from "react";
 import { ContestListClient } from "./ContestListClient";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus ,Loader2 } from "lucide-react";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 
@@ -16,11 +16,14 @@ export function ContestsPageClient({ initialContests, userId }: ContestsPageClie
     const [showModal, setShowModal] = useState(false);
     const { handleCreateContest } = useContestCreation(userId);
     const [selectedTab, setSelectedTab] = useState("all");
+    const [loading, setLoading] = useState(false);
 
-    const handleCreateContestClick = async () => {
+    const handleCreateContestClick = async () =>{ 
+        setLoading(true);
         const shouldShowModal = await handleCreateContest();
         if (shouldShowModal) {
             setShowModal(true);
+            setLoading(false);
         }
     };
 
@@ -35,12 +38,21 @@ export function ContestsPageClient({ initialContests, userId }: ContestsPageClie
                     <h1 className="text-2xl md:text-2xl font-bold tracking-tight">My Contests</h1>
                 </div>
                 <button
-                 className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
-                    
+                 className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"                  
                    
                     onClick={handleCreateContestClick}
+                    disabled={loading}
                 >
-                    <Plus className="h-4 w-4" /> Create Contest
+                     {loading ? (
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Creating...
+                        </>
+                    ) : (
+                        <>
+                            <Plus className="h-4 w-4" /> Create Contest
+                        </>
+                    )}
                 </button>
             </div>
             <Suspense fallback={<div>Loading contests...</div>}>

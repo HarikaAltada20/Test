@@ -91,7 +91,7 @@ export function DeleteContestButton({
         onClick={() => setIsOpen(true)}
         variant={variant}
         size="md"
-        className={`text-purple-500 text-md ${className}`}
+        className={`text-purple-500 text-[14px] ${className}`}
       >
         <Trash2 className="h-4 w-4 mb-[2px]" />
         Delete

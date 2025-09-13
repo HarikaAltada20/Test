@@ -320,15 +320,14 @@ export function DashboardSidebar({
 
                 {/* Show Book a Call only for advertisers */}
                 {userRole === "advertiser" && (
-                  <button className="w-full rounded-xl bg-black text-white py-2 hover:bg-gray-800 transition">
-                    <a
-                      href="https://calendly.com/guptavishesh2/30min"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Book a Call
-                    </a>
-                  </button>
+                   <a
+                   href="https://calendly.com/guptavishesh2/30min"
+                   target="_blank"
+                   rel="noopener noreferrer"
+                   className="block w-full rounded-xl bg-black text-white py-2 text-center hover:bg-gray-800 transition"
+                 >
+                   Book a Call
+                 </a>
                 )}
               </div>
             ) : (
