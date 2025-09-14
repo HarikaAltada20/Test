@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -38,16 +38,33 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [showChat, setShowChat] = useState(false);
+
+  // Check if screen is mobile size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   // Handle mouse enter on sidebar - show scrollbar immediately
   const handleMouseEnter = () => {
-    setShowScrollbar(true);
+    if (!isMobile) {
+      setShowScrollbar(true);
+    }
   };
 
   // Handle mouse leave from sidebar - hide scrollbar immediately
   const handleMouseLeave = () => {
-    setShowScrollbar(false);
+    if (!isMobile) {
+      setShowScrollbar(false);
+    }
   };
 
   const advertiserLinks = [
@@ -171,12 +188,12 @@ export function DashboardSidebar({
     userRole === "advertiser"
       ? advertiserLinks
       : userRole === "admin"
-        ? adminLinks
-        : creatorLinks;
+      ? adminLinks
+      : creatorLinks;
 
   return (
     <div
-      className="flex h-full flex-col min-h-0 bg-white"
+      className="flex h-full flex-col min-h-0 bg-white overflow-hidden max-h-screen"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -184,8 +201,13 @@ export function DashboardSidebar({
       <div
         ref={scrollContainerRef}
         className={cn(
-          "flex-1 overflow-y-auto transition-all duration-300",
-          showScrollbar ? "sidebar-scrollbar" : "sidebar-scrollbar-hidden"
+          "flex-1 overflow-y-auto overflow-x-hidden transition-all duration-300 min-h-0",
+          "scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100",
+          isMobile || showScrollbar
+            ? "sidebar-scrollbar"
+            : "sidebar-scrollbar-hidden",
+          "sm:hover:scrollbar-thumb-gray-400",
+          "max-h-full"
         )}
       >
         {/* Removed Getting Started link for admin */}
@@ -318,41 +340,41 @@ export function DashboardSidebar({
                     Chat with Us
                   </button>
 
-                {/* Show Book a Call only for advertisers */}
-                {userRole === "advertiser" && (
-                   <a
-                   href="https://calendly.com/guptavishesh2/30min"
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   className="block w-full rounded-xl bg-black text-white py-2 text-center hover:bg-gray-800 transition"
-                 >
-                   Book a Call
-                 </a>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <button
-                  onClick={onChatOpen}
-                  className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
-                >
-                  <MessageCircle size={18} />
-                </button>
-                {/* Show Book a Call only for advertisers */}
-                {userRole === "advertiser" && (
-                  <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
+                  {/* Show Book a Call only for advertisers */}
+                  {userRole === "advertiser" && (
                     <a
                       href="https://calendly.com/guptavishesh2/30min"
                       target="_blank"
                       rel="noopener noreferrer"
+                      className="block w-full rounded-xl bg-black text-white py-2 text-center hover:bg-gray-800 transition"
                     >
-                      <Phone size={18} className="text-white" />
+                      Book a Call
                     </a>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={onChatOpen}
+                    className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
+                  >
+                    <MessageCircle size={18} />
+                  </button>
+                  {/* Show Book a Call only for advertisers */}
+                  {userRole === "advertiser" && (
+                    <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
+                      <a
+                        href="https://calendly.com/guptavishesh2/30min"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Phone size={18} className="text-white" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

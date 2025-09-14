@@ -69,9 +69,6 @@ body {
   animation: scroll-right 40s linear infinite;
 }
 
-
-
-
 .hide-before-animate {
   opacity: 0;
 }
@@ -91,6 +88,91 @@ body {
   opacity: 0; /* Initially invisible */
   animation: slideUp 0.7s ease-out forwards;
   /* animation-delay: 0.2s; */
+}
+
+/* Sidebar Scrollbar Styles */
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.8);
+}
+
+.sidebar-scrollbar-hidden {
+  scrollbar-width: none;
+}
+
+.sidebar-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* For small screens, always show thin scrollbar */
+@media (max-width: 768px) {
+  .sidebar-scrollbar,
+  .sidebar-scrollbar-hidden {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(156, 163, 175, 0.5) transparent !important;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar,
+  .sidebar-scrollbar-hidden::-webkit-scrollbar {
+    display: block !important;
+    width: 6px !important;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-track,
+  .sidebar-scrollbar-hidden::-webkit-scrollbar-track {
+    background: rgba(229, 231, 235, 0.3) !important;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb,
+  .sidebar-scrollbar-hidden::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.6) !important;
+    border-radius: 3px !important;
+  }
+
+  .sidebar-scrollbar::-webkit-scrollbar-thumb:hover,
+  .sidebar-scrollbar-hidden::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(156, 163, 175, 0.8) !important;
+  }
+}
+
+/* Dark theme scrollbar for navigation menu */
+.nav-dark-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.3) transparent;
+}
+
+.nav-dark-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nav-dark-scrollbar::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.3);
+}
+
+.nav-dark-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(139, 92, 246, 0.4);
+  border-radius: 3px;
+}
+
+.nav-dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(139, 92, 246, 0.6);
 }
 
 @keyframes spin-slow {
@@ -214,8 +296,6 @@ body {
   }
 }
 
-
-
 @layer utilities {
   .text-balance {
     text-wrap: balance;
@@ -315,19 +395,19 @@ body {
   html {
     font-size: 14px; /* Reduced from default 16px (87.5% of original) */
   }
-  
+
   /* Remove any dark mode classes that might be applied */
   .dark,
   [data-theme="dark"],
   [data-mode="dark"] {
     color-scheme: light !important;
   }
-  
+
   /* Dashboard zoom control - now handled dynamically by compact mode toggle */
   /* .dashboard-container {
     zoom: 0.85;
   } */
-  
+
   /* Ensure sidebar takes full height despite zoom */
   .dashboard-container aside {
     height: 117.647vh !important; /* 100vh / 0.85 = 117.647vh */
@@ -335,11 +415,14 @@ body {
   }
 }
 
-
 /* Vertical scroll for mobile */
 @keyframes scroll-vertical {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-50%); }
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
 }
 
 .animate-scroll-vertical {
@@ -347,8 +430,6 @@ body {
   flex-direction: column;
   animation: scroll-vertical 50s linear infinite;
 }
-
-
 
 /* Hide arrows below 1000px */
 @media (max-width: 999px) {

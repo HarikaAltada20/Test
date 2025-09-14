@@ -595,8 +595,9 @@ function DashboardPage() {
                           ? `/dashboard/contests/${contest.id}`
                           : `/dashboard/opportunities/${contest.id}`
                       }
+                       className="block w-full sm:w-auto"
                     >
-                      <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
+                      <button className="w-full px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
                         View
                       </button>
                     </Link>
