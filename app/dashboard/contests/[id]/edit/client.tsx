@@ -70,6 +70,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
 import { canCreateNewContest } from "@/lib/contest-utils-client";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -3499,9 +3500,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   if (isLoading || isPlansLoading || isUserPlanLoading) {
     // Check all loading states
     return (
-      <div className="flex items-center justify-center h-full">
-        <p>Loading contest data...</p>
-      </div>
+      // <div className="flex items-center justify-center h-full">
+      //   <p>Loading contest data...</p>
+      // </div>
+      <div className="flex items-center justify-center h-[76vh]">
+      <PageLoadingSpinner mode="light" />
+        </div>
     );
   }
 

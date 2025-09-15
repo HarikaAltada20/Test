@@ -54,6 +54,7 @@ import { useToast } from "@/hooks/use-toast";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -608,11 +609,13 @@ export function ContestClientPage({
   // Show loading state ONLY when fetching data (loading state)
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
+      <div className="flex items-center justify-center h-[76vh]">
+        {/* <div className="text-center">
           <p>Loading contest details...</p>
-        </div>
-      </div>
+        </div> */}
+            
+              <PageLoadingSpinner mode="light" />
+               </div>
     );
   }
 
@@ -1880,13 +1883,17 @@ export function ContestClientPage({
 
           <TabPanel value="leaderboard" activeTab={activeTab}>
             {loadingLeaderboard ? (
-              <p className="text-center py-4">Loading leaderboard...</p>
+              // <p className="text-center py-4">Loading leaderboard...</p>
+              <div className="flex items-center justify-center h-[60vh]">
+              <PageLoadingSpinner mode="light" />
+                </div>
             ) : error ? (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
               <div className="text-center py-8">
+                  <Trophy className="mx-auto h-12 w-12 text-slate-400" />
                 <p className="text-slate-600 dark:text-slate-400 mb-2">
                   No submissions yet. Be the first!
                 </p>

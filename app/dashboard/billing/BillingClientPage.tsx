@@ -87,6 +87,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { usePagination } from "@/hooks/use-pagination";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -613,6 +614,7 @@ export default function BillingClientPage({
     return (
       <div className="container mx-auto py-8 px-4 md:px-6">
         <div className="flex items-center justify-center h-64">
+          <PageLoadingSpinner mode="light"/>
           <p>Loading billing data or not authenticated...</p>
         </div>
       </div>

@@ -225,11 +225,11 @@ body {
 }
 
 .animate-spin-slow {
-  animation: spin-slow 20s linear infinite;
+  animation: spin-slow 15s linear infinite;
 }
 
 .animate-spin-slow-reverse {
-  animation: spin-slow-reverse 20s linear infinite;
+  animation: spin-slow-reverse 15s linear infinite;
 }
 
 .bg-orange-ellipse {

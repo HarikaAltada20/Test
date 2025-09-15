@@ -31,6 +31,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 function DashboardPage() {
   const router = useRouter();
@@ -272,8 +273,8 @@ function DashboardPage() {
 
   if (isAuthLoading || isFetchingData) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p>Loading dashboard...</p>
+      <div className="flex items-center justify-center h-[76vh]">
+      <PageLoadingSpinner mode="light" />
       </div>
     );
   }

@@ -27,6 +27,7 @@ import { useState, useEffect } from "react";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { useSearchParams } from "next/navigation";
 import { DiscordOnboardingModal } from "@/components/DiscordOnboardingModal";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 interface GettingStartedClientProps {
   user: User;
@@ -78,7 +79,11 @@ export default function GettingStartedClient({
   }, [userType, searchParams]);
 
   if (!userType) {
-    return <div>Loading...</div>;
+    return (
+    <div className="flex items-center justify-center h-[76vh]">
+    <PageLoadingSpinner mode="light" />
+      </div>
+    )
   }
 
   return (
@@ -358,7 +363,7 @@ export default function GettingStartedClient({
 
                   {/* CPM Contest Section */}
                   <div className="p-6 border border-[#7F39EC] rounded-lg bg-[#D9C0FF26]">
-                    <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
                       <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                         <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                       </div>

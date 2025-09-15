@@ -16,6 +16,7 @@ import { useTabState } from "@/components/ui/tab-utils"
 import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsList as TabsList, EnhancedTabsTrigger as TabsTrigger } from "@/components/ui/enhanced-tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 // Define types for filters and sorting
 type StatusFilterType = 'all' | 'live' | 'upcoming' | 'completed';
@@ -265,10 +266,11 @@ export default function OpportunitiesPage({
 
   if (isFetchingData) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
+      <div className="flex items-center justify-center h-[76vh]">
+        {/* <div className="text-center">
           <p>Loading opportunities...</p>
-        </div>
+        </div> */}
+        <PageLoadingSpinner mode="light"/>
       </div>
     );
   }
