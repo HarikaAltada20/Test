@@ -1517,7 +1517,7 @@ export default function SubmitContentPage({
 
   if (isLoadingContest) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
+      <div className="flex flex-col items-center justify-center h-[76vh]">
         {/* <RefreshCw className="w-12 h-12 animate-spin text-primary mb-4" /> */}
         
         {/* <p className="text-lg text-muted-foreground">
@@ -2234,7 +2234,7 @@ export default function SubmitContentPage({
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (
                       <div className="text-center py-4">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                        <PageLoadingSpinner mode="light"/>
                         Loading Instagram Reels...
                       </div>
                     ) : userReels.length === 0 ? (

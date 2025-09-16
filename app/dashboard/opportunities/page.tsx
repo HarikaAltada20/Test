@@ -8,8 +8,8 @@ export default async function OpportunitiesServerPage() {
   const { data: user } = await supabase.auth.getUser();
 
   return (
-    <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
+    // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
       <OpportunitiesPage user={user?.user} />
-    </RouteGuard>
+    // </RouteGuard>
   );
 }

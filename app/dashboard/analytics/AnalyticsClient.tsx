@@ -286,19 +286,20 @@
 
 
 "use client";
-
-import { BarChart, DollarSign, EyeIcon, Users } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BarChart, DollarSign, EyeIcon, Loader2, Users } from "lucide-react";
 import { CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 type AnalyticsClientProps = {
   totalContests: number;
   totalSubmissions: number;
   totalViews: number;
-  totalSpent: string; // already formatted with formatCurrencyFromCents
+  totalSpent: string;
 };
 
 const tabs = [
@@ -314,7 +315,22 @@ export default function AnalyticsClient({
   totalSpent,
 }: AnalyticsClientProps) {
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "overview" });
+  const [loading, setLoading] = useState(true);
 
+  // Simulate loading
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 1000); 
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[70vh] space-y-4">
+       <PageLoadingSpinner mode="light"/>
+        {/* <p className="text-lg font-medium text-gray-600">Loading analytics...</p> */}
+      </div>
+    );
+  }
   return (
     <div>
       {/* Analytics Cards */}

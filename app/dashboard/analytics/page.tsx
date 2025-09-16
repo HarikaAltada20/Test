@@ -69,13 +69,13 @@ export default async function AnalyticsPage() {
     }, 0) || 0;
 
   return (
-    <RouteGuard allowedUserTypes={["advertiser"]} fallbackPath="/dashboard/opportunities">
+    // <RouteGuard allowedUserTypes={["advertiser"]} fallbackPath="/dashboard/opportunities">
       <AnalyticsClient
         totalContests={totalContests}
         totalSubmissions={totalSubmissions}
         totalViews={totalViews}
         totalSpent={formatCurrencyFromCents(totalSpent)}
       />
-    </RouteGuard>
+    // </RouteGuard>
   );
 }

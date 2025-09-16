@@ -134,7 +134,7 @@ export default async function CreatorEarningsServerPage() {
   // import Link from "next/link"; 
 
   return (
-    <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard">
+    // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard">
       <EarningsClientPage
         initialAuthUser={authUser}
         initialProfile={initialProfile}
@@ -144,6 +144,6 @@ export default async function CreatorEarningsServerPage() {
         initialPayoutMethods={initialPayoutMethods}
         initialWithdrawalRequests={initialWithdrawalRequests}
       />
-    </RouteGuard>
+    // </RouteGuard>
   );
 }

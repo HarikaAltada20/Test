@@ -1295,7 +1295,7 @@ export default function BillingClientPage({
             <div className="bg-white rounded-xl shadow-xl">
               <CardHeader>
                 <CardTitle>Subscription Management</CardTitle>
-                <CardDescription>
+                <CardDescription className="text-md">
                   Manage your subscription plan, billing, and payment methods
                 </CardDescription>
               </CardHeader>

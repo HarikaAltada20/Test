@@ -38,6 +38,7 @@ import type {
   SubscriptionPlan,
 } from "@/lib/subscription-types";
 import { useRouter, useSearchParams } from "next/navigation";
+import { PageLoadingSpinner } from "./loading/LoadingSpinner";
 
 interface ScheduledChange {
   id: string;
@@ -503,9 +504,10 @@ export const SubscriptionManagement = memo(function SubscriptionManagement() {
     return (
       <div className="space-y-8">
         <div className="text-center py-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 mb-4">
+          {/* <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-          </div>
+          </div> */}
+          <PageLoadingSpinner mode="dark"/>
           <h2 className="text-2xl font-bold text-gray-300 mb-2">
             Loading Subscription Details
           </h2>

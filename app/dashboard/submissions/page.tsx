@@ -43,9 +43,9 @@ export default async function SubmissionsPage() {
   if (submissionsError) {
     console.error("Error fetching submissions:", submissionsError.message);
     return (
-      <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
+      // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
         <SubmissionsClient initialSubmissions={[]} fetchError={submissionsError.message} />
-      </RouteGuard>
+      // </RouteGuard>
     );
   }
 
@@ -88,10 +88,10 @@ export default async function SubmissionsPage() {
   }));
 
   return (
-    <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
+    // <RouteGuard allowedUserTypes={['creator']} fallbackPath="/dashboard/contests">
       <SubmissionsClient
         initialSubmissions={(formattedSubmissions as SubmissionWithContest[]) || []}
       />
-    </RouteGuard>
+    // </RouteGuard>
   );
 }
