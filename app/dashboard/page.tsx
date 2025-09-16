@@ -306,21 +306,17 @@ function DashboardPage() {
         </h2>
         {isAdvertiser && (
           <button
-            onClick={handleCreateContestClick}
-            disabled={loading}
-            className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4" /> Create Contest
-              </>
-            )}
-          </button>
+          onClick={handleCreateContestClick}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Create Contest
+        </button>
         )}
       </div>
 
