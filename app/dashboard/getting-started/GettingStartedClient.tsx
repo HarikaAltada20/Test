@@ -90,7 +90,7 @@ export default function GettingStartedClient({
     <div className="container mx-auto px-2 py-3 md:px-4 md:py-8 max-w-[1100px]">
       {/* Header Section */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1 className="text-2xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
           Getting Started with Game Of Creators
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300">

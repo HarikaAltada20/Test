@@ -233,6 +233,7 @@ function DashboardContent({
     subscriptionPlan: null,
   });
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+  const [open, setOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
@@ -263,6 +264,10 @@ function DashboardContent({
       console.error("Sign out error:", error);
     }
   };
+
+ useEffect(() => {
+  setOpen(false);
+}, [pathname]);
 
   // Handle checkout success - refresh subscription data with protection against infinite loops
   useEffect(() => {
@@ -951,7 +956,7 @@ function DashboardContent({
                 {/* Left Side: Sidebar Toggle + Mobile Menu + Breadcrumb */}
                 <div className="flex items-center gap-4">
                   {/* Mobile Menu Trigger */}
-                  <Sheet>
+                  <Sheet open={open} onOpenChange={setOpen}>
                     <SheetTrigger asChild>
                       <Button
                         variant="ghost"

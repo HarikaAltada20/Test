@@ -1,5 +1,6 @@
 "use client";
-
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -34,7 +35,6 @@ import {
   Zap,
   Star,
 } from "lucide-react";
-import { usePathname } from "next/navigation";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
@@ -88,7 +88,13 @@ export function Nav({
   const avatarSrc =
     profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
+  const [open, setOpen] = useState(false);
+  
 
+  
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
     pathname.startsWith("/auth") ||
@@ -347,7 +353,7 @@ export function Nav({
 
               {/* Enhanced Mobile Menu */}
               <div className="md:hidden">
-                <Sheet>
+                <Sheet open={open} onOpenChange={setOpen}>
                   <SheetTrigger asChild>
                     <Button
                       variant="ghost"
