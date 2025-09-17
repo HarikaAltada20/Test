@@ -2961,7 +2961,7 @@ export default function CreateContestPage({
                       <Trophy className="h-8 w-8" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold text-gray-900">
+                      <h3 className="text-xl md:text-2xl font-bold text-gray-900">
                         Your Current Subscription Plan
                       </h3>
                       <p className="text-gray-600 text-md leading-relaxed">
@@ -3659,7 +3659,7 @@ export default function CreateContestPage({
             {contestType === "leaderboard" ? (
               <>
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex px-1 items-center flex-col gap-3 md:flex-row md:justify-between">
                     {/* This is the specific "Prize distribution" heading for leaderboard */}
                     <h3 className="text-lg font-medium">Prize Distribution</h3>
                     <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
@@ -3673,7 +3673,7 @@ export default function CreateContestPage({
                   </div>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     <div className="flex items-center gap-4 mb-4">
-                      <Label className="w-48">
+                      <Label className="w-32 md:w-48">
                         Number of Winners{" "}
                         <span className="text-xs text-gray-500">
                           (Required)
@@ -3709,7 +3709,7 @@ export default function CreateContestPage({
                         </Button>
                       </div>
                       <div className="text-sm text-gray-500">
-                        <span>
+                        <span >
                           Allowed:{" "}
                           {planFeatures.maxWinnersPerContest === Infinity
                             ? "Unlimited"
@@ -3719,8 +3719,8 @@ export default function CreateContestPage({
                     </div>
                     {Array.from({ length: Math.min(winnerCount, 10) }).map(
                       (_, i) => (
-                        <div key={i} className="flex items-center gap-4 mb-2">
-                          <Label className="w-48">Winner {i + 1}</Label>
+                        <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-4">
+                          <Label className="w-40 md:w-48">Winner {i + 1}</Label>
                           <Input
                             type="number"
                             step="1"
@@ -3731,10 +3731,10 @@ export default function CreateContestPage({
                               (e) => handleWinnerAmountChange(i, e.target.value) // Expects dollars
                             }
                             min={MIN_PRIZE_PER_WINNER / 100}
-                            className="w-48"
+                              className="w-full sm:w-40 md:w-48"
                           />
                           <div className="text-sm text-gray-500">
-                            <span>
+                            <span >
                               Min:{" "}
                               {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
                             </span>

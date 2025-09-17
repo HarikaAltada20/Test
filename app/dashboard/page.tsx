@@ -32,6 +32,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import GettingStartedModal from "@/components/GettingStartedModal";
 
 function DashboardPage() {
   const router = useRouter();
@@ -55,7 +56,7 @@ function DashboardPage() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
-
+  const [showPopup, setShowPopup] = useState(false);
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
     const success = searchParams.get("success");
@@ -98,6 +99,25 @@ function DashboardPage() {
     }
   }, [searchParams, user, supabase, hasProcessedSuccess]);
 
+
+  // Effect to auto-open WelcomePopup ONLY once after login
+useEffect(() => {
+  if (
+    profile &&
+    "company_name" in profile && // ✅ advertiser check
+    (!profile?.total_contests_run || profile.total_contests_run === 0) // ✅ no contests
+  ) {
+    // ✅ Check if user already saw the popup
+    const hasSeenPopup = localStorage.getItem("gettingStartedPopupShown");
+
+    if (!hasSeenPopup) {
+      setShowPopup(true); // ✅ Open popup first time
+      localStorage.setItem("gettingStartedPopupShown", "true"); // ✅ Mark as seen
+    }
+  }
+}, [profile]);
+
+  
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -530,12 +550,20 @@ function DashboardPage() {
                     </p>
                   </div>
                 </div>
-                <Link href="/dashboard/getting-started">
+                {/* <Link href="/dashboard/getting-started">
                   <Button className="bg-purple-600 hover:bg-purple-700 text-white">
                     <HelpCircle className="w-4 h-4 mr-2" />
                     Get Started
                   </Button>
-                </Link>
+                </Link> */}
+                    <Button
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+                onClick={() => setShowPopup(true)}
+              >
+                <HelpCircle className="w-4 h-4" />
+                Get Started
+              </Button>
+              <GettingStartedModal open={showPopup} onClose={() => setShowPopup(false)} />
               </div>
             </CardContent>
           </Card>
