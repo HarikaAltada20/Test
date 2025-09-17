@@ -1,5 +1,6 @@
 "use client";
-
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -34,7 +35,6 @@ import {
   Zap,
   Star,
 } from "lucide-react";
-import { usePathname } from "next/navigation";
 import logo from "@/public/images/gold_logo_horizontal.svg";
 import Image from "next/image";
 import type { UserResponse } from "@supabase/supabase-js";
@@ -88,7 +88,13 @@ export function Nav({
   const avatarSrc =
     profilePictureUrl || user?.user_metadata?.profile_picture_url || "";
   const avatarFallback = displayName.charAt(0).toUpperCase();
+  const [open, setOpen] = useState(false);
+  
 
+  
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
     pathname.startsWith("/auth") ||
@@ -313,47 +319,41 @@ export function Nav({
                 <>
                   {/* Enhanced Sign In Button */}
                   <Link href="/auth/signin" className="hidden sm:block">
-                  <Button
-                    variant="outline"
-                    aria-label="Sign in"
-                    className={cn(
-                      "hidden md:flex px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
-                      pathname === "/creators"
-                        ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
-                        : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
-                    )}
-                  >
-                    
+                    <Button
+                      variant="outline"
+                      aria-label="Sign in"
+                      className={cn(
+                        "hidden md:flex px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
+                        pathname === "/creators"
+                          ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
+                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
+                      )}
+                    >
                       Sign In
-                    
-                  </Button>
+                    </Button>
                   </Link>
 
-
                   <Link href="/auth/signup">
-                  <Button
-                    className={cn(
-                      "hidden md:flex px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
-                      pathname === "/creators"
-                        ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
-                        : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
-                    )}
-                  >
-                    
+                    <Button
+                      className={cn(
+                        "hidden md:flex px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
+                        pathname === "/creators"
+                          ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
+                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
+                      )}
+                    >
                       {/* Scan line */}
                       <div className="scan-line"></div>
 
                       <span className="relative z-10">Get Started</span>
-                    
-                  </Button>
+                    </Button>
                   </Link>
-
                 </>
               )}
 
               {/* Enhanced Mobile Menu */}
               <div className="md:hidden">
-                <Sheet>
+                <Sheet open={open} onOpenChange={setOpen}>
                   <SheetTrigger asChild>
                     <Button
                       variant="ghost"
@@ -365,9 +365,9 @@ export function Nav({
                   </SheetTrigger>
                   <SheetContent
                     side="right"
-                    className="w-[320px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-l border-violet-400/20 backdrop-blur-md"
+                    className="w-[320px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-l border-violet-400/20 backdrop-blur-md flex flex-col h-full"
                   >
-                    <SheetHeader className="mb-8 border-b border-violet-400/20 pb-6">
+                    <SheetHeader className="border-b border-violet-400/20 pb-6 flex-shrink-0">
                       <SheetTitle className="text-xl font-bold text-white bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent text-left">
                         Game Menu
                       </SheetTitle>
@@ -375,119 +375,121 @@ export function Nav({
                         Main navigation menu for Game of Creators platform
                       </SheetDescription>
                     </SheetHeader>
-                    <div className="flex-1 overflow-y-auto">
-                    {/* Mobile Logo */}
-                    <Link
-                      href="/"
-                      className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15"
-                    >
-                      <Image
-                        src={logo}
-                        alt="Game Of Creators Logo"
-                        width={100}
-                        height={24}
-                      />
-                    </Link>
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden mt-6 pr-2 -mr-2 nav-dark-scrollbar min-h-0">
+                      <div className="px-4 pb-6">
+                        {/* Mobile Logo */}
+                        <Link
+                          href="/"
+                          className="flex items-center gap-3 mb-8 p-3 rounded-xl bg-gradient-to-r from-slate-900/50 to-slate-800/50 border border-violet-400/15"
+                        >
+                          <Image
+                            src={logo}
+                            alt="Game Of Creators Logo"
+                            width={100}
+                            height={24}
+                          />
+                        </Link>
 
-                    {/* Mobile Navigation Links */}
-                    <nav className="space-y-3 mb-8">
-                      <Link
-                        href="/brands"
-                        className="group flex items-center gap-3 text-base font-semibold transition-all duration-300 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-gradient-to-r hover:from-violet-600/10 hover:to-purple-600/10 border border-transparent hover:border-violet-400/20"
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-violet-600/20 to-purple-600/20 flex items-center justify-center group-hover:from-violet-600/30 group-hover:to-purple-600/30 transition-all duration-300">
-                          <Crown className="h-5 w-5" />
-                        </div>
-                        For Brands
-                      </Link>
-                      <Link
-                        href="/creators"
-                        className="group flex items-center gap-3 text-base font-semibold transition-all duration-300 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-gradient-to-r hover:from-amber-600/10 hover:to-orange-600/10 border border-transparent hover:border-amber-400/20"
-                      >
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-amber-600/20 to-orange-600/20 flex items-center justify-center group-hover:from-amber-600/30 group-hover:to-orange-600/30 transition-all duration-300">
-                          <Sparkles className="h-5 w-5" />
-                        </div>
-                        For Creators
-                      </Link>
-                    </nav>
-
-                    {/* Mobile User Section or Auth */}
-                    {user ? (
-                      <div className="space-y-3 border-t border-violet-400/20 pt-6">
-                        <Link
-                          href="/dashboard/profile"
-                          className="flex items-center gap-3 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-xl border border-violet-400/20 hover:from-slate-700/50 hover:to-slate-600/50 transition-all duration-300 cursor-pointer"
-                        >
-                          {avatarSrc ? (
-                            <Image
-                              src={avatarSrc}
-                              alt="Profile"
-                              width={40}
-                              height={40}
-                              className="rounded-xl border border-violet-400/20"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white font-bold">
-                              {avatarFallback}
-                            </div>
-                          )}
-                          <div>
-                            <div className="text-sm font-semibold text-white">
-                              {displayName}
-                            </div>
-                            <div className="text-xs text-slate-400">
-                              {displayEmail}
-                            </div>
-                          </div>
-                        </Link>
-                        <Link
-                          href="/dashboard/profile"
-                          className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
-                        >
-                          <User className="h-5 w-5" />
-                          Profile
-                        </Link>
-                        <Link
-                          href="/dashboard"
-                          className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
-                        >
-                          <LayoutDashboard className="h-5 w-5" />
-                          Dashboard
-                        </Link>
-                        <Link
-                          href="/dashboard/settings"
-                          className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
-                        >
-                          <Settings className="h-5 w-5" />
-                          Settings
-                        </Link>
-                        <button
-                          onClick={handleSignOut}
-                          className="flex items-center gap-3 text-red-300 hover:text-red-200 p-4 rounded-xl hover:bg-red-600/10 transition-colors w-full text-left"
-                        >
-                          <LogOut className="h-5 w-5" />
-                          Log out
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-4 border-t border-violet-400/20 pt-6">
-                        <Link href="/auth/signin">
-                          <Button
-                            variant="outline"
-                            className="w-full bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10"
+                        {/* Mobile Navigation Links */}
+                        <nav className="space-y-3 mb-8">
+                          <Link
+                            href="/brands"
+                            className="group flex items-center gap-3 text-base font-semibold transition-all duration-300 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-gradient-to-r hover:from-violet-600/10 hover:to-purple-600/10 border border-transparent hover:border-violet-400/20"
                           >
-                            Sign In
-                          </Button>
-                        </Link>
-
-                        <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
-                          <Link href="/auth/signup">
-                            {/* <Zap className="mr-2 h-4 w-4" /> */}
-                            Get Started
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-violet-600/20 to-purple-600/20 flex items-center justify-center group-hover:from-violet-600/30 group-hover:to-purple-600/30 transition-all duration-300">
+                              <Crown className="h-5 w-5" />
+                            </div>
+                            For Brands
                           </Link>
-                        </Button>
+                          <Link
+                            href="/creators"
+                            className="group flex items-center gap-3 text-base font-semibold transition-all duration-300 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-gradient-to-r hover:from-amber-600/10 hover:to-orange-600/10 border border-transparent hover:border-amber-400/20"
+                          >
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-amber-600/20 to-orange-600/20 flex items-center justify-center group-hover:from-amber-600/30 group-hover:to-orange-600/30 transition-all duration-300">
+                              <Sparkles className="h-5 w-5" />
+                            </div>
+                            For Creators
+                          </Link>
+                        </nav>
+
+                        {/* Mobile User Section or Auth */}
+                        {user ? (
+                          <div className="space-y-3 border-t border-violet-400/20 pt-6">
+                            <Link
+                              href="/dashboard/profile"
+                              className="flex items-center gap-3 p-4 bg-gradient-to-r from-slate-800/50 to-slate-700/50 rounded-xl border border-violet-400/20 hover:from-slate-700/50 hover:to-slate-600/50 transition-all duration-300 cursor-pointer"
+                            >
+                              {avatarSrc ? (
+                                <Image
+                                  src={avatarSrc}
+                                  alt="Profile"
+                                  width={40}
+                                  height={40}
+                                  className="rounded-xl border border-violet-400/20"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white font-bold">
+                                  {avatarFallback}
+                                </div>
+                              )}
+                              <div>
+                                <div className="text-sm font-semibold text-white">
+                                  {displayName}
+                                </div>
+                                <div className="text-xs text-slate-400">
+                                  {displayEmail}
+                                </div>
+                              </div>
+                            </Link>
+                            <Link
+                              href="/dashboard/profile"
+                              className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
+                            >
+                              <User className="h-5 w-5" />
+                              Profile
+                            </Link>
+                            <Link
+                              href="/dashboard"
+                              className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
+                            >
+                              <LayoutDashboard className="h-5 w-5" />
+                              Dashboard
+                            </Link>
+                            <Link
+                              href="/dashboard/settings"
+                              className="flex items-center gap-3 text-slate-300 hover:text-white p-4 rounded-xl hover:bg-violet-600/10 transition-colors"
+                            >
+                              <Settings className="h-5 w-5" />
+                              Settings
+                            </Link>
+                            <button
+                              onClick={handleSignOut}
+                              className="flex items-center gap-3 text-red-300 hover:text-red-200 p-4 rounded-xl hover:bg-red-600/10 transition-colors w-full text-left"
+                            >
+                              <LogOut className="h-5 w-5" />
+                              Log out
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4 border-t border-violet-400/20 pt-6">
+                            <Link href="/auth/signin">
+                              <Button
+                                variant="outline"
+                                className="w-full bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10"
+                              >
+                                Sign In
+                              </Button>
+                            </Link>
+
+                            <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
+                              <Link href="/auth/signup">
+                                {/* <Zap className="mr-2 h-4 w-4" /> */}
+                                Get Started
+                              </Link>
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    )}
                     </div>
                   </SheetContent>
                 </Sheet>

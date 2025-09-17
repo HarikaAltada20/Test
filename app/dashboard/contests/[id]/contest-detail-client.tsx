@@ -1428,7 +1428,7 @@ export default function ContestDetailClient({
                           <p className="text-md text-black font-medium tracking-wide">
                             Platform
                           </p>
-                          <p className="text-xl font-bold text-black capitalize">
+                          <p className="text-lg md:text-xl font-bold text-black capitalize">
                             {currentContest.platform}
                           </p>
                         </div>
@@ -1447,7 +1447,7 @@ export default function ContestDetailClient({
                           <p className="text-md font-medium text-black tracking-wide">
                             Status
                           </p>
-                          <p className="text-xl font-bold text-black capitalize">
+                          <p className="text-lg md:text-xl font-bold text-black capitalize">
                             {contestStatusBadgeInfo.text}
                           </p>
                         </div>
@@ -1519,7 +1519,7 @@ export default function ContestDetailClient({
                                 <p className="text-md font-medium tracking-wide">
                                   Total Prize Pool
                                 </p>
-                                <p className="text-xl font-bold ">
+                                <p className="text-lg md:text-xl font-bold ">
                                   {formatMoney(
                                     currentContest.contest_based_details
                                       .leaderboard_contest.total_prize
@@ -1541,7 +1541,7 @@ export default function ContestDetailClient({
                                 <p className="text-md font-medium tracking-wide">
                                   Total Winners
                                 </p>
-                                <p className="text-xl font-bold">
+                                <p className=" text-lg md:text-xl font-bold">
                                   {
                                     currentContest.contest_based_details
                                       .leaderboard_contest.winner_count
@@ -2153,7 +2153,7 @@ export default function ContestDetailClient({
                           <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                             Submissions Leaderboard
                           </h2>
-                          <div className="flex items-center mt-1">
+                          <div className="flex flex-wrap items-center mt-1 gap-x-2 gap-y-1 text-sm">
                             <div className="text-sm">
                               {filteredSubmissions.length} submission
                               {filteredSubmissions.length !== 1 ? "s" : ""}

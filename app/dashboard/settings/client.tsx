@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
 import { API_TIMEOUT_MEDIUM, API_TIMEOUT_LONG, API_TIMEOUT_SHORT } from "@/constants/subscriptionPlans";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -799,8 +800,8 @@ export default function SettingsPage({
 
   if (pageLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p>Loading settings...</p>
+      <div className="flex items-center justify-center h-[76vh]">
+    <PageLoadingSpinner mode="light" />
       </div>
     );
   }

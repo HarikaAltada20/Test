@@ -2,24 +2,24 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner"
 
 export default function SubmissionsLoading() {
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="flex items-center justify-center h-[76vh]">
+            {/* <div className="flex items-center justify-between">
                 <div className="h-8 w-48 bg-muted animate-pulse rounded" />
                 <div className="h-10 w-40 bg-muted animate-pulse rounded" />
-            </div>
+            </div> */}
 
             {/* Tabs skeleton */}
-            <div className="flex space-x-1 bg-muted p-1 rounded-lg w-fit">
+            {/* <div className="flex space-x-1 bg-muted p-1 rounded-lg w-fit">
                 {Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="h-8 w-20 bg-background animate-pulse rounded" />
                 ))}
-            </div>
+            </div> */}
 
-            <div className="space-y-4">
+            {/* <div className="space-y-4">
                 {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} className="border rounded-lg p-6">
                         <div className="flex items-start gap-4">
-                            {/* Thumbnail skeleton */}
+                          
                             <div className="w-24 h-16 bg-muted animate-pulse rounded" />
 
                             <div className="flex-1 space-y-3">
@@ -53,9 +53,10 @@ export default function SubmissionsLoading() {
                         </div>
                     </div>
                 ))}
-            </div>
+            </div> */}
 
-            <PageLoadingSpinner text="Loading your submissions..." />
+            {/* <PageLoadingSpinner text="Loading your submissions..." /> */}
+            <PageLoadingSpinner mode="light" />
         </div>
     )
 } 

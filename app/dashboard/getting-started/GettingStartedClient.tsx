@@ -27,6 +27,7 @@ import { useState, useEffect } from "react";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { useSearchParams } from "next/navigation";
 import { DiscordOnboardingModal } from "@/components/DiscordOnboardingModal";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 interface GettingStartedClientProps {
   user: User;
@@ -78,14 +79,18 @@ export default function GettingStartedClient({
   }, [userType, searchParams]);
 
   if (!userType) {
-    return <div>Loading...</div>;
+    return (
+    <div className="flex items-center justify-center h-[76vh]">
+    <PageLoadingSpinner mode="light" />
+      </div>
+    )
   }
 
   return (
     <div className="container mx-auto px-2 py-3 md:px-4 md:py-8 max-w-[1100px]">
       {/* Header Section */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1 className="text-2xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
           Getting Started with Game Of Creators
         </h1>
         <p className="text-lg text-gray-600 dark:text-gray-300">
@@ -358,7 +363,7 @@ export default function GettingStartedClient({
 
                   {/* CPM Contest Section */}
                   <div className="p-6 border border-[#7F39EC] rounded-lg bg-[#D9C0FF26]">
-                    <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
                       <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                         <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                       </div>

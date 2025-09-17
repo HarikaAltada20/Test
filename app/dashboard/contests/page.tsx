@@ -50,11 +50,11 @@ export default async function ContestsPage() {
   })) as any[];
 
   return (
-    <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
+    // <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
       <ContestsPageClient
         initialContests={typedContests}
         userId={data.user.id}
       />
-    </RouteGuard>
+    // </RouteGuard>
   );
 }

@@ -2,8 +2,8 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner"
 
 export default function ContestsLoading() {
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
+        <div className="flex items-center justify-center h-[76vh]">
+            {/* <div className="flex items-center justify-between">
                 <div className="h-8 w-48 bg-muted animate-pulse rounded" />
                 <div className="h-10 w-32 bg-muted animate-pulse rounded" />
             </div>
@@ -23,9 +23,10 @@ export default function ContestsLoading() {
                         </div>
                     ))}
                 </div>
-            </div>
+            </div> */}
 
-            <PageLoadingSpinner text="Loading contests..." />
+            {/* <PageLoadingSpinner text="Loading contests..." /> */}
+            <PageLoadingSpinner mode="light" />
         </div>
     )
 } 

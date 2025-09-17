@@ -194,7 +194,7 @@ export default async function AdvertiserBillingServerPage({
     const initialWithdrawalRequests: WithdrawalRequest[] = withdrawalRequestsData || [];
 
     return (
-        <RouteGuard allowedUserTypes={['advertiser']} fallbackPath="/dashboard/opportunities">
+        // <RouteGuard allowedUserTypes={['advertiser']} fallbackPath="/dashboard/opportunities">
             <BillingClientPage
                 initialAuthUser={authUser}
                 initialProfile={initialProfile}
@@ -204,6 +204,6 @@ export default async function AdvertiserBillingServerPage({
                 initialPayoutMethods={initialPayoutMethods}
                 initialWithdrawalRequests={initialWithdrawalRequests}
             />
-        </RouteGuard>
+        // </RouteGuard>
     );
 } 

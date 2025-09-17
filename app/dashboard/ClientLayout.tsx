@@ -233,6 +233,7 @@ function DashboardContent({
     subscriptionPlan: null,
   });
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+  const [open, setOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
@@ -263,6 +264,10 @@ function DashboardContent({
       console.error("Sign out error:", error);
     }
   };
+
+ useEffect(() => {
+  setOpen(false);
+}, [pathname]);
 
   // Handle checkout success - refresh subscription data with protection against infinite loops
   useEffect(() => {
@@ -951,7 +956,7 @@ function DashboardContent({
                 {/* Left Side: Sidebar Toggle + Mobile Menu + Breadcrumb */}
                 <div className="flex items-center gap-4">
                   {/* Mobile Menu Trigger */}
-                  <Sheet>
+                  <Sheet open={open} onOpenChange={setOpen}>
                     <SheetTrigger asChild>
                       <Button
                         variant="ghost"
@@ -986,8 +991,11 @@ function DashboardContent({
                         <span className="sr-only">Toggle Sidebar</span>
                       </Button>
                     </SheetTrigger>
-                    <SheetContent side="left" className="md:w-64 p-0">
-                      <SheetHeader className="flex h-20 items-center justify-between border-b border-violet-500/30 px-4">
+                    <SheetContent
+                      side="left"
+                      className="md:w-64 bg-white p-0 flex flex-col h-full"
+                    >
+                      <SheetHeader className="flex h-20 items-center justify-between border-b border-violet-500/30 px-4 flex-shrink-0">
                         {/* Premium Background Effects for Mobile Header */}
                         {/* <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.1),transparent)]"></div>
@@ -1001,7 +1009,7 @@ function DashboardContent({
                             width={180}
                             height={100}
                             className={cn(
-                              "h-[50px] w-auto transition-all duration-300",
+                              "h-[50px] mt-1 w-auto transition-all duration-300",
                               currentMode === "light"
                                 ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
                                 : "filter brightness-110 group-hover:brightness-125"
@@ -1012,8 +1020,8 @@ function DashboardContent({
                           Dashboard navigation menu
                         </SheetDescription>
                       </SheetHeader>
-                      <div className="flex-1 overflow-hidden">
-                        <div className="flex-1 overflow-y-auto sidebar-scrollbar h-full">
+                      <div className="flex-1 overflow-hidden min-h-0">
+                        <div className="h-full overflow-y-auto overflow-x-hidden sidebar-scrollbar">
                           {userRole && (
                             <DashboardSidebar
                               userRole={userRole}

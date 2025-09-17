@@ -43,6 +43,7 @@ import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { useRouter } from "next/navigation";
 import socialPair from "@/public/images/social_pair.avif";
 import startdemo from "@/public/images/startdemo.avif";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 // import FAQ from "@/components/FAQ";
 // Define PlanFeatures and SubscriptionPlan types (ensure consistency)
 type PlanFeatures = {
@@ -387,10 +388,11 @@ export default function PricingClient() {
   if (isLoadingUser) {
     return (
       <div className="container min-h-screen bg-[#000825] flex items-center justify-center">
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           <Loader2 className="h-6 w-6 animate-spin text-gray-300" />
           <p className="text-gray-300 text-lg">Loading...</p>
-        </div>
+        </div> */}
+       <PageLoadingSpinner mode="dark" />
       </div>
     );
   }
@@ -835,10 +837,10 @@ export default function PricingClient() {
 
             {/* Loading State */}
             {isLoading && (
-              <div className="text-center py-8">
-                <div className="animate-pulse">
+                <div className="flex items-center justify-center h-[64vh]">
+                 <PageLoadingSpinner mode="dark"/>
                   <p className="text-gray-600">Loading pricing plans...</p>
-                </div>
+               
               </div>
             )}
 

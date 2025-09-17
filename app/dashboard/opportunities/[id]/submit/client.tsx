@@ -35,6 +35,7 @@ import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 // --- Submission Window Constants ---
 // CONFIGURATION: Change these values to modify the submission time window
@@ -1516,11 +1517,13 @@ export default function SubmitContentPage({
 
   if (isLoadingContest) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <RefreshCw className="w-12 h-12 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">
+      <div className="flex flex-col items-center justify-center h-[76vh]">
+        {/* <RefreshCw className="w-12 h-12 animate-spin text-primary mb-4" /> */}
+        
+        {/* <p className="text-lg text-muted-foreground">
           Loading contest details...
-        </p>
+        </p>  */}
+        <PageLoadingSpinner mode="light"/>
       </div>
     );
   }
@@ -1758,12 +1761,12 @@ export default function SubmitContentPage({
                   <TabsContent value="youtube-library" className="mt-8">
                     {isLoadingVideos ? (
                       <div className="text-center py-4">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                        <PageLoadingSpinner mode="light"/>
                         Loading YouTube videos...
                       </div>
                     ) : userVideos.length === 0 ? (
                       libraryMessage ? (
-                        <Alert variant="default" className="text-center">
+                        <Alert variant="default" className="text-center border border-[#7F39EC] bg-[#D9C0FF26]">
                           <AlertDescription>{libraryMessage}</AlertDescription>
                         </Alert>
                       ) : (
@@ -2231,7 +2234,7 @@ export default function SubmitContentPage({
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (
                       <div className="text-center py-4">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                        <PageLoadingSpinner mode="light"/>
                         Loading Instagram Reels...
                       </div>
                     ) : userReels.length === 0 ? (

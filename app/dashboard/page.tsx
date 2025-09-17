@@ -31,6 +31,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 function DashboardPage() {
   const router = useRouter();
@@ -272,8 +273,8 @@ function DashboardPage() {
 
   if (isAuthLoading || isFetchingData) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p>Loading dashboard...</p>
+      <div className="flex items-center justify-center h-[76vh]">
+      <PageLoadingSpinner mode="light" />
       </div>
     );
   }
@@ -305,21 +306,17 @@ function DashboardPage() {
         </h2>
         {isAdvertiser && (
           <button
-            onClick={handleCreateContestClick}
-            disabled={loading}
-            className="flex items-center gap-1 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="h-4 w-4" /> Create Contest
-              </>
-            )}
-          </button>
+          onClick={handleCreateContestClick}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Create Contest
+        </button>
         )}
       </div>
 
@@ -595,8 +592,9 @@ function DashboardPage() {
                           ? `/dashboard/contests/${contest.id}`
                           : `/dashboard/opportunities/${contest.id}`
                       }
+                       className="block w-full sm:w-auto"
                     >
-                      <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
+                      <button className="w-full px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
                         View
                       </button>
                     </Link>
