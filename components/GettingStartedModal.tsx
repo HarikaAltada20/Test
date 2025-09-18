@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "./ui/badge";
 import Link from "next/link";
+import confetti from "canvas-confetti";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ChevronLeft,
@@ -11,7 +12,7 @@ import {
   DollarSign,
   Check,
   Video,
-  PartyPopper
+  PartyPopper,
 } from "lucide-react";
 
 const steps = [
@@ -61,6 +62,33 @@ export default function GettingStartedModal({
   const [showSecondPopup, setShowSecondPopup] = useState(false);
   const [showThirdPopup, setShowThirdPopup] = useState(false);
 
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const partyIconRef = useRef<HTMLDivElement>(null);
+
+// Runs whenever we return to Welcome
+useEffect(() => {
+  if (open && currentStep === 0 && partyIconRef.current && canvasRef.current) {
+    const rect = partyIconRef.current.getBoundingClientRect();
+    const canvas = canvasRef.current;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    confetti({
+      particleCount: 150,
+      spread: 100,
+      origin: {
+        x: x / window.innerWidth,
+        y: y / window.innerHeight,
+      },
+    });
+  }
+}, [open, currentStep]);
+
+
   useEffect(() => {
     if (open) setCurrentStep(0);
   }, [open]);
@@ -93,50 +121,64 @@ export default function GettingStartedModal({
     const isLastStep = currentStep === steps.length - 1;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-       
-  
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
         {/* Welcome Card */}
-        {step.isWelcome && (
-          <Card className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] py-12 px-6 text-center relative">
-              <button
-          onClick={onClose}
-         className="absolute top-6 right-6 z-10 px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200 bg-white/80 backdrop-blur-sm"
-        >
-          Skip
-        </button>
-            <div className="w-24 h-24 bg-[#7F39EC17] border border-[#7F39EC] rounded-full flex items-center justify-center mb-8 mx-auto">
-              {/* <img src="/images/bx_party.avif" alt="logo" className="w-12 h-12" /> */}
-              <PartyPopper className="w-12 h-12 text-purple-600" />
+        {isWelcome && (
+          <Card className="bg-white rounded-2xl w-full max-w-2xl p-6 md:py-12 md:px-10 text-center relative ">
+            <button
+              onClick={onClose}
+              className="absolute top-6 right-6 z-10 px-6 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full bg-white/80 backdrop-blur-sm"
+            >
+              Skip
+            </button>
+
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 pointer-events-none"
+            />
+
+            <div
+              ref={partyIconRef}
+              className="w-20 h-20 sm:w-24 sm:h-24 bg-[#7F39EC17] border border-[#7F39EC] rounded-full flex items-center justify-center mb-6 sm:mb-8 mx-auto"
+            >
+              <PartyPopper className="w-10 h-10 sm:w-12 sm:h-12 text-purple-600" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">{step.title}</h1>
-            <p className="text-lg text-gray-600 mb-12">{step.description}</p>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+              {step.title}
+            </h1>
+            <p className="text-base sm:text-lg text-gray-600 mb-8 sm:mb-12">
+              {step.description}
+            </p>
             <button
               onClick={handleNext}
-              className="w-full bg-gradient-to-r from-purple-400 to-purple-600 text-white py-4 rounded-full font-semibold hover:from-purple-500 hover:to-purple-700 transition-all duration-200 "
+              className="w-full text-lg bg-[#D9C0FF61] text-purple-500 py-3 sm:py-4 rounded-full font-semibold hover:from-purple-500 hover:to-purple-700"
             >
               Let’s Start
             </button>
           </Card>
         )}
-  
+
         {/* Steps Card */}
-        {!step.isWelcome && (
-          <Card className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] flex overflow-hidden relative">
-              <button
-          onClick={onClose}
-          className="absolute top-6 right-6 z-10 px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200 bg-white/80 backdrop-blur-sm"
-        >
-          Skip
-        </button>
-            {/* Sidebar */}
-            <div className="w-16 bg-gray-50 flex flex-col items-center py-8 space-y-6 flex-shrink-0">
+        {!isWelcome && (
+          <Card className="bg-white rounded-2xl w-full max-w-4xl lg:max-w-6xl flex flex-col md:flex-row overflow-hidden relative">
+            <button
+              onClick={onClose}
+              className="absolute top-14 right-6 md:top-6 md:right-6 z-10 px-6 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full bg-white/80 backdrop-blur-sm"
+            >
+              Skip
+            </button>
+
+            {/* Stepper (row on mobile, column on desktop) */}
+            <div className="md:w-16 flex md:flex-col items-center justify-center gap-4 md:gap-6 p-4 bg-gray-50 flex-shrink-0">
               {steps.slice(1).map((_, index) => {
                 const stepIndex = index + 1;
                 const isActive = currentStep === stepIndex;
                 const isCompleted = currentStep > stepIndex;
                 return (
-                  <div key={stepIndex} className="flex flex-col items-center">
+                  <div
+                    key={stepIndex}
+                    className="flex flex-row md:flex-col items-center"
+                  >
                     <div
                       className={`w-3 h-3 rounded-full transition-all duration-300 ${
                         isActive
@@ -148,32 +190,63 @@ export default function GettingStartedModal({
                     />
                     {stepIndex < steps.length - 1 && (
                       <div
-                        className={`w-0.5 h-[120px] mt-2 transition-all duration-300 ${
-                          currentStep > stepIndex ? "bg-purple-400" : "bg-gray-200"
-                        }`}
+                        className={`${
+                          currentStep > stepIndex
+                            ? "bg-purple-400"
+                            : "bg-gray-200"
+                        } transition-all duration-300 
+                        ${"md:w-0.5 md:h-[110px] w-12 h-0.5 mx-2 md:mx-0 md:my-2"}`}
                       />
                     )}
                   </div>
                 );
               })}
             </div>
-  
+
             {/* Content */}
-            <div className="flex-1 flex flex-col p-8 overflow-y-auto">
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <div className="flex-1 flex flex-col p-4 sm:p-6 md:p-8 overflow-y-auto">
+              <div className="text-center mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900">
                   How it Works
                 </h2>
               </div>
+
               <div className="flex-1 flex flex-col min-h-0">
-                <div className="mb-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">
-                    {step.title}
-                  </h3>
-                  <p className="text-gray-600">{step.description}</p>
+                <div className="flex flex-row items-center justify-between w-full gap-4 pb-6">
+                  {/* Title + Description */}
+                  <div className="text-left flex-1">
+                    <h2 className="text-lg md:text-2xl font-semibold mb-2">
+                      {step.title}
+                    </h2>
+                    <p className="text-sm md:text-base text-gray-600">{step.description}</p>
+                  </div>
+
+                  <div className="flex flex-row justify-end gap-3 mt-3 text-md">
+                    <button
+                      onClick={handlePrevious}
+                      disabled={currentStep <= 1}
+                      className={`flex items-center justify-center rounded-full ${
+                        currentStep <= 1
+                          ? "text-gray-400 cursor-not-allowed "
+                          : "text-black"
+                      }`}
+                    >
+                      <ChevronLeft size={30} />
+                      {/* <span>Previous</span> */}
+                    </button>
+
+                    <button
+                      onClick={handleNext}
+                      className="text-black rounded-full font-semibold flex items-center justify-center gap-2"
+                    >
+                      {/* <span>{!isLastStep ? "Next" : "Next Step"}</span> */}
+                      <ChevronRight size={30} />
+                    </button>
+                  </div>
                 </div>
+
                 {step.image && (
-                  <div className="h-[350px] rounded-2xl overflow-hidden mb-6 flex-shrink-0">
+                  <div className="h-[250px] md:h-[400px] rounded-2xl overflow-hidden mb-4 sm:mb-6 flex-shrink-0">
                     <img
                       src={step.image}
                       alt={step.title}
@@ -181,28 +254,6 @@ export default function GettingStartedModal({
                     />
                   </div>
                 )}
-              </div>
-  
-              {/* Navigation */}
-              <div className="flex items-center justify-between flex-shrink-0">
-                <button
-                  onClick={handlePrevious}
-                  disabled={currentStep <= 1}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-full transition-all duration-200 ${
-                    currentStep <= 1
-                      ? "text-gray-400 cursor-not-allowed"
-                      : "text-gray-600 hover:text-gray-800 hover:bg-gray-100"
-                  }`}
-                >
-                  <ChevronLeft size={20} />
-                  <span>Previous</span>
-                </button>
-                <button
-                  onClick={handleNext}
-                  className="bg-gradient-to-r from-purple-400 to-purple-600 text-white px-8 py-2 rounded-full font-semibold hover:from-purple-500 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2"
-                >
-                  <span>{!isLastStep ? "Next" : "Next Step"}</span>
-                </button>
               </div>
             </div>
           </Card>
@@ -212,19 +263,26 @@ export default function GettingStartedModal({
   };
 
   const renderSecondPopup = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      {/* Contest Types Section */}
-
-      <div className="bg-white rounded-2xl max-w-6xl w-full pt-12 pb-6 text-center relative overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
+      <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto relative pt-12 pb-6">
+        <button
+          onClick={() => {
+            setShowSecondPopup(false);
+            setCurrentStep(steps.length - 1);
+          }}
+          className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10 px-4 sm:px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200"
+        >
+          Back
+        </button>
         {/* Skip */}
         <button
           onClick={handleCloseAll}
-          className="absolute top-6 right-6 z-10 px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200 bg-white/80 backdrop-blur-sm"
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 z-10 px-4 sm:px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200"
         >
           Skip
         </button>
-        <div className="text-center pb-4">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <div className="text-center mt-6 md:mt-0 md:pb-4 px-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
             Choose Your Contest Type
           </h2>
         </div>
@@ -384,13 +442,13 @@ export default function GettingStartedModal({
             </div>
           </div>
         </div>
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 px-6 flex justify-center">
           <button
             onClick={() => {
               setShowSecondPopup(false);
               setShowThirdPopup(true);
             }}
-            className="bg-gradient-to-r text-md from-purple-400 to-purple-600 text-white px-8 py-3 rounded-full font-semibold hover:from-purple-500 hover:to-purple-700"
+            className="text-[14px] bg-[#D9C0FF61] text-purple-500 w-full  py-3 rounded-full font-semibold hover:from-purple-500 hover:to-purple-700"
           >
             Next Step
           </button>
@@ -401,37 +459,47 @@ export default function GettingStartedModal({
 
   const renderThirdPopup = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-  <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] p-12 text-center relative">
-    {/* Skip */}
-    <button
-      onClick={handleCloseAll}
-     className="absolute top-6 right-6 z-10 px-8 py-1.5 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200 bg-white/80 backdrop-blur-sm"
-    >
-      Skip
-    </button>
+      <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] px-4 py-8 md:px-8 md:py-12 text-center relative">
+        {/* Back (top-left) */}
+        <button
+          onClick={() => {
+            setShowThirdPopup(false);
+            setShowSecondPopup(true);
+          }}
+          className="absolute top-6 left-6 z-10 px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200"
+        >
+          Back
+        </button>
 
-    <CardContent className="mt-8 p-6 border border-[#7F39EC] rounded-2xl bg-[#D9C0FF26]">
-      <div className="text-center mb-6">
-        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          Ready to Start?
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300">
-          Start creating contests and campaigns
-        </p>
+        {/* Skip (top-right) */}
+        <button
+          onClick={handleCloseAll}
+          className="absolute top-6 right-6 z-10 px-8 py-2 text-[#4A00BE] border border-[#4A00BE] rounded-full transition-all duration-200 bg-white/80 backdrop-blur-sm"
+        >
+          Skip
+        </button>
+
+        <CardContent className="mt-12 md:mt-10 p-6 border border-[#7F39EC] rounded-2xl bg-[#D9C0FF26]">
+          <div className="text-center mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              Ready to Start?
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300">
+              Start creating contests and campaigns
+            </p>
+          </div>
+
+          <div className="text-center">
+            <Link href="/dashboard/contests/create">
+              <Button className="bg-[#4A00BE] w-full hover:bg-[#4A00BE] text-white py-3 px-8 text-lg flex items-center justify-center gap-2">
+                <Video className="w-6 h-6" />
+                Create Contest
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
       </div>
-
-      <div className="text-center">
-        <Link href="/dashboard/contests/create">
-          <Button className="bg-[#4A00BE] w-full hover:bg-[#4A00BE] text-white py-3 px-8 text-lg flex items-center justify-center gap-2">
-            <Video className="w-6 h-6" />
-            Create Contest
-          </Button>
-        </Link>
-      </div>
-    </CardContent>
-  </div>
-</div>
-
+    </div>
   );
 
   return (

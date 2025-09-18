@@ -99,25 +99,23 @@ function DashboardPage() {
     }
   }, [searchParams, user, supabase, hasProcessedSuccess]);
 
-
   // Effect to auto-open WelcomePopup ONLY once after login
-useEffect(() => {
-  if (
-    profile &&
-    "company_name" in profile && // ✅ advertiser check
-    (!profile?.total_contests_run || profile.total_contests_run === 0) // ✅ no contests
-  ) {
-    // ✅ Check if user already saw the popup
-    const hasSeenPopup = localStorage.getItem("gettingStartedPopupShown");
+  useEffect(() => {
+    if (
+      profile &&
+      "company_name" in profile && // ✅ advertiser check
+      (!profile?.total_contests_run || profile.total_contests_run === 0) // ✅ no contests
+    ) {
+      // ✅ Check if user already saw the popup
+      const hasSeenPopup = localStorage.getItem("gettingStartedPopupShown");
 
-    if (!hasSeenPopup) {
-      setShowPopup(true); // ✅ Open popup first time
-      localStorage.setItem("gettingStartedPopupShown", "true"); // ✅ Mark as seen
+      if (!hasSeenPopup) {
+        setShowPopup(true); // ✅ Open popup first time
+        localStorage.setItem("gettingStartedPopupShown", "true"); // ✅ Mark as seen
+      }
     }
-  }
-}, [profile]);
+  }, [profile]);
 
-  
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -294,7 +292,7 @@ useEffect(() => {
   if (isAuthLoading || isFetchingData) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
-      <PageLoadingSpinner mode="light" />
+        <PageLoadingSpinner mode="light" />
       </div>
     );
   }
@@ -326,17 +324,17 @@ useEffect(() => {
         </h2>
         {isAdvertiser && (
           <button
-          onClick={handleCreateContestClick}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-          Create Contest
-        </button>
+            onClick={handleCreateContestClick}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+          >
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Create Contest
+          </button>
         )}
       </div>
 
@@ -533,18 +531,18 @@ useEffect(() => {
       {/* Getting Started Section - Only show for advertisers with no contests */}
       {isAdvertiser &&
         (!profile?.total_contests_run || profile.total_contests_run === 0) && (
-          <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-700/50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full">
+          <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl">
+            <CardContent className="p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                <div className="flex items-start sm:items-center space-x-4">
+                  <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full flex-shrink-0">
                     <HelpCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-1">
                       New to Game Of Creators?
                     </h3>
-                    <p className="text-gray-600 dark:text-gray-300">
+                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
                       Learn about our two contest types: Leaderboard and CPM
                       contests
                     </p>
@@ -556,14 +554,17 @@ useEffect(() => {
                     Get Started
                   </Button>
                 </Link> */}
-                    <Button
-                className="bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={() => setShowPopup(true)}
-              >
-                <HelpCircle className="w-4 h-4" />
-                Get Started
-              </Button>
-              <GettingStartedModal open={showPopup} onClose={() => setShowPopup(false)} />
+                <Button
+                  className="bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center sm:justify-start px-4 py-2"
+                  onClick={() => setShowPopup(true)}
+                >
+                  <HelpCircle className="w-4 h-4" />
+                  Get Started
+                </Button>
+                <GettingStartedModal
+                  open={showPopup}
+                  onClose={() => setShowPopup(false)}
+                />
               </div>
             </CardContent>
           </Card>
@@ -620,7 +621,7 @@ useEffect(() => {
                           ? `/dashboard/contests/${contest.id}`
                           : `/dashboard/opportunities/${contest.id}`
                       }
-                       className="block w-full sm:w-auto"
+                      className="block w-full sm:w-auto"
                     >
                       <button className="w-full px-4 py-2 rounded-xl bg-[#6C43D0] text-white">
                         View
