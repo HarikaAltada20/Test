@@ -3655,7 +3655,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           </Alert>
         )}
 
-      <div className="mx-auto bg-white rounded-xl shadow-xl px-2 py-4">
+      <div className="mx-auto bg-white rounded-xl shadow-md px-2 py-4">
         <CardHeader>
           <CardTitle>Edit Contest Details</CardTitle>
         </CardHeader>

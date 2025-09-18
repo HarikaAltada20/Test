@@ -1611,8 +1611,7 @@ export default function EarningsClientPage({
                 />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  
+                <div className="space-y-1">            
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1669,6 +1668,8 @@ export default function EarningsClientPage({
                   placeholder="e.g., My UPI"
                   disabled={isLoading}
                 />
+                
+                <div className="space-y-1">
                 <Label htmlFor="upiHolder">Account Holder Name</Label>
                 <Input
                   id="upiHolder"
@@ -1677,6 +1678,8 @@ export default function EarningsClientPage({
                   placeholder="e.g., Rahul Kumar"
                   disabled={isLoading}
                 />
+                </div>
+                <div className="space-y-1">
                 <Label htmlFor="upiId">UPI ID</Label>
                 <Input
                   id="upiId"
@@ -1685,6 +1688,7 @@ export default function EarningsClientPage({
                   placeholder="yourname@bank"
                   disabled={isLoading}
                 />
+                </div>
                 <p className="text-xs text-muted-foreground">
                   UPI withdrawals are instant and usually free. You are
                   responsible for declaring your earnings and paying any taxes

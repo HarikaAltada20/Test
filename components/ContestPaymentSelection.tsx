@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { PaymentAnimation } from '@/components/ui/payment-success-animation';
-import { LoadingSpinner } from '@/components/loading/LoadingSpinner';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -452,7 +451,8 @@ export function ContestPaymentSelection({
                             </span>
                             {isLoadingBalance ? (
                                 <div className="flex items-center gap-2">
-                                    <LoadingSpinner size="sm" text="Fetching balance..." />
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span className="text-sm">Fetching balance...</span>
                                 </div>
                             ) : (
                                 <span className="text-lg font-semibold text-green-900">
@@ -469,7 +469,8 @@ export function ContestPaymentSelection({
                                 <Label className="text-base font-medium">Choose Payment Method</Label>
                                 {isLoadingBalance && (
                                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <LoadingSpinner size="sm" text="Loading payment options..." />
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>Loading payment options...</span>
                                     </div>
                                 )}
 

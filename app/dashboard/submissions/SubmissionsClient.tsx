@@ -508,18 +508,18 @@ export default function SubmissionsClient({
         <TabsContent value={statusFilter} className="space-y-4">
           <div>
             <div className="py-4 md:px-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl font-bold">
+              <div className="flex items-start justify-between flex-wrap gap-2">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-xl md:text-2xl font-bold truncate">
                     {filterDisplayInfo[statusFilter].title}
                   </CardTitle>
-                  <CardDescription className="mt-1">
+                  <p className="mt-1 text-sm md:text-[14px] text-muted-foreground">
                     {filterDisplayInfo[statusFilter].description}
-                  </CardDescription>
+                  </p>
                 </div>
                 <Badge
                   variant="secondary"
-                  className="px-3 py-1 text-sm font-medium"
+                  className="px-3 py-1 text-sm md:text-md font-medium flex-shrink-0"
                 >
                   {filteredSubmissions.length} submission
                   {filteredSubmissions.length !== 1 ? "s" : ""}
