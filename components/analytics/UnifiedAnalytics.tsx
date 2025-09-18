@@ -27,6 +27,7 @@ import {
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import ContestAnalytics from "./ContestAnalytics";
 import CreatorAnalytics from "./CreatorAnalytics";
+import BrandDetailedAnalytics from "./BrandDetailedAnalytics";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
@@ -83,6 +84,7 @@ const submissionStatusOptions = [
 
 const tabs = [
     { id: "overview", label: "Overview" },
+    { id: "detailed", label: "Detailed Analytics" },
     { id: "contests", label: "Contests" },
     { id: "creators", label: "Creators" },
 ];
@@ -218,8 +220,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                 size="sm"
                                 onClick={() => setActiveFilter(option.id)}
                                 className={`flex items-center gap-2 ${activeFilter === option.id
-                                        ? "bg-purple-600 hover:bg-purple-700 text-white"
-                                        : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
+                                    ? "bg-purple-600 hover:bg-purple-700 text-white"
+                                    : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
                                     }`}
                             >
                                 <Icon className="w-4 h-4" />
@@ -278,8 +280,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                                 <div
                                                     key={tile.id}
                                                     className={`p-3 border rounded-lg cursor-pointer transition-all ${tile.enabled
-                                                            ? "bg-purple-50 border-purple-200"
-                                                            : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                                                        ? "bg-purple-50 border-purple-200"
+                                                        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
                                                         }`}
                                                     onClick={() => toggleMetricTile(tile.id)}
                                                 >
@@ -388,6 +390,10 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                             </Card>
                         </div>
                     </div>
+                </TabPanel>
+
+                <TabPanel value="detailed" activeTab={activeTab}>
+                    <BrandDetailedAnalytics userId={userId} />
                 </TabPanel>
 
                 <TabPanel value="contests" activeTab={activeTab}>
