@@ -3,7 +3,7 @@
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { LoadingPlaceholder } from "@/components/loading-placeholder";
 import type { UserResponse } from "@supabase/supabase-js";
-import { Suspense, useState, useEffect } from "react";
+import React, { Suspense, useState, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,8 @@ import { useFullscreen } from "@/hooks/use-fullscreen";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
 import Link from "next/link";
 import Image from "next/image";
+import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
+import goldSquareLogo from "@/public/images/Group (4).png";
 import logo from "@/public/images/Primary Horizintal.svg";
 import squareLogo from "@/public/images/Group (2).avif";
 
@@ -265,9 +267,9 @@ function DashboardContent({
     }
   };
 
- useEffect(() => {
-  setOpen(false);
-}, [pathname]);
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
 
   // Handle checkout success - refresh subscription data with protection against infinite loops
   useEffect(() => {
@@ -679,7 +681,10 @@ function DashboardContent({
         <aside
           className={cn(
             "hidden lg:flex flex-col backdrop-blur-sm border-r transition-all duration-300 ease-in-out fixed left-0 top-0 z-30",
-            sidebarCollapsed ? "w-28" : "w-72"
+            sidebarCollapsed ? "w-28" : "w-72",
+            currentMode === "dark"
+              ? "bg-[#06021D] text-white border-gray-800"
+              : "bg-white text-slate-900 border-gray-300"
           )}
           // style={{
           //   background:
@@ -697,8 +702,11 @@ function DashboardContent({
         >
           {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div
-            className="relative bg-white dark:bg-gray-900 flex h-16 sm:h-20 items-center justify-center border-b px-3 sm:px-6"
-            // style={{ borderBottomColor: `rgba(${theme.primary}, 0.3)` }}
+            // className="relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b border-gray-300"
+            className={cn(
+              "relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b",
+              currentMode === "dark" ? "border-gray-800" : "border-gray-300"
+            )}
           >
             {/* <div
               className="absolute inset-0"
@@ -745,7 +753,7 @@ function DashboardContent({
                   // }}
                   >
                     <Image
-                      src={logo}
+                      src={currentMode === "dark" ? goldLogoHorizontal : logo}
                       alt="Game Of Creators Logo"
                       width={180}
                       height={100}
@@ -764,20 +772,20 @@ function DashboardContent({
                   className="flex items-center justify-center group transition-all duration-300"
                 >
                   <div
-                    className={cn(
-                      "relative p-2 rounded-lg transition-all duration-300",
-                      currentMode === "light"
-                        ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
-                        : "hover:bg-white/5"
-                    )}
-                    style={{
-                      ...(currentMode === "light" && {
-                        boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
-                      }),
-                    }}
+                  // className={cn(
+                  //   "relative p-2 rounded-lg transition-all duration-300",
+                  //   currentMode === "light"
+                  //     ? "bg-gradient-to-br from-slate-100 to-white border border-slate-200 shadow-lg hover:shadow-xl"
+                  //     : "hover:bg-white/5"
+                  // )}
+                  // style={{
+                  //   ...(currentMode === "light" && {
+                  //     boxShadow: `0 4px 6px -1px rgba(${theme.primary}, 0.1), 0 2px 4px -1px rgba(${theme.primary}, 0.06)`,
+                  //   }),
+                  // }}
                   >
                     <Image
-                      src={squareLogo}
+                      src={currentMode === "dark" ? goldSquareLogo : squareLogo}
                       alt="Game Of Creators"
                       width={184}
                       height={100}
@@ -801,6 +809,7 @@ function DashboardContent({
                 userRole={userRole}
                 onChatOpen={() => setIsChatOpen(true)}
                 collapsed={sidebarCollapsed}
+                mode={currentMode}
               />
             )}
           </div>
@@ -902,7 +911,12 @@ function DashboardContent({
         >
           {/* Premium Dashboard Header */}
           <header
-            className="sticky bg-white top-0 z-40 w-full"
+            className={cn(
+              "sticky top-0 z-40 w-full",
+              currentMode === "dark"
+                ? "bg-[#07031E] text-white border-b border-gray-800"
+                : "bg-white text-slate-900"
+            )}
             style={{
               boxShadow:
                 currentMode === "light"
@@ -993,9 +1007,14 @@ function DashboardContent({
                     </SheetTrigger>
                     <SheetContent
                       side="left"
-                      className="md:w-64 bg-white p-0 flex flex-col h-full"
+                      className={cn(
+                        "md:w-64 p-0 flex flex-col h-full",
+                        currentMode === "dark"
+                          ? "bg-[#06021D] text-white border-gray-800"
+                          : "bg-white text-slate-900"
+                      )}
                     >
-                      <SheetHeader className="flex h-20 items-center justify-between border-b border-violet-500/30 px-4 flex-shrink-0">
+                      <SheetHeader className="flex h-20 items-center justify-between px-4 flex-shrink-0">
                         {/* Premium Background Effects for Mobile Header */}
                         {/* <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950"></div>
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.1),transparent)]"></div>
@@ -1004,7 +1023,7 @@ function DashboardContent({
 
                         <div>
                           <Image
-                            src={logo}
+                            src={currentMode === "dark" ? squareLogo : logo}
                             alt="Game Of Creators Logo"
                             width={180}
                             height={100}
@@ -1027,6 +1046,7 @@ function DashboardContent({
                               userRole={userRole}
                               onChatOpen={() => setIsChatOpen(true)}
                               collapsed={false}
+                              mode={currentMode}
                             />
                           )}
                         </div>
@@ -1316,41 +1336,61 @@ function DashboardContent({
                         <div className="flex-1 overflow-y-auto sidebar-scrollbar">
                           <div className="p-6 space-y-6">
                             {/* Quick Presets - COMMENTED OUT FOR SIMPLICITY */}
-                            {/* <div className="space-y-4">
+                            <div className="space-y-4">
                               <h3
                                 className="text-sm font-semibold uppercase tracking-wider"
                                 style={{
-                                  color: `rgba(${mode.text.muted}, 1)`
+                                  color: `rgba(${mode.text.muted}, 1)`,
                                 }}
                               >
                                 Quick Presets
                               </h3>
                               <div className="grid grid-cols-1 gap-3">
-                                {Object.entries(presetConfigurations).map(([key, preset]) => (
-                                  <button
-                                    key={key}
-                                    onClick={() => switchPreset(key as PresetKey)}
-                                    className={cn(
-                                      "p-3 rounded-lg border text-left transition-all duration-200",
-                                      currentPreset === key
-                                        ? "border-primary bg-primary/10"
-                                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                                    )}
-                                    style={{
-                                      borderColor: currentPreset === key ? `rgba(${theme.primary}, 0.3)` : `rgba(${mode.border}, 0.3)`,
-                                      backgroundColor: currentPreset === key ? `rgba(${theme.primary}, 0.1)` : 'transparent'
-                                    }}
-                                  >
-                                    <div className="font-medium text-sm" style={{ color: `rgba(${mode.text.primary}, 1)` }}>
-                                      {preset.name}
-                                    </div>
-                                    <div className="text-xs mt-1" style={{ color: `rgba(${mode.text.muted}, 1)` }}>
-                                      {preset.description}
-                                    </div>
-                                  </button>
-                                ))}
+                                {Object.entries(presetConfigurations).map(
+                                  ([key, preset]) => (
+                                    <button
+                                      key={key}
+                                      onClick={() =>
+                                        switchPreset(key as PresetKey)
+                                      }
+                                      className={cn(
+                                        "p-3 rounded-lg border text-left transition-all duration-200",
+                                        currentPreset === key
+                                          ? "border-primary bg-primary/10"
+                                          : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                                      )}
+                                      style={{
+                                        borderColor:
+                                          currentPreset === key
+                                            ? `rgba(${theme.primary}, 0.3)`
+                                            : `rgba(${mode.border}, 0.3)`,
+                                        backgroundColor:
+                                          currentPreset === key
+                                            ? `rgba(${theme.primary}, 0.1)`
+                                            : "transparent",
+                                      }}
+                                    >
+                                      <div
+                                        className="font-medium text-sm"
+                                        style={{
+                                          color: `rgba(${mode.text.primary}, 1)`,
+                                        }}
+                                      >
+                                        {preset.name}
+                                      </div>
+                                      <div
+                                        className="text-xs mt-1"
+                                        style={{
+                                          color: `rgba(${mode.text.muted}, 1)`,
+                                        }}
+                                      >
+                                        {preset.description}
+                                      </div>
+                                    </button>
+                                  )
+                                )}
                               </div>
-                            </div> */}
+                            </div>
 
                             {/* Color Themes - COMMENTED OUT FOR SIMPLICITY */}
                             {/* <div className="space-y-4">
@@ -2113,7 +2153,9 @@ function DashboardContent({
           {/* Main Content */}
           <main className="flex-1 dashboard-main-content">
             <div className="p-6 md:p-8">
-              <Suspense fallback={<LoadingPlaceholder />}>{children}</Suspense>
+              <Suspense fallback={<LoadingPlaceholder />}>
+                <div data-mode={currentMode}>{children}</div>
+              </Suspense>
 
               {/* Chat Popup */}
               {isChatOpen && (

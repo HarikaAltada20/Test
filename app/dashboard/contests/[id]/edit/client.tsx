@@ -3655,11 +3655,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           </Alert>
         )}
 
-      <div className="mx-auto bg-white rounded-xl shadow-md px-2 py-4">
-        <CardHeader>
-          <CardTitle>Edit Contest Details</CardTitle>
-        </CardHeader>
-        <div className="px-3 md:p-6 space-y-6">
+      <div className="mx-auto bg-white rounded-xl shadow-md py-4">
+        <div className="py-4 px-6 border-b border-[#D0D0D0]">
+          <CardTitle className="text-[20px] text-purple-500">Edit Contest Details</CardTitle>
+        </div>
+        <div className="px-4 md:p-6 space-y-6">
           {!datesOnly && (
             <>
               <div className="space-y-2">
@@ -4514,7 +4514,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 <CardTitle className="mb-2 text-lg md:text-2xl">
                   Inspiration Content <span className="text-red-500">*</span>
                 </CardTitle>
-                <CardDescription className="mb-6 text-md">
+                <CardDescription className="mb-4 text-md">
                   Help creators understand your vision by adding at least one
                   inspiration link (Instagram, YouTube, TikTok, etc.) with a
                   description.
@@ -4527,6 +4527,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   </div>
                 )}
                 <div className="flex flex-col gap-2">
+                  <div className="space-y-2">
                   <Label htmlFor="inspirationUrlInput">
                     Inspiration Link{" "}
                     <span className="text-red-500">*</span>
@@ -4538,6 +4539,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                     value={newInspirationUrl}
                     onChange={(e) => setNewInspirationUrl(e.target.value)}
                   />
+                  </div>
+                  <div className="space-y-2">
                   <Label htmlFor="inspirationDescriptionInput">
                     Inspiration Description{" "}
                     <span className="text-red-500">*</span>
@@ -4550,6 +4553,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                       setNewInspirationDescription(e.target.value)
                     }
                   />
+                  </div>
                   <Button
                     type="button"
                     onClick={addInspiration}

@@ -12,17 +12,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createClient } from "@/utils/supabase/client";
 import type { UserResponse } from "@supabase/supabase-js";
-import { Bell, LogOut, Mail, ExternalLink, RefreshCw, Eye, EyeOff, Copy } from "lucide-react";
+import {
+  Bell,
+  LogOut,
+  Mail,
+  ExternalLink,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Copy,
+} from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
-import dayjs from 'dayjs';
+import dayjs from "dayjs";
 import { useRouter, useSearchParams } from "next/navigation";
-import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import { useToast } from "@/hooks/use-toast";
-import { validatePassword, getPasswordErrorMessage } from "@/lib/password-utils";
+import {
+  validatePassword,
+  getPasswordErrorMessage,
+} from "@/lib/password-utils";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
-import { API_TIMEOUT_MEDIUM, API_TIMEOUT_LONG, API_TIMEOUT_SHORT } from "@/constants/subscriptionPlans";
+import {
+  API_TIMEOUT_MEDIUM,
+  API_TIMEOUT_LONG,
+  API_TIMEOUT_SHORT,
+} from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -44,7 +61,7 @@ interface SocialAccount {
   instagram_user_id?: string; // Actual global IG User ID
   app_scoped_user_id?: string; // IGBA ID or Professional Account ID for the app
   name_of_account?: string; // User's full name on IG
-  account_type?: 'BUSINESS' | 'MEDIA_CREATOR' | 'PERSONAL';
+  account_type?: "BUSINESS" | "MEDIA_CREATOR" | "PERSONAL";
   followers_count?: number;
   follows_count?: number;
   media_count?: number;
@@ -91,129 +108,183 @@ export default function SettingsPage({
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
-  const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(null);
-  const [instagramAccount, setInstagramAccount] = useState<SocialAccount | null>(null);
+  const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(
+    null
+  );
+  const [instagramAccount, setInstagramAccount] =
+    useState<SocialAccount | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingYouTube, setIsLoadingYouTube] = useState(false);
-  const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] = useState(false);
+  const [isLoadingYouTubeDisconnect, setIsLoadingYouTubeDisconnect] =
+    useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const [connectionError, setConnectionError] = useState<{
-    type: 'youtube' | 'instagram';
+    type: "youtube" | "instagram";
     message: string;
     details?: string;
-    code?: 'no_channel' | 'generic';
+    code?: "no_channel" | "generic";
   } | null>(null);
+
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Handle URL error parameters
   useEffect(() => {
-    const error = searchParams.get('error');
-    const message = searchParams.get('message');
-    const success = searchParams.get('success');
-    const platform = searchParams.get('platform');
+    const error = searchParams.get("error");
+    const message = searchParams.get("message");
+    const success = searchParams.get("success");
+    const platform = searchParams.get("platform");
 
-    if (error === 'youtube_connection_failed') {
-      if (message === 'No+channel+found') {
+    if (error === "youtube_connection_failed") {
+      if (message === "No+channel+found") {
         setConnectionError({
-          type: 'youtube',
-          message: 'YouTube Connection Failed',
-          details: 'No channel found. Create your YouTube channel first, then try connecting your YouTube account again.',
-          code: 'no_channel'
+          type: "youtube",
+          message: "YouTube Connection Failed",
+          details:
+            "No channel found. Create your YouTube channel first, then try connecting your YouTube account again.",
+          code: "no_channel",
         });
       } else {
         // Handle other YouTube connection errors
         setConnectionError({
-          type: 'youtube',
-          message: 'YouTube Connection Failed',
-          details: message ? decodeURIComponent(message) : 'An error occurred while connecting your YouTube account. Please try again.'
+          type: "youtube",
+          message: "YouTube Connection Failed",
+          details: message
+            ? decodeURIComponent(message)
+            : "An error occurred while connecting your YouTube account. Please try again.",
         });
       }
 
       toast({
         title: "YouTube Connection Failed",
-        description: message ? decodeURIComponent(message) : "An error occurred while connecting your YouTube account.",
+        description: message
+          ? decodeURIComponent(message)
+          : "An error occurred while connecting your YouTube account.",
         variant: "destructive",
         duration: 10000, // Show for 10 seconds to ensure user sees it
       });
 
       // Clear the error from URL to prevent showing it again on refresh
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('error');
-      newUrl.searchParams.delete('message');
+      newUrl.searchParams.delete("error");
+      newUrl.searchParams.delete("message");
       router.replace(newUrl.pathname);
     }
 
     // Handle success parameters
     // Pattern A: success=true&platform=youtube|instagram
-    if (success === 'true' && platform) {
-      const platformName = platform === 'youtube' ? 'YouTube' : 'Instagram';
+    if (success === "true" && platform) {
+      const platformName = platform === "youtube" ? "YouTube" : "Instagram";
 
       toast({
         title: `${platformName} Connected Successfully`,
         description: `Your ${platformName} account has been connected successfully.`,
-        variant: 'default',
+        variant: "default",
         duration: 5000,
       });
 
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('success');
-      newUrl.searchParams.delete('platform');
+      newUrl.searchParams.delete("success");
+      newUrl.searchParams.delete("platform");
       router.replace(newUrl.pathname);
     }
 
     // Pattern B: success=youtube_connected | instagram_connected
-    if (success === 'youtube_connected' || success === 'instagram_connected') {
-      const platformName = success === 'youtube_connected' ? 'YouTube' : 'Instagram';
+    if (success === "youtube_connected" || success === "instagram_connected") {
+      const platformName =
+        success === "youtube_connected" ? "YouTube" : "Instagram";
 
       toast({
         title: `${platformName} Connected Successfully`,
         description: `Your ${platformName} account has been connected successfully.`,
-        variant: 'default',
+        variant: "default",
         duration: 5000,
       });
 
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('success');
+      newUrl.searchParams.delete("success");
       router.replace(newUrl.pathname);
     }
   }, [searchParams, toast, router]);
 
   // Function declarations
-  const refreshInstagramToken = async (currentToken: string, userId: string, currentProfile: CreatorProfile) => {
+  const refreshInstagramToken = async (
+    currentToken: string,
+    userId: string,
+    currentProfile: CreatorProfile
+  ) => {
     try {
-      const refreshRes = await fetch(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`);
+      const refreshRes = await fetch(
+        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`
+      );
       const newData = await refreshRes.json();
 
       if (!refreshRes.ok || newData.error) {
-        throw new Error(newData.error?.message || 'Failed to refresh Instagram token');
+        throw new Error(
+          newData.error?.message || "Failed to refresh Instagram token"
+        );
       }
 
       const updatedInstagramAccount = {
         ...(currentProfile.instagram_account || {}),
         access_token: newData.access_token,
-        token_expiry: dayjs().add(59, 'days').toISOString(), // Refreshed token is also valid for 60 days
+        token_expiry: dayjs().add(59, "days").toISOString(), // Refreshed token is also valid for 60 days
         updated_at: new Date().toISOString(),
       };
 
       const { error: updateError } = await supabase
-        .from('creator_profiles')
+        .from("creator_profiles")
         .update({
           instagram_account: updatedInstagramAccount,
         })
-        .eq('id', userId);
+        .eq("id", userId);
 
       if (updateError) {
         throw updateError;
       }
 
-      setProfile(prev => prev ? { ...prev, instagram_account: updatedInstagramAccount as SocialAccount } : null);
-      console.log('Instagram token refreshed successfully');
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              instagram_account: updatedInstagramAccount as SocialAccount,
+            }
+          : null
+      );
+      console.log("Instagram token refreshed successfully");
       // Optionally show a success message to the user, though this can be silent
-
     } catch (err: any) {
-      console.error('Error refreshing Instagram token:', err);
+      console.error("Error refreshing Instagram token:", err);
       // Handle token refresh error, e.g., notify user, attempt disconnect, or ask to re-authenticate
-      // For now, we'll log the error. Depending on the error type (e.g. token revoked), 
+      // For now, we'll log the error. Depending on the error type (e.g. token revoked),
       // you might want to nullify the instagram_account or prompt for re-login.
       toast({
         title: "Error",
@@ -243,10 +314,12 @@ export default function SettingsPage({
         setUserType(userData.user_type);
 
         // Simple check: if user has email provider, they can manage passwords
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
         if (authUser) {
           const providers = authUser.app_metadata?.providers || [];
-          const hasEmailProvider = providers.includes('email');
+          const hasEmailProvider = providers.includes("email");
           setHasPassword(hasEmailProvider);
         }
 
@@ -261,11 +334,20 @@ export default function SettingsPage({
           setProfile(data);
 
           // Check and refresh Instagram token
-          if (data.instagram_account?.access_token && data.instagram_account?.token_expiry) {
-            const shouldRefresh = dayjs().isAfter(dayjs(data.instagram_account.token_expiry).subtract(7, 'days')); // Refresh 7 days before expiry
+          if (
+            data.instagram_account?.access_token &&
+            data.instagram_account?.token_expiry
+          ) {
+            const shouldRefresh = dayjs().isAfter(
+              dayjs(data.instagram_account.token_expiry).subtract(7, "days")
+            ); // Refresh 7 days before expiry
             if (shouldRefresh) {
-              console.log('Attempting to refresh Instagram token');
-              await refreshInstagramToken(data.instagram_account.access_token, user!.id, data);
+              console.log("Attempting to refresh Instagram token");
+              await refreshInstagramToken(
+                data.instagram_account.access_token,
+                user!.id,
+                data
+              );
             }
           }
         } else if (userData.user_type === "advertiser") {
@@ -301,7 +383,7 @@ export default function SettingsPage({
   }, [user, supabase]);
 
   useEffect(() => {
-    if (profile && userType === 'creator') {
+    if (profile && userType === "creator") {
       const creatorProfile = profile as CreatorProfile;
       if (creatorProfile.youtube_account) {
         setYoutubeAccount(creatorProfile.youtube_account);
@@ -331,9 +413,9 @@ export default function SettingsPage({
     const load = async () => {
       if (!user?.id) return;
       const { data, error } = await supabase
-        .from('users')
-        .select('username, user_type')
-        .eq('id', user.id)
+        .from("users")
+        .select("username, user_type")
+        .eq("id", user.id)
         .maybeSingle();
       if (!error && data) {
         setUsername(data.username || null);
@@ -384,7 +466,9 @@ export default function SettingsPage({
 
       toast({
         title: "Success",
-        description: hasPassword ? "Password updated successfully" : "Password set successfully! You can now sign in with email and password.",
+        description: hasPassword
+          ? "Password updated successfully"
+          : "Password set successfully! You can now sign in with email and password.",
         variant: "default",
       });
       setCurrentPassword("");
@@ -393,7 +477,11 @@ export default function SettingsPage({
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || (hasPassword ? "Failed to update password" : "Failed to set password"),
+        description:
+          err.message ||
+          (hasPassword
+            ? "Failed to update password"
+            : "Failed to set password"),
         variant: "destructive",
       });
     } finally {
@@ -402,8 +490,11 @@ export default function SettingsPage({
   };
 
   const buildReferralLinks = () => {
-    const base = typeof window !== 'undefined' ? window.location.origin : 'https://www.gameofcreators.com';
-    const code = username || '';
+    const base =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : "https://www.gameofcreators.com";
+    const code = username || "";
     return {
       general: `${base}/?ref=${code}`,
       creators: `${base}/creators?ref=${code}`,
@@ -414,12 +505,18 @@ export default function SettingsPage({
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied', description: 'Referral link copied to clipboard.' });
+      toast({
+        title: "Copied",
+        description: "Referral link copied to clipboard.",
+      });
     } catch (e) {
-      toast({ title: 'Copy failed', description: 'Please copy manually.', variant: 'destructive' });
+      toast({
+        title: "Copy failed",
+        description: "Please copy manually.",
+        variant: "destructive",
+      });
     }
   };
-
 
   const clearConnectionError = () => {
     setConnectionError(null);
@@ -427,7 +524,8 @@ export default function SettingsPage({
     // Show a success message when error is dismissed
     toast({
       title: "Error Dismissed",
-      description: "You can try connecting your account again when you're ready.",
+      description:
+        "You can try connecting your account again when you're ready.",
       variant: "default",
       duration: 3000,
     });
@@ -449,10 +547,6 @@ export default function SettingsPage({
       console.error(`Error updating ${type} notifications:`, err);
     }
   };
-
-
-
-
 
   const updateCompanyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -542,7 +636,7 @@ export default function SettingsPage({
         });
       }, API_TIMEOUT_LONG);
 
-      window.location.href = '/api/youtube/auth';
+      window.location.href = "/api/youtube/auth";
     } catch (err: any) {
       setIsLoadingYouTube(false);
       toast({
@@ -560,7 +654,8 @@ export default function SettingsPage({
     if (!instagramClientId) {
       toast({
         title: "Error",
-        description: "Instagram Client ID is not configured. Please contact support.",
+        description:
+          "Instagram Client ID is not configured. Please contact support.",
         variant: "destructive",
       });
       return;
@@ -568,7 +663,8 @@ export default function SettingsPage({
     if (!appBaseUrl) {
       toast({
         title: "Error",
-        description: "Application Base URL is not configured. Please contact support.",
+        description:
+          "Application Base URL is not configured. Please contact support.",
         variant: "destructive",
       });
       return;
@@ -578,11 +674,13 @@ export default function SettingsPage({
     try {
       const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
       const scopes = [
-        'instagram_business_basic',
-        'instagram_business_manage_insights'
-      ].join(',');
+        "instagram_business_basic",
+        "instagram_business_manage_insights",
+      ].join(",");
 
-      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(instagramRedirectUri)}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
+      const authUrl = `https://api.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
+        instagramRedirectUri
+      )}&scope=${scopes}&response_type=code&enable_fb_login=0&force_authentication=1`;
 
       // Set a timeout to reset loading state if redirect doesn't happen
       const timeoutId = setTimeout(() => {
@@ -620,16 +718,21 @@ export default function SettingsPage({
       }, API_TIMEOUT_SHORT);
 
       const { error: updateError } = await supabase
-        .from('creator_profiles')
-        .update({ instagram_account: null, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
+        .from("creator_profiles")
+        .update({
+          instagram_account: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
 
       clearTimeout(timeoutId);
 
       if (updateError) throw updateError;
 
       setInstagramAccount(null);
-      setProfile(prev => prev ? { ...prev, instagram_account: null } : null);
+      setProfile((prev) =>
+        prev ? { ...prev, instagram_account: null } : null
+      );
       toast({
         title: "Success",
         description: "Instagram account disconnected successfully.",
@@ -661,16 +764,16 @@ export default function SettingsPage({
       }, 5000);
 
       const { error: updateError } = await supabase
-        .from('creator_profiles')
+        .from("creator_profiles")
         .update({ youtube_account: null, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
+        .eq("id", user.id);
 
       clearTimeout(timeoutId);
 
       if (updateError) throw updateError;
 
       setYoutubeAccount(null);
-      setProfile(prev => prev ? { ...prev, youtube_account: null } : null);
+      setProfile((prev) => (prev ? { ...prev, youtube_account: null } : null));
       toast({
         title: "Success",
         description: "YouTube account disconnected successfully.",
@@ -689,24 +792,28 @@ export default function SettingsPage({
 
   // Auto-refresh Instagram token if nearing expiry
   const checkAndRefreshInstagramToken = useCallback(async () => {
-    if (!instagramAccount || !instagramAccount.access_token || !instagramAccount.token_expiry) {
+    if (
+      !instagramAccount ||
+      !instagramAccount.access_token ||
+      !instagramAccount.token_expiry
+    ) {
       return;
     }
 
     // Check if token expires within 7 days
-    if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, 'day'))) {
+    if (dayjs(instagramAccount.token_expiry).isBefore(dayjs().add(7, "day"))) {
       try {
-        const response = await fetch('/api/instagram/refresh-token', {
-          method: 'POST',
+        const response = await fetch("/api/instagram/refresh-token", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
         });
 
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || 'Failed to refresh Instagram token');
+          throw new Error(result.error || "Failed to refresh Instagram token");
         }
 
         // Show success message
@@ -718,15 +825,18 @@ export default function SettingsPage({
 
         // Refresh the page data to show updated token expiry
         window.location.reload();
-
       } catch (error: any) {
-        console.error('Error refreshing Instagram token:', error);
+        console.error("Error refreshing Instagram token:", error);
 
         // Handle different error scenarios
-        if (error.message?.includes('re-authenticate') || error.message?.includes('revoked')) {
+        if (
+          error.message?.includes("re-authenticate") ||
+          error.message?.includes("revoked")
+        ) {
           toast({
             title: "Authentication Required",
-            description: "Your Instagram token has expired. Please reconnect your Instagram account.",
+            description:
+              "Your Instagram token has expired. Please reconnect your Instagram account.",
             variant: "destructive",
           });
         } else {
@@ -742,24 +852,28 @@ export default function SettingsPage({
 
   // Auto-refresh YouTube token if nearing expiry
   const checkAndRefreshYouTubeToken = useCallback(async () => {
-    if (!youtubeAccount || !youtubeAccount.access_token || !youtubeAccount.expires_at) {
+    if (
+      !youtubeAccount ||
+      !youtubeAccount.access_token ||
+      !youtubeAccount.expires_at
+    ) {
       return;
     }
 
     // Check if token expires within 5 minutes (YouTube tokens have shorter expiry)
-    if (dayjs(youtubeAccount.expires_at).isBefore(dayjs().add(5, 'minute'))) {
+    if (dayjs(youtubeAccount.expires_at).isBefore(dayjs().add(5, "minute"))) {
       try {
-        const response = await fetch('/api/youtube/refresh', {
-          method: 'POST',
+        const response = await fetch("/api/youtube/refresh", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
         });
 
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || 'Failed to refresh YouTube token');
+          throw new Error(result.error || "Failed to refresh YouTube token");
         }
 
         // Show success message
@@ -771,15 +885,18 @@ export default function SettingsPage({
 
         // Refresh the page data to show updated token expiry
         window.location.reload();
-
       } catch (error: any) {
-        console.error('Error refreshing YouTube token:', error);
+        console.error("Error refreshing YouTube token:", error);
 
         // Handle different error scenarios
-        if (error.message?.includes('re-authenticate') || error.message?.includes('revoked')) {
+        if (
+          error.message?.includes("re-authenticate") ||
+          error.message?.includes("revoked")
+        ) {
           toast({
             title: "Authentication Required",
-            description: "Your YouTube token has expired. Please reconnect your YouTube account.",
+            description:
+              "Your YouTube token has expired. Please reconnect your YouTube account.",
             variant: "destructive",
           });
         } else {
@@ -801,7 +918,7 @@ export default function SettingsPage({
   if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
-    <PageLoadingSpinner mode="light" />
+        <PageLoadingSpinner mode="light" />
       </div>
     );
   }
@@ -814,19 +931,41 @@ export default function SettingsPage({
     );
   }
 
+  const isDark = mode === "dark";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-center justify-center text-center">
-        <h1 className="text-4xl font-bold">Settings</h1>
-        <p className="mt-3 text-lg text-muted-foreground">
+        <h1
+          className={cn(
+            "text-4xl font-bold",
+            isDark ? "text-white" : "text-slate-900"
+          )}
+        >
+          Settings
+        </h1>
+        <p
+          className={cn(
+            "mt-3 text-lg",
+            isDark ? "text-gray-300" : "text-muted-foreground"
+          )}
+        >
           Manage your account settings and preferences
         </p>
       </div>
 
       {/* Connection Error Alert */}
       {connectionError && (
-        <Alert variant="destructive" className="border-red-500 bg-red-50">
-          <AlertDescription className="text-red-800">
+        <Alert
+          variant="destructive"
+          className={cn(
+            "border-red-500",
+            isDark ? "bg-red-900/20" : "bg-red-50"
+          )}
+        >
+          <AlertDescription
+            className={cn(isDark ? "text-red-300" : "text-red-800")}
+          >
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
                 {connectionError.type === "youtube" ? (
@@ -917,197 +1056,206 @@ export default function SettingsPage({
       {userType === "creator" && (
         <div>
           <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-         <CardTitle className="text-2xl text-[#7F39EC]">Manage Your Account</CardTitle>
-       </div>
-       <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg" >
-          <CardHeader>
-            <CardTitle className="text-lg">Social Accounts</CardTitle>
-            <CardDescription>
-              Connect your social media accounts to participate in campaigns.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* YouTube Connection */}
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center space-x-3">
-                <SiYoutube className="text-2xl text-red-600" />
-                <div>
-                  <h3 className="font-medium">YouTube</h3>
-                  {youtubeConnected ? (
-                    <div>
+            <CardTitle className="text-2xl text-[#7F39EC]">
+              Manage Your Account
+            </CardTitle>
+          </div>
+          <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-lg">Social Accounts</CardTitle>
+              <CardDescription>
+                Connect your social media accounts to participate in campaigns.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* YouTube Connection */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <SiYoutube className="text-2xl text-red-600" />
+                  <div>
+                    <h3 className="font-medium">YouTube</h3>
+                    {youtubeConnected ? (
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Connected as{" "}
+                          {youtubeAccount?.channel_title ||
+                            "your YouTube account"}
+                          <span className="ml-2 text-green-600 text-xs">
+                            ✓ Active
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
                       <p className="text-sm text-muted-foreground">
-                        Connected as{" "}
-                        {youtubeAccount?.channel_title ||
-                          "your YouTube account"}
-                        <span className="ml-2 text-green-600 text-xs">
-                          ✓ Active
-                        </span>
+                        Not connected
                       </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Not connected
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-              {youtubeConnected ? (
-                <Button
-                 
-                  className="bg-[#C90808] text-white"
-                  onClick={handleYouTubeDisconnect}
-                  disabled={isLoadingYouTubeDisconnect}
-                >
-                  {isLoadingYouTubeDisconnect && (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Disconnect
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleYouTubeConnect}
-                  disabled={isLoadingYouTube}
-                >
-                  {isLoadingYouTube && (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Connect YouTube
-                </Button>
-              )}
-            </div>
-            {/* YouTube Connection Information - Display if not connected */}
-            {!youtubeConnected && (
-              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
-                <Bell className="h-4 w-4" />
-                <AlertDescription className="text-sm leading-relaxed">
-                  Connect your YouTube account to allow Game Of Creators to view
-                  basic channel information (e.g., name, subscriber count,
-                  username). This also enables us to display your videos on the
-                  campaign submission page, allowing you to easily select them
-                  for opportunities. Please note that we will only have{" "}
-                  <span className="font-medium">read-only access</span> and{" "}
-                  <span className="font-medium">will not</span> be able to
-                  upload videos, modify content, or change any of your channel
-                  settings.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Instagram Connection */}
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center space-x-3">
-                <SiInstagram className="text-2xl text-pink-600" />
-                <div>
-                  <h3 className="font-medium">Instagram</h3>
-                  {instagramConnected ? (
-                    <div>
-                      <p className="text-sm text-muted-foreground">
-                        Connected as{" "}
-                        {instagramAccount?.name_of_account ||
-                          instagramAccount?.username ||
-                          "your Instagram account"}{" "}
-                        (
-                        {(instagramAccount?.account_type || "N/A").replace(
-                          "_",
-                          " "
-                        )}
-                        )
-                        <span className="ml-2 text-green-600 text-xs">
-                          ✓ Active
-                        </span>
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Not connected
-                    </p>
-                  )}
-                </div>
-              </div>
-              {instagramConnected ? (
-                <Button
-                  variant="outline"
-                   className="bg-[#C90808] text-white"
-                  onClick={handleInstagramDisconnect}
-                  disabled={isLoading}
-                >
-                  {isLoading && (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Disconnect
-                </Button>
-              ) : (
-                <Button onClick={handleInstagramConnect} disabled={isLoading}>
-                  {isLoading && (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Connect Instagram
-                </Button>
-              )}
-            </div>
-            {/* Instagram Connection Information - Display if not connected */}
-            {!instagramConnected && (
-              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
-                <Bell className="h-4 w-4" />
-                <AlertDescription className="text-sm leading-relaxed">
-                  To participate in Instagram campaigns, you need to connect an
-                  Instagram{" "}
-                  <strong className="font-semibold">
-                    Business or Creator account
-                  </strong>
-                  . This is required by Instagram for us to fetch your
-                  Reels/Videos and their performance insights. We request
-                  permissions for basic profile data and to read your media and
-                  insights.
-                  <br />
-                  <br />
-                  <strong className="font-semibold">
-                    Important Steps Before Connecting:
-                  </strong>
-                  <ul className="list-disc list-inside mt-1 space-y-0.5">
-                    <li>
-                      Ensure your Instagram profile is a{" "}
-                      <strong className="font-semibold">
-                        Business or Creator
-                      </strong>{" "}
-                      account. (To check your Instagram account type, open the
-                      Instagram app, go to your profile, tap the menu icon
-                      (three horizontal lines), select "Settings and Privacy,"
-                      then "Account type and tools," and finally, "Switch to
-                      professional account". If you see the "Switch to
-                      professional account" option, you have a Personal account.
-                      If you see "Switch to personal account" or "Switch to
-                      creator account," you have a Business or Creator account.
-                      )
-                    </li>
-                    <li>
-                      If your account is not a Business or Creator account,
-                      please convert it by going to your profile and clicking on
-                      the three dots in the top right corner,then navigate to
-                      Settings - Account - Switch to Businees/Creator account.
-                    </li>
-                    <li>
-                      Please be aware: For contest eligibility and data
-                      fetching, only content created{" "}
-                      <strong className="font-semibold">after</strong> your
-                      account has been converted to a Business or Creator
-                      account will be valid.
-                    </li>
-                  </ul>
-                  {/* Replace # with your actual FAQ/help page URL */}
-                  <a
-                    href="/instagram-connection-faq"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 inline-block font-semibold underline hover:text-primary"
+                {youtubeConnected ? (
+                  <Button
+                    className="bg-[#C90808] text-white"
+                    onClick={handleYouTubeDisconnect}
+                    disabled={isLoadingYouTubeDisconnect}
                   >
-                    Learn more about these requirements{" "}
-                    <ExternalLink className="inline h-3 w-3 ml-0.5" />
-                  </a>
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
+                    {isLoadingYouTubeDisconnect && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleYouTubeConnect}
+                    disabled={isLoadingYouTube}
+                  >
+                    {isLoadingYouTube && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Connect YouTube
+                  </Button>
+                )}
+              </div>
+              {/* YouTube Connection Information - Display if not connected */}
+              {!youtubeConnected && (
+                <Alert
+                  variant="default"
+                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                >
+                  <Bell className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    Connect your YouTube account to allow Game Of Creators to
+                    view basic channel information (e.g., name, subscriber
+                    count, username). This also enables us to display your
+                    videos on the campaign submission page, allowing you to
+                    easily select them for opportunities. Please note that we
+                    will only have{" "}
+                    <span className="font-medium">read-only access</span> and{" "}
+                    <span className="font-medium">will not</span> be able to
+                    upload videos, modify content, or change any of your channel
+                    settings.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Instagram Connection */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <SiInstagram className="text-2xl text-pink-600" />
+                  <div>
+                    <h3 className="font-medium">Instagram</h3>
+                    {instagramConnected ? (
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Connected as{" "}
+                          {instagramAccount?.name_of_account ||
+                            instagramAccount?.username ||
+                            "your Instagram account"}{" "}
+                          (
+                          {(instagramAccount?.account_type || "N/A").replace(
+                            "_",
+                            " "
+                          )}
+                          )
+                          <span className="ml-2 text-green-600 text-xs">
+                            ✓ Active
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Not connected
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {instagramConnected ? (
+                  <Button
+                    variant="outline"
+                    className="bg-[#C90808] text-white"
+                    onClick={handleInstagramDisconnect}
+                    disabled={isLoading}
+                  >
+                    {isLoading && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button onClick={handleInstagramConnect} disabled={isLoading}>
+                    {isLoading && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Connect Instagram
+                  </Button>
+                )}
+              </div>
+              {/* Instagram Connection Information - Display if not connected */}
+              {!instagramConnected && (
+                <Alert
+                  variant="default"
+                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+                >
+                  <Bell className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    To participate in Instagram campaigns, you need to connect
+                    an Instagram{" "}
+                    <strong className="font-semibold">
+                      Business or Creator account
+                    </strong>
+                    . This is required by Instagram for us to fetch your
+                    Reels/Videos and their performance insights. We request
+                    permissions for basic profile data and to read your media
+                    and insights.
+                    <br />
+                    <br />
+                    <strong className="font-semibold">
+                      Important Steps Before Connecting:
+                    </strong>
+                    <ul className="list-disc list-inside mt-1 space-y-0.5">
+                      <li>
+                        Ensure your Instagram profile is a{" "}
+                        <strong className="font-semibold">
+                          Business or Creator
+                        </strong>{" "}
+                        account. (To check your Instagram account type, open the
+                        Instagram app, go to your profile, tap the menu icon
+                        (three horizontal lines), select "Settings and Privacy,"
+                        then "Account type and tools," and finally, "Switch to
+                        professional account". If you see the "Switch to
+                        professional account" option, you have a Personal
+                        account. If you see "Switch to personal account" or
+                        "Switch to creator account," you have a Business or
+                        Creator account. )
+                      </li>
+                      <li>
+                        If your account is not a Business or Creator account,
+                        please convert it by going to your profile and clicking
+                        on the three dots in the top right corner,then navigate
+                        to Settings - Account - Switch to Businees/Creator
+                        account.
+                      </li>
+                      <li>
+                        Please be aware: For contest eligibility and data
+                        fetching, only content created{" "}
+                        <strong className="font-semibold">after</strong> your
+                        account has been converted to a Business or Creator
+                        account will be valid.
+                      </li>
+                    </ul>
+                    {/* Replace # with your actual FAQ/help page URL */}
+                    <a
+                      href="/instagram-connection-faq"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block font-semibold underline hover:text-primary"
+                    >
+                      Learn more about these requirements{" "}
+                      <ExternalLink className="inline h-3 w-3 ml-0.5" />
+                    </a>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
           </div>
         </div>
       )}
@@ -1115,41 +1263,67 @@ export default function SettingsPage({
       {/* Company Profile - Only for Advertisers */}
       {userType === "advertiser" && (
         <div>
-         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-              <CardTitle className="text-2xl text-[#7F39EC]">Profile</CardTitle>
-            </div>
-        <div className="bg-white rounded-b-2xl shadow-lg px-2 pb-3">
-          <div className="px-6 py-4">
-            <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
-            <CardDescription>Update your company information</CardDescription>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Profile
+            </CardTitle>
           </div>
-          <CardContent>
-            <form onSubmit={updateCompanyProfile} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="company_name">Company Name</Label>
-                <Input
-                  id="company_name"
-                  name="company_name"
-                  defaultValue={(profile as AdvertiserProfile)?.company_name}
-                />
-              </div>
+          <div 
+           className={cn(
+            "rounded-b-2xl shadow-lg px-2 pb-3",
+            isDark ? "bg-[#180438]" : "bg-white "
+          )}>
+            <div className="px-6 py-4">
+              <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
+              <CardDescription>Update your company information</CardDescription>
+            </div>
+            <CardContent>
+              <form onSubmit={updateCompanyProfile} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company_name">Company Name</Label>
+                  <Input
+                    id="company_name"
+                    name="company_name"
+                    className={cn(
+                      isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                    )}
+                    defaultValue={(profile as AdvertiserProfile)?.company_name}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="website_url">Website URL</Label>
-                <Input
-                  id="website_url"
-                  name="website_url"
-                  type="url"
-                  defaultValue={(profile as AdvertiserProfile)?.website_url}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="website_url">Website URL</Label>
+                  <Input
+                    id="website_url"
+                    name="website_url"
+                    type="url"
+                    className={cn(
+                      isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                    )}
+                    defaultValue={(profile as AdvertiserProfile)?.website_url}
+                  />
+                </div>
 
-              <Button type="submit" className="w-full bg-[#6C43D0] text-md" disabled={companyProfileLoading}>
-                {companyProfileLoading ? "Updating..." : "Update Profile"}
-              </Button>
-            </form>
-          </CardContent>
-        </div>
+                <button
+                  type="submit"
+                  className="w-full rounded-xl py-2.5 bg-[#6C43D0] text-white text-md"
+                  disabled={companyProfileLoading}
+                >
+                  {companyProfileLoading ? "Updating..." : "Update Profile"}
+                </button>
+              </form>
+            </CardContent>
+          </div>
         </div>
       )}
 
@@ -1209,136 +1383,164 @@ export default function SettingsPage({
       {/* Security - Only show for users with email authentication */}
       {hasPassword && (
         <div>
-         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-         <CardTitle className="text-2xl text-[#7F39EC]">Security</CardTitle>
-       </div>
-        <div className="bg-white rounded-b-2xl shadow-lg px-2 py-5">
-          {/* <CardHeader>
+          <div 
+           className={cn(
+            "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+            isDark ? "bg-[#180438]" : "bg-white "
+          )}>
+            <CardTitle  className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}>Security</CardTitle>
+          </div>
+          <div
+           className={cn(
+            "rounded-b-2xl shadow-lg px-2 py-5",
+            isDark ? "bg-[#180438]" : "bg-white "
+          )}>
+            {/* <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>
               Update your password and security settings
             </CardDescription>
           </CardHeader> */}
-          <CardContent>
-            <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
-              <AlertDescription>
-                <strong>Multiple Sign-in Methods:</strong> You can sign in with
-                both Google and email/password.
-              </AlertDescription>
-            </Alert>
+            <CardContent>
+              <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
+                <AlertDescription>
+                  <strong>Multiple Sign-in Methods:</strong> You can sign in
+                  with both Google and email/password.
+                </AlertDescription>
+              </Alert>
 
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="current-password">Current Password</Label>
-                <div className="relative">
-                  <Input
-                    id="current-password"
-                    type={showCurrentPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showCurrentPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <div className="relative">
-                  <Input
-                    id="new-password"
-                    type={showNewPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
-                    className="pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showNewPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="current-password">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="current-password"
+                      type={showCurrentPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className={cn("pr-10",
+                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      )}
+                     
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowCurrentPassword(!showCurrentPassword)
+                      }
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showCurrentPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Real-time Password Strength Meter */}
-                <PasswordStrengthMeter
-                  password={newPassword}
-                  className="mt-3"
-                  showRequirements={true}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-password"
+                      type={showNewPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 8 characters"
+                      className={cn("pr-10",
+                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      )}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showNewPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <div className="relative">
-                  <Input
-                    id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
-                    className="pr-10"
-                    required
+                  {/* Real-time Password Strength Meter */}
+                  <PasswordStrengthMeter
+                    password={newPassword}
+                    className="mt-3"
+                    showRequirements={true}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
                 </div>
-              </div>
 
-              <Button
-              className="w-full bg-[#6C43D0] text-md"
-                type="submit"
-                disabled={
-                  passwordChangeLoading || !newPassword || !confirmPassword
-                }
-              >
-                {passwordChangeLoading
-                  ? "Updating Password..."
-                  : "Update Password"}
-              </Button>
-            </form>
-          </CardContent>
-        </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      className={cn("pr-10",
+                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      )}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  className="w-full py-2.5 text-white rounded-xl bg-[#6C43D0] text-md"
+                  type="submit"
+                  disabled={
+                    passwordChangeLoading || !newPassword || !confirmPassword
+                  }
+                >
+                  {passwordChangeLoading
+                    ? "Updating Password..."
+                    : "Update Password"}
+                </button>
+              </form>
+            </CardContent>
+          </div>
         </div>
       )}
 
-       {/* Referral Links */}
-       {username && (
-        <div className="bg-white rounded-xl shadow-xl">
+      {/* Referral Links */}
+      {username && (
+        <div 
+       
+        className={cn(
+          "rounded-xl shadow-xl",
+          isDark ? "bg-[#180438]" : "bg-white "
+        )}>
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
             <CardDescription>
-              Invite others with your referral code embedded. Choose the right landing page.
+              Invite others with your referral code embedded. Choose the right
+              landing page.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1347,21 +1549,58 @@ export default function SettingsPage({
               return (
                 <div className="space-y-4">
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.general} className="border-gray-400 w-full"/>
-                    <Button type="button" className="bg-[#4A00BE] text-white" variant="outline" onClick={() => copyToClipboard(links.general)}>
-                      <Copy className="h-4 w-4 mr-1" />Copy General
+                    <Input
+                      readOnly
+                      value={links.general}
+                      
+                      className={cn(
+                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      className="bg-[#4A00BE] text-white"
+                      variant="outline"
+                      onClick={() => copyToClipboard(links.general)}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy General
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.creators}  className="border-gray-400" />
-                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white" onClick={() => copyToClipboard(links.creators)}>
-                      <Copy className="h-4 w-4" />Copy Creators
+                    <Input
+                      readOnly
+                      value={links.creators}
+                      className={cn(
+                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-[#4A00BE] text-white"
+                      onClick={() => copyToClipboard(links.creators)}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy Creators
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.brands} className="border-gray-400"/>
-                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white"  onClick={() => copyToClipboard(links.brands)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy Brands
+                    <Input
+                      readOnly
+                      value={links.brands}
+                      className={cn(
+                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-[#4A00BE] text-white"
+                      onClick={() => copyToClipboard(links.brands)}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Brands
                     </Button>
                   </div>
                 </div>
@@ -1370,8 +1609,6 @@ export default function SettingsPage({
           </CardContent>
         </div>
       )}
-
-  
 
       {/* Danger Zone */}
       {/* <Card>

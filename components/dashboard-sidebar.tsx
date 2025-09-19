@@ -29,18 +29,21 @@ interface DashboardSidebarProps {
   userRole?: "advertiser" | "creator" | "admin";
   collapsed?: boolean;
   onChatOpen: () => void;
+  mode?: "light" | "dark";
 }
 
 export function DashboardSidebar({
   userRole = "advertiser",
   onChatOpen,
   collapsed = false,
+  mode,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [showChat, setShowChat] = useState(false);
+  const isDark = mode === "dark";
 
   // Check if screen is mobile size
   useEffect(() => {
@@ -193,7 +196,9 @@ export function DashboardSidebar({
 
   return (
     <div
-      className="flex h-full flex-col min-h-0 bg-white overflow-hidden max-h-screen"
+      className=
+        "dashboard-sidebar flex h-full flex-col min-h-0 overflow-hidden max-h-screen"
+      
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -223,6 +228,15 @@ export function DashboardSidebar({
           <nav className={cn("space-y-2", collapsed && "space-y-3")}>
             {links.map((link) => {
               const isActive = pathname === link.href;
+              const isDark = mode === "dark";
+              const activeBg = isDark
+                ? "rgba(127, 57, 236, 0.15)"
+                : "#7F39EC14";
+              const activeBorder = isDark
+                ? "rgba(127, 57, 236, 0.45)"
+                : "hsl(var(--primary) / 0.3)";
+              const activeText = isDark ? "#ffffff" : "#4A00BE";
+              const hoverShadow = "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
               return (
                 <Link
                   key={link.href}
@@ -233,22 +247,18 @@ export function DashboardSidebar({
                     collapsed ? "justify-center px-2 py-3" : "px-3 py-3"
                   )}
                   style={{
-                    backgroundColor: isActive ? "#7F39EC14" : "transparent",
-                    borderColor: isActive
-                      ? "hsl(var(--primary) / 0.3)"
-                      : "transparent",
-                    color: isActive ? "#4A00BE" : "hsl(var(--foreground))",
-                    boxShadow: isActive
-                      ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
-                      : "none",
+                    backgroundColor: isActive ? activeBg : "transparent",
+                    borderColor: isActive ? activeBorder : "transparent",
+                    color: isActive ? activeText : "hsl(var(--foreground))",
+                    // boxShadow: isActive
+                    //   ? "0 4px 6px -1px hsl(var(--primary) / 0.25)"
+                    //   : "none",
                   }}
                   onMouseEnter={(e) => {
                     if (!isActive) {
-                      e.currentTarget.style.borderColor =
-                        "hsl(var(--primary) / 0.3)";
-                      e.currentTarget.style.backgroundColor = "#7F39EC14";
-                      e.currentTarget.style.boxShadow =
-                        "0 1px 2px 0 rgba(0, 0, 0, 0.05)";
+                      e.currentTarget.style.borderColor = activeBorder;
+                      e.currentTarget.style.backgroundColor = activeBg;
+                      e.currentTarget.style.boxShadow = hoverShadow;
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -266,10 +276,11 @@ export function DashboardSidebar({
                       collapsed ? "w-16 h-12" : "w-10 h-10"
                     )}
                     style={{
-                      // backgroundColor: isActive
-                      //   ? "hsl(var(--primary-foreground) / 0.2)"
-                      //   : "hsl(var(--primary) / 0.2)",
-                      color: isActive ? "#4A00BE" : "hsl(var(--primary))",
+                      color: isActive
+                        ? isDark
+                          ? "#C9A7FF"
+                          : "#4A00BE"
+                        : "hsl(var(--primary))",
                     }}
                   >
                     <link.icon
@@ -283,7 +294,9 @@ export function DashboardSidebar({
                           className="font-semibold text-sm"
                           style={{
                             color: isActive
-                              ? "#4A00BE"
+                              ? isDark
+                                ? "#ffffff"
+                                : "#4A00BE"
                               : "hsl(var(--foreground))",
                           }}
                         >
@@ -293,7 +306,9 @@ export function DashboardSidebar({
                           className="text-xs truncate transition-colors"
                           style={{
                             color: isActive
-                              ? "#4A00BE"
+                              ? isDark
+                                ? "rgba(255,255,255,0.8)"
+                                : "#4A00BE"
                               : "hsl(var(--muted-foreground))",
                           }}
                         >
@@ -307,7 +322,9 @@ export function DashboardSidebar({
                         )}
                         style={{
                           color: isActive
-                            ? "#4A00BE"
+                            ? isDark
+                              ? "#C9A7FF"
+                              : "#4A00BE"
                             : "hsl(var(--muted-foreground))",
                         }}
                       />
@@ -321,10 +338,22 @@ export function DashboardSidebar({
         <div>
           {/* Sidebar Content: hide chat widget for admin */}
           {userRole !== "admin" && (
-            <div className="p-4 rounded-2xl border border-purple-500 mr-4 ml-4 bg-purple-100 shadow-lg shadow-purple-200">
+            <div
+              className={cn(
+                "chat-card p-4 rounded-2xl mr-4 ml-4 shadow-lg",
+                isDark
+                  ? "border border-purple-500 bg-[rgba(127,57,236,0.10)] shadow-purple-900/30"
+                  : "border border-purple-500 bg-purple-100 shadow-purple-200"
+              )}
+            >
               {!collapsed ? (
                 <div className="flex flex-col gap-3">
-                  <p className="text-md text-purple-800 text-center font-medium">
+                  <p
+                    className={cn(
+                      "text-md text-center font-medium",
+                      isDark ? "text-white" : "text-purple-800"
+                    )}
+                  >
                     We're here to help
                   </p>
 
@@ -346,7 +375,12 @@ export function DashboardSidebar({
                       href="https://calendly.com/guptavishesh2/30min"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block w-full rounded-xl bg-black text-white py-2 text-center hover:bg-gray-800 transition"
+                      className={cn(
+                        "block w-full rounded-xl text-white py-2 text-center transition",
+                        isDark
+                          ? "bg-purple-700 hover:bg-purple-600"
+                          : "bg-black hover:bg-gray-800"
+                      )}
                     >
                       Book a Call
                     </a>
@@ -356,13 +390,23 @@ export function DashboardSidebar({
                 <div className="flex flex-col items-center gap-3">
                   <button
                     onClick={onChatOpen}
-                    className="rounded-full bg-[#7F39EC] text-white w-10 h-10 flex items-center justify-center hover:bg-purple-700"
+                    className={cn(
+                      "rounded-full text-white w-10 h-10 flex items-center justify-center",
+                      isDark
+                        ? "bg-purple-700 hover:bg-purple-600"
+                        : "bg-[#7F39EC] hover:bg-purple-700"
+                    )}
                   >
                     <MessageCircle size={18} />
                   </button>
                   {/* Show Book a Call only for advertisers */}
                   {userRole === "advertiser" && (
-                    <div className="rounded-full bg-[#7F39EC] w-10 h-10 flex items-center justify-center">
+                    <div
+                      className={cn(
+                        "rounded-full w-10 h-10 flex items-center justify-center",
+                        isDark ? "bg-purple-700" : "bg-[#7F39EC]"
+                      )}
+                    >
                       <a
                         href="https://calendly.com/guptavishesh2/30min"
                         target="_blank"

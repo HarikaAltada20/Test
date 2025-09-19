@@ -22,7 +22,7 @@ import {
   Coins,
   Loader2,
 } from "lucide-react";
-import { formatLocalDateTime } from "@/lib/utils";
+import { formatLocalDateTime, cn } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
@@ -57,6 +57,37 @@ function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
   const [showPopup, setShowPopup] = useState(false);
+  const [mode, setMode] = useState<"light" | "dark">("light");
+
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
     const success = searchParams.get("success");
@@ -315,18 +346,27 @@ function DashboardPage() {
   };
 
   const isAdvertiser = profile && "company_name" in profile;
+  const isDark = mode === "dark";
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h2 className="pl-2 text-2xl md:text-3xl font-bold tracking-tight">
+        <h2
+          className={cn(
+            "pl-2 text-2xl md:text-3xl font-bold tracking-tight",
+            isDark ? "text-white" : "text-slate-900"
+          )}
+        >
           Dashboard
         </h2>
         {isAdvertiser && (
           <button
             onClick={handleCreateContestClick}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl text-white font-medium",
+              isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+            )}
           >
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -342,20 +382,31 @@ function DashboardPage() {
         {isAdvertiser ? (
           <>
             {/* Total Spent Card - Red/Pink */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex justify-between">
-                  {/* <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600 mb-4">
-                    <DollarSign className="w-5 h-5" />
-                  </div> */}
-                  <div className="flex-1 text-black space-y-2">
+                  <div
+                    className={cn(
+                      "flex-1 space-y-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     <p className="text-lg font-medium">Total Spent</p>
                     <p className="text-xl font-bold ">
                       {formatCurrencyFromCents(profile?.total_money_spent || 0)}
                     </p>
                     <p className="text-md mt-0.5">Money spent on contests</p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                  <div 
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                     <DollarSign className="w-5 h-5" />
                   </div>
                 </div>
@@ -363,20 +414,30 @@ function DashboardPage() {
             </div>
 
             {/* Total Contests Card - Blue */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex justify-between">
-                  {/* <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div> */}
-                  <div className="flex-1 text-black space-y-2">
+                  <div
+                    className={cn(
+                      "flex-1 space-y-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     <p className="text-lg font-medium">Total Contests</p>
                     <p className="text-xl font-bold">
                       {profile?.total_contests_run || 0}
                     </p>
                     <p className="text-md mt-0.5">Contests created</p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                  <div  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                     <Trophy className="h-5 w-5" />
                   </div>
                 </div>
@@ -385,12 +446,21 @@ function DashboardPage() {
           </>
         ) : (
           <>
-            {/* Total Earnings Card - Green */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex justify-between">
-                  <div className="flex-1 text-black space-y-2">
+                  <div
+                    className={cn(
+                      "flex-1 space-y-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     <p className="text-lg font-medium">Total Earnings</p>
                     <p className="text-xl font-bold">
                       {formatCurrencyFromCents(profile?.total_money_won || 0)}
@@ -399,7 +469,10 @@ function DashboardPage() {
                       Money earned from contests
                     </p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                  <div  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                     <DollarSign className="h-6 w-6" />
                   </div>
                 </div>
@@ -428,10 +501,20 @@ function DashboardPage() {
 
             {/* Contests Won Card - Yellow/Gold */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex justify-between">
-                  <div className="flex-1 text-black space-y-2">
+                  <div
+                    className={cn(
+                      "flex-1 space-y-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     <p className="text-lg font-medium">Contests Won</p>
                     <p className="text-xl font-bold">
                       {profile?.total_contests_won || 0}
@@ -441,7 +524,10 @@ function DashboardPage() {
                       participated
                     </p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+                  <div  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                     <Trophy className="h-6 w-6" />
                   </div>
                 </div>
@@ -472,13 +558,20 @@ function DashboardPage() {
         )}
 
         {/* Total Views Card - Purple */}
-        <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+        <div
+          className={cn(
+            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+            isDark ? "bg-[#170337]" : "bg-white"
+          )}
+        >
           <CardContent className="p-4">
             <div className="flex justify-between">
-              {/* <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                <Video className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-              </div> */}
-              <div className="flex-1 text-black space-y-2">
+              <div
+                className={cn(
+                  "flex-1 space-y-2",
+                  isDark ? "text-white" : "text-black"
+                )}
+              >
                 <p className="text-lg font-medium">Total Views</p>
                 <p className="text-xl font-bold">
                   {(profile?.total_views || 0).toLocaleString()}
@@ -489,7 +582,10 @@ function DashboardPage() {
                     : "Views on your content"}
                 </p>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+              <div  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                 <Eye className="h-6 w-6" />
               </div>
             </div>
@@ -497,30 +593,28 @@ function DashboardPage() {
         </div>
 
         {/* Available Coins Card - Orange */}
-        <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+        <div
+          className={cn(
+            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+            isDark ? "bg-[#170337]" : "bg-white"
+          )}
+        >
           <CardContent className="p-4">
             <div className="flex justify-between">
-              {/* <div className="p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5 text-orange-600 dark:text-orange-400"
-                >
-                  <circle cx="12" cy="12" r="8" />
-                  <path d="M12 8v4l2 2" />
-                </svg>
-              </div> */}
-              <div className="flex-1 text-black space-y-2">
+              <div
+                className={cn(
+                  "flex-1 space-y-2",
+                  isDark ? "text-white" : "text-black"
+                )}
+              >
                 <p className="text-lg font-medium">Available Coins</p>
                 <p className="text-lg font-bold">{userCoins}</p>
                 <p className="text-md mt-0.5">Coins to redeem or use</p>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE] mb-4">
+              <div  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                 <Coins className="w-5 h-5" />
               </div>
             </div>
@@ -531,18 +625,34 @@ function DashboardPage() {
       {/* Getting Started Section - Only show for advertisers with no contests */}
       {isAdvertiser &&
         (!profile?.total_contests_run || profile.total_contests_run === 0) && (
-          <Card className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-700/50 rounded-xl">
+          <Card 
+          className={cn(
+            "mb-6  rounded-xl",
+            isDark ? "bg-[#170337] border border-[#170337]" : "bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 border border-purple-200 dark:border-purple-700/50"
+          )}>
             <CardContent className="p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
                 <div className="flex items-start sm:items-center space-x-4">
-                  <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-full flex-shrink-0">
-                    <HelpCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  <div 
+                  className={cn(
+                    "p-3 rounded-full flex-shrink-0",
+                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400"
+                  )}>
+                    <HelpCircle className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-1">
+                    <h3 
+                     className={cn(
+                      "text-base sm:text-lg font-semibold mb-1",
+                      isDark ? "text-white" : "text-gray-900 dark:text-white"
+                    )}>
                       New to Game Of Creators?
                     </h3>
-                    <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+                    <p 
+                    className={cn(
+                      "text-sm sm:text-base",
+                      isDark ? "text-white" : "text-gray-600 dark:text-gray-300"
+                    )}>
                       Learn about our two contest types: Leaderboard and CPM
                       contests
                     </p>
@@ -555,7 +665,10 @@ function DashboardPage() {
                   </Button>
                 </Link> */}
                 <Button
-                  className="bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center sm:justify-start px-4 py-2"
+                  className={cn(
+                    "text-white flex items-center justify-center sm:justify-start px-4 py-2",
+                    isDark ? "bg-[#5F2BB1] text-white" : "bg-purple-600 hover:bg-purple-700"
+                  )}
                   onClick={() => setShowPopup(true)}
                 >
                   <HelpCircle className="w-4 h-4" />
@@ -571,10 +684,19 @@ function DashboardPage() {
         )}
 
       <div className="grid gap-6 md:grid-cols-2">
-        <div className="bg-white min-h-[300px] rounded-xl shadow-md flex flex-col">
+        <div
+          className={cn(
+            "min-h-[300px] rounded-xl shadow-md flex flex-col",
+            isDark ? "bg-[#210B43]" : "bg-white"
+          )}
+        >
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>
+            <CardTitle className={cn(isDark ? "text-white" : "text-slate-900")}>
+              Recent Activity
+            </CardTitle>
+            <CardDescription
+              className={cn("text-md", isDark ? "text-[#808080]" : "text-slate-600")}
+            >
               {isAdvertiser
                 ? "Your recent contests"
                 : "Contests you've participated in recently"}
@@ -585,7 +707,7 @@ function DashboardPage() {
               <div className="space-y-4">
                 {recentContests.map((contest) => (
                   <div
-                    key={contest.id}
+                    key={contest.id}       
                     className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-lg border border-[#D1B7F9]"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -642,17 +764,38 @@ function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md">
+        <div
+          className={cn(
+            "rounded-xl shadow-md",
+            isDark ? "bg-[#210B43]" : "bg-white"
+          )}
+        >
           <CardHeader>
-            <CardTitle>Analytics Overview</CardTitle>
-            <CardDescription>
+            <CardTitle className={cn(isDark ? "text-white" : "text-slate-900")}>
+              Analytics Overview
+            </CardTitle>
+            <CardDescription
+              className={cn(isDark ? "text-gray-300" : "text-slate-600")}
+            >
               Performance insights for your{" "}
               {isAdvertiser ? "contests" : "content"}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex h-[270px] bg-[#7F39EC26] items-center justify-center border border-[#D1B7F9] rounded-xl">
-              <p className="text-lg text-black font-semibold">
+            <div
+              className={cn(
+                "flex h-[270px] items-center justify-center border rounded-xl",
+                isDark
+                  ? "bg-[#170337] border-[#170337]"
+                  : "bg-[#7F39EC26] border-[#D1B7F9]"
+              )}
+            >
+              <p
+                className={cn(
+                  "text-lg font-semibold",
+                  isDark ? "text-white" : "text-black"
+                )}
+              >
                 Detailed analytics available soon
               </p>
             </div>
@@ -668,4 +811,4 @@ function DashboardPage() {
   );
 }
 
-export default DashboardPage; // Export directly
+export default DashboardPage;
