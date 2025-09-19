@@ -3,20 +3,29 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-export default function ContestTypeFilter({ value = "all" }: { value?: "all" | "leaderboard" | "cpm" }) {
+interface ContestTypeFilterProps {
+    value?: "all" | "leaderboard" | "cpm";
+    onChange?: (value: string) => void;
+}
+
+export default function ContestTypeFilter({ value = "all", onChange: customOnChange }: ContestTypeFilterProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
 
     const onChange = (next: string) => {
-        const params = new URLSearchParams(searchParams?.toString() || "");
-        if (next === "all") {
-            params.delete("type");
+        if (customOnChange) {
+            customOnChange(next);
         } else {
-            params.set("type", next);
+            const params = new URLSearchParams(searchParams?.toString() || "");
+            if (next === "all") {
+                params.delete("type");
+            } else {
+                params.set("type", next);
+            }
+            const qs = params.toString();
+            const href = qs ? `/dashboard/admin?${qs}` : "/dashboard/admin";
+            router.push(href);
         }
-        const qs = params.toString();
-        const href = qs ? `/dashboard/admin?${qs}` : "/dashboard/admin";
-        router.push(href);
     };
 
     return (
