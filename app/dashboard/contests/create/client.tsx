@@ -4525,7 +4525,7 @@ export default function CreateContestPage({
   );
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-8 bg-background text-foreground transition-colors duration-300">
       {/* Enhanced Header with Better Back Button */}
       <div className="mb-8">
         <div className="flex items-center gap-4 mb-6">

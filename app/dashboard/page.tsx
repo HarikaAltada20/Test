@@ -349,7 +349,7 @@ function DashboardPage() {
   const isDark = mode === "dark";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 bg-background text-foreground transition-colors duration-300">
       <div className="flex items-center justify-between">
         <h2
           className={cn(
@@ -402,11 +402,14 @@ function DashboardPage() {
                     </p>
                     <p className="text-md mt-0.5">Money spent on contests</p>
                   </div>
-                  <div 
-                  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
+                  <div
+                    className={cn(
+                      "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                    )}
+                  >
                     <DollarSign className="w-5 h-5" />
                   </div>
                 </div>
@@ -434,10 +437,14 @@ function DashboardPage() {
                     </p>
                     <p className="text-md mt-0.5">Contests created</p>
                   </div>
-                  <div  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
+                  <div
+                    className={cn(
+                      "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                    )}
+                  >
                     <Trophy className="h-5 w-5" />
                   </div>
                 </div>
@@ -446,7 +453,6 @@ function DashboardPage() {
           </>
         ) : (
           <>
-
             <div
               className={cn(
                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
@@ -469,10 +475,14 @@ function DashboardPage() {
                       Money earned from contests
                     </p>
                   </div>
-                  <div  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
+                  <div
+                    className={cn(
+                      "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                    )}
+                  >
                     <DollarSign className="h-6 w-6" />
                   </div>
                 </div>
@@ -524,10 +534,14 @@ function DashboardPage() {
                       participated
                     </p>
                   </div>
-                  <div  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
+                  <div
+                    className={cn(
+                      "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                    )}
+                  >
                     <Trophy className="h-6 w-6" />
                   </div>
                 </div>
@@ -582,10 +596,14 @@ function DashboardPage() {
                     : "Views on your content"}
                 </p>
               </div>
-              <div  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
+              <div
+                className={cn(
+                  "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                  isDark
+                    ? "bg-[#FFFFFF36] text-white"
+                    : "bg-[#D8C3FF] text-[#4A00BE]"
+                )}
+              >
                 <Eye className="h-6 w-6" />
               </div>
             </div>
@@ -611,10 +629,14 @@ function DashboardPage() {
                 <p className="text-lg font-bold">{userCoins}</p>
                 <p className="text-md mt-0.5">Coins to redeem or use</p>
               </div>
-              <div  className={cn(
-                    "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
+              <div
+                className={cn(
+                  "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
+                  isDark
+                    ? "bg-[#FFFFFF36] text-white"
+                    : "bg-[#D8C3FF] text-[#4A00BE]"
+                )}
+              >
                 <Coins className="w-5 h-5" />
               </div>
             </div>
@@ -625,34 +647,44 @@ function DashboardPage() {
       {/* Getting Started Section - Only show for advertisers with no contests */}
       {isAdvertiser &&
         (!profile?.total_contests_run || profile.total_contests_run === 0) && (
-          <Card 
-          className={cn(
-            "mb-6  rounded-xl",
-            isDark ? "bg-[#170337] border border-[#170337]" : "bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 border border-purple-200 dark:border-purple-700/50"
-          )}>
+          <Card
+            className={cn(
+              "mb-6  rounded-xl",
+              isDark
+                ? "bg-[#170337] border border-[#170337]"
+                : "bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 border border-purple-200 dark:border-purple-700/50"
+            )}
+          >
             <CardContent className="p-4 sm:p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
                 <div className="flex items-start sm:items-center space-x-4">
-                  <div 
-                  className={cn(
-                    "p-3 rounded-full flex-shrink-0",
-                    isDark ? "bg-[#FFFFFF36] text-white" : "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400"
-                  )}>
+                  <div
+                    className={cn(
+                      "p-3 rounded-full flex-shrink-0",
+                      isDark
+                        ? "bg-[#FFFFFF36] text-white"
+                        : "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400"
+                    )}
+                  >
                     <HelpCircle className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 
-                     className={cn(
-                      "text-base sm:text-lg font-semibold mb-1",
-                      isDark ? "text-white" : "text-gray-900 dark:text-white"
-                    )}>
+                    <h3
+                      className={cn(
+                        "text-base sm:text-lg font-semibold mb-1",
+                        isDark ? "text-white" : "text-gray-900 dark:text-white"
+                      )}
+                    >
                       New to Game Of Creators?
                     </h3>
-                    <p 
-                    className={cn(
-                      "text-sm sm:text-base",
-                      isDark ? "text-white" : "text-gray-600 dark:text-gray-300"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-sm sm:text-base",
+                        isDark
+                          ? "text-white"
+                          : "text-gray-600 dark:text-gray-300"
+                      )}
+                    >
                       Learn about our two contest types: Leaderboard and CPM
                       contests
                     </p>
@@ -667,7 +699,9 @@ function DashboardPage() {
                 <Button
                   className={cn(
                     "text-white flex items-center justify-center sm:justify-start px-4 py-2",
-                    isDark ? "bg-[#5F2BB1] text-white" : "bg-purple-600 hover:bg-purple-700"
+                    isDark
+                      ? "bg-[#5F2BB1] text-white"
+                      : "bg-purple-600 hover:bg-purple-700"
                   )}
                   onClick={() => setShowPopup(true)}
                 >
@@ -695,7 +729,10 @@ function DashboardPage() {
               Recent Activity
             </CardTitle>
             <CardDescription
-              className={cn("text-md", isDark ? "text-[#808080]" : "text-slate-600")}
+              className={cn(
+                "text-md",
+                isDark ? "text-[#808080]" : "text-slate-600"
+              )}
             >
               {isAdvertiser
                 ? "Your recent contests"
@@ -707,7 +744,7 @@ function DashboardPage() {
               <div className="space-y-4">
                 {recentContests.map((contest) => (
                   <div
-                    key={contest.id}       
+                    key={contest.id}
                     className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-lg border border-[#D1B7F9]"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0">

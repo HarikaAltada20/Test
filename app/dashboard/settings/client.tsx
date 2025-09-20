@@ -934,7 +934,7 @@ export default function SettingsPage({
   const isDark = mode === "dark";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-background text-foreground transition-colors duration-300">
       <div className="flex flex-col items-center justify-center text-center">
         <h1
           className={cn(
@@ -1278,11 +1278,12 @@ export default function SettingsPage({
               Profile
             </CardTitle>
           </div>
-          <div 
-           className={cn(
-            "rounded-b-2xl shadow-lg px-2 pb-3",
-            isDark ? "bg-[#180438]" : "bg-white "
-          )}>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-3",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
             <div className="px-6 py-4">
               <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
               <CardDescription>Update your company information</CardDescription>
@@ -1295,7 +1296,9 @@ export default function SettingsPage({
                     id="company_name"
                     name="company_name"
                     className={cn(
-                      isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      isDark
+                        ? "bg-[#180438] border border-gray-700"
+                        : "bg-white"
                     )}
                     defaultValue={(profile as AdvertiserProfile)?.company_name}
                   />
@@ -1308,7 +1311,9 @@ export default function SettingsPage({
                     name="website_url"
                     type="url"
                     className={cn(
-                      isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      isDark
+                        ? "bg-[#180438] border border-gray-700"
+                        : "bg-white"
                     )}
                     defaultValue={(profile as AdvertiserProfile)?.website_url}
                   />
@@ -1383,21 +1388,27 @@ export default function SettingsPage({
       {/* Security - Only show for users with email authentication */}
       {hasPassword && (
         <div>
-          <div 
-           className={cn(
-            "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-            isDark ? "bg-[#180438]" : "bg-white "
-          )}>
-            <CardTitle  className={cn(
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
                 "text-2xl",
                 isDark ? "text-white" : "text-[#7F39EC]"
-              )}>Security</CardTitle>
+              )}
+            >
+              Security
+            </CardTitle>
           </div>
           <div
-           className={cn(
-            "rounded-b-2xl shadow-lg px-2 py-5",
-            isDark ? "bg-[#180438]" : "bg-white "
-          )}>
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 py-5",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
             {/* <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>
@@ -1422,10 +1433,12 @@ export default function SettingsPage({
                       autoComplete="current-password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
-                      className={cn("pr-10",
-                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white"
                       )}
-                     
                       required
                     />
                     <button
@@ -1454,8 +1467,11 @@ export default function SettingsPage({
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Minimum 8 characters"
-                      className={cn("pr-10",
-                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white"
                       )}
                       required
                     />
@@ -1490,8 +1506,11 @@ export default function SettingsPage({
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm new password"
-                      className={cn("pr-10",
-                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white"
                       )}
                       required
                     />
@@ -1530,12 +1549,12 @@ export default function SettingsPage({
 
       {/* Referral Links */}
       {username && (
-        <div 
-       
-        className={cn(
-          "rounded-xl shadow-xl",
-          isDark ? "bg-[#180438]" : "bg-white "
-        )}>
+        <div
+          className={cn(
+            "rounded-xl shadow-xl",
+            isDark ? "bg-[#180438]" : "bg-white "
+          )}
+        >
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
             <CardDescription>
@@ -1552,9 +1571,10 @@ export default function SettingsPage({
                     <Input
                       readOnly
                       value={links.general}
-                      
                       className={cn(
-                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white"
                       )}
                     />
                     <Button
@@ -1572,7 +1592,9 @@ export default function SettingsPage({
                       readOnly
                       value={links.creators}
                       className={cn(
-                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white"
                       )}
                     />
                     <Button
@@ -1590,7 +1612,9 @@ export default function SettingsPage({
                       readOnly
                       value={links.brands}
                       className={cn(
-                        isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                        isDark
+                          ? "bg-[#180438] border border-gray-700"
+                          : "bg-white"
                       )}
                     />
                     <Button
