@@ -742,10 +742,7 @@ function DashboardContent({
           {/* Sidebar Header - Premium Styling to Match Main Header */}
           <div
             // className="relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b border-gray-300"
-            className={cn(
-              "relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b",
-              currentMode === "dark" ? "border-gray-800" : "border-gray-300"
-            )}
+            className="relative flex h-16 sm:h-20 items-center justify-center px-3 sm:px-6 border-b"
           >
             {/* <div
               className="absolute inset-0"
@@ -796,12 +793,7 @@ function DashboardContent({
                       alt="Game Of Creators Logo"
                       width={180}
                       height={100}
-                      className={cn(
-                        "h-[50px] w-auto transition-all duration-300",
-                        currentMode === "light"
-                          ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
-                          : "filter brightness-110 group-hover:brightness-125"
-                      )}
+                      className="h-[50px] w-auto "
                     />
                   </div>
                 </Link>
@@ -828,12 +820,7 @@ function DashboardContent({
                       alt="Game Of Creators"
                       width={184}
                       height={100}
-                      className={cn(
-                        "h-[50px] w-auto transition-all duration-300",
-                        currentMode === "light"
-                          ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
-                          : "filter brightness-110 group-hover:brightness-125"
-                      )}
+                      className="h-[50px] w-auto transition-all duration-300"
                     />
                   </div>
                 </Link>
@@ -1068,12 +1055,7 @@ function DashboardContent({
                             alt="Game Of Creators Logo"
                             width={180}
                             height={100}
-                            className={cn(
-                              "h-[50px] mt-5 w-auto transition-all duration-300",
-                              currentMode === "light"
-                                ? "filter brightness-90 contrast-110 saturate-110 group-hover:brightness-75"
-                                : "filter brightness-110 group-hover:brightness-125"
-                            )}
+                            className="h-[50px] mt-5 w-auto transition-all duration-300"
                           />
                         </div>
                         <SheetDescription className="sr-only">
@@ -1193,7 +1175,7 @@ function DashboardContent({
 
                   {/* Compact Mode Indicator - Shows current zoom level */}
                   <div
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all duration-300 cursor-pointer hover:scale-105"
+                    className="flex border border-gray-400 items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 cursor-pointer hover:scale-105"
                     // style={{
                     //   backgroundColor:
                     //     currentMode === "light"
@@ -1240,6 +1222,25 @@ function DashboardContent({
                     </svg>
                     {isCompactMode ? "85%" : "100%"}
                   </div>
+
+                  {/* Theme Toggle - Quick Access */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
+                    title={`Switch to ${
+                      currentMode === "light" ? "dark" : "light"
+                    } theme`}
+                    onClick={() =>
+                      switchMode(currentMode === "light" ? "dark" : "light")
+                    }
+                  >
+                    {currentMode === "light" ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4" />
+                    )}
+                  </Button>
 
                   {/* Settings Panel Trigger - Premium Style */}
                   <Sheet
@@ -1385,7 +1386,7 @@ function DashboardContent({
                         <div className="flex-1 overflow-y-auto sidebar-scrollbar">
                           <div className="p-6 space-y-6">
                             {/* Quick Presets - COMMENTED OUT FOR SIMPLICITY */}
-                            <div className="space-y-4">
+                            {/* <div className="space-y-4">
                               <h3
                                 className="text-sm font-semibold uppercase tracking-wider"
                                 style={{
@@ -1439,7 +1440,7 @@ function DashboardContent({
                                   )
                                 )}
                               </div>
-                            </div>
+                            </div> */}
 
                             {/* Color Themes - COMMENTED OUT FOR SIMPLICITY */}
                             {/* <div className="space-y-4">
@@ -1538,7 +1539,6 @@ function DashboardContent({
                               >
                                 <div className="flex items-center gap-3">
                                   <div
-                                  
                                     className={cn(
                                       "flex rounded-full p-3 items-center",
                                       currentMode === "light"
@@ -1553,7 +1553,7 @@ function DashboardContent({
                                     {isFullscreen ? (
                                       <Minimize
                                         className="h-5 w-5"
-                                        
+
                                         // style={{
                                         //   color: `rgba(${theme.primaryLight}, 1)`,
                                         // }}
@@ -1573,7 +1573,6 @@ function DashboardContent({
                                       style={{
                                         color: `rgba(var(--mode-text-primary), 1)`,
                                       }}
-                                      
                                     >
                                       {isFullscreen
                                         ? "Exit Full Screen"
@@ -1598,6 +1597,56 @@ function DashboardContent({
                               </div>
                             )}
 
+                            {/* Theme Mode Toggle - NEW FEATURE */}
+                            <div className="w-full bg-[#D9C0FF26] flex justify-between items-center border border-[#7F39EC] rounded-lg px-4 py-5 transition">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "flex rounded-full p-3 items-center",
+                                    currentMode === "light"
+                                      ? "bg-[#D8C3FF] text-purple-600"
+                                      : "bg-[#FFFFFF42] text-white"
+                                  )}
+                                >
+                                  {currentMode === "light" ? (
+                                    <Sun className="h-5 w-5" />
+                                  ) : (
+                                    <Moon className="h-5 w-5" />
+                                  )}
+                                </div>
+                                <div>
+                                  <div
+                                    className="font-medium text-md"
+                                    style={{
+                                      color: `rgba(var(--mode-text-primary), 1)`,
+                                    }}
+                                  >
+                                    {currentMode === "light"
+                                      ? "Light Mode"
+                                      : "Dark Mode"}
+                                  </div>
+                                  <div
+                                    className="text-xs mr-2"
+                                    style={{
+                                      color: `rgba(var(--mode-text-muted), 1)`,
+                                    }}
+                                  >
+                                    {currentMode === "light"
+                                      ? "Switch to dark theme"
+                                      : "Switch to light theme"}
+                                  </div>
+                                </div>
+                              </div>
+                              <Switch
+                                variant="theme-aware"
+                                theme={currentMode}
+                                checked={currentMode === "dark"}
+                                onCheckedChange={(checked) =>
+                                  switchMode(checked ? "dark" : "light")
+                                }
+                              />
+                            </div>
+
                             {/* Compact Mode Toggle - NEW FEATURE */}
                             <div
                               className="w-full bg-[#D9C0FF26] flex justify-between items-center border border-[#7F39EC] rounded-lg px-4 py-5  transition"
@@ -1608,7 +1657,6 @@ function DashboardContent({
                             >
                               <div className="flex items-center gap-3">
                                 <div
-                               
                                   className={cn(
                                     "flex rounded-full p-3 items-center",
                                     currentMode === "light"
@@ -1784,12 +1832,9 @@ function DashboardContent({
                     {/* Profile Sidebar Content */}
                     <SheetContent
                       side="right"
-                     
                       className={cn(
                         "w-96 bg-white p-0 border-l",
-                        currentMode === "light"
-                          ? " bg-white"
-                          : "bg-[#06021D]"
+                        currentMode === "light" ? " bg-white" : "bg-[#06021D]"
                       )}
                       // style={{
                       //   background:
@@ -1900,13 +1945,14 @@ function DashboardContent({
                         {/* Scrollable Content */}
                         <div className="flex-1 overflow-y-auto sidebar-scrollbar">
                           <div className="px-6 py-3 flex gap-3 items-center ">
-                            <div 
-                            className={cn(
-                                    "flex rounded-full p-3 items-center",
-                                    currentMode === "light"
-                                      ? "bg-[#D8C3FF] text-purple-600"
-                                      : "bg-[#FFFFFF42] text-white"
-                                  )}>
+                            <div
+                              className={cn(
+                                "flex rounded-full p-3 items-center",
+                                currentMode === "light"
+                                  ? "bg-[#D8C3FF] text-purple-600"
+                                  : "bg-[#FFFFFF42] text-white"
+                              )}
+                            >
                               <Mail className="w-5 h-5" />
                             </div>
                             <p
@@ -1941,11 +1987,11 @@ function DashboardContent({
                                   // }}
                                 >
                                   <div className="flex items-center justify-between">
-                                    <div                          
+                                    <div
                                       className={cn(
                                         "flex rounded-full p-3 items-center mr-2.5",
                                         currentMode === "light"
-                                           ? "bg-[#D8C3FF] text-purple-600"
+                                          ? "bg-[#D8C3FF] text-purple-600"
                                           : "bg-[#FFFFFF42] text-white"
                                       )}
                                       // style={{
@@ -1964,7 +2010,6 @@ function DashboardContent({
                                         {currentPlan.name} Plan
                                       </div>
                                       <div
-                                        
                                         className={cn(
                                           "text-xs",
                                           currentMode === "light"
@@ -2041,11 +2086,11 @@ function DashboardContent({
                                     // style={{
                                     //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
                                     // }}
-                                    
+
                                     className={cn(
                                       "flex rounded-full p-3 items-center mr-2.5",
                                       currentMode === "light"
-                                         ? "bg-[#D8C3FF] text-purple-600"
+                                        ? "bg-[#D8C3FF] text-purple-600"
                                         : "bg-[#FFFFFF42] text-white"
                                     )}
                                   >
@@ -2062,7 +2107,12 @@ function DashboardContent({
                                     </div>
                                   </div>
                                   <ChevronRight
-                                    className="h-3 w-3 text-purple-600 transition-all group-hover:translate-x-0.5"
+                                    className={cn(
+                                      "h-3 w-3 transition-all group-hover:translate-x-0.5",
+                                      currentMode === "light"
+                                        ? "text-purple-600"
+                                        : "text-white"
+                                    )}
                                     // style={{
                                     //   color: `rgba(${mode.text.muted}, 1)`,
                                     // }}
@@ -2091,11 +2141,10 @@ function DashboardContent({
                                   // }}
                                 >
                                   <div
-                                
                                     className={cn(
                                       "flex rounded-full p-3 items-center mr-2.5",
                                       currentMode === "light"
-                                         ? "bg-[#D8C3FF] text-purple-600"
+                                        ? "bg-[#D8C3FF] text-purple-600"
                                         : "bg-[#FFFFFF42] text-white"
                                     )}
                                     // style={{
@@ -2115,7 +2164,12 @@ function DashboardContent({
                                     </div>
                                   </div>
                                   <ChevronRight
-                                    className="h-3 w-3 text-purple-600 transition-all group-hover:translate-x-0.5"
+                                    className={cn(
+                                      "h-3 w-3 transition-all group-hover:translate-x-0.5",
+                                      currentMode === "light"
+                                        ? "text-purple-600"
+                                        : "text-white"
+                                    )}
                                     // style={{
                                     //   color: `rgba(${mode.text.muted}, 1)`,
                                     // }}
@@ -2231,24 +2285,24 @@ function DashboardContent({
                               />
                             </div>
                             <div className="flex-1 text-left">
-                              <div 
-                              className={cn(
-                                "text-md font-semibold",
-                                currentMode === "light"
-                                   ? "text-black"
-                                  : "text-white"
-                              )}>
+                              <div
+                                className={cn(
+                                  "text-md font-semibold",
+                                  currentMode === "light"
+                                    ? "text-black"
+                                    : "text-white"
+                                )}
+                              >
                                 Sign Out
                               </div>
                               <div
-                              
                                 className={cn(
                                   "text-xs",
                                   currentMode === "light"
-                                     ? "text-black"
+                                    ? "text-black"
                                     : "text-white"
                                 )}
-                                
+
                                 // style={{
                                 //   color: "rgba(244, 63, 94, 0.8)",
                                 // }}

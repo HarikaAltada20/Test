@@ -142,7 +142,9 @@ export default function CreateContestPage({
   const [showBriefPreview, setShowBriefPreview] = useState(false); // Default to editor mode for better UX
   const [rulesHtml, setRulesHtml] = useState("");
   const [rulesJson, setRulesJson] = useState<any>(null);
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const [showRulesPreview, setShowRulesPreview] = useState(false);
+  const isDark = mode === "dark";
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [newResourceUrl, setNewResourceUrl] = useState("");
   const [resourceFile, setResourceFile] = useState<File | null>(null);
@@ -202,6 +204,32 @@ export default function CreateContestPage({
       document.body.style.overflow = "";
     };
   }, [showPayment]);
+
+  // Mode detection
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Set up observer for mode changes
+    const observer = new MutationObserver(checkMode);
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["data-mode"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
 
   // Refresh protection - track changes and warn before refresh
   useEffect(() => {
@@ -5129,6 +5157,7 @@ export default function CreateContestPage({
                       value={brief}
                       placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
                       height="250px"
+                      isDark={isDark}
                       ref={richTextEditorRef}
                       onChange={(html: string, json: any) => {
                         console.log(
@@ -5196,6 +5225,7 @@ export default function CreateContestPage({
                       value={rulesHtml}
                       placeholder="Content rules and guidelines..."
                       height="250px"
+                      isDark={isDark}
                       ref={rulesRichTextEditorRef}
                       onChange={(html: string, json: any) => {
                         console.log(
