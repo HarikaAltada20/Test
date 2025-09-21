@@ -1297,7 +1297,7 @@ export default function SettingsPage({
                     name="company_name"
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-700"
+                        ? "bg-[#180438] border border-gray-600"
                         : "bg-white"
                     )}
                     defaultValue={(profile as AdvertiserProfile)?.company_name}
@@ -1312,7 +1312,7 @@ export default function SettingsPage({
                     type="url"
                     className={cn(
                       isDark
-                        ? "bg-[#180438] border border-gray-700"
+                        ? "bg-[#180438] border border-gray-600"
                         : "bg-white"
                     )}
                     defaultValue={(profile as AdvertiserProfile)?.website_url}
@@ -1436,7 +1436,7 @@ export default function SettingsPage({
                       className={cn(
                         "pr-10",
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                       required
@@ -1470,7 +1470,7 @@ export default function SettingsPage({
                       className={cn(
                         "pr-10",
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                       required
@@ -1509,7 +1509,7 @@ export default function SettingsPage({
                       className={cn(
                         "pr-10",
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                       required
@@ -1573,7 +1573,7 @@ export default function SettingsPage({
                       value={links.general}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                     />
@@ -1593,7 +1593,7 @@ export default function SettingsPage({
                       value={links.creators}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                     />
@@ -1613,7 +1613,7 @@ export default function SettingsPage({
                       value={links.brands}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                     />

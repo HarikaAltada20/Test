@@ -39,6 +39,7 @@ import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import {
+  cn,
   toLocalDateTimeStrings,
   toUTCISOString,
   validateImageFile,
@@ -205,7 +206,7 @@ export default function CreateContestPage({
     };
   }, [showPayment]);
 
-  // Mode detection
+  // Read mode from data attribute
   useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
@@ -221,15 +222,19 @@ export default function CreateContestPage({
 
     checkMode();
 
-    // Set up observer for mode changes
+    // Watch for changes in the data attribute
     const observer = new MutationObserver(checkMode);
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ["data-mode"],
-    });
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
 
     return () => observer.disconnect();
   }, []);
+
 
   // Refresh protection - track changes and warn before refresh
   useEffect(() => {
@@ -4782,12 +4787,29 @@ export default function CreateContestPage({
 
         {step === "basics" && (
           <>
-            <div className="p-6 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
-              <h2 className="text-purple-600 font-semibold text-2xl ">
+            <div
+              className={cn(
+                "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
+                isDark
+                  ? "bg-[#180438] border-gray-600"
+                  : "bg-white border-[#D0D0D0]"
+              )}
+            >
+              <h2
+                className={cn(
+                  "font-semibold text-2xl ",
+                  isDark ? "text-white" : "text-purple-600"
+                )}
+              >
                 Customize your Contest
               </h2>
             </div>
-            <div className="space-y-6 p-6 rounded-bl-xl rounded-br-xl bg-white shadow-xl">
+            <div
+              className={cn(
+                "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
+                isDark ? "bg-[#180438]" : "bg-white"
+              )}
+            >
               {/* Removed general validationError Alert from CardContent */}
 
               {/* Contest Type Selection */}
@@ -4905,6 +4927,11 @@ export default function CreateContestPage({
                 <Input
                   id="title"
                   value={title}
+                  className={cn(
+                    isDark
+                      ? "bg-[#180438] border border-gray-600"
+                      : "bg-white"
+                  )}
                   onChange={(e) => {
                     setTitle(e.target.value);
                     clearToastError(); // Clear toast error when user starts typing
@@ -4920,8 +4947,12 @@ export default function CreateContestPage({
 
               <div>
                 <Label htmlFor="platform">Platform</Label>
-                <Select value={platform} onValueChange={setPlatform}>
-                  <SelectTrigger id="platform">
+                <Select value={platform} onValueChange={setPlatform} >
+                  <SelectTrigger id="platform"  className={cn(
+                    isDark
+                      ? "bg-[#180438] border border-gray-600"
+                      : "bg-white"
+                  )}>
                     <SelectValue placeholder="Select contest platform" />
                   </SelectTrigger>
                   <SelectContent>
@@ -4940,7 +4971,11 @@ export default function CreateContestPage({
                   value={category}
                   onValueChange={(value) => setCategory(value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger  className={cn(
+                    isDark
+                      ? "bg-[#180438] border border-gray-600"
+                      : "bg-white"
+                  )}>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
@@ -4968,9 +5003,12 @@ export default function CreateContestPage({
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
+                 
                   className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
                     isDragActive
-                      ? "border-rose-500 bg-rose-50"
+                      ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                      : isDark
+                      ? "border-slate-600 bg-[#170337]"
                       : "border-gray-300 bg-white"
                   }`}
                   onClick={() => fileInputRef.current?.click()}
@@ -5057,7 +5095,12 @@ export default function CreateContestPage({
                 {/* Only show red styled error, removed black error display */}
                 <div className="flex gap-2 ml-auto">
                   <button
-                    className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                     className={cn(
+                      "border font-semibold px-4 py-2 rounded-lg text-md",
+                      isDark
+                        ? "border-gray-300 text-gray-300"
+                        : "border-[#4A00BE] text-[#4A00BE]"
+                    )}
                     onClick={handleSaveDraft}
                     disabled={isLoading || !title.trim()}
                   >
@@ -5076,7 +5119,13 @@ export default function CreateContestPage({
                     )}
                   </button>
                   <button
-                    className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE]"
+                   
+                    className={cn(
+                      "cursor-pointer px-8 py-2 rounded-lg text-md ",
+                      isDark
+                        ? "bg-[#7F39EC] text-white"
+                        : "bg-[#4A00BE] text-white"
+                    )}
                     type="button"
                     onClick={nextStep}
                     disabled={isNextDisabled() || isLoading}
@@ -5096,12 +5145,27 @@ export default function CreateContestPage({
               
             </CardHeader> */}
 
-            <div className="p-6 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
-              <h2 className="text-purple-600 font-semibold text-2xl">
+            <div 
+            className={cn(
+              "p-6 border-b rounded-t-xl shadow-xl space-y-6",
+              isDark
+                ? "bg-[#180438] border-gray-600"
+                : "border-[#D0D0D0] bg-white"
+            )}>
+              <h2 className={cn(
+                "font-semibold text-2xl ",
+                isDark ? "text-white" : "text-purple-600"
+              )}>
                 Project Overview
               </h2>
             </div>
-            <CardContent className="space-y-6 p-6 rounded-bl-xl rounded-br-xl bg-white shadow-xl">
+            <CardContent 
+            className={cn(
+              "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
+              isDark
+                ? "bg-[#180438]"
+                : "bg-white"
+            )}>
               {/* formFeedback display removed from CardContent for brief step, it's in the CardFooter */}
 
               <div className="space-y-2">
@@ -5127,14 +5191,20 @@ export default function CreateContestPage({
                     </Button>
                   </div>
                 </div>
-                <p className="text-md text-gray-600 dark:text-gray-400">
+                <p 
+                className={cn(
+                  "text-md",
+                  isDark
+                    ? "text-white"
+                    : "text-gray-600 dark:text-gray-400"
+                )}>
                   Provide a detailed description of your project, what you want
                   creators to do, key messages, target audience, and specific
                   requirements.
                 </p>
 
                 {showBriefPreview ? (
-                  <div className="border rounded-lg p-4 min-h-[300px] bg-white">
+                  <div className="border rounded-lg p-4 min-h-[300px]">
                     <h4 className="text-sm font-medium mb-2 text-gray-600">
                       Preview:
                     </h4>
@@ -5152,7 +5222,7 @@ export default function CreateContestPage({
                     />
                   </div>
                 ) : (
-                  <div className="bg-white rounded min-h-[300px]">
+                  <div className="min-h-[300px]">
                     <NovelEditor
                       value={brief}
                       placeholder="Describe your project, what you want creators to do, key messages, target audience, and any specific requirements..."
@@ -5196,13 +5266,19 @@ export default function CreateContestPage({
                     </Button>
                   </div>
                 </div>
-                <p className="text-md text-gray-600 dark:text-gray-400">
+                <p 
+                className={cn(
+                  "text-md",
+                  isDark
+                    ? "text-white"
+                    : "text-gray-600 dark:text-gray-400"
+                )}>
                   Define clear rules and guidelines for participants to follow
                   when creating content for your contest.
                 </p>
 
                 {showRulesPreview ? (
-                  <div className="border rounded-lg p-4 min-h-[300px] bg-white">
+                  <div className="border rounded-lg p-4 min-h-[300px]">
                     <h4 className="text-sm font-medium mb-2 text-gray-600">
                       Preview:
                     </h4>
@@ -5220,7 +5296,7 @@ export default function CreateContestPage({
                     />
                   </div>
                 ) : (
-                  <div className="bg-white rounded min-h-[300px]">
+                  <div className="min-h-[300px]">
                     <NovelEditor
                       value={rulesHtml}
                       placeholder="Content rules and guidelines..."
@@ -5262,11 +5338,14 @@ export default function CreateContestPage({
                   type="button"
                   onClick={prevStep}
                   disabled={isLoading}
-                  className={`${
-                    !(formFeedback && formFeedbackType === "error")
-                      ? "mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
-                      : ""
-                  }`}
+                  className={cn(
+                    "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                    !(formFeedback && formFeedbackType === "error") && (
+                      isDark
+                        ? "border-gray-300 text-gray-300"
+                        : "border-[#4A00BE] text-[#4A00BE]"
+                    )
+                  )}
                 >
                   Back
                 </button>
@@ -5278,7 +5357,13 @@ export default function CreateContestPage({
                   }`}
                 >
                   <button
-                    className="mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                    
+                    className={cn(
+                      "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                      isDark
+                        ? "border-gray-300 text-gray-300"
+                        : "border-[#4A00BE] text-[#4A00BE]"
+                    )}
                     onClick={handleSaveDraft}
                     disabled={isLoading || !title.trim()}
                   >
@@ -5297,7 +5382,13 @@ export default function CreateContestPage({
                     )}
                   </button>
                   <button
-                    className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE]"
+                    
+                    className={cn(
+                      "cursor-pointer px-8 py-2 rounded-lg text-md ",
+                      isDark
+                        ? "bg-[#7F39EC] text-white"
+                        : "bg-[#4A00BE] text-white"
+                    )}
                     type="button"
                     onClick={nextStep}
                     disabled={isNextDisabled() || isLoading}
@@ -5314,14 +5405,29 @@ export default function CreateContestPage({
           <>
             {/* Resources for Participants Section */}
             <div className="mb-8">
-              <div className="px-6 py-5 border-b border-[#D0D0D0] rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6">
-                <h2 className="text-purple-600 font-semibold text-2xl">
+              <div 
+               className={cn(
+                "px-6 py-4 border-b rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6",
+                isDark
+                  ? "bg-[#180438] border-gray-600"
+                  : "bg-white border-[#D0D0D0]"
+              )}>
+                <h2 className={cn(
+                  "font-semibold text-2xl ",
+                  isDark ? "text-white" : "text-purple-600"
+                )}>
                   Add Resources
                 </h2>
               </div>
-              <div className="space-y-6 px-1 rounded-b-xl pb-5 bg-white shadow-xl">
-                <CardHeader>
-                  <CardTitle>
+              <div 
+              className={cn(
+                "space-y-6 px-1 rounded-b-xl pb-5 shadow-xl",
+                isDark
+                  ? "bg-[#180438]"
+                  : "bg-white"
+              )}>
+                <div className="px-6 pt-6">
+                  <CardTitle className="mb-3">
                     Resources for Participants{" "}
                     <span className="text-red-500">*</span>
                   </CardTitle>
@@ -5334,16 +5440,18 @@ export default function CreateContestPage({
                   <span className="text-sm text-red-600 font-medium mt-2">
                     At least one required
                   </span>
-                </CardHeader>
+                </div>
                 <CardContent className="space-y-6">
                   {/* Asset Upload */}
                   <div className="flex flex-col gap-6">
                     <div
-                      className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${
-                        isDragActive
-                          ? "border-rose-500 bg-rose-50"
-                          : "border-gray-300 bg-white"
-                      }`}
+                     className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                      isDragActive
+                        ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
+                        : isDark
+                        ? "border-slate-600 bg-[#170337]"
+                        : "border-gray-300 bg-white"
+                    }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -5592,7 +5700,8 @@ export default function CreateContestPage({
                     <div className="flex-grow border-t border-gray-300"></div>
                   </div>
                   {/* External Link Input */}
-                  <div className="">
+                  <div>
+                  <div className="space-y-2">
                     <Label htmlFor="resourceLinkUrl">External Link</Label>
                     <Input
                       id="resourceLinkUrl"
@@ -5600,8 +5709,14 @@ export default function CreateContestPage({
                       placeholder="https://example.com/resource"
                       value={newResourceUrl}
                       onChange={(e) => setNewResourceUrl(e.target.value)}
-                      className="mb-6 mt-[3px]"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
+                    </div>
+                    <div className="space-y-2 mt-4 mb-4">
                     <Label htmlFor="resourceLinkDescription">
                       Description <span className="text-red-500">*</span>
                     </Label>
@@ -5612,8 +5727,14 @@ export default function CreateContestPage({
                       onChange={(e) =>
                         setExternalResourceDescription(e.target.value)
                       }
-                      className="mb-6 mt-[3px]"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                      
                     />
+                    </div>
                     <Button
                       type="button"
                       onClick={addResource}
@@ -5658,7 +5779,11 @@ export default function CreateContestPage({
                         return (
                           <li
                             key={idx}
-                            className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                            className={cn("flex items-center  gap-3 border rounded-lg p-4 shadow-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : " bg-white border-gray-200"
+                            )}
                           >
                             {isInternal && isImage && !isPdf && (
                               <img
@@ -5808,7 +5933,12 @@ export default function CreateContestPage({
                               <div className="font-medium">
                                 {resource.description}
                               </div>
-                              <div className="text-xs text-gray-700 mt-1">
+                              <div 
+                               className={cn("text-xs mt-1",
+                                isDark
+                                  ? "text-white"
+                                  : "text-gray-700"
+                              )}>
                                 {resource.type === "internal"
                                   ? "Uploaded File"
                                   : "External Link"}
@@ -5818,7 +5948,11 @@ export default function CreateContestPage({
                                   href={resource.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 hover:underline break-all"
+                                  className={cn("text-sm hover:underline break-all",
+                                    isDark
+                                      ? "text-purple-500"
+                                      : "text-blue-600"
+                                  )}
                                 >
                                   {resource.url}
                                 </a>
@@ -5889,7 +6023,12 @@ export default function CreateContestPage({
                         type="url"
                         placeholder="https://instagram.com/example"
                         value={newInspirationUrl}
-                        className="mb-5"
+                       
+                        className={cn("mb-3",
+                          isDark
+                            ? "bg-[#180438] border border-gray-600"
+                            : "bg-white"
+                        )}
                         onChange={(e) => setNewInspirationUrl(e.target.value)}
                       />
                       <Label
@@ -5903,7 +6042,11 @@ export default function CreateContestPage({
                         id="inspirationDescriptionInput"
                         placeholder="Add description here*"
                         value={newInspirationDescription}
-                        className="mb-5"
+                        className={cn("mb-4",
+                          isDark
+                            ? "bg-[#180438] border border-gray-600"
+                            : "bg-white"
+                        )}
                         onChange={(e) =>
                           setNewInspirationDescription(e.target.value)
                         }
@@ -5930,7 +6073,12 @@ export default function CreateContestPage({
                         {inspirationLinks.map((item, index) => (
                           <li
                             key={index}
-                            className="flex items-center  gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                           
+                            className={cn("flex items-center  gap-3 border rounded-lg p-4 shadow-sm",
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : " bg-white border-gray-200"
+                            )}
                           >
                             <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
                               <ExternalLink className="w-6= h-6" />
@@ -5941,7 +6089,12 @@ export default function CreateContestPage({
                                 href={item.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-medium text-blue-600 hover:underline break-all"
+                                
+                                className={cn("font-medium hover:underline break-all",
+                                  isDark
+                                    ? "text-purple-500"
+                                    : "text-blue-600"
+                                )}
                               >
                                 {item.url}
                               </a>
@@ -5962,7 +6115,12 @@ export default function CreateContestPage({
                   </CardContent>
                   <CardFooter className="py-6 px-6">
                     <button
-                      className="mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                      
+                      className={cn("mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                        isDark
+                          ? "text-white border-gray-400"
+                          : "border-[#4A00BE] text-[#4A00BE]"
+                      )}
                       type="button"
                       onClick={prevStep}
                       disabled={isLoading}
@@ -5971,7 +6129,11 @@ export default function CreateContestPage({
                     </button>
                     <div className="flex gap-2 ml-auto">
                       <button
-                        className="mr-auto border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE]"
+                        className={cn("mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
+                          isDark
+                            ? "text-white border-gray-400"
+                            : "border-[#4A00BE] text-[#4A00BE]"
+                        )}
                         onClick={handleSaveDraft}
                         disabled={isLoading || !title.trim()}
                       >
@@ -5987,7 +6149,11 @@ export default function CreateContestPage({
                         )}
                       </button>
                       <button
-                        className="bg-[#4A00BE] cursor-pointer px-8 py-2 rounded-lg text-md text-white hover:bg-[#4A00BE]"
+                        className={cn("cursor-pointer px-8 py-2 rounded-lg text-md",
+                          isDark
+                            ? "bg-[#7F39EC] text-white"
+                            : "bg-[#4A00BE] text-white"
+                        )}
                         type="button"
                         onClick={nextStep}
                         disabled={

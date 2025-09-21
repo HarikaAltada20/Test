@@ -34,7 +34,7 @@ const EnhancedTabsTrigger = React.forwardRef<
             "flex items-center justify-center gap-2 px-4 py-3 whitespace-nowrap text-sm font-medium transition-all duration-300",
             "flex-1 min-w-fit",
             "text-muted-foreground hover:text-foreground",
-            "data-[state=active]:bg-[#7F39EC] data-[state=active]:text-primary-foreground data-[state=active]:font-bold",
+            "data-[state=active]:bg-[#7F39EC] data-[state=active]:border-[#7F39EC] data-[state=active]:text-white data-[state=active]:font-bold",
             // "data-[state=active]:shadow-xl data-[state=active]:border-2 data-[state=active]:border-primary",
             // "data-[state=active]:scale-105 data-[state=active]:ring-2 data-[state=active]:ring-primary/30",
             "data-[state=active]:relative data-[state=active]:z-10",

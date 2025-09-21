@@ -3736,7 +3736,14 @@ export default function EditContestPage({
 
       {/* Dates Only Warning */}
       {datesOnly && (
-        <Alert className="mb-6 border-blue-200 bg-blue-50 text-blue-900">
+        <Alert
+          className={cn(
+            "mb-6",
+            isDark
+              ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
+              : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+          )}
+        >
           <Info className="h-4 w-4" />
           <AlertDescription>
             <strong>Dates Only Mode:</strong> This contest is approved. You can
@@ -3748,16 +3755,28 @@ export default function EditContestPage({
 
       {/* Current Plan Information */}
       <div className="mb-6">
-        <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
+        <div
+          className={cn(
+            "border px-4 py-4 rounded-lg",
+            isDark
+              ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
+              : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+          )}
+        >
           <AlertDescription className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-start sm:items-center gap-2 ">
-              <Crown className="h-5 w-5 text-[#7F39EC]" />
+              <Crown
+                className={cn(
+                  "h-5 w-5",
+                  isDark ? "text-[#C9A7FF]" : "text-[#7F39EC]"
+                )}
+              />
 
               <div>
                 <span className="font-medium text-md">Current Plan: </span>
                 {subscriptionPlans.find((p) => p.id === userPlan)?.name ||
                   "EXPLORER"}
-                <span className="ml-3 text-md text-black">
+                <span className="ml-3 text-md">
                   • Max Winners: {planFeatures.maxWinnersPerContest}• Min Prize
                   Pool: {formatCurrencyFromCents(planFeatures.minContestBudget)}
                 </span>
@@ -3779,7 +3798,14 @@ export default function EditContestPage({
       {contestCommissionRate !== null &&
         currentPlanCommissionRate !== null &&
         contestCommissionRate !== currentPlanCommissionRate && (
-          <Alert className="mb-6 border-blue-200 bg-blue-50 w-full">
+          <Alert
+            className={cn(
+              "mb-6 w-full",
+              isDark
+                ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
+                : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+            )}
+          >
             <Info className="h-4 w-4 flex-shrink-0" />
             <AlertDescription className="min-w-0">
               <strong>Commission Rate Notice:</strong> This contest was created
@@ -3800,8 +3826,18 @@ export default function EditContestPage({
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
-        <div className="py-2 px-6 border-b border-[#D0D0D0]">
-          <CardTitle className="text-[20px] text-purple-500">
+        <div
+          className={cn(
+            "py-2 px-6 border-b",
+            isDark ? "border-gray-600" : "border-[#D0D0D0]"
+          )}
+        >
+          <CardTitle
+            className={cn(
+              "text-[20px]",
+              isDark ? "text-white" : "text-purple-500"
+            )}
+          >
             Edit Contest Details
           </CardTitle>
         </div>
@@ -3819,7 +3855,7 @@ export default function EditContestPage({
                   }}
                   placeholder="Game Of Creators! Get Paid to Create"
                   className={cn(
-                    isDark ? "bg-[#180438] border border-gray-700" : "bg-white"
+                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white"
                   )}
                   required
                 />
@@ -3835,7 +3871,7 @@ export default function EditContestPage({
                     <SelectTrigger
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                     >
@@ -4006,18 +4042,18 @@ export default function EditContestPage({
               </p>
 
               {showBriefPreview ? (
-                <div 
-                className={`border rounded-lg p-4 min-h-[300px] ${
-                  isDark
-                    ? "text-white bg-[#170337] border-gray-700"
-                    : "bg-white"
-                }`}>
-                  <h4 
-                   className={`text-sm font-medium mb-2${
+                <div
+                  className={`border rounded-lg p-4 min-h-[300px] ${
                     isDark
-                      ? "text-white"
-                      : "text-gray-600"
-                  }`}>
+                      ? "text-white bg-[#170337] border-gray-600"
+                      : "bg-white"
+                  }`}
+                >
+                  <h4
+                    className={`text-sm font-medium mb-2${
+                      isDark ? "text-white" : "text-gray-600"
+                    }`}
+                  >
                     Preview:
                   </h4>
                   <div
@@ -4079,21 +4115,21 @@ export default function EditContestPage({
 
               {showRulesPreview ? (
                 <div
-                className={`border rounded-lg p-4 min-h-[300px] ${
-                  isDark
-                    ? "text-white bg-[#170337] border-gray-700"
-                    : "bg-white"
-                }`}>
-                  <h4 
-                   className={`text-sm font-medium mb-2${
-                      isDark
-                        ? "text-white"
-                        : "text-gray-600"
-                    }`}>
+                  className={`border rounded-lg p-4 min-h-[300px] ${
+                    isDark
+                      ? "text-white bg-[#170337] border-gray-600"
+                      : "bg-white"
+                  }`}
+                >
+                  <h4
+                    className={`text-sm font-medium mb-2${
+                      isDark ? "text-white" : "text-gray-600"
+                    }`}
+                  >
                     Preview:
                   </h4>
                   <div
-                     className={`max-w-none ${
+                    className={`max-w-none ${
                       isDark
                         ? "text-white"
                         : "prose prose-lg dark:prose-invert prose-headings:font-title font-default "
@@ -4295,38 +4331,40 @@ export default function EditContestPage({
                 {/* External Link Input */}
                 <div className="space-y-4">
                   <div className="space-y-2">
-                  <Label htmlFor="resourceLinkUrl">External Link</Label>
-                  <Input
-                    id="resourceLinkUrl"
-                    type="url"
-                    placeholder="https://example.com/resource"
-                    value={newExternalResourceUrl}
-                    onChange={(e) => setNewExternalResourceUrl(e.target.value)}
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-700"
-                        : "bg-white"
-                    )}
-                  />
+                    <Label htmlFor="resourceLinkUrl">External Link</Label>
+                    <Input
+                      id="resourceLinkUrl"
+                      type="url"
+                      placeholder="https://example.com/resource"
+                      value={newExternalResourceUrl}
+                      onChange={(e) =>
+                        setNewExternalResourceUrl(e.target.value)
+                      }
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
                   </div>
                   <div className="space-y-2">
-                  <Label htmlFor="resourceLinkDescription">
-                    Description <span className="text-red-500">*</span>
-                  </Label>
-                 
-                  <Input
-                    id="resourceLinkDescription"
-                    placeholder="Describe this link"
-                    value={externalResourceDescription}
-                    onChange={(e) =>
-                      setExternalResourceDescription(e.target.value)
-                    }
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-700"
-                        : "bg-white"
-                    )}
-                  />
+                    <Label htmlFor="resourceLinkDescription">
+                      Description <span className="text-red-500">*</span>
+                    </Label>
+
+                    <Input
+                      id="resourceLinkDescription"
+                      placeholder="Describe this link"
+                      value={externalResourceDescription}
+                      onChange={(e) =>
+                        setExternalResourceDescription(e.target.value)
+                      }
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
                   </div>
                   <Button
                     type="button"
@@ -4385,11 +4423,12 @@ export default function EditContestPage({
                       return (
                         <li
                           key={idx}
-                        className={cn("flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
-                          isDark
-                            ? "bg-[#180438] border-gray-700"
-                            : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 "
-                        )}
+                          className={cn(
+                            "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
+                            isDark
+                              ? "bg-[#180438] border-gray-600"
+                              : "bg-white dark:bg-gray-800 border border-gray-200"
+                          )}
                         >
                           {/* File Type Icons */}
                           {isInternal && isImage && (
@@ -4667,11 +4706,12 @@ export default function EditContestPage({
                               {resource.description}
                             </div>
                             <div className="text-xs mt-1 flex items-center gap-2">
-                              <span className={cn("text-sm",
-                                isDark
-                                  ? "text-white"
-                                  : "text-gray-600"
-                              )}>
+                              <span
+                                className={cn(
+                                  "text-sm",
+                                  isDark ? "text-white" : "text-gray-600"
+                                )}
+                              >
                                 {resource.type === "internal"
                                   ? "Uploaded File"
                                   : "External Link"}
@@ -4685,12 +4725,10 @@ export default function EditContestPage({
                                 href={resource.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={cn("text-sm hover:underline break-all",
-                                  isDark
-                                    ? "text-purple-500"
-                                    : "text-blue-600"
+                                className={cn(
+                                  "text-sm hover:underline break-all",
+                                  isDark ? "text-purple-500" : "text-blue-600"
                                 )}
-                               
                               >
                                 {resource.url}
                               </a>
@@ -4783,7 +4821,7 @@ export default function EditContestPage({
                       value={newInspirationUrl}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                       onChange={(e) => setNewInspirationUrl(e.target.value)}
@@ -4800,7 +4838,7 @@ export default function EditContestPage({
                       value={newInspirationDescription}
                       className={cn(
                         isDark
-                          ? "bg-[#180438] border border-gray-700"
+                          ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
                       )}
                       onChange={(e) =>
@@ -4823,10 +4861,11 @@ export default function EditContestPage({
                     {inspirationLinks.map((item, index) => (
                       <li
                         key={index}
-                        className={cn("flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
+                        className={cn(
+                          "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                           isDark
-                            ? "bg-[#180438] border-gray-700"
-                            : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 "
+                            ? "bg-[#180438] border-gray-600"
+                            : "bg-white dark:bg-gray-800 border border-gray-200"
                         )}
                       >
                         <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12">
@@ -4837,19 +4876,19 @@ export default function EditContestPage({
                             href={item.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={cn("font-medium hover:underline break-all",
-                              isDark
-                                ? "text-purple-500"
-                                : "text-blue-600"
+                            className={cn(
+                              "font-medium hover:underline break-all",
+                              isDark ? "text-purple-500" : "text-blue-600"
                             )}
                           >
                             {item.url}
                           </a>
-                          <div className={cn("text-xs mt-1",
-                            isDark
-                              ? "text-white"
-                              : "text-gray-600"
-                          )}>
+                          <div
+                            className={cn(
+                              "text-xs mt-1",
+                              isDark ? "text-white" : "text-gray-600"
+                            )}
+                          >
                             {item.description}
                           </div>
                         </div>
@@ -4879,12 +4918,12 @@ export default function EditContestPage({
                   contestType === "cpm" ? "CPM Based" : "Leaderboard Based"
                 }
                 readOnly
-                className={cn("cursor-not-allowed",
+                className={cn(
+                  "cursor-not-allowed",
                   isDark
-                    ? "bg-[#180438] border border-gray-700 text-white"
+                    ? "bg-[#180438] border border-gray-600 text-white"
                     : "bg-gray-100"
                 )}
-               
               />
             </div>
           )}
@@ -4899,9 +4938,14 @@ export default function EditContestPage({
                   id="start-date"
                   type="date"
                   value={startDate}
+                  className={cn(
+                    "w-full",
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                  )}
                   onChange={(e) => setStartDate(e.target.value)}
                   min={getMinDateTime()}
-                  className="w-full"
                 />
               </div>
               <div className="space-y-2">
@@ -4911,7 +4955,12 @@ export default function EditContestPage({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full"
+                  className={cn(
+                    "w-full",
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -4922,7 +4971,12 @@ export default function EditContestPage({
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   min={getMinEndDate()}
-                  className="w-full"
+                  className={cn(
+                    "w-full",
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -4935,17 +4989,34 @@ export default function EditContestPage({
                   min={
                     endDate === getMinEndDate() ? getMinEndTime() : undefined
                   }
-                  className="w-full"
+                  className={cn(
+                    "w-full",
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                  )}
                 />
               </div>
             </div>
 
             {getContestDuration() && (
-              <Alert className="mt-2 bg-green-50 border-green-200 text-green-700">
+              <Alert
+                className={cn(
+                  "mt-2 border",
+                  isDark
+                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                    : "bg-green-50 border-green-200 text-green-700"
+                )}
+              >
                 <AlertDescription>{getContestDuration()}</AlertDescription>
               </Alert>
             )}
-            <p className="text-sm text-gray-500 mt-1">
+            <p
+              className={cn(
+                "text-[13px] mt-1",
+                isDark ? "text-white" : "text-gray-500"
+              )}
+            >
               <strong>Start Date Rule:</strong> Contest must start at least{" "}
               {MIN_DAYS_UNTIL_START} days from today.{" "}
               {getStartDateRuleExample()}
@@ -5189,6 +5260,11 @@ export default function EditContestPage({
                   <Input
                     id="cpmRate"
                     type="number"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
                     value={cpmRate}
                     onChange={(e) => setCpmRate(e.target.value)}
                     onBlur={(e) => {
@@ -5228,6 +5304,11 @@ export default function EditContestPage({
                     id="totalBudget"
                     type="number"
                     value={totalBudget}
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
                     onChange={(e) => {
                       setTotalBudget(e.target.value);
                       checkBudgetChange(undefined, e.target.value);
@@ -5245,6 +5326,11 @@ export default function EditContestPage({
                     id="minViews"
                     type="number"
                     value={minViews}
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
                     onChange={(e) => {
                       const value = e.target.value;
                       setMinViews(value);
@@ -5312,6 +5398,11 @@ export default function EditContestPage({
                     id="maxViews"
                     type="number"
                     value={maxViews}
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
                     onChange={(e) => {
                       const value = e.target.value;
                       setMaxViews(value);
@@ -5380,6 +5471,9 @@ export default function EditContestPage({
                 <Textarea
                   id="termsConditions"
                   value={termsConditions}
+                  className={cn(
+                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white"
+                  )}
                   onChange={(e) => setTermsConditions(e.target.value)}
                   placeholder="Outline the specific terms and conditions for creators participating in this CPM contest..."
                   rows={6}
@@ -5466,7 +5560,12 @@ export default function EditContestPage({
             <button
               onClick={() => router.back()}
               disabled={isSubmitting}
-              className="border font-semibold border-[#4A00BE] px-4 py-2 rounded-lg text-md text-[#4A00BE] w-full sm:w-auto"
+              className={cn(
+                "border font-semibold px-4 py-2 rounded-lg text-md w-full sm:w-auto",
+                isDark
+                  ? "text-white border-gray-400"
+                  : "border-[#4A00BE] bg-white text-[#4A00BE]"
+              )}
             >
               Cancel
             </button>
@@ -5494,7 +5593,12 @@ export default function EditContestPage({
                 <>
                   <div className="flex flex-col sm:flex-row gap-2 w-full">
                     <button
-                      className="border h-[38px] font-semibold border-[#4A00BE] px-3 sm:px-4 py-2 rounded-lg text-sm text-[#4A00BE] w-full sm:w-auto flex-shrink-0 whitespace-nowrap"
+                      className={cn(
+                        "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
+                        isDark
+                          ? "text-white border-gray-400"
+                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                      )}
                       onClick={handleSaveAsDraft}
                       disabled={isSubmitting || !!validationError}
                     >
