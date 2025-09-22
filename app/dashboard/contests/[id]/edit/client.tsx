@@ -5614,7 +5614,14 @@ export default function EditContestPage({
                     <Button
                       onClick={handleResubmitForApproval}
                       disabled={isSubmitting || !!validationError}
-                      className="bg-[#4A00BE] h-[38px] cursor-pointer py-2 px-4 rounded-lg text-sm text-white hover:bg-[#4A00BE] w-full sm:w-auto flex-shrink-0 whitespace-nowrap"
+                     
+
+                      className={cn(
+                        "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
+                        isDark
+                          ? "bg-[#7F39EC]"
+                          : "bg-[#4A00BE]"
+                      )}
                     >
                       {isSubmitting ? (
                         <div className="flex items-center gap-2">
