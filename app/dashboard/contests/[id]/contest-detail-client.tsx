@@ -1305,9 +1305,12 @@ export default function ContestDetailClient({
           {currentContest.contest_type === "leaderboard" &&
             currentContest.contest_based_details?.leaderboard_contest
               ?.total_prize != null && (
-              <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+              <div   className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}>
                 <CardContent className="p-4 flex justify-between">
-                  <div className="flex-1 text-black space-y-3">
+                  <div className="flex-1  space-y-3">
                     <p className="text-lg font-medium">Prize Pool</p>
                     <p className="text-xl font-bold">
                       {formatMoney(
@@ -1323,7 +1326,11 @@ export default function ContestDetailClient({
                       winners
                     </p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                  <div className={cn("w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}>
                     <Trophy className="h-5 w-5" />
                   </div>
                 </CardContent>
@@ -1687,7 +1694,13 @@ export default function ContestDetailClient({
                         <div className="border border-[#757272] rounded-xl transition-all duration-300">
                           <CardContent className="p-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                              <div 
+                               className={cn(
+                                "w-10 h-10 flex items-center justify-center rounded-full ",
+                                isDark
+                                  ? "bg-[#FFFFFF42] text-white"
+                                  : "bg-purple-100 text-[#4A00BE]"
+                              )}>
                                 <Trophy className="h-5 w-5" />
                               </div>
                               <div className="flex-1">
@@ -1709,7 +1722,12 @@ export default function ContestDetailClient({
                         <div className="border border-[#757272] rounded-xl transition-all duration-300">
                           <CardContent className="p-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                              <div  className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-full ",
+                            isDark
+                              ? "bg-[#FFFFFF42] text-white"
+                              : "bg-purple-100 text-[#4A00BE]"
+                          )}>
                                 <Users className="h-5 w-5" />
                               </div>
                               <div className="flex-1">
@@ -1780,17 +1798,33 @@ export default function ContestDetailClient({
                               .map((prize: any, index: number) => (
                                 <div
                                   key={index}
-                                  className="flex items-center justify-between py-3 px-3 rounded-lg border"
+                                
+                                  className={cn(
+                                    "flex items-center justify-between py-3 px-3 rounded-lg border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400"
+                                  )}
                                 >
                                   <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 border rounded-full font-bold text-sm">
+                                    <div 
+                                    className={cn(
+                                      "w-8 h-8 rounded-full flex items-center justify-center border rounded-full font-bold text-sm",
+                                      isDark
+                                        ? "border-gray-500 text-gray-300"
+                                        : "border-gray-400 text-gray-400"
+                                    )}>
                                       {prize.position}
                                     </div>
                                     <span className="font-medium text-foreground">
                                       Position {prize.position}
                                     </span>
                                   </div>
-                                  <span className="font-bold text-gray-500 text-lg">
+                                  <span className={cn("font-bold text-lg",
+                                    isDark
+                                      ? "text-gray-300"
+                                      : "text-gray-500"
+                                  )}>
                                     {formatMoney(prize.amount)}
                                   </span>
                                 </div>
@@ -2430,8 +2464,12 @@ export default function ContestDetailClient({
                   <CardContent className="p-5">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
                       <div className="flex items-center gap-4">
-                        <div className="p-4 bg-[#D8C3FF] rounded-full">
-                          <Trophy className="h-6 w-6 text-[#4A00BE]" />
+                        <div className={cn(
+                          "p-4 rounded-full",
+                          isDark ? "bg-[#FFFFFF36] text-white" : "bg-[#D8C3FF] text-[#4A00BE]"
+                        )}
+                        >
+                          <Trophy className="h-6 w-6" />
                         </div>
                         <div>
                           <h2
@@ -2549,7 +2587,11 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                           
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200"
+                            )}
                           >
                             {currentSubmissions.length}
                           </Badge>
@@ -2572,7 +2614,10 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200"
+                            )}
                           >
                             {
                               currentSubmissions.filter(
@@ -2599,7 +2644,10 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200"
+                            )}
                           >
                             {
                               currentSubmissions.filter(
@@ -2625,7 +2673,10 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200"
+                            )}
                           >
                             {
                               currentSubmissions.filter(
@@ -2651,7 +2702,10 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200"
+                            )}
                           >
                             {
                               currentSubmissions.filter(
@@ -2677,7 +2731,10 @@ export default function ContestDetailClient({
                           </div>
                           <Badge
                             variant="secondary"
-                            className="px-1.5 py-0.5 text-sm text-[#7F39EC] bg-purple-200 h-5 "
+                            className={cn(
+                              "px-1.5 py-0.5 text-sm h-5",
+                              isDark ? "text-white bg-[#FFFFFF36]" : "text-[#7F39EC] bg-purple-200"
+                            )}
                           >
                             {
                               currentSubmissions.filter(

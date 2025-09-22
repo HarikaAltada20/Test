@@ -88,6 +88,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -117,8 +118,10 @@ export default function BillingClientPage({
   const searchParams = useSearchParams();
 
   // Get initial tab from URL parameter, fallback to "cash"
-  const initialTab = searchParams.get('tab') || "cash";
-  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: initialTab });
+  const initialTab = searchParams.get("tab") || "cash";
+  const { activeTab, setActiveTab } = useTabState(tabs, {
+    defaultTab: initialTab,
+  });
 
   // States derived from props, allowing client-side updates
   const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
@@ -170,7 +173,7 @@ export default function BillingClientPage({
   const [bankCountry, setBankCountry] = useState("IN");
   const [bankSortCode, setBankSortCode] = useState("");
   const [bankRoutingNumber, setBankRoutingNumber] = useState("");
-
+  const [mode, setMode] = useState<"light" | "dark">("light");
   // Withdrawal form states
   const [withdrawAmountDollars, setWithdrawAmountDollars] = useState<number>(0);
   const [withdrawAmountCoins, setWithdrawAmountCoins] = useState<number>(0);
@@ -179,6 +182,34 @@ export default function BillingClientPage({
   >(null);
   const [withdrawalUserNotes, setWithdrawalUserNotes] = useState("");
 
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Pagination for cash transactions
   const {
@@ -190,7 +221,7 @@ export default function BillingClientPage({
     setLimit: setCashLimit,
     refresh: refreshCashTransactions,
   } = usePagination<CashTransaction>({
-    apiEndpoint: '/api/money-transactions',
+    apiEndpoint: "/api/money-transactions",
     initialLimit: 25,
   });
 
@@ -198,11 +229,19 @@ export default function BillingClientPage({
   const getPayoutMethodSummary = (method: PayoutMethod): string => {
     switch (method.method_type) {
       case "crypto":
-        return `${method.details?.network?.toUpperCase() || 'Crypto'} Wallet: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Crypto'})`;
+        return `${
+          method.details?.network?.toUpperCase() || "Crypto"
+        } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${
+          method.friendly_name || "Crypto"
+        })`;
       case "upi":
-        return `UPI: ${method.details?.upi_id || 'N/A'} (${method.friendly_name || 'UPI'})`;
+        return `UPI: ${method.details?.upi_id || "N/A"} (${
+          method.friendly_name || "UPI"
+        })`;
       case "bank_transfer":
-        return `Bank: ...${method.details?.account_number?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Bank'})`;
+        return `Bank: ...${
+          method.details?.account_number?.slice(-4) || "XXXX"
+        } (${method.friendly_name || "Bank"})`;
       default:
         return "Unknown Method Type";
     }
@@ -210,7 +249,7 @@ export default function BillingClientPage({
 
   const getPayoutMethodSummaryById = (methodId: string | null): string => {
     if (!methodId) return "Payout method deleted or N/A";
-    const method = payoutMethods.find(p => p.id === methodId);
+    const method = payoutMethods.find((p) => p.id === methodId);
     return method ? getPayoutMethodSummary(method) : "Unknown Method";
   };
 
@@ -227,30 +266,40 @@ export default function BillingClientPage({
     setCoinTransactionsState(initialCoinTransactions);
     setPayoutMethods(initialPayoutMethods);
     setWithdrawalRequests(
-      initialWithdrawalRequests.map(wr => ({
+      initialWithdrawalRequests.map((wr) => ({
         ...wr,
-        payout_method_summary: getPayoutMethodSummaryById(wr.payout_method_id === undefined ? null : wr.payout_method_id)
+        payout_method_summary: getPayoutMethodSummaryById(
+          wr.payout_method_id === undefined ? null : wr.payout_method_id
+        ),
       }))
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialAuthUser, initialProfile, initialUserData, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
+  }, [
+    initialAuthUser,
+    initialProfile,
+    initialUserData,
+    initialCoinTransactions,
+    initialPayoutMethods,
+    initialWithdrawalRequests,
+    router,
+  ]);
 
   // Reset form function
   const resetPayoutForm = () => {
     setCurrentPayoutMethod(null);
     setSelectedPayoutType("crypto");
-    setCryptoAddress('');
-    setCryptoNetwork('BNB_BEP20');
-    setUpiId('');
-    setBankAccountHolder('');
-    setBankAccountNumber('');
-    setBankIfscCode('');
-    setBankRoutingNumber('');
-    setBankName('');
-    setBankBranchName('');
-    setBankCountry('IN');
-    setPayoutFriendlyName('');
-    setPayoutCountry('IN');
+    setCryptoAddress("");
+    setCryptoNetwork("BNB_BEP20");
+    setUpiId("");
+    setBankAccountHolder("");
+    setBankAccountNumber("");
+    setBankIfscCode("");
+    setBankRoutingNumber("");
+    setBankName("");
+    setBankBranchName("");
+    setBankCountry("IN");
+    setPayoutFriendlyName("");
+    setPayoutCountry("IN");
   };
 
   // Simple BNB Smart Chain (BEP20) wallet validation: 0x + 40 hex chars
@@ -271,29 +320,43 @@ export default function BillingClientPage({
 
     let details: PayoutMethodDetails;
 
-    if (selectedPayoutType === 'crypto') {
+    if (selectedPayoutType === "crypto") {
       if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
         toast.error("Crypto wallet address and network are required.");
         return;
       }
-      if (cryptoNetwork !== 'BNB_BEP20') {
+      if (cryptoNetwork !== "BNB_BEP20") {
         toast.error("Only BNB Smart Chain (BEP20) is supported.");
         return;
       }
       if (!isValidBep20Address(cryptoAddress)) {
-        toast.error("Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars).");
+        toast.error(
+          "Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars)."
+        );
         return;
       }
-      details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim() };
-    } else if (selectedPayoutType === 'upi') {
+      details = {
+        wallet_address: cryptoAddress.trim(),
+        network: cryptoNetwork.trim(),
+      };
+    } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
         return;
       }
-      details = { account_holder_name: bankAccountHolder.trim(), upi_id: upiId.trim() };
-    } else if (selectedPayoutType === 'bank_transfer') {
-      if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankIfscCode.trim()) {
-        toast.error("Account holder name, account number, and IFSC code are required for bank transfer.");
+      details = {
+        account_holder_name: bankAccountHolder.trim(),
+        upi_id: upiId.trim(),
+      };
+    } else if (selectedPayoutType === "bank_transfer") {
+      if (
+        !bankAccountHolder.trim() ||
+        !bankAccountNumber.trim() ||
+        !bankIfscCode.trim()
+      ) {
+        toast.error(
+          "Account holder name, account number, and IFSC code are required for bank transfer."
+        );
         return;
       }
       const bankDetails: any = {
@@ -302,9 +365,11 @@ export default function BillingClientPage({
         ifsc_code: bankIfscCode.trim(),
         country: bankCountry.trim(),
       };
-      if (bankRoutingNumber.trim()) bankDetails.swift_bic_code = bankRoutingNumber.trim();
+      if (bankRoutingNumber.trim())
+        bankDetails.swift_bic_code = bankRoutingNumber.trim();
       if (bankName.trim()) bankDetails.bank_name = bankName.trim();
-      if (bankBranchName.trim()) bankDetails.branch_name = bankBranchName.trim();
+      if (bankBranchName.trim())
+        bankDetails.branch_name = bankBranchName.trim();
       details = bankDetails;
     } else {
       toast.error("Invalid payout method type selected.");
@@ -322,7 +387,7 @@ export default function BillingClientPage({
 
     try {
       const { data, error } = await supabase
-        .from('payout_methods')
+        .from("payout_methods")
         .upsert(methodToSave)
         .select()
         .single();
@@ -330,8 +395,8 @@ export default function BillingClientPage({
       if (error) throw error;
 
       if (data) {
-        setPayoutMethods(prevMethods => {
-          const index = prevMethods.findIndex(m => m.id === data.id);
+        setPayoutMethods((prevMethods) => {
+          const index = prevMethods.findIndex((m) => m.id === data.id);
           if (index !== -1) {
             const newMethods = [...prevMethods];
             newMethods[index] = data as PayoutMethod;
@@ -340,15 +405,21 @@ export default function BillingClientPage({
             return [...prevMethods, data as PayoutMethod];
           }
         });
-        toast.success(`Payout method ${currentPayoutMethod ? 'updated' : 'added'} successfully!`);
+        toast.success(
+          `Payout method ${
+            currentPayoutMethod ? "updated" : "added"
+          } successfully!`
+        );
         setIsPayoutModalOpen(false);
         resetPayoutForm();
       } else {
-        throw new Error("No data returned after saving payout method.")
+        throw new Error("No data returned after saving payout method.");
       }
     } catch (error: any) {
       console.error("Error saving payout method:", error);
-      toast.error(`Failed to save payout method: ${error.message || 'Unknown error'}`);
+      toast.error(
+        `Failed to save payout method: ${error.message || "Unknown error"}`
+      );
     }
     setIsLoading(false);
   };
@@ -356,21 +427,21 @@ export default function BillingClientPage({
   const handleEditPayoutMethod = (method: PayoutMethod) => {
     setCurrentPayoutMethod(method);
     setSelectedPayoutType(method.method_type);
-    setPayoutFriendlyName(method.friendly_name || '');
+    setPayoutFriendlyName(method.friendly_name || "");
 
-    if (method.method_type === 'crypto' && method.details) {
-      setCryptoAddress(method.details.wallet_address || '');
-      setCryptoNetwork(method.details.network || 'BNB_BEP20');
-    } else if (method.method_type === 'upi' && method.details) {
-      setUpiId(method.details.upi_id || '');
-    } else if (method.method_type === 'bank_transfer' && method.details) {
-      setBankAccountHolder(method.details.account_holder_name || '');
-      setBankAccountNumber(method.details.account_number || '');
-      setBankIfscCode(method.details.ifsc_code || '');
-      setBankRoutingNumber(method.details.swift_bic_code || '');
-      setBankName(method.details.bank_name || '');
-      setBankBranchName(method.details.branch_name || '');
-      setBankCountry(method.details.country || 'IN');
+    if (method.method_type === "crypto" && method.details) {
+      setCryptoAddress(method.details.wallet_address || "");
+      setCryptoNetwork(method.details.network || "BNB_BEP20");
+    } else if (method.method_type === "upi" && method.details) {
+      setUpiId(method.details.upi_id || "");
+    } else if (method.method_type === "bank_transfer" && method.details) {
+      setBankAccountHolder(method.details.account_holder_name || "");
+      setBankAccountNumber(method.details.account_number || "");
+      setBankIfscCode(method.details.ifsc_code || "");
+      setBankRoutingNumber(method.details.swift_bic_code || "");
+      setBankName(method.details.bank_name || "");
+      setBankBranchName(method.details.branch_name || "");
+      setBankCountry(method.details.country || "IN");
     }
     setIsPayoutModalOpen(true);
   };
@@ -378,13 +449,16 @@ export default function BillingClientPage({
   const handleDeletePayoutMethod = async (methodId: string) => {
     if (!confirm("Are you sure you want to delete this payout method?")) return;
     setIsLoading(true);
-    const { error } = await supabase.from("payout_methods").delete().eq("id", methodId);
+    const { error } = await supabase
+      .from("payout_methods")
+      .delete()
+      .eq("id", methodId);
     setIsLoading(false);
     if (error) {
       console.error("Error deleting payout method:", error);
       toast.error(`Failed to delete method: ${error.message}`);
     } else {
-      setPayoutMethods(payoutMethods.filter(p => p.id !== methodId));
+      setPayoutMethods(payoutMethods.filter((p) => p.id !== methodId));
       toast.success("Payout method deleted.");
     }
   };
@@ -415,7 +489,9 @@ export default function BillingClientPage({
       console.error("Error setting default payout method:", error);
       toast.error(`Failed to set default method: ${error.message}`);
     } else if (data) {
-      setPayoutMethods(payoutMethods.map(p => ({ ...p, is_default: p.id === data.id })));
+      setPayoutMethods(
+        payoutMethods.map((p) => ({ ...p, is_default: p.id === data.id }))
+      );
       toast.success("Default payout method updated.");
     }
   };
@@ -432,17 +508,21 @@ export default function BillingClientPage({
 
     const minWithdrawalDollars = MIN_WITHDRAWAL_AMOUNT / 100;
     let amountToWithdraw = 0;
-    let currencyForRpc = 'USD';
-    let amountTypeForRpc: 'cash' | 'coins' = activeTabModal;
+    let currencyForRpc = "USD";
+    let amountTypeForRpc: "cash" | "coins" = activeTabModal;
     let redeemedItemDescForRpc: any | null = null;
 
-    if (activeTabModal === 'cash') {
+    if (activeTabModal === "cash") {
       if (withdrawAmountDollars <= 0) {
         toast.error("Please enter a valid withdrawal amount.");
         return;
       }
       if (withdrawAmountDollars < minWithdrawalDollars) {
-        toast.error(`Minimum cash withdrawal amount is ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.`);
+        toast.error(
+          `Minimum cash withdrawal amount is ${formatCurrencyFromCents(
+            MIN_WITHDRAWAL_AMOUNT
+          )}.`
+        );
         return;
       }
       amountToWithdraw = Math.round(withdrawAmountDollars * 100); // Convert to cents
@@ -450,13 +530,14 @@ export default function BillingClientPage({
         toast.error("Insufficient cash balance.");
         return;
       }
-    } else { // activeTabModal === 'coins'
+    } else {
+      // activeTabModal === 'coins'
       if (withdrawAmountCoins <= 0) {
         toast.error("Please enter a valid coin amount to redeem.");
         return;
       }
       amountToWithdraw = withdrawAmountCoins;
-      currencyForRpc = 'COIN';
+      currencyForRpc = "COIN";
       redeemedItemDescForRpc = { placeholder: "Item to be redeemed" };
       if (amountToWithdraw > (userData.coins || 0)) {
         toast.error("Insufficient coin balance.");
@@ -471,29 +552,64 @@ export default function BillingClientPage({
       p_currency: currencyForRpc,
       p_amount_type: amountTypeForRpc,
       p_user_notes: withdrawalUserNotes,
-      p_redeemed_item_description: redeemedItemDescForRpc
+      p_redeemed_item_description: redeemedItemDescForRpc,
     };
 
-    console.log("Calling create_advertiser_withdrawal_request with args:", JSON.stringify(rpcArgs, null, 2));
+    console.log(
+      "Calling create_advertiser_withdrawal_request with args:",
+      JSON.stringify(rpcArgs, null, 2)
+    );
 
     setIsSubmittingWithdrawal(true);
-    const { data: rpcResponse, error: rpcError } = await supabase.rpc('create_advertiser_withdrawal_request', rpcArgs);
+    const { data: rpcResponse, error: rpcError } = await supabase.rpc(
+      "create_advertiser_withdrawal_request",
+      rpcArgs
+    );
     setIsSubmittingWithdrawal(false);
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
       toast.error(`Withdrawal request failed: ${rpcError.message}`);
-    } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
+    } else if (
+      rpcResponse &&
+      Array.isArray(rpcResponse) &&
+      rpcResponse.length > 0
+    ) {
       const createdRequest = rpcResponse[0] as WithdrawalRequest;
-      toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrencyFromCents(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
-      setWithdrawalRequests(prev => [{
-        ...createdRequest,
-        payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id === undefined ? null : createdRequest.payout_method_id)
-      }, ...prev]);
-      if (activeTab === 'cash') {
-        setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) - (createdRequest.amount) }) : null);
+      toast.success(
+        `Withdrawal request for ${
+          activeTab === "cash"
+            ? formatCurrencyFromCents(createdRequest.amount)
+            : formatCoins(createdRequest.amount) + " coins"
+        } submitted successfully!`
+      );
+      setWithdrawalRequests((prev) => [
+        {
+          ...createdRequest,
+          payout_method_summary: getPayoutMethodSummaryById(
+            createdRequest.payout_method_id === undefined
+              ? null
+              : createdRequest.payout_method_id
+          ),
+        },
+        ...prev,
+      ]);
+      if (activeTab === "cash") {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                withdrawable_balance:
+                  (prev.withdrawable_balance || 0) - createdRequest.amount,
+              }
+            : null
+        );
       } else {
-        setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) - createdRequest.amount }) : null);
+        setUserData((prev) =>
+          prev
+            ? { ...prev, coins: (prev.coins || 0) - createdRequest.amount }
+            : null
+        );
       }
       setIsWithdrawModalOpen(false);
       setWithdrawAmountDollars(0);
@@ -501,38 +617,59 @@ export default function BillingClientPage({
       setSelectedWithdrawMethodId(null);
       setWithdrawalUserNotes("");
     } else {
-      console.error("Withdrawal request RPC returned unexpected data:", rpcResponse);
-      toast.error("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
+      console.error(
+        "Withdrawal request RPC returned unexpected data:",
+        rpcResponse
+      );
+      toast.error(
+        "Withdrawal request submitted, but couldn't confirm details. Please check your requests."
+      );
     }
   };
 
   // Handle balance update after successful top-up
   const handleBalanceUpdate = (newBalanceInCents: number) => {
-    console.log('💰 BillingPage: Balance update received:', newBalanceInCents);
-    console.log('💰 BillingPage: Previous balance was:', profile?.available_deposit_balance);
+    console.log("💰 BillingPage: Balance update received:", newBalanceInCents);
+    console.log(
+      "💰 BillingPage: Previous balance was:",
+      profile?.available_deposit_balance
+    );
 
-    setProfile(prev => {
-      const updated = prev ? { ...prev, available_deposit_balance: newBalanceInCents } : null;
-      console.log('💰 BillingPage: Profile updated:', updated);
+    setProfile((prev) => {
+      const updated = prev
+        ? { ...prev, available_deposit_balance: newBalanceInCents }
+        : null;
+      console.log("💰 BillingPage: Profile updated:", updated);
       return updated;
     });
 
     // Refresh paginated transactions to show the new deposit
-    console.log('🔄 BillingPage: Refreshing transaction history...');
+    console.log("🔄 BillingPage: Refreshing transaction history...");
     refreshCashTransactions();
   };
 
-  const handleCancelWithdrawal = async (requestId: string, amountToRestore: number, amountType: 'cash' | 'coins') => {
+  const handleCancelWithdrawal = async (
+    requestId: string,
+    amountToRestore: number,
+    amountType: "cash" | "coins"
+  ) => {
     if (!authUser || !profile || !userData) return;
-    if (!confirm("Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance.")) {
+    if (
+      !confirm(
+        "Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance."
+      )
+    ) {
       return;
     }
     setIsCancellingWithdrawal(requestId);
 
-    const { data: rpcSuccess, error: rpcError } = await supabase.rpc('cancel_advertiser_withdrawal_request_by_user', {
-      p_request_id: requestId,
-      p_user_id: authUser.id
-    });
+    const { data: rpcSuccess, error: rpcError } = await supabase.rpc(
+      "cancel_advertiser_withdrawal_request_by_user",
+      {
+        p_request_id: requestId,
+        p_user_id: authUser.id,
+      }
+    );
 
     setIsCancellingWithdrawal(null);
 
@@ -540,28 +677,49 @@ export default function BillingClientPage({
       console.error("Error cancelling withdrawal request via RPC:", rpcError);
       toast.error(`Failed to cancel request: ${rpcError.message}`);
     } else if (rpcSuccess === true) {
-      if (amountType === 'cash') {
-        setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) + (amountToRestore) }) : null);
+      if (amountType === "cash") {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                withdrawable_balance:
+                  (prev.withdrawable_balance || 0) + amountToRestore,
+              }
+            : null
+        );
       } else {
-        setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) + amountToRestore }) : null);
+        setUserData((prev) =>
+          prev ? { ...prev, coins: (prev.coins || 0) + amountToRestore } : null
+        );
       }
-      setWithdrawalRequests(prevReqs =>
-        prevReqs.map(req =>
+      setWithdrawalRequests((prevReqs) =>
+        prevReqs.map((req) =>
           req.id === requestId
             ? {
-              ...req,
-              status: 'cancelled',
-              payout_method_summary: getPayoutMethodSummaryById(req.payout_method_id === undefined ? null : req.payout_method_id),
-              cancelled_at: new Date().toISOString(),
-              cancellation_reason: 'Cancelled by user'
-            }
+                ...req,
+                status: "cancelled",
+                payout_method_summary: getPayoutMethodSummaryById(
+                  req.payout_method_id === undefined
+                    ? null
+                    : req.payout_method_id
+                ),
+                cancelled_at: new Date().toISOString(),
+                cancellation_reason: "Cancelled by user",
+              }
             : req
         )
       );
-      toast.success("Withdrawal Cancelled: The funds have been returned to your balance.");
+      toast.success(
+        "Withdrawal Cancelled: The funds have been returned to your balance."
+      );
     } else {
-      console.error("RPC call to cancel withdrawal did not return true. Response:", rpcSuccess);
-      toast.error("Failed to cancel the withdrawal request. Please try again or contact support.");
+      console.error(
+        "RPC call to cancel withdrawal did not return true. Response:",
+        rpcSuccess
+      );
+      toast.error(
+        "Failed to cancel the withdrawal request. Please try again or contact support."
+      );
     }
   };
 
@@ -581,28 +739,28 @@ export default function BillingClientPage({
 
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
-    const success = searchParams.get('success');
-    const sessionId = searchParams.get('session_id');
+    const success = searchParams.get("success");
+    const sessionId = searchParams.get("session_id");
 
-    if (success === 'true' && sessionId && !hasProcessedSuccess) {
-      console.log('🎉 Payment successful, refreshing subscription data...');
+    if (success === "true" && sessionId && !hasProcessedSuccess) {
+      console.log("🎉 Payment successful, refreshing subscription data...");
       setHasProcessedSuccess(true);
-      toast.success('Payment successful! Your subscription has been updated.');
+      toast.success("Payment successful! Your subscription has been updated.");
 
       // Clear URL parameters to prevent refresh loops
       const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState({}, "", newUrl);
 
       // Refresh the page data to get updated subscription info
       const refreshData = async () => {
         try {
           // Give the webhook a moment to process
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           // Refresh the current page to get updated data
           window.location.reload();
         } catch (error) {
-          console.error('Error refreshing data:', error);
+          console.error("Error refreshing data:", error);
         }
       };
 
@@ -614,7 +772,7 @@ export default function BillingClientPage({
     return (
       <div className="container mx-auto py-8 px-4 md:px-6">
         <div className="flex items-center justify-center h-64">
-          <PageLoadingSpinner mode="light"/>
+          <PageLoadingSpinner mode="light" />
           <p>Loading billing data or not authenticated...</p>
         </div>
       </div>
@@ -622,12 +780,18 @@ export default function BillingClientPage({
   }
 
   // Derived state for total referrals
-  const totalReferrals = (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
+  const totalReferrals =
+    (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
 
   // Filter withdrawal requests for display
-  const cashWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'cash');
-  const coinWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'coins');
+  const cashWithdrawalRequests = withdrawalRequests.filter(
+    (req) => req.amount_type === "cash"
+  );
+  const coinWithdrawalRequests = withdrawalRequests.filter(
+    (req) => req.amount_type === "coins"
+  );
 
+  const isDark = mode === "dark";
 
   return (
     <div className="max-w-[1200px] mx-auto py-8">
@@ -658,18 +822,30 @@ export default function BillingClientPage({
       {/* Cash Account Tab */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
-        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
             {/*Total Spent*/}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1  space-y-3">
                   <p className="text-lg font-medium">Total Spent</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.total_money_spent)}
                   </p>
                   <p className="text-md">Lifetime contest spending</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <TrendingDown className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -690,16 +866,28 @@ export default function BillingClientPage({
                 </p>
               </CardContent>
             </Card> */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Contests Run</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_run}
                   </p>
                   <p className="text-md">Total contests created</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <BarChart3 className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -721,16 +909,28 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1  space-y-3">
                   <p className="text-lg font-medium">Available Balance</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.available_deposit_balance)}
                   </p>
                   <p className="text-md">Ready for contests</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Banknote className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -752,16 +952,28 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Withdrawable Balance</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.withdrawable_balance)}
                   </p>
                   <p className="text-md">From referrals & bonuses</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Banknote className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -827,7 +1039,12 @@ export default function BillingClientPage({
             </p>
           )}
 
-          <div className="bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Transaction History</CardTitle>
             </CardHeader>
@@ -840,7 +1057,14 @@ export default function BillingClientPage({
 
               <Table>
                 <TableHeader>
-                  <TableRow className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                  <TableRow
+                    className={cn(
+                      "text-left border-b",
+                      isDark
+                        ? "bg-[#391A6A] text-white"
+                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                    )}
+                  >
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
@@ -890,25 +1114,26 @@ export default function BillingClientPage({
                           <Badge
                             variant={
                               transaction.status === "completed" ||
-                                transaction.status === "credited" ||
-                                transaction.status === "success"
+                              transaction.status === "credited" ||
+                              transaction.status === "success"
                                 ? "default"
                                 : transaction.status === "pending"
-                                  ? "secondary"
-                                  : transaction.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
+                                ? "secondary"
+                                : transaction.status === "failed"
+                                ? "destructive"
+                                : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
-                              ${transaction.status === "completed" ||
+                              ${
+                                transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                ? "bg-green-100 text-green-700 border-green-300"
-                                : transaction.status === "pending"
+                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
                                   ? "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                    ? "bg-red-100 text-red-700 border-red-300"
-                                    : "bg-gray-100 text-gray-700 border-gray-300"
+                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
                           >
@@ -942,14 +1167,26 @@ export default function BillingClientPage({
           </div>
 
           {/* Cash Withdrawal Requests */}
-          <div className="mt-8 bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Withdrawal Request History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                  <TableRow
+                    className={cn(
+                      "text-left border-b",
+                      isDark
+                        ? "bg-[#391A6A] text-white"
+                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                    )}
+                  >
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Method</TableHead>
@@ -974,10 +1211,10 @@ export default function BillingClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                  ? "secondary"
-                                  : req.status === "cancelled"
-                                    ? "outline"
-                                    : "destructive"
+                                ? "secondary"
+                                : req.status === "cancelled"
+                                ? "outline"
+                                : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1030,16 +1267,28 @@ export default function BillingClientPage({
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Total Coins Earned</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.total_lifetime_coins_earned)}
                   </p>
                   <p className="text-md">Lifetime coin earnings</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Banknote className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1061,16 +1310,28 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Coins Available</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.coins)}
                   </p>
                   <p className="text-md">Your current coin balance</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <CryptoWalletIcon className="h-4 w-4" />
                 </div>
               </CardContent>
@@ -1092,14 +1353,26 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Total Referrals</p>
                   <p className="text-xl font-bold">{totalReferrals}</p>
                   <p className="text-md">Successful referrals</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Users className="h-4 w-4" />
                 </div>
               </CardContent>
@@ -1121,18 +1394,33 @@ export default function BillingClientPage({
           </div>
 
           <div className="mb-6">
-            <Button className="w-full md:w-auto bg-[#6C43D0] text-md text-white" disabled={true}>
+            <Button
+              className="w-full md:w-auto bg-[#6C43D0] text-md text-white"
+              disabled={true}
+            >
               <Gift className="h-4 w-4 mr-2" /> Redeem Coins (Coming Soon)
             </Button>
           </div>
 
-          <div className="bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Transaction History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1177,15 +1465,27 @@ export default function BillingClientPage({
                           <Badge
                             variant={
                               transaction.status === "completed" ||
-                                transaction.status === "credited"
+                              transaction.status === "credited"
                                 ? "default"
                                 : transaction.status === "pending"
-                                  ? "secondary"
-                                  : transaction.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
+                                ? "secondary"
+                                : transaction.status === "failed"
+                                ? "destructive"
+                                : "outline"
                             }
-                            className="capitalize"
+                            className={`capitalize px-3 py-1 rounded-full text-sm font-medium
+                              ${
+                                transaction.status === "completed" ||
+                                transaction.status === "credited" ||
+                                transaction.status === "success"
+                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
+                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  : transaction.status === "failed"
+                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                              }
+                            `}
                           >
                             {transaction.status?.replace(/_/g, " ") || "N/A"}
                           </Badge>
@@ -1199,13 +1499,25 @@ export default function BillingClientPage({
           </div>
 
           {/* Coin Withdrawal Requests */}
-          <div className="mt-8 bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Redemption History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Coins</TableHead>
@@ -1226,7 +1538,7 @@ export default function BillingClientPage({
                             ? typeof req.redeemed_item_description === "string"
                               ? req.redeemed_item_description
                               : (req.redeemed_item_description as any)?.name ||
-                              JSON.stringify(req.redeemed_item_description)
+                                JSON.stringify(req.redeemed_item_description)
                             : "N/A"}
                         </TableCell>
                         <TableCell className="max-w-xs truncate">
@@ -1239,10 +1551,10 @@ export default function BillingClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                  ? "secondary"
-                                  : req.status === "cancelled"
-                                    ? "outline"
-                                    : "destructive"
+                                ? "secondary"
+                                : req.status === "cancelled"
+                                ? "outline"
+                                : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1292,7 +1604,11 @@ export default function BillingClientPage({
         {/* Subscription Tab */}
         <TabPanel value="subscription" activeTab={activeTab}>
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-xl">
+            <div 
+             className={cn(
+              "rounded-xl shadow-xl",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}>
               <CardHeader>
                 <CardTitle>Subscription Management</CardTitle>
                 <CardDescription className="text-md">
@@ -1360,9 +1676,21 @@ export default function BillingClientPage({
             >
               {payoutCountry === "IN" ? (
                 <TabsList className="grid w-full grid-cols-3 gap-4">
-                  <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500"value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="upi">
+                    UPI
+                  </TabsTrigger>
+                  <TabsTrigger
+                    className="border border-gray-500"
+                    value="bank_transfer"
+                  >
+                    Bank Transfer
+                  </TabsTrigger>
+                  <TabsTrigger
+                    className="border border-gray-500"
+                    value="crypto"
+                  >
+                    BNB (BEP20)
+                  </TabsTrigger>
                 </TabsList>
               ) : (
                 <TabsList className="grid w-full grid-cols-1">
@@ -1371,42 +1699,44 @@ export default function BillingClientPage({
               )}
 
               <TabsContent value="crypto" className="pt-4 space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameCrypto"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My Binance USDT"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameCrypto">
+                    Friendly Name
+                  </Label>
+                  <Input
+                    id="payoutFriendlyNameCrypto"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My Binance USDT"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoNetwork">Network</Label>
-                <Select
-                  value={cryptoNetwork}
-                  onValueChange={(val) => setCryptoNetwork(val)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BNB_BEP20">
-                      BNB Smart Chain (BEP20)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Label htmlFor="cryptoNetwork">Network</Label>
+                  <Select
+                    value={cryptoNetwork}
+                    onValueChange={(val) => setCryptoNetwork(val)}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BNB_BEP20">
+                        BNB Smart Chain (BEP20)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
-                <Input
-                  id="cryptoAddress"
-                  value={cryptoAddress}
-                  onChange={(e) => setCryptoAddress(e.target.value)}
-                  placeholder={`Enter your ${cryptoNetwork} wallet address`}
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
+                  <Input
+                    id="cryptoAddress"
+                    value={cryptoAddress}
+                    onChange={(e) => setCryptoAddress(e.target.value)}
+                    placeholder={`Enter your ${cryptoNetwork} wallet address`}
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
                   We only support BNB Smart Chain (BEP20). Do not enter
@@ -1421,16 +1751,15 @@ export default function BillingClientPage({
 
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameBank"
-                 
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., Primary Savings"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameBank"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., Primary Savings"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -1481,35 +1810,35 @@ export default function BillingClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameUpi"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My UPI"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameUpi"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My UPI"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="upiHolder">Account Holder Name</Label>
-                <Input
-                  id="upiHolder"
-                  value={bankAccountHolder}
-                  onChange={(e) => setBankAccountHolder(e.target.value)}
-                  placeholder="e.g., Rahul Kumar"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiHolder">Account Holder Name</Label>
+                  <Input
+                    id="upiHolder"
+                    value={bankAccountHolder}
+                    onChange={(e) => setBankAccountHolder(e.target.value)}
+                    placeholder="e.g., Rahul Kumar"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="upiId">UPI ID</Label>
-                <Input
-                  id="upiId"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="yourname@bank"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiId">UPI ID</Label>
+                  <Input
+                    id="upiId"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="yourname@bank"
+                    disabled={isLoading}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   UPI withdrawals are instant and usually free. You are
@@ -1520,20 +1849,25 @@ export default function BillingClientPage({
             </Tabs>
           </div>
           <DialogFooter>
-          <Button  onClick={handleSavePayoutMethod} disabled={isLoading}
-             className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
+            <Button
+              onClick={handleSavePayoutMethod}
+              disabled={isLoading}
+              className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full"
+            >
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
-                  ? "Save Changes"
-                  : "Add Method"}
+                ? "Save Changes"
+                : "Add Method"}
             </Button>
             <DialogClose asChild>
-              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <Button
+                disabled={isLoading}
+                className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+              >
                 Cancel
               </Button>
             </DialogClose>
-            
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
@@ -1563,7 +1897,7 @@ export default function BillingClientPage({
                         <Button
                           variant="ghost"
                           size="sm"
-                           className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
+                          className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
                           onClick={() =>
                             handleSetDefaultPayoutMethod(method.id)
                           }
@@ -1577,7 +1911,7 @@ export default function BillingClientPage({
                         size="icon"
                         onClick={() => handleEditPayoutMethod(method)}
                         disabled={isLoading}
-                         className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
+                        className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
                       >
                         <Edit3 className="h-4 w-4" />
                       </Button>
@@ -1717,9 +2051,8 @@ export default function BillingClientPage({
             )}
           </div>
           <DialogFooter>
-           
             <Button
-            className="w-full py-6 rounded-full text-md"
+              className="w-full py-6 rounded-full text-md"
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
               loadingText="Processing..."
@@ -1730,7 +2063,7 @@ export default function BillingClientPage({
                 (activeTabModal === "cash" &&
                   (!profile ||
                     withdrawAmountDollars * 100 >
-                    (profile.withdrawable_balance || 0))) ||
+                      (profile.withdrawable_balance || 0))) ||
                 (activeTabModal === "coins" &&
                   (!userData ||
                     withdrawAmountCoins > (userData.coins || 0) ||
@@ -1742,7 +2075,10 @@ export default function BillingClientPage({
               Request Withdrawal
             </Button>
             <DialogClose asChild>
-              <Button disabled={isLoading}  className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <Button
+                disabled={isLoading}
+                className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+              >
                 Cancel
               </Button>
             </DialogClose>
