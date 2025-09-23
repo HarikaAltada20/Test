@@ -130,7 +130,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
     const router = useRouter();
     const [sortOption, setSortOption] = useState<SortOptionType>("created_at_desc");
     const [internalSelectedTab, setInternalSelectedTab] = useState("all");
-
+    const [mode, setMode] = useState<"light" | "dark">("light");
     // Use external tab if provided, otherwise use internal state
     const selectedTab = externalSelectedTab !== undefined ? externalSelectedTab : internalSelectedTab;
     const setSelectedTab = onTabChange || setInternalSelectedTab;
@@ -143,6 +143,63 @@ export function ContestListClient({ initialContests, isAdminView = false, select
         const platforms = new Set(initialContests.map(c => c.platform).filter(Boolean) as string[]);
         return ["all", ...Array.from(platforms)];
     }, [initialContests]);
+    // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+// Read mode from data attribute
+useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
     // Group contests by moderation status and contest lifecycle
     const contestsByStatus = useMemo(() => {
@@ -286,6 +343,8 @@ export function ContestListClient({ initialContests, isAdminView = false, select
         );
     };
 
+    const isDark = mode === "dark";
+
     const getContestStatusDisplay = (status: string | null, postContestStatus: string | null = null) => {
         if (!status) return { text: "Unknown", className: "bg-slate-400 border-slate-400 text-white" };
         if (status === "active") return { text: "Live", className: "bg-green-500 border-green-500 text-white" };
@@ -309,7 +368,10 @@ export function ContestListClient({ initialContests, isAdminView = false, select
             return (
                 <Card
                     key={contest.id}
-                    className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full cursor-pointer"
+                    className={cn(
+                        "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+                        isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+                      )}
                     onClick={() => {
                         const href = isAdminView
                             ? `/dashboard/admin/contests/${contest.id}`
@@ -342,56 +404,58 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         </div>
                     </div>
                     <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-lg font-bold text-slate-800 transition-colors duration-300 mr-2 leading-tight">
+                        <CardTitle className={cn("text-lg font-bold transition-colors duration-300 mr-2 leading-tight",
+                             isDark ? "text-white" : "text-slate-800")}>
                             {contest.title || "Untitled Contest"}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                        <div className="space-y-1.5 text-md mb-4 text-slate-600 dark:text-slate-400">
+                        <div className={cn("space-y-2 text-md mb-4 ",
+                             isDark ? "text-white" : "text-slate-600")}>
                             <div className="flex items-center">
-                                <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                                <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
+                                <Trophy className="h-4 w-4 mr-2 flex-shrink-0" />
+                                <span>Platform: <span className="font-medium ">{contest.platform || "N/A"}</span></span>
                             </div>
                             {contest.start_date && (
                                 <div className="flex items-center">
                                     <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span>Starts: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
+                                    <span>Starts: <span className="font-medium">{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                                 </div>
                             )}
                             {contest.end_date && (
                                 <div className="flex items-center">
                                     <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span>Ends: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
+                                    <span>Ends: <span className="font-medium ">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                                 </div>
                             )}
                             {contest.live_submission_count !== null && contest.live_submission_count !== undefined && (
                                 <div className="flex items-center">
                                     <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                                    <span>Submissions: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                                    <span>Submissions: <span className="font-medium ">{contest.live_submission_count}</span></span>
                                 </div>
                             )}
                             <div className="flex items-center">
                                 <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                                <span>Contest Type: <span className="font-medium text-slate-700 dark:text-slate-300">
+                                <span>Contest Type: <span className="font-medium ">
                                     {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type ? contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1) : 'N/A'}
                                 </span></span>
                             </div>
                             {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
                                 <div className="flex items-center">
-                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                                    <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>CPM Rate: <span className="font-medium ">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                                 </div>
                             )}
                             {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                                 <div className="flex items-center">
-                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                                    <span>Total Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 " />
+                                    <span>Total Budget: <span className="font-medium ">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
                                 </div>
                             )}
                             {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null && contest.contest_based_details.leaderboard_contest.total_prize > 0 && (
                                 <div className="flex items-center">
-                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                                    <span>Total Prize Pool: <span className="font-medium text-slate-700 dark:text-slate-300">
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                                    <span>Total Prize Pool: <span className="font-medium">
                                         {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
                                     </span></span>
                                 </div>
@@ -401,25 +465,29 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         {/* Budget Spent Progress Bar for CPM contests */}
                         {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                             <div className="mt-3 mb-3">
-                                <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
+                                <div className="flex justify-between text-sm mb-1">
                                     <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
                                     <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
                                 </div>
-                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                                <div 
+                                 className={cn(
+                                    "w-full rounded-full h-2",
+                                    isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
+                                  )}>
                                     <div
                                         className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
                                         style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
                                     ></div>
                                 </div>
-                                <div className="flex justify-center text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                <div className="flex justify-center text-xs  mt-1">
                                     <span>Remaining: {formatMoney(contest.contest_based_details.cpm_contest.total_budget - (contest.contest_based_details.cpm_contest.budget_spent || 0))}</span>
                                 </div>
                             </div>
                         )}
 
                         <button
-                        
-                                      className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                        className={cn("flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                             isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]")}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 const href = isAdminView
@@ -443,7 +511,10 @@ export function ContestListClient({ initialContests, isAdminView = false, select
         return (
             <Card
                 key={contest.id}
-                className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-200  flex flex-col group bg-white cursor-pointer"
+                className={cn(
+                    "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+                    isDark ? "bg-[#06021D] border-slate-700" : "bg-white border-slate-200"
+                  )}
                 onClick={(e) => {
                     if ((e.target as HTMLElement).closest('button')) {
                         return;
@@ -476,7 +547,11 @@ export function ContestListClient({ initialContests, isAdminView = false, select
 
                     <CardContent className="flex-grow p-4 flex flex-col">
                         <div className="mb-3">
-                            <h3 className="font-bold text-lg leading-tight text-slate-900 dark:text-slate-100 line-clamp-2">
+                            <h3 
+                             className={cn(
+                                "font-bold text-lg leading-tight  line-clamp-2",
+                                isDark ? "text-white" : " text-slate-900 dark:text-slate-100 "
+                              )}>
                                 {contest.title || "Untitled Contest"}
                             </h3>
                         </div>
@@ -490,14 +565,22 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             </Badge>
                         </div>
 
-                        <div className="space-y-2 text-md text-slate-600 dark:text-slate-400 mb-4 flex-grow">
+                        <div 
+                         className={cn(
+                            "space-y-2 text-md mb-4 flex-grow",
+                            isDark ? "text-white" : "text-slate-600"
+                          )}>
                             {contest.start_date && contest.end_date ? (
                                 <div className="flex items-center gap-1">
                                     <Calendar className="h-3 w-3" />
                                     <span>{formatLocalDateTime(contest.start_date)} - {formatLocalDateTime(contest.end_date)}</span>
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-1 text-amber-600">
+                                <div 
+                                 className={cn(
+                                    "flex items-center gap-1",
+                                    isDark ? "text-amber-400" : "text-amber-600"
+                                  )}>
                                     <AlertTriangle className="h-3 w-3" />
                                     <span>Dates not set</span>
                                 </div>
@@ -563,9 +646,8 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             ) : contest.moderation_status !== 'published' ? (
                                 // Non-published contests: Show Edit Contest button
                                 <button
-                                
-                                   
-                                      className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                                className={cn("flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                                    isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]")}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const href = isAdminView
@@ -581,7 +663,8 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                 <button
                                     // variant="outline"
                                     // size="sm"
-                                    className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                                    className={cn("flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                                        isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]")}
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const href = isAdminView

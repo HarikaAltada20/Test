@@ -817,6 +817,8 @@ export default function BillingClientPage({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         className="mt-12 mb-10"
+        isDark={isDark}
+        light={!isDark}
       />
 
       {/* Cash Account Tab */}
@@ -1604,11 +1606,12 @@ export default function BillingClientPage({
         {/* Subscription Tab */}
         <TabPanel value="subscription" activeTab={activeTab}>
           <div className="space-y-6">
-            <div 
-             className={cn(
-              "rounded-xl shadow-xl",
-              isDark ? "bg-[#170337]" : "bg-white "
-            )}>
+            <div
+              className={cn(
+                "rounded-xl shadow-xl",
+                isDark ? "bg-[#170337]" : "bg-white "
+              )}
+            >
               <CardHeader>
                 <CardTitle>Subscription Management</CardTitle>
                 <CardDescription className="text-md">

@@ -1489,6 +1489,8 @@ export default function ContestDetailClient({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         className="mt-12 mb-6"
+        isDark={isDark}
+        light={!isDark}
       />
       <div className="mt-8">
         <TabContent activeTab={activeTab}>
@@ -3578,15 +3580,39 @@ export default function ContestDetailClient({
                 </div>
               </div>
             ) : (
-              <Card className="shadow-sm border-0 bg-purple-50">
+              <Card 
+              className={cn(
+                "shadow-sm border-0",
+                isDark
+                  ? "bg-[#170337]"
+                  : "bg-purple-50"
+              )}>
                 <CardContent className="py-16 flex flex-col items-center justify-center text-center">
-                  <div className="p-4 bg-white rounded-full shadow-lg mb-6">
-                    <FileText className="h-12 w-12 text-slate-400" />
+                  <div 
+                   className={cn(
+                    "p-4 rounded-full mb-6",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-purple-200 text-purple-500"
+                  )}>
+                    <FileText className="h-12 w-12 " />
                   </div>
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                  <h3 
+                  className={cn(
+                    "text-xl font-semibold mb-2",
+                    isDark
+                      ? "text-white"
+                      : "text-slate-900 dark:text-slate-100"
+                  )}>
                     No Submissions Yet
                   </h3>
-                  <p className="text-slate-600 dark:text-slate-400 max-w-md">
+                  <p 
+                  className={cn(
+                    " max-w-md",
+                    isDark
+                      ? "text-white"
+                      : "text-slate-600 dark:text-slate-400"
+                  )}>
                     When creators submit entries for this contest, they will
                     appear here with detailed metrics and status information.
                   </p>

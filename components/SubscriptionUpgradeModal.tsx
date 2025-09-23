@@ -188,7 +188,7 @@ export function SubscriptionUpgradeModal({
   // 👇 conditional color based on route
   const dialogBg =
     pathname === "/pricing"
-      ? "bg-[#000825] border-purple-600 text-white shadow-lg shadow-purple-200"
+      ? "bg-[#000825] border-gray-600 text-white"
       : "bg-white border-gray-200 text-black";
 
   return (

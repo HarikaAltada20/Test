@@ -5035,7 +5035,13 @@ export default function EditContestPage({
             <div className="space-y-4">
               <div className="flex items-center flex-col gap-3 md:flex-row md:justify-between">
                 <h3 className="text-lg font-medium">Prize distribution</h3>
-                <div className="flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full">
+                <div 
+                 className={cn(
+                  "flex items-center gap-2  px-4 py-2 rounded-full",
+                  isDark
+                    ? "bg-[#180438] text-purple-400"
+                    : "bg-gray-100 text-black"
+                )}>
                   <span className="text-sm font-medium">Total Prize Pool:</span>
                   <span className="text-lg font-bold">
                     {formatCurrencyFromCents(totalPrizePool)}
@@ -5046,7 +5052,10 @@ export default function EditContestPage({
               {/* Plan Requirements Info */}
 
               <div className="mb-6">
-                <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
+                <div 
+                className={cn("border px-4 py-3 rounded-lg",
+                      isDark ? "bg-[#C9A7FF26] border-[#C9A7FF]" : "border-[#7F39EC] bg-[#D9C0FF26] text-black "
+                    )}>
                   <AlertDescription className="flex items-center justify-between">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <Info className="h-4 w-4 shrink-0" />
@@ -5090,7 +5099,11 @@ export default function EditContestPage({
                 </AlertDescription>
               </Alert> */}
 
-              <div className="bg-gray-50 p-4 rounded-lg">
+              <div 
+               className={cn(
+                isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg"
+              )}
+              >
                 <div className="flex items-center gap-4 mb-4">
                   <Label className="w-32 md:w-48">
                     Number of Winners{" "}
@@ -5216,7 +5229,13 @@ export default function EditContestPage({
                         }
                       }}
                       min={MIN_PRIZE_PER_WINNER / 100}
-                      className="w-full sm:w-40 md:w-48"
+                      
+                      className={cn(
+                        "w-full sm:w-40 md:w-48",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                          : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      )}
                     />
                     <div className="text-xs sm:text-sm text-gray-500">
                       <span>

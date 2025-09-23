@@ -305,6 +305,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
                 className="mb-6"
+                
             />
 
             {/* Tab Content */}
