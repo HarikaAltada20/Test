@@ -1192,6 +1192,7 @@ export default function ContestDetailClient({
               contestId={contestId}
               contestTitle={currentContest.title || "this contest"}
               isDeletable={isContestDeletable}
+              isdark={isDark}
             />
           )}
         </div>

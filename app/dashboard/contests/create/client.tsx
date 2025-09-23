@@ -5191,13 +5191,21 @@ export default function CreateContestPage({
                           {!hasCpmAccess && (
                             <div className="mt-2 flex items-center gap-2">
                               {isFreePlan && (
-                                <button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-white text-md px-3 rounded-full py-1 h-8">
+                                <button
+                                className={cn(
+                                  "text-white text-md px-3 rounded-full py-1 h-8",
+                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                )}>
                                   <Link href="/dashboard/billing?tab=subscription">
                                     Upgrade Plan
                                   </Link>
                                 </button>
                               )}
-                              <p className="text-sm text-black font-medium">
+                              <p 
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-white" : "text-black"
+                              )}>
                                 Available in paid plans only
                               </p>
                             </div>

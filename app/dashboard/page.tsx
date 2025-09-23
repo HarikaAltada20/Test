@@ -647,12 +647,12 @@ function DashboardPage() {
       {/* Getting Started Section - Only show for advertisers with no contests */}
       {isAdvertiser &&
         (!profile?.total_contests_run || profile.total_contests_run === 0) && (
-          <Card
+          <div
             className={cn(
               "mb-6  rounded-xl",
               isDark
                 ? "bg-[#170337] border border-[#170337]"
-                : "bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 border border-purple-200 dark:border-purple-700/50"
+                : "bg-white border border-gray-300"
             )}
           >
             <CardContent className="p-4 sm:p-6">
@@ -714,7 +714,7 @@ function DashboardPage() {
                 />
               </div>
             </CardContent>
-          </Card>
+          </div>
         )}
 
       <div className="grid gap-6 md:grid-cols-2">

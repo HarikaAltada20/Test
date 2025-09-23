@@ -13,7 +13,14 @@ import {
 } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface DeleteContestButtonProps {
   contestId: string;
@@ -22,6 +29,7 @@ interface DeleteContestButtonProps {
   variant?: "outline" | "destructive" | "ghost" | "link";
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
+  isdark?: boolean;
 }
 
 export function DeleteContestButton({
@@ -29,7 +37,7 @@ export function DeleteContestButton({
   contestTitle,
   isDeletable,
   variant = "outline",
- 
+  isdark = false,
   className = "",
 }: DeleteContestButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -47,19 +55,20 @@ export function DeleteContestButton({
       setIsDeleting(true);
 
       const response = await fetch(`/api/contests/${contestId}/delete`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to delete contest');
+        throw new Error(result.error || "Failed to delete contest");
       }
 
       // Show success toast
       toast({
         title: "Contest Deleted",
-        description: result.message || `"${contestTitle}" was successfully deleted.`,
+        description:
+          result.message || `"${contestTitle}" was successfully deleted.`,
         variant: "default",
       });
 
@@ -91,7 +100,9 @@ export function DeleteContestButton({
         onClick={() => setIsOpen(true)}
         variant={variant}
         size="md"
-        className={`text-purple-500 text-[14px] ${className}`}
+        className={`${
+          isdark ? "border border-purple-400 text-purple-300" : "text-purple-500"
+        } text-[14px] ${className}`}
       >
         <Trash2 className="h-4 w-4 mb-[2px]" />
         Delete
@@ -107,7 +118,6 @@ export function DeleteContestButton({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-          
             <Button
               variant="destructive"
               onClick={handleDelete}
@@ -118,7 +128,7 @@ export function DeleteContestButton({
               Delete Contest
             </Button>
             <Button
-             className="bg-[#FF323224] text-[#E50000] py-2 rounded-full"
+              className="bg-[#FF323224] text-[#E50000] py-2 rounded-full"
               variant="destructive"
               onClick={() => setIsOpen(false)}
               disabled={isDeleting}

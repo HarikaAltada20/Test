@@ -686,6 +686,7 @@ useEffect(() => {
                                     contestTitle={contest.title || 'this contest'}
                                     isDeletable={true}
                                       className="flex items-center gap-2"
+                                      isdark={isDark}
                                 />
                             )}
                         </div>
