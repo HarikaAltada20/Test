@@ -1042,10 +1042,14 @@ export default function ContestDetailClient({
               <DialogTrigger asChild>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="border-purple-200 text-purple-700 hover:bg-purple-50 shadow-sm"
+                  variant="outline"               
+                  className={cn(                
+                    isDark
+                      ? "py-3 border border-purple-400 text-purple-400"
+                      : "border-purple-500 text-purple-500"
+                  )}
                 >
-                  <Settings className="mr-2 h-4 w-4" />
+                  <Settings className="h-4 w-4" />
                   Update Status
                 </Button>
               </DialogTrigger>
@@ -1102,16 +1106,15 @@ export default function ContestDetailClient({
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setStatusUpdateDialog(false)}
-                    disabled={isUpdatingStatus}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
+                <button
                     onClick={handleUpdateContestStatus}
                     disabled={isUpdatingStatus || !selectedStatus}
+                    className={cn(
+                      "w-full text-md rounded-full",
+                      isDark
+                        ? "bg-[#7F39EC] py-3"
+                        : " bg-[#D9C0FF61] py-3 text-[#7F39EC] "
+                    )}
                   >
                     {isUpdatingStatus ? (
                       <>
@@ -1121,7 +1124,21 @@ export default function ContestDetailClient({
                     ) : (
                       "Update Status"
                     )}
-                  </Button>
+                  </button>
+                  <button
+                  
+                    onClick={() => setStatusUpdateDialog(false)}
+                    disabled={isUpdatingStatus}
+                    className={cn(
+                      "w-full text-md rounded-full",
+                      isDark
+                        ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                        : "bg-[#FF323224] text-[#E50000] py-3"
+                    )}
+                  >
+                    Cancel
+                  </button>
+                  
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -4266,6 +4283,7 @@ export default function ContestDetailClient({
       <Dialog
         open={!!confirmReversal}
         onOpenChange={(open) => !open && setConfirmReversal(null)}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -4279,18 +4297,28 @@ export default function ContestDetailClient({
             <p className="font-medium">This action cannot be undone.</p>
           </div>
           <div className="flex flex-col gap-3 pt-4">
-            <Button
+            <button
               onClick={handleConfirmReversal}
-              className="bg-[#D9C0FF61] rounded-full text-[#7F39EC]"
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "bg-[#7F39EC] py-3"
+                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+              )}
             >
               Confirm Reversal
-            </Button>
-            <Button
+            </button>
+            <button
               onClick={() => setConfirmReversal(null)}
-              className="bg-[#FF323224] rounded-full text-[#E50000]"
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                  : "bg-[#FF323224] text-[#E50000] py-4"
+              )}
             >
               Cancel
-            </Button>
+            </button>
           </div>
         </DialogContent>
       </Dialog>

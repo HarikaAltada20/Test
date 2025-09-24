@@ -1,12 +1,13 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, MessageSquare, ExternalLink, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
+import { cn } from "@/lib/utils";
 interface ChatProps {
   onClose: () => void;
   email: string; // 👈 pass logged-in user's email
-  userType?: "creator" | "advertiser" | "admin"; // optional: show creator-only CTA
+  userType?: "creator" | "advertiser" | "admin"; //show creator-only CTA
 }
 
 const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
@@ -14,7 +15,62 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const { toast } = useToast();
+  const getInitialMode = (): "light" | "dark" => {
+    if (typeof document === "undefined") return "light";
+    const dataMode = document
+      .querySelector("[data-mode]")
+      ?.getAttribute("data-mode");
+    if (dataMode === "dark" || dataMode === "light") {
+      return dataMode;
+    }
+    if (document.documentElement.classList.contains("dark")) {
+      return "dark";
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    ) {
+      return "dark";
+    }
+    return "light";
+  };
 
+  const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
+  // Read mode from data attribute and html class, respond to changes
+  useEffect(() => {
+    const readMode = (): "light" | "dark" => {
+      const el = document.querySelector("[data-mode]");
+      const attr = el?.getAttribute("data-mode");
+      if (attr === "dark" || attr === "light") return attr;
+      return document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light";
+    };
+
+    // Set immediately on mount to avoid any flicker
+    setMode(readMode());
+
+    // Watch for changes on either data-mode or html class
+    const observer = new MutationObserver(() => {
+      setMode(readMode());
+    });
+    const dataModeTarget = document.querySelector("[data-mode]");
+    if (dataModeTarget) {
+      observer.observe(dataModeTarget, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+  const isDark=mode==="dark";
+  
   const handleSubmit = async () => {
     if (!query.trim()) {
       toast({
@@ -56,9 +112,20 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
   };
 
   return (
-    <div className="fixed right-6 bottom-20 w-[380px] bg-white shadow-2xl border rounded-lg z-50 flex flex-col">
+    <div
+    className={cn(
+      "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+      isDark ? "bg-[#100A33]" : "bg-black"
+    )}
+  >
+    <div 
+    className={cn(
+      "fixed right-6 bottom-20 w-[380px] shadow-2xl rounded-lg z-50 flex flex-col",
+      isDark ? "bg-[#06021D]" : "bg-white"
+    )}>
       {/* Header Section */}
-      <div className="bg-purple-500 text-white rounded-t-lg p-6 flex justify-between items-start">
+      <div className={cn("text-white rounded-t-lg p-6 flex justify-between items-start", 
+        isDark ? "bg-[#7F39EC] border-[#7F39EC]" : "bg-purple-500 border-purple-500")}>
         <h2 className="text-xl">Get Touch with Us!</h2>
         <button
           onClick={onClose}
@@ -71,7 +138,7 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
       {/* Form Section */}
       <div className="p-5 flex-1">
         <h3 className="font-semibold mb-2 text-lg">Drop us a Query</h3>
-        <p className="text-md text-gray-600 mb-4">
+        <p className={cn("text-md text-gray-600 mb-4", isDark ? "text-white" : "text-gray-600")}>
           Fill in the details below and our team will get in touch with you
           within 24 hours.
         </p>
@@ -80,7 +147,10 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
           placeholder="Type your query here*"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="w-full border border-gray-300 px-3 py-2 rounded mb-3 text-sm h-[200px] resize-none focus:outline-none focus:ring-1 focus:ring-purple-500"
+          className={cn(
+            "w-full border px-3 py-2 rounded mb-3 text-sm h-[200px] resize-none focus:outline-none focus:ring-1 focus:ring-purple-500",
+            isDark ? "bg-[#06021D] border border-gray-800" : "bg-white border-gray-300 "
+          )}
         ></textarea>
 
         {userType === "creator" && (
@@ -109,7 +179,8 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full py-3 rounded-full bg-gradient-to-r from-[#7F39EC] to-[#B16FF4] font-semibold text-white"
+          className={cn("w-full py-3 rounded-full font-semibold text-white",
+            isDark ? "bg-[#7F39EC] to-[#B16FF4]" : "bg-gradient-to-r from-[#7F39EC] to-[#B16FF4]")}
         >
           {loading ? "Submitting..." : "SUBMIT"}
         </button>
@@ -123,6 +194,7 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
       <button className="fixed bottom-6 right-6 bg-purple-500 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg  transition z-50">
         <MessageSquare size={25} />
       </button>
+    </div>
     </div>
   );
 };

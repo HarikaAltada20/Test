@@ -21,17 +21,17 @@ body {
 }
 
 .pricing-scroll::-webkit-scrollbar-thumb {
-  background-color: #7f39ec; /* Purple */
+  background-color: rgba(156, 163, 175, 0.5); /* Purple */
   border-radius: 9999px;
 }
 
 .pricing-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: #6a29d9; /* Darker purple */
+  background-color: rgba(156, 163, 175, 0.5); /* Darker purple */
 }
 
 /* For Firefox */
 .pricing-scroll {
-  scrollbar-color: #7f39ec transparent;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
   scrollbar-width: thin;
 }
 
