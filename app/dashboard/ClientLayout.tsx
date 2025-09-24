@@ -243,13 +243,47 @@ function DashboardContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileSidebarOpen, setProfileSidebarOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<ThemeKey>("clean");
-  const [currentMode, setCurrentMode] = useState<ModeKey>("light");
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState<ThemeKey>(() => {
+    if (typeof window === "undefined") return "clean";
+    const savedPreset = localStorage.getItem("dashboard-preset") as PresetKey;
+    if (savedPreset && presetConfigurations[savedPreset]) {
+      return presetConfigurations[savedPreset].theme;
+    }
+    const savedTheme = localStorage.getItem("dashboard-theme") as ThemeKey;
+    if (savedTheme && savedTheme in colorThemes) return savedTheme;
+    return "clean";
+  });
+  const [currentMode, setCurrentMode] = useState<ModeKey>(() => {
+    if (typeof window === "undefined") return "light";
+    const savedPreset = localStorage.getItem("dashboard-preset") as PresetKey;
+    if (savedPreset && presetConfigurations[savedPreset]) {
+      return presetConfigurations[savedPreset].mode;
+    }
+    const savedMode = localStorage.getItem("dashboard-mode") as ModeKey;
+    if (savedMode && savedMode in modeConfigurations) return savedMode;
+    return "light";
+  });
   const [isOpen, setIsOpen] = useState(false);
-  const [currentPreset, setCurrentPreset] =
-    useState<PresetKey>("clean-professional");
-  const [isColorfulMode, setIsColorfulMode] = useState(false);
-  const [isCompactMode, setIsCompactMode] = useState(false);
+  const [currentPreset, setCurrentPreset] = useState<PresetKey>(() => {
+    if (typeof window === "undefined") return "clean-professional";
+    const savedPreset = localStorage.getItem("dashboard-preset") as PresetKey;
+    if (savedPreset && presetConfigurations[savedPreset]) return savedPreset;
+    const savedTheme = localStorage.getItem("dashboard-theme") as ThemeKey;
+    const savedMode = localStorage.getItem("dashboard-mode") as ModeKey;
+    if (!savedTheme && !savedMode) return "clean-professional";
+    return "clean-professional";
+  });
+  const [isColorfulMode, setIsColorfulMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const saved = localStorage.getItem("dashboard-colorful-mode");
+    return saved !== null ? saved === "true" : false;
+  });
+  const [isCompactMode, setIsCompactMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const saved = localStorage.getItem("dashboard-compact-mode");
+    return saved === "true";
+  });
   const { logout } = useClientAuth();
   const {
     isFullscreen,
@@ -370,49 +404,13 @@ function DashboardContent({
     };
   }, [user]);
 
-  // Theme persistence and initialization
+  // Ensure defaults exist for optional flags without causing a flash
   useEffect(() => {
-    const savedPreset = localStorage.getItem("dashboard-preset") as PresetKey;
-    if (savedPreset && presetConfigurations[savedPreset]) {
-      setCurrentPreset(savedPreset);
-      setCurrentMode(presetConfigurations[savedPreset].mode);
-      setCurrentTheme(presetConfigurations[savedPreset].theme);
-    } else {
-      // Fallback to individual settings or defaults
-      const savedTheme = localStorage.getItem("dashboard-theme") as ThemeKey;
-      if (savedTheme && colorThemes[savedTheme]) {
-        setCurrentTheme(savedTheme);
-      } else {
-        setCurrentTheme("clean"); // Default to clean theme
-      }
-
-      const savedMode = localStorage.getItem("dashboard-mode") as ModeKey;
-      if (savedMode && modeConfigurations[savedMode]) {
-        setCurrentMode(savedMode);
-      } else {
-        setCurrentMode("light"); // Default to light mode
-      }
-
-      // Set default preset if no individual settings
-      if (!savedTheme && !savedMode) {
-        setCurrentPreset("clean-professional");
-      }
-    }
-
-    const savedColorfulMode = localStorage.getItem("dashboard-colorful-mode");
-    if (savedColorfulMode !== null) {
-      setIsColorfulMode(savedColorfulMode === "true");
-    } else {
-      // Set colorful mode to false by default if no preference is saved
-      setIsColorfulMode(false);
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("dashboard-colorful-mode") === null) {
       localStorage.setItem("dashboard-colorful-mode", "false");
     }
-
-    // Load compact mode preference
-    const savedCompactMode = localStorage.getItem("dashboard-compact-mode");
-    if (savedCompactMode) {
-      setIsCompactMode(savedCompactMode === "true");
-    }
+    setIsHydrated(true);
   }, []);
 
   // Preset switching function - memoized for performance
@@ -424,6 +422,9 @@ function DashboardContent({
     localStorage.setItem("dashboard-preset", presetKey);
     localStorage.removeItem("dashboard-theme"); // Clear individual settings
     localStorage.removeItem("dashboard-mode");
+    try {
+      document.cookie = `dashboard-preset=${presetKey}; path=/; max-age=31536000`;
+    } catch {}
   }, []);
 
   // Theme switching function - memoized for performance
@@ -438,6 +439,9 @@ function DashboardContent({
     setCurrentMode(modeKey);
     localStorage.setItem("dashboard-mode", modeKey);
     localStorage.removeItem("dashboard-preset"); // Clear preset when manually changing
+    try {
+      document.cookie = `dashboard-mode=${modeKey}; path=/; max-age=31536000`;
+    } catch {}
   }, []);
 
   const toggleColorfulMode = useCallback((enabled: boolean) => {
@@ -528,6 +532,10 @@ function DashboardContent({
   };
 
   const currentPlan = getCurrentPlan();
+
+  if (!isHydrated) {
+    return null;
+  }
 
   return (
     <div

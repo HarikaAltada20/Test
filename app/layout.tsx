@@ -10,13 +10,15 @@ import { createClient } from "@/utils/supabase/server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
+import { cookies } from "next/headers";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-  description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
-  metadataBase: new URL('https://www.gameofcreators.com'),
+  description:
+    "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+  metadataBase: new URL("https://www.gameofcreators.com"),
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -24,13 +26,12 @@ export const metadata: Metadata = {
       { url: "/icon1.png", sizes: "96x96", type: "image/png" },
       { url: "/icon0.svg", type: "image/svg+xml" },
     ],
-    apple: [
-      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
-    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+    description:
+      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
     url: "https://www.gameofcreators.com/",
     siteName: "Game Of Creators",
     images: [
@@ -51,7 +52,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
+    description:
+      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
     images: ["https://www.gameofcreators.com/goc_ogc.png"],
     creator: "@gameofcreators",
   },
@@ -76,7 +78,6 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user;
@@ -95,13 +96,20 @@ export default async function RootLayout({
       .maybeSingle();
 
     if (userError) {
-      console.error("Error fetching user profile data in layout:", userError.message);
+      console.error(
+        "Error fetching user profile data in layout:",
+        userError.message
+      );
     }
 
     if (userData) {
       profileFullName = userData.full_name;
       profilePictureUrl = userData.profile_picture_url;
-      userType = userData.user_type as "advertiser" | "creator" | "admin" | null;
+      userType = userData.user_type as
+        | "advertiser"
+        | "creator"
+        | "admin"
+        | null;
     }
 
     // Fetch subscription info only for advertisers
@@ -112,8 +120,11 @@ export default async function RootLayout({
         .eq("id", user.id)
         .maybeSingle();
 
-      if (advertiserError && advertiserError.code !== 'PGRST116') {
-        console.error("Error fetching advertiser profile in layout:", advertiserError.message);
+      if (advertiserError && advertiserError.code !== "PGRST116") {
+        console.error(
+          "Error fetching advertiser profile in layout:",
+          advertiserError.message
+        );
       }
 
       if (advertiserData?.subscription_info) {
@@ -123,8 +134,72 @@ export default async function RootLayout({
     }
   }
 
+  // Determine initial theme mode on the server from cookies to avoid white flash
+  const cookieStore = await cookies();
+  const presetCookie = cookieStore.get("dashboard-preset")?.value as
+    | "game-of-creators"
+    | "clean-professional"
+    | "dark-professional"
+    | undefined;
+  const modeCookie = cookieStore.get("dashboard-mode")?.value as
+    | "light"
+    | "dark"
+    | undefined;
+  const presetToMode: Record<string, "light" | "dark"> = {
+    "game-of-creators": "dark",
+    "clean-professional": "light",
+    "dark-professional": "dark",
+  };
+  const initialMode: "light" | "dark" = presetCookie
+    ? presetToMode[presetCookie] || "light"
+    : modeCookie === "dark" || modeCookie === "light"
+    ? modeCookie
+    : "light";
+
   return (
-    <html lang="en">
+    <html lang="en" data-theme={initialMode} suppressHydrationWarning>
+      <head>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              html{background:${
+                initialMode === "dark" ? "#07031E" : "#ffffff"
+              };color:${
+              initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
+            }}
+              body{background:inherit;color:inherit}
+            `,
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                try {
+                  var d = document.documentElement;
+                  var get = function(k){
+                    try { return window.localStorage.getItem(k); } catch(e) { return null; }
+                  };
+                  var mode = 'light';
+                  var preset = get('dashboard-preset');
+                  var presetToMode = { 'game-of-creators': 'dark', 'clean-professional': 'light', 'dark-professional': 'dark' };
+                  if (preset && presetToMode[preset]) {
+                    mode = presetToMode[preset];
+                  } else {
+                    var savedMode = get('dashboard-mode');
+                    if (savedMode === 'dark' || savedMode === 'light') mode = savedMode;
+                  }
+                  d.setAttribute('data-theme', mode);
+                  if (mode === 'dark') {
+                    d.style.backgroundColor = '#07031E';
+                    d.style.color = 'rgb(248, 250, 252)';
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={inter.className} suppressHydrationWarning>
         <div className="relative flex min-h-screen flex-col">
           {/* Capture referral codes from landing links and store in localStorage */}
