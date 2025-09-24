@@ -145,7 +145,7 @@ export default function RejectionReasonModal({
     
         return () => observer.disconnect();
       }, []);
-      
+
     const handleConfirm = () => {
         const finalReason = selectedReason === 'other' ? customReason : selectedReason;
         if (finalReason.trim()) {
@@ -269,9 +269,10 @@ export default function RejectionReasonModal({
                                 align="start"
                                 position="popper"
                                 side="bottom"
+                                isDark={isDark}
                             >
                                 {PREDEFINED_REASONS.map((reason) => (
-                                    <SelectItem key={reason.value} value={reason.value} className="select-item">
+                                    <SelectItem key={reason.value} value={reason.value} className="select-item" isDark={isDark}>
                                         <div className="select-item-content">
                                             <span className="font-medium text-sm">{reason.label}</span>
                                             <span className="text-xs text-muted-foreground leading-relaxed">{reason.description}</span>

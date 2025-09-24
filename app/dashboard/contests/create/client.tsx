@@ -5287,9 +5287,9 @@ export default function CreateContestPage({
                   >
                     <SelectValue placeholder="Select contest platform" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="youtube">YouTube</SelectItem>
-                    <SelectItem value="instagram">Instagram</SelectItem>
+                  <SelectContent isDark={isDark}>
+                    <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
+                    <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -5312,24 +5312,24 @@ export default function CreateContestPage({
                   >
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="crypto-financial">
+                  <SelectContent isDark={isDark}>
+                    <SelectItem value="crypto-financial" isDark={isDark}>
                       Crypto/Financial
                     </SelectItem>
-                    <SelectItem value="education">Education</SelectItem>
-                    <SelectItem value="dating">Dating</SelectItem>
-                    <SelectItem value="food-drink">Food & Drink</SelectItem>
-                    <SelectItem value="games-toys">Games & Toys</SelectItem>
-                    <SelectItem value="health-wellness">
+                    <SelectItem value="education" isDark={isDark}>Education</SelectItem>
+                    <SelectItem value="dating" isDark={isDark}>Dating</SelectItem>
+                    <SelectItem value="food-drink" isDark={isDark}>Food & Drink</SelectItem>
+                    <SelectItem value="games-toys" isDark={isDark}>Games & Toys</SelectItem>
+                    <SelectItem value="health-wellness" isDark={isDark}>
                       Health & Wellness
                     </SelectItem>
-                    <SelectItem value="home-living">Home & Living</SelectItem>
-                    <SelectItem value="pets-animals">Pets & Animals</SelectItem>
-                    <SelectItem value="sports-outdoors">
+                    <SelectItem value="home-living" isDark={isDark}>Home & Living</SelectItem>
+                    <SelectItem value="pets-animals" isDark={isDark}>Pets & Animals</SelectItem>
+                    <SelectItem value="sports-outdoors" isDark={isDark}>
                       Sports & Outdoors
                     </SelectItem>
-                    <SelectItem value="technology">Technology</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="technology" isDark={isDark}>Technology</SelectItem>
+                    <SelectItem value="other" isDark={isDark}>Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

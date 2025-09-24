@@ -3877,26 +3877,26 @@ export default function EditContestPage({
                     >
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="crypto-financial">
+                    <SelectContent isDark={isDark}>
+                      <SelectItem value="crypto-financial" isDark={isDark}>
                         Crypto/Financial
                       </SelectItem>
-                      <SelectItem value="education">Education</SelectItem>
-                      <SelectItem value="dating">Dating</SelectItem>
-                      <SelectItem value="food-drink">Food & Drink</SelectItem>
-                      <SelectItem value="games-toys">Games & Toys</SelectItem>
+                      <SelectItem value="education" isDark={isDark}>Education</SelectItem>
+                      <SelectItem value="dating" isDark={isDark}>Dating</SelectItem>
+                      <SelectItem value="food-drink" isDark={isDark}>Food & Drink</SelectItem>
+                      <SelectItem value="games-toys" isDark={isDark}>Games & Toys</SelectItem>
                       <SelectItem value="health-wellness">
                         Health & Wellness
                       </SelectItem>
-                      <SelectItem value="home-living">Home & Living</SelectItem>
+                      <SelectItem value="home-living"isDark={isDark}>Home & Living</SelectItem>
                       <SelectItem value="pets-animals">
                         Pets & Animals
                       </SelectItem>
-                      <SelectItem value="sports-outdoors">
+                      <SelectItem value="sports-outdoors"isDark={isDark}>
                         Sports & Outdoors
                       </SelectItem>
-                      <SelectItem value="technology">Technology</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      <SelectItem value="technology" isDark={isDark}>Technology</SelectItem>
+                      <SelectItem value="other" isDark={isDark}>Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -5833,7 +5833,7 @@ export default function EditContestPage({
               {contestCommissionRate !== null &&
                 currentPlanCommissionRate !== null &&
                 contestCommissionRate !== currentPlanCommissionRate && (
-                  <Alert className="mb-4 border-blue-200 bg-blue-50 w-full">
+                  <Alert className='mb-4 w-full bg-[#D9C0FF26] border border-[#7F39EC]'>
                     <Info className="h-4 w-4 flex-shrink-0" />
                     <AlertDescription className="min-w-0">
                       <strong>Commission Rate Notice:</strong> This contest was
@@ -5900,7 +5900,7 @@ export default function EditContestPage({
                   className={cn(
                     "w-full text-md rounded-full",
                     isDark
-                      ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                      ? "py-3 border border-[#FF5353] bg-[#06021D] text-[#FF5353]"
                       : "bg-[#FF323224] text-[#E50000] py-4"
                   )}
                   onClick={() => setShowPayment(false)}

@@ -1076,9 +1076,9 @@ export default function ContestDetailClient({
                       <SelectTrigger>
                         <SelectValue placeholder="Select new status" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent isDark={isDark}>
                         {getAvailableStatusOptions().map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
+                          <SelectItem key={option.value} value={option.value} isDark={isDark}>
                             <div className="flex flex-col">
                               <span className="font-medium">
                                 {option.label}
@@ -2801,17 +2801,17 @@ export default function ContestDetailClient({
                             >
                               <SelectValue placeholder="Sort submissions" />
                             </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="views_desc">
+                            <SelectContent isDark={isDark}>
+                              <SelectItem isDark={isDark} value="views_desc">
                                 Views • High → Low
                               </SelectItem>
-                              <SelectItem value="views_asc">
+                              <SelectItem value="views_asc"  isDark={isDark}>
                                 Views • Low → High
                               </SelectItem>
-                              <SelectItem value="time_desc">
+                              <SelectItem value="time_desc" isDark={isDark}>
                                 Submitted • Newest First
                               </SelectItem>
-                              <SelectItem value="time_asc">
+                              <SelectItem value="time_asc" isDark={isDark}>
                                 Submitted • Oldest First
                               </SelectItem>
                             </SelectContent>

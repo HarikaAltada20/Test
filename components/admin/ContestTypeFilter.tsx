@@ -33,7 +33,7 @@ export default function ContestTypeFilter({ value = "all", onChange: customOnCha
             <SelectTrigger className="w-44">
                 <SelectValue placeholder="Contest Type" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent >
                 <SelectItem value="all">All Contest Types</SelectItem>
                 <SelectItem value="leaderboard">Leaderboard</SelectItem>
                 <SelectItem value="cpm">CPM</SelectItem>

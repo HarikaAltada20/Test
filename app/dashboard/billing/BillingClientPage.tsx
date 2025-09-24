@@ -1664,9 +1664,9 @@ export default function BillingClientPage({
                 <SelectTrigger id="payoutCountry">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="IN">India</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
+                <SelectContent isDark={isDark}>
+                  <SelectItem isDark={isDark} value="IN">India</SelectItem>
+                  <SelectItem isDark={isDark} value="OTHER">Other</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1730,8 +1730,8 @@ export default function BillingClientPage({
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BNB_BEP20">
+                    <SelectContent isDark={isDark}>
+                      <SelectItem isDark={isDark} value="BNB_BEP20">
                         BNB Smart Chain (BEP20)
                       </SelectItem>
                     </SelectContent>
@@ -2105,18 +2105,18 @@ export default function BillingClientPage({
                 <SelectTrigger id="payoutMethodSelect">
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent isDark={isDark}>
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
