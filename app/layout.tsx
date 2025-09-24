@@ -17,9 +17,10 @@ export const metadata: Metadata = {
   title: "Game Of Creators - Performance-Based Creator Marketing Platform",
   description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
   metadataBase: new URL('https://www.gameofcreators.com'),
+  manifest: "/manifest.json",
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.ico", type: "image/x-icon" },
       { url: "/goc.png", type: "image/png" },
       { url: "/icon1.png", sizes: "96x96", type: "image/png" },
       { url: "/icon0.svg", type: "image/svg+xml" },
