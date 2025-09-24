@@ -259,7 +259,11 @@ export function SubscriptionUpgradeModal({
           {/* Plan Comparison */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Current Plan */}
-            <div className="border rounded-2xl border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]">
+            <div className={`border rounded-2xl ${
+              pathname === "/pricing" || isDark
+                ? "border-gray-600 text-white bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
+                : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
+            }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div
@@ -296,7 +300,12 @@ export function SubscriptionUpgradeModal({
             </div>
 
             {/* Target Plan */}
-            <div className="border rounded-2xl border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]">
+            <div
+             className={`border rounded-2xl ${
+              pathname === "/pricing" || isDark
+                ? "border-gray-600 text-white bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
+                : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
+            }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div
@@ -401,7 +410,7 @@ export function SubscriptionUpgradeModal({
                   <Alert
                     className={`ml-2 ${
                       pathname === "/pricing" || isDark
-                        ? "bg-[#B16FF43D] border-2 border-[#7F39EC] text-white"
+                        ? "bg-[#B16FF43D] border border-gray-500 text-white"
                         : "bg-white text-black border border-gray-200"
                     }`}
                   >
