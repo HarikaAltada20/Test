@@ -301,19 +301,19 @@ export default function CreatorsClient() {
 
             {/* Call-to-Action Buttons */}
             <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
-            <Link
-                  href="/auth/signup"
-                
-                  onClick={() => {
-                    localStorage.setItem("signupRole", "creator");
-                  }}
-                >
-              <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
-              
+              <Link
+                href="/auth/signup"
+
+                onClick={() => {
+                  localStorage.setItem("signupRole", "creator");
+                }}
+              >
+                <Button className="rounded-3xl relative bg-gradient-to-r from-[#FF512F] to-[#F09819] text-white font-bold px-8 py-6 text-lg overflow-hidden hover:from-[#FF512F]/90 hover:to-[#F09819]/90 transition-all duration-300 shadow-lg">
+
                   <Sparkles className="h-4 w-4" />
                   <span>Get Started →</span>
-                
-              </Button>
+
+                </Button>
               </Link>
 
               <Button
@@ -321,7 +321,7 @@ export default function CreatorsClient() {
                 className="rounded-3xl border-2 border-slate-400/40 text-slate-300 font-semibold px-8 py-6 text-lg hover:border-orange-400/50 hover:text-orange-400 transition-all duration-300 bg-transparent hover:bg-slate-800/20 hover:shadow-lg"
                 asChild
               >
-                <a href="https://youtu.be/DrW0UnbQgfQ?si=zqr9imnzt03jeEgE" target="_blank" rel="noopener noreferrer">
+                <a href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N" target="_blank" rel="noopener noreferrer">
                   Watch Demo
                 </a>
               </Button>
