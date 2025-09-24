@@ -3885,14 +3885,14 @@ export default function EditContestPage({
                       <SelectItem value="dating" isDark={isDark}>Dating</SelectItem>
                       <SelectItem value="food-drink" isDark={isDark}>Food & Drink</SelectItem>
                       <SelectItem value="games-toys" isDark={isDark}>Games & Toys</SelectItem>
-                      <SelectItem value="health-wellness">
+                      <SelectItem value="health-wellness" isDark={isDark}>
                         Health & Wellness
                       </SelectItem>
-                      <SelectItem value="home-living"isDark={isDark}>Home & Living</SelectItem>
-                      <SelectItem value="pets-animals">
+                      <SelectItem value="home-living" isDark={isDark}>Home & Living</SelectItem>
+                      <SelectItem value="pets-animals" isDark={isDark}>
                         Pets & Animals
                       </SelectItem>
-                      <SelectItem value="sports-outdoors"isDark={isDark}>
+                      <SelectItem value="sports-outdoors" isDark={isDark}>
                         Sports & Outdoors
                       </SelectItem>
                       <SelectItem value="technology" isDark={isDark}>Technology</SelectItem>

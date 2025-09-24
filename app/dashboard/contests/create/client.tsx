@@ -4763,16 +4763,20 @@ export default function CreateContestPage({
 
   // Upgrade Modal component
   const UpgradeModal = () => (
-    <div 
-    className={cn(
-      "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-      isDark ? "bg-[#100A33]" : "bg-black"
-    )}>
-      <div 
+    <div
       className={cn(
-        "rounded-lg p-6 max-w-md w-full shadow-xl",
-        isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-black"
-      )}>
+        "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
+        isDark ? "bg-[#100A33]" : "bg-black"
+      )}
+    >
+      <div
+        className={cn(
+          "rounded-lg p-6 max-w-md w-full shadow-xl",
+          isDark
+            ? "bg-[#06021D] border border-gray-800 text-white"
+            : "bg-white text-black"
+        )}
+      >
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center">
             <Trophy className="h-5 w-5 text-purple-600" />
@@ -4811,16 +4815,20 @@ export default function CreateContestPage({
 
   // Refresh Warning Modal
   const RefreshWarningModal = () => (
-    <div 
-    className={cn(
-      "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-      isDark ? "bg-[#100A33]" : "bg-black"
-    )}>
-      <div 
+    <div
       className={cn(
-        "rounded-lg p-6 max-w-md w-full shadow-xl",
-        isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-black"
-      )}>
+        "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
+        isDark ? "bg-[#100A33]" : "bg-black"
+      )}
+    >
+      <div
+        className={cn(
+          "rounded-lg p-6 max-w-md w-full shadow-xl",
+          isDark
+            ? "bg-[#06021D] border border-gray-800 text-white"
+            : "bg-white text-black"
+        )}
+      >
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center">
             <AlertTriangle className="h-5 w-5 text-white" />
@@ -4859,7 +4867,6 @@ export default function CreateContestPage({
 
   return (
     <div className="container mx-auto py-8 bg-background text-foreground transition-colors duration-300">
-    
       {/* Enhanced Header with Better Back Button */}
       <div className="mb-8">
         <div className="flex items-center gap-4 mb-6">
@@ -5288,8 +5295,12 @@ export default function CreateContestPage({
                     <SelectValue placeholder="Select contest platform" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
-                    <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
-                    <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
+                    <SelectItem isDark={isDark} value="youtube">
+                      YouTube
+                    </SelectItem>
+                    <SelectItem isDark={isDark} value="instagram">
+                      Instagram
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -5316,20 +5327,36 @@ export default function CreateContestPage({
                     <SelectItem value="crypto-financial" isDark={isDark}>
                       Crypto/Financial
                     </SelectItem>
-                    <SelectItem value="education" isDark={isDark}>Education</SelectItem>
-                    <SelectItem value="dating" isDark={isDark}>Dating</SelectItem>
-                    <SelectItem value="food-drink" isDark={isDark}>Food & Drink</SelectItem>
-                    <SelectItem value="games-toys" isDark={isDark}>Games & Toys</SelectItem>
+                    <SelectItem value="education" isDark={isDark}>
+                      Education
+                    </SelectItem>
+                    <SelectItem value="dating" isDark={isDark}>
+                      Dating
+                    </SelectItem>
+                    <SelectItem value="food-drink" isDark={isDark}>
+                      Food & Drink
+                    </SelectItem>
+                    <SelectItem value="games-toys" isDark={isDark}>
+                      Games & Toys
+                    </SelectItem>
                     <SelectItem value="health-wellness" isDark={isDark}>
                       Health & Wellness
                     </SelectItem>
-                    <SelectItem value="home-living" isDark={isDark}>Home & Living</SelectItem>
-                    <SelectItem value="pets-animals" isDark={isDark}>Pets & Animals</SelectItem>
+                    <SelectItem value="home-living" isDark={isDark}>
+                      Home & Living
+                    </SelectItem>
+                    <SelectItem value="pets-animals" isDark={isDark}>
+                      Pets & Animals
+                    </SelectItem>
                     <SelectItem value="sports-outdoors" isDark={isDark}>
                       Sports & Outdoors
                     </SelectItem>
-                    <SelectItem value="technology" isDark={isDark}>Technology</SelectItem>
-                    <SelectItem value="other" isDark={isDark}>Other</SelectItem>
+                    <SelectItem value="technology" isDark={isDark}>
+                      Technology
+                    </SelectItem>
+                    <SelectItem value="other" isDark={isDark}>
+                      Other
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -6519,24 +6546,24 @@ export default function CreateContestPage({
 
       {/* Payment Modal */}
       {showPayment && (
-        <div 
-        className={cn(
-          "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-          isDark ? "bg-[#100A33]" : "bg-black"
-        )}>
-          <div 
+        <div
           className={cn(
-            "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-            isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-gray-900 "
-          )}>
+            "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+            isDark ? "bg-[#100A33]" : "bg-black"
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
+              isDark
+                ? "bg-[#06021D] border border-gray-800 text-white"
+                : "bg-white text-gray-900 "
+            )}
+          >
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">
-                  Contest Payment
-                </h2>
-                <p>
-                  Complete payment to submit your contest for review
-                </p>
+                <h2 className="text-2xl font-bold mb-2">Contest Payment</h2>
+                <p>Complete payment to submit your contest for review</p>
               </div>
 
               <ContestPaymentSelection

@@ -579,15 +579,19 @@ export const SubscriptionManagementBilling = memo(
     if (isLoading) {
       return (
         <div className="space-y-8">
-          <div className="text-center py-8">
+          <div 
+           className={cn(
+            "text-center py-8",
+            isDark ? "text-white" : "text-gray-600 "
+          )}>
             {/* <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
           </div> */}
             <PageLoadingSpinner mode="light" />
-            <h2 className="text-2xl font-bold text-gray-600 mb-2">
+            <h2 className="text-2xl font-bold mb-2">
               Loading Subscription Details
             </h2>
-            <p className="text-gray-600">
+            <p>
               Please wait while we fetch your subscription information...
             </p>
           </div>
