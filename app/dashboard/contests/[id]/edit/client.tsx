@@ -5809,14 +5809,22 @@ export default function EditContestPage({
 
       {/* Payment Modal */}
       {showPayment && contest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div 
+        className={cn(
+          "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+          isDark ? "bg-[#100A33]" : "bg-black"
+        )}>
+          <div
+           className={cn(
+            "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
+            isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-gray-900 "
+          )} >
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2 className="text-2xl font-bold mb-2">
                   Contest Payment
                 </h2>
-                <p className="text-gray-600">
+                <p >
                   Complete payment to submit your contest for review
                 </p>
               </div>
@@ -5833,7 +5841,7 @@ export default function EditContestPage({
                       Your current plan has a {currentPlanCommissionRate}%
                       commission rate.
                       <br />
-                      <span className="text-sm text-gray-600">
+                      <span className="text-sm">
                         If you want to use your new plan's commission rate,
                         you'll need to create a new contest.
                       </span>
@@ -5882,15 +5890,22 @@ export default function EditContestPage({
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
                 disabled={isSubmitting}
+              
                 isIncrease={budgetChanged && budgetDifference > 0}
                 isDecrease={false} // Budget decreases are now handled directly, not through payment modal
               />
 
               <div className="mt-6">
                 <Button
-                  className="w-full bg-[#FF323224] text-[#E50000] py-6 text-md rounded-full"
+                  className={cn(
+                    "w-full text-md rounded-full",
+                    isDark
+                      ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                      : "bg-[#FF323224] text-[#E50000] py-4"
+                  )}
                   onClick={() => setShowPayment(false)}
                   disabled={isSubmitting}
+                  size="lg"
                 >
                   Cancel
                 </Button>

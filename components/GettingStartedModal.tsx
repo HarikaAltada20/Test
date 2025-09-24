@@ -167,7 +167,7 @@ export default function GettingStartedModal({
           <div
             className={cn(
               "rounded-2xl w-full max-w-2xl p-6 md:py-12 md:px-10 text-center relative",
-              isDark ? "bg-[#06021D] " : "bg-white"
+              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
             )}
           >
             <button
@@ -228,7 +228,7 @@ export default function GettingStartedModal({
           <div
             className={cn(
               "rounded-2xl w-full max-w-4xl lg:max-w-6xl flex flex-col md:flex-row overflow-hidden relative",
-              isDark ? "bg-[#06021D]" : "bg-white"
+              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
             )}
           >
             <button
@@ -371,7 +371,7 @@ export default function GettingStartedModal({
       <div 
         className={cn(
           " rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto relative pt-12 pb-6",
-          isDark ? "bg-[#06021D]" : "bg-white"
+          isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
         )}>
         <button
           onClick={() => {
@@ -715,7 +715,7 @@ export default function GettingStartedModal({
       <div 
      className={cn(
       "rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto px-4 py-8 md:px-8 md:py-12 text-center relative",
-      isDark ? "bg-[#06021D]" : "bg-white"
+      isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
     )} >
         {/* Back (top-left) */}
         <button

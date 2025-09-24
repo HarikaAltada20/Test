@@ -1037,6 +1037,7 @@ export default function ContestDetailClient({
             <Dialog
               open={statusUpdateDialog}
               onOpenChange={setStatusUpdateDialog}
+              isdark={isDark}
             >
               <DialogTrigger asChild>
                 <Button

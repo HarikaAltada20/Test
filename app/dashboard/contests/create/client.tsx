@@ -4720,8 +4720,18 @@ export default function CreateContestPage({
 
   // Custom Back Modal component
   const BackModal = () => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+    <div
+      className={cn(
+        "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
+        isDark ? "bg-[#100A33]" : "bg-black"
+      )}
+    >
+      <div
+        className={cn(
+          "rounded-lg p-6 max-w-md w-full shadow-xl",
+          isDark ? "bg-[#06021D]  border border-gray-800" : "bg-white"
+        )}
+      >
         <h2 className="text-xl font-bold mb-4">Leave Contest Creation?</h2>
         <p className="mb-6">
           Do you want to save this contest as a draft or delete it? All progress
@@ -4753,15 +4763,23 @@ export default function CreateContestPage({
 
   // Upgrade Modal component
   const UpgradeModal = () => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+    <div 
+    className={cn(
+      "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
+      isDark ? "bg-[#100A33]" : "bg-black"
+    )}>
+      <div 
+      className={cn(
+        "rounded-lg p-6 max-w-md w-full shadow-xl",
+        isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-black"
+      )}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center">
             <Trophy className="h-5 w-5 text-purple-600" />
           </div>
           <h2 className="text-xl font-bold">Upgrade Your Plan</h2>
         </div>
-        <p className="mb-6 text-gray-600">
+        <p className="mb-6">
           You have unsaved contest data. Would you like to save your progress
           before upgrading your plan?
         </p>
@@ -4793,15 +4811,23 @@ export default function CreateContestPage({
 
   // Refresh Warning Modal
   const RefreshWarningModal = () => (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-xl">
+    <div 
+    className={cn(
+      "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
+      isDark ? "bg-[#100A33]" : "bg-black"
+    )}>
+      <div 
+      className={cn(
+        "rounded-lg p-6 max-w-md w-full shadow-xl",
+        isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-black"
+      )}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-600 rounded-full flex items-center justify-center">
             <AlertTriangle className="h-5 w-5 text-white" />
           </div>
           <h2 className="text-xl font-bold">Unsaved Changes</h2>
         </div>
-        <p className="mb-6 text-gray-600">
+        <p className="mb-6">
           You have unsaved changes. Refreshing the page will lose all your
           progress. What would you like to do?
         </p>
@@ -4815,14 +4841,14 @@ export default function CreateContestPage({
           <Button
             variant="outline"
             onClick={handleConfirmRefresh}
-            className="w-full border-2 hover:bg-gray-50"
+            className="w-full border-2"
           >
             Refresh Anyway
           </Button>
           <Button
             variant="ghost"
             onClick={handleCancelRefresh}
-            className="w-full text-gray-600 hover:text-gray-800"
+            className="w-full text-gray-600"
           >
             Cancel
           </Button>
@@ -4833,13 +4859,14 @@ export default function CreateContestPage({
 
   return (
     <div className="container mx-auto py-8 bg-background text-foreground transition-colors duration-300">
+    
       {/* Enhanced Header with Better Back Button */}
       <div className="mb-8">
         <div className="flex items-center gap-4 mb-6">
           <Button
             variant="outline"
             asChild={false}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all duration-200"
             onClick={handleBackToContests}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -5192,20 +5219,22 @@ export default function CreateContestPage({
                             <div className="mt-2 flex items-center gap-2">
                               {isFreePlan && (
                                 <button
-                                className={cn(
-                                  "text-white text-md px-3 rounded-full py-1 h-8",
-                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
-                                )}>
+                                  className={cn(
+                                    "text-white text-md px-3 rounded-full py-1 h-8",
+                                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                  )}
+                                >
                                   <Link href="/dashboard/billing?tab=subscription">
                                     Upgrade Plan
                                   </Link>
                                 </button>
                               )}
-                              <p 
-                              className={cn(
-                                "text-sm font-medium",
-                                isDark ? "text-white" : "text-black"
-                              )}>
+                              <p
+                                className={cn(
+                                  "text-sm font-medium",
+                                  isDark ? "text-white" : "text-black"
+                                )}
+                              >
                                 Available in paid plans only
                               </p>
                             </div>
@@ -6490,14 +6519,22 @@ export default function CreateContestPage({
 
       {/* Payment Modal */}
       {showPayment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div 
+        className={cn(
+          "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+          isDark ? "bg-[#100A33]" : "bg-black"
+        )}>
+          <div 
+          className={cn(
+            "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
+            isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-gray-900 "
+          )}>
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2 className="text-2xl font-bold mb-2">
                   Contest Payment
                 </h2>
-                <p className="text-gray-600">
+                <p>
                   Complete payment to submit your contest for review
                 </p>
               </div>
@@ -6518,11 +6555,17 @@ export default function CreateContestPage({
                 disabled={isLoading}
               />
 
-              <div className="w-full mt-4">
+              <div className="w-full mt-3">
                 <Button
-                  className="w-full bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+                  className={cn(
+                    "w-full text-md rounded-full",
+                    isDark
+                      ? "py-3 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
+                      : "bg-[#FF323224] text-[#E50000] py-4"
+                  )}
                   onClick={() => setShowPayment(false)}
                   disabled={isLoading}
+                  size="lg"
                 >
                   Cancel
                 </Button>

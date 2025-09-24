@@ -1634,6 +1634,7 @@ export default function BillingClientPage({
           setIsPayoutModalOpen(isOpen);
           if (!isOpen) resetPayoutForm();
         }}
+        isdark={isDark}
       >
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1709,6 +1710,11 @@ export default function BillingClientPage({
                   <Input
                     id="payoutFriendlyNameCrypto"
                     value={payoutFriendlyName}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., My Binance USDT"
                     disabled={isLoading}
@@ -1736,6 +1742,11 @@ export default function BillingClientPage({
                   <Input
                     id="cryptoAddress"
                     value={cryptoAddress}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                     onChange={(e) => setCryptoAddress(e.target.value)}
                     placeholder={`Enter your ${cryptoNetwork} wallet address`}
                     disabled={isLoading}
@@ -1762,6 +1773,11 @@ export default function BillingClientPage({
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., Primary Savings"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1774,6 +1790,11 @@ export default function BillingClientPage({
                       value={bankAccountHolder}
                       onChange={(e) => setBankAccountHolder(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1783,6 +1804,11 @@ export default function BillingClientPage({
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1792,6 +1818,11 @@ export default function BillingClientPage({
                       value={bankIfscCode}
                       onChange={(e) => setBankIfscCode(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1801,6 +1832,11 @@ export default function BillingClientPage({
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                   </div>
                 </div>
@@ -1821,6 +1857,11 @@ export default function BillingClientPage({
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., My UPI"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                   />
                 </div>
                 <div className="space-y-1">
@@ -1831,6 +1872,11 @@ export default function BillingClientPage({
                     onChange={(e) => setBankAccountHolder(e.target.value)}
                     placeholder="e.g., Rahul Kumar"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                   />
                 </div>
                 <div className="space-y-1">
@@ -1841,6 +1887,11 @@ export default function BillingClientPage({
                     onChange={(e) => setUpiId(e.target.value)}
                     placeholder="yourname@bank"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -1852,24 +1903,34 @@ export default function BillingClientPage({
             </Tabs>
           </div>
           <DialogFooter>
-            <Button
+            <button
               onClick={handleSavePayoutMethod}
               disabled={isLoading}
-              className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full"
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "bg-[#7F39EC] py-3"
+                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+              )}
             >
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
                 ? "Save Changes"
                 : "Add Method"}
-            </Button>
+            </button>
             <DialogClose asChild>
-              <Button
+              <button
                 disabled={isLoading}
-                className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+                className={cn(
+                  "w-full text-md rounded-full",
+                  isDark
+                    ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                    : "bg-[#FF323224] text-[#E50000] py-4"
+                )}
               >
                 Cancel
-              </Button>
+              </button>
             </DialogClose>
           </DialogFooter>
 
@@ -1943,6 +2004,7 @@ export default function BillingClientPage({
           if (isSubmittingWithdrawal && isOpen) return;
           setIsWithdrawModalOpen(isOpen);
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -1982,7 +2044,11 @@ export default function BillingClientPage({
                     step="0.01"
                     placeholder="e.g., 50.00"
                     disabled={isLoading}
-                  />
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}/>
                 </div>
               </>
             )}
@@ -2005,6 +2071,11 @@ export default function BillingClientPage({
                     }
                     placeholder="e.g., 1000"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600"
+                        : "bg-white"
+                    )}
                   />
                 </div>
               </>
@@ -2017,6 +2088,11 @@ export default function BillingClientPage({
                 onChange={(e) => setWithdrawalUserNotes(e.target.value)}
                 placeholder="Optional notes for your withdrawal request"
                 disabled={isLoading}
+                className={cn(
+                  isDark
+                    ? "bg-[#06021D] border border-gray-600"
+                    : "bg-white"
+                )}
               />
             </div>
             <div>
@@ -2099,6 +2175,7 @@ export default function BillingClientPage({
           }
           setIsTopUpModalOpen(open);
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
