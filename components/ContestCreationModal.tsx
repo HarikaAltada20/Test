@@ -162,7 +162,7 @@ export function ContestCreationModal({
         >
           <DialogHeader>
             <DialogTitle className={cn("text-xl", isDark ? "text-white" : "text-black")}>Continue with Draft?</DialogTitle>
-            <DialogDescription className="text-md">
+            <DialogDescription className="text-md text-muted-foreground">
               You have an existing draft that you can continue working on.
             </DialogDescription>
           </DialogHeader>

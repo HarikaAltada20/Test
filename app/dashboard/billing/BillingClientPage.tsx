@@ -1638,25 +1638,23 @@ export default function BillingClientPage({
       >
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle    className={cn(
-                isDark ? "text-white" : "text-gray-600"
-              )}>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-600")}
+            >
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
             </DialogTitle>
-            <DialogDescription className={cn(
-                isDark ? "text-white" : "text-gray-600"
-              )}>
+            <DialogDescription
+              className={cn(isDark ? "text-white" : "text-gray-600")}
+            >
               Manage your payout methods. Your default method will be
               pre-selected for withdrawals.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Country selector controls which payout methods show */}
-            <div className={cn(
-                isDark ? "text-white" : "text-gray-600"
-              )}>
+            <div className={cn(isDark ? "text-white" : "text-gray-600")}>
               <Label htmlFor="payoutCountry">Country</Label>
               <Select
                 value={payoutCountry}
@@ -1671,8 +1669,12 @@ export default function BillingClientPage({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value="IN">India</SelectItem>
-                  <SelectItem isDark={isDark} value="OTHER">Other</SelectItem>
+                  <SelectItem isDark={isDark} value="IN">
+                    India
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="OTHER">
+                    Other
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1709,9 +1711,12 @@ export default function BillingClientPage({
               )}
 
               <TabsContent value="crypto" className="pt-4 space-y-2">
-                <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameCrypto">
                     Friendly Name
                   </Label>
@@ -1728,9 +1733,12 @@ export default function BillingClientPage({
                     disabled={isLoading}
                   />
                 </div>
-                <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="cryptoNetwork">Network</Label>
                   <Select
                     value={cryptoNetwork}
@@ -1747,9 +1755,12 @@ export default function BillingClientPage({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
                   <Input
                     id="cryptoAddress"
@@ -1764,9 +1775,12 @@ export default function BillingClientPage({
                     disabled={isLoading}
                   />
                 </div>
-                <div className={cn("rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   We only support BNB Smart Chain (BEP20). Do not enter
                   ERC20/other chain addresses. Wrong address = funds lost.
                 </div>
@@ -1779,9 +1793,12 @@ export default function BillingClientPage({
 
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-                <div className={cn("space-y-1",
-                isDark ? "text-white" : "text-gray-600"
-              )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameBank"
@@ -1797,9 +1814,12 @@ export default function BillingClientPage({
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1815,9 +1835,12 @@ export default function BillingClientPage({
                       )}
                     />
                   </div>
-                  <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
@@ -1831,9 +1854,12 @@ export default function BillingClientPage({
                       )}
                     />
                   </div>
-                  <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
@@ -1847,9 +1873,12 @@ export default function BillingClientPage({
                       )}
                     />
                   </div>
-                  <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
@@ -1873,9 +1902,12 @@ export default function BillingClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
-                <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameUpi"
@@ -1890,9 +1922,12 @@ export default function BillingClientPage({
                     )}
                   />
                 </div>
-                <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiHolder">Account Holder Name</Label>
                   <Input
                     id="upiHolder"
@@ -1907,9 +1942,12 @@ export default function BillingClientPage({
                     )}
                   />
                 </div>
-                <div className={cn("space-y-1",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiId">UPI ID</Label>
                   <Input
                     id="upiId"
@@ -1965,9 +2003,12 @@ export default function BillingClientPage({
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
-            <div className={cn("mt-6 pt-4 border-t",
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <div
+              className={cn(
+                "mt-6 pt-4 border-t",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {payoutMethods.map((method) => (
@@ -2040,14 +2081,14 @@ export default function BillingClientPage({
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle className={cn(
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
-            <DialogDescription className={cn(
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <DialogDescription
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
             </DialogDescription>
@@ -2055,9 +2096,12 @@ export default function BillingClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className={cn("text-lg",
-                  isDark ? "text-white" : "text-gray-600"
-                )}>
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available:{" "}
                   <span className="font-semibold">
                     {profile
@@ -2065,9 +2109,7 @@ export default function BillingClientPage({
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
-                <div className={cn(
-                  isDark ? "text-white" : "text-gray-600"
-                )}>
+                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
                   <Label htmlFor="withdrawAmountDollars">
                     Amount to Withdraw (USD)
                   </Label>
@@ -2088,23 +2130,25 @@ export default function BillingClientPage({
                       isDark
                         ? "bg-[#06021D] border border-gray-600 text-white"
                         : "bg-white text-black"
-                    )}/>
+                    )}
+                  />
                 </div>
               </>
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className={cn("text-lg",
-                  isDark ? "text-white" : "text-gray-600"
-                )}>
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
                   </span>
                 </div>
-                <div className={cn(
-                  isDark ? "text-white" : "text-gray-600"
-                )}>
+                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
                   <Label htmlFor="withdrawAmountCoins">Coins to Redeem</Label>
                   <Input
                     id="withdrawAmountCoins"
@@ -2124,9 +2168,7 @@ export default function BillingClientPage({
                 </div>
               </>
             )}
-            <div className={cn(
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
               <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
               <Input
                 id="withdrawalUserNotes"
@@ -2141,9 +2183,7 @@ export default function BillingClientPage({
                 )}
               />
             </div>
-            <div className={cn(
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
               <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
@@ -2157,14 +2197,22 @@ export default function BillingClientPage({
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
@@ -2227,10 +2275,12 @@ export default function BillingClientPage({
       >
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className={cn(
-              "flex items-center gap-2",
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <DialogTitle
+              className={cn(
+                "flex items-center gap-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               Top Up Your Wallet
               {isProcessingPayment && (
                 <span className="text-sm text-orange-600 font-normal">
@@ -2238,10 +2288,12 @@ export default function BillingClientPage({
                 </span>
               )}
             </DialogTitle>
-            <DialogDescription className={cn(
-              "flex items-center gap-2",
-              isDark ? "text-white" : "text-gray-600"
-            )}>
+            <DialogDescription
+              className={cn(
+                "flex items-center gap-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               Add funds to your wallet balance for contest payments. Your wallet
               balance can be used for all contest fees.
               {isProcessingPayment && (

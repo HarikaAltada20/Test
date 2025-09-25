@@ -1933,8 +1933,12 @@ function DashboardContent({
 
                               <div className="flex-1 min-w-0">
                                 <span
-                                  className="block text-start mt-[2px] text-sm font-medium"
-
+                                  className={cn(
+                                    "block text-start mt-[2px] text-sm font-medium",
+                                    currentMode === "light"
+                                      ? "text-gray-700"
+                                      : "text-white"
+                                  )}
                                   // style={{
                                   //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
                                   //   color: `rgba(${theme.primary}, 1)`,
@@ -2026,7 +2030,7 @@ function DashboardContent({
                                         className={cn(
                                           "text-xs",
                                           currentMode === "light"
-                                            ? "rgba(${theme.primary}, 1)"
+                                            ? "text-gray-700"
                                             : "text-white"
                                         )}
                                       >
@@ -2115,7 +2119,12 @@ function DashboardContent({
                                     />
                                   </div>
                                   <div className="flex-1">
-                                    <div className="font-medium text-md">
+                                    <div  className={cn(
+                                      "font-medium text-md",
+                                      currentMode === "light"
+                                        ? "text-black"
+                                        : "text-white"
+                                    )}>
                                       Edit Profile
                                     </div>
                                   </div>
@@ -2141,7 +2150,7 @@ function DashboardContent({
                                   //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
                                   //   borderColor: `rgba(${theme.primary}, 0.2)`,
                                   //   color: `rgba(${mode.text.secondary}, 1)`,
-                                  // }}
+                                  // }} 
                                   // onMouseEnter={(e) => {
                                   //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
                                   //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
@@ -2172,7 +2181,13 @@ function DashboardContent({
                                     />
                                   </div>
                                   <div className="flex-1 text-left">
-                                    <div className="font-medium text-sm">
+                                    <div 
+                                    className={cn(
+                                      "font-medium text-md",
+                                      currentMode === "light"
+                                        ? "text-black"
+                                        : "text-white"
+                                    )}>
                                       Dashboard Customization
                                     </div>
                                   </div>
