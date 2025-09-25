@@ -171,7 +171,7 @@ export default function GettingStartedModal({
             )}
           >
             <button
-              onClick={onClose}
+              onClick={handleCloseAll}
               className={cn(
                 "absolute top-6 right-6 border z-10 px-6 py-2 rounded-full backdrop-blur-sm",
                 isDark
@@ -232,7 +232,7 @@ export default function GettingStartedModal({
             )}
           >
             <button
-              onClick={onClose}
+              onClick={handleCloseAll}
               className={cn(
                 "absolute top-6 right-6 border z-10 px-6 py-2 rounded-full backdrop-blur-sm",
                 isDark
@@ -364,28 +364,29 @@ export default function GettingStartedModal({
 
   const renderSecondPopup = () => (
     <div
-     className={cn(
-      "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-      isDark ? "bg-[#100A33]" : "bg-black"
-    )}>
-      <div 
+      className={cn(
+        "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+        isDark ? "bg-[#100A33]" : "bg-black"
+      )}
+    >
+      <div
         className={cn(
           " rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto relative pt-12 pb-6",
           isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
-        )}>
+        )}
+      >
         <button
           onClick={() => {
             setShowSecondPopup(false);
             setCurrentStep(steps.length - 1);
           }}
-       
           className={cn(
             "absolute top-4 left-4 sm:top-6 sm:left-6 z-10 px-4 sm:px-8 py-2 border rounded-full transition-all duration-200",
             isDark
               ? "bg-[#06021D] border-white"
               : "text-[#4A00BE] border-[#4A00BE] bg-white/80"
           )}
-       >
+        >
           Back
         </button>
         {/* Skip */}
@@ -402,10 +403,11 @@ export default function GettingStartedModal({
         </button>
         <div className="text-center mt-6 md:mt-0 md:pb-4 px-4">
           <h2
-          className={cn(
-            "text-xl sm:text-2xl font-bold",
-            isDark ? "text-white" : "text-gray-900"
-          )}>
+            className={cn(
+              "text-xl sm:text-2xl font-bold",
+              isDark ? "text-white" : "text-gray-900"
+            )}
+          >
             Choose Your Contest Type
           </h2>
         </div>
@@ -414,60 +416,73 @@ export default function GettingStartedModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Leaderboard Contest Section */}
             <div
-             className={cn(
-              "p-6 border rounded-lg",
-              isDark ? "bg-[#170337] border-[#7F39EC]" : "border-[#7F39EC] bg-[#D9C0FF26]"
-            )}>
+              className={cn(
+                "p-6 border rounded-lg",
+                isDark
+                  ? "bg-[#170337] border-[#7F39EC]"
+                  : "border-[#7F39EC] bg-[#D9C0FF26]"
+              )}
+            >
               <div className="flex flex-wrap items-center gap-3 mb-4">
-                <div 
-                 className={cn(
-                  "p-2.5 rounded-full",
-                  isDark ? "bg-[#FFFFFF3D] text-white" : "bg-[#ECE1FC] text-purple-600"
-                )}>
+                <div
+                  className={cn(
+                    "p-2.5 rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF3D] text-white"
+                      : "bg-[#ECE1FC] text-purple-600"
+                  )}
+                >
                   <Trophy className="w-6 h-6" />
                 </div>
                 <h3 className="font-bold text-lg">Leaderboard Contests</h3>
 
                 <Badge
                   variant="outline"
-                
                   className={cn(
                     "py-1 px-3 rounded-full",
-                    isDark ? "bg-[#FFFFFF3D] text-white" : "bg-[#ECE1FC] text-purple-700"
+                    isDark
+                      ? "bg-[#FFFFFF3D] text-white"
+                      : "bg-[#ECE1FC] text-purple-700"
                   )}
                 >
                   Competition Based
                 </Badge>
               </div>
 
-              <p 
+              <p
                 className={cn(
                   "text-md mb-4",
                   isDark ? "text-white" : "text-gray-600 dark:text-gray-300"
-                )}>
+                )}
+              >
                 Set a fixed prize pool and let creators compete for the top
                 spots.
               </p>
 
               {/* Visual Process */}
               <div className="text-center mb-4">
-                <div 
-                 className={cn(
-                  "inline-block p-4 rounded-lg border",
-                  isDark ? "bg-[#06021D26] border-[#7F39EC]" : "bg-[#D9C0FF26] border-[#7F39EC]"
-                )}>
-                  <div 
-                   className={cn(
-                    "text-lg font-bold mb-1",
-                    isDark ? "text-white" : "text-black"
-                  )}>
+                <div
+                  className={cn(
+                    "inline-block p-4 rounded-lg border",
+                    isDark
+                      ? "bg-[#06021D26] border-[#7F39EC]"
+                      : "bg-[#D9C0FF26] border-[#7F39EC]"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "text-lg font-bold mb-1",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     Set Prize Pool → Creators Compete → Winners Get Paid
                   </div>
-                  <div 
-                   className={cn(
-                    "text-sm",
-                    isDark ? "text-white" : "text-black"
-                  )}>
+                  <div
+                    className={cn(
+                      "text-sm",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     Example: $1000 total, 3 winners get $500, $300, $200
                   </div>
                 </div>
@@ -476,54 +491,66 @@ export default function GettingStartedModal({
               {/* Benefits */}
               <div className="space-y-4">
                 <div className="flex items-start space-x-2">
-                  <Check className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Fixed budget - know your total cost upfront
                   </span>
                 </div>
                 <div className="flex items-start space-x-2">
-                  <Check className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     High competition drives quality content
                   </span>
                 </div>
                 <div className="flex items-start space-x-2">
-                  <Check className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Own winning videos forever
                   </span>
                 </div>
                 <div className="flex items-start space-x-2">
-                  <Check className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Perfect for viral marketing & brand awareness
                   </span>
                 </div>
@@ -531,11 +558,14 @@ export default function GettingStartedModal({
 
               <div className="text-center pt-4">
                 <Link href="/dashboard/contests/create">
-                  <Button 
-                   className={cn(
-                    "text-md text-white w-full",
-                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE] hover:bg-[#4A00BE] "
-                  )}>
+                  <Button
+                    className={cn(
+                      "text-md text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1]"
+                        : "bg-[#4A00BE] hover:bg-[#4A00BE] "
+                    )}
+                  >
                     <Trophy className="w-4 h-4" />
                     Create Leaderboard Contest
                   </Button>
@@ -544,17 +574,23 @@ export default function GettingStartedModal({
             </div>
 
             {/* CPM Contest Section */}
-            <div 
-             className={cn(
-              "p-6 border rounded-lg",
-              isDark ? "bg-[#170337] border-[#7F39EC]" : "border-[#7F39EC] bg-[#D9C0FF26]"
-            )}>
+            <div
+              className={cn(
+                "p-6 border rounded-lg",
+                isDark
+                  ? "bg-[#170337] border-[#7F39EC]"
+                  : "border-[#7F39EC] bg-[#D9C0FF26]"
+              )}
+            >
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <div
-                 className={cn(
-                  "p-2.5 rounded-full",
-                  isDark ? "bg-[#FFFFFF3D] text-white" : "bg-[#ECE1FC] text-purple-600"
-                )}>
+                  className={cn(
+                    "p-2.5 rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF3D] text-white"
+                      : "bg-[#ECE1FC] text-purple-600"
+                  )}
+                >
                   <DollarSign className="w-6 h-6" />
                 </div>
                 <h3 className="font-bold text-lg flex items-center">
@@ -573,41 +609,49 @@ export default function GettingStartedModal({
                   variant="outline"
                   className={cn(
                     "py-1 px-3 rounded-full",
-                    isDark ? "bg-[#FFFFFF3D] text-white" : "bg-[#ECE1FC] text-purple-700"
+                    isDark
+                      ? "bg-[#FFFFFF3D] text-white"
+                      : "bg-[#ECE1FC] text-purple-700"
                   )}
                 >
                   Pay Per 1000 Views
                 </Badge>
               </div>
 
-              <p 
-               className={cn(
-                "text-md mb-4",
-                isDark ? "text-white" : "text-gray-600 dark:text-gray-300"
-              )}>
+              <p
+                className={cn(
+                  "text-md mb-4",
+                  isDark ? "text-white" : "text-gray-600 dark:text-gray-300"
+                )}
+              >
                 Pay only for actual views. More views = more marketing reach for
                 your brand.
               </p>
 
               {/* Visual Process */}
               <div className="text-center mb-4">
-                <div 
-                 className={cn(
-                  "inline-block p-4 rounded-lg border",
-                  isDark ? "bg-[#06021D26] border-[#7F39EC]" : "bg-[#D9C0FF26] border-[#7F39EC]"
-                )}>
+                <div
+                  className={cn(
+                    "inline-block p-4 rounded-lg border",
+                    isDark
+                      ? "bg-[#06021D26] border-[#7F39EC]"
+                      : "bg-[#D9C0FF26] border-[#7F39EC]"
+                  )}
+                >
                   <div
-                   className={cn(
-                    "text-lg font-bold mb-2",
-                    isDark ? "text-white" : "text-black"
-                  )}>
+                    className={cn(
+                      "text-lg font-bold mb-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     Set CPM Rate → Creators Post → Pay Per Views
                   </div>
-                  <div 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-black"
-                  )}>
+                  <div
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     Example: $5 per 1K views, 50K views = $250 payment
                   </div>
                 </div>
@@ -616,57 +660,66 @@ export default function GettingStartedModal({
               {/* Benefits */}
               <div className="space-y-4">
                 <div className="flex items-start space-x-2">
-                  <Check className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
                   <span
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Pay only for performance - no wasted budget
                   </span>
                 </div>
                 <div className="flex items-start space-x-2">
-                  <Check  
-                   className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Scalable - more views = more marketing
                   </span>
                 </div>
                 <div className="flex items-start space-x-2">
-                  <Check  
-                   className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Set max budget & CPM rate for control
                   </span>
                 </div>
                 <div className="flex items-start space-x-2">
-                  <Check  
-                   className={cn(
-                    "w-5 h-5 mt-0.5 flex-shrink-0",
-                    isDark ? "text-purple-400" : "text-[#4A00BE]"
-                  )}/>
-                  <span 
-                   className={cn(
-                    "text-md",
-                    isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
-                  )}>
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
                     Perfect for ongoing marketing & paid advertising
                   </span>
                 </div>
@@ -674,11 +727,14 @@ export default function GettingStartedModal({
 
               <div className="text-center pt-4">
                 <Link href="/dashboard/contests/create">
-                  <Button 
-                   className={cn(
-                    "text-md text-white w-full",
-                    isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE] hover:bg-[#4A00BE] "
-                  )}>
+                  <Button
+                    className={cn(
+                      "text-md text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1]"
+                        : "bg-[#4A00BE] hover:bg-[#4A00BE] "
+                    )}
+                  >
                     <DollarSign className="w-4 h-4" />
                     Create CPM Contest
                   </Button>
@@ -693,12 +749,13 @@ export default function GettingStartedModal({
               setShowSecondPopup(false);
               setShowThirdPopup(true);
             }}
-
             className={cn(
               "text-[14px] w-full py-3 rounded-full font-semibold",
-              isDark ? "bg-[#5F2BB1] text-white" : "bg-[#D9C0FF61] text-purple-500 hover:from-purple-500 hover:to-purple-700"
+              isDark
+                ? "bg-[#5F2BB1] text-white"
+                : "bg-[#D9C0FF61] text-purple-500 hover:from-purple-500 hover:to-purple-700"
             )}
-         >
+          >
             Next Step
           </button>
         </div>
@@ -707,16 +764,18 @@ export default function GettingStartedModal({
   );
 
   const renderThirdPopup = () => (
-    <div 
-    className={cn(
-      "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-      isDark ? "bg-[#100A33]" : "bg-black"
-    )}>
-      <div 
-     className={cn(
-      "rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto px-4 py-8 md:px-8 md:py-12 text-center relative",
-      isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
-    )} >
+    <div
+      className={cn(
+        "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+        isDark ? "bg-[#100A33]" : "bg-black"
+      )}
+    >
+      <div
+        className={cn(
+          "rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto px-4 py-8 md:px-8 md:py-12 text-center relative",
+          isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
+        )}
+      >
         {/* Back (top-left) */}
         <button
           onClick={() => {
@@ -742,39 +801,42 @@ export default function GettingStartedModal({
               ? "bg-[#06021D] border-white"
               : "text-[#4A00BE] border-[#4A00BE] bg-white/80"
           )}
-          
         >
           Skip
         </button>
 
-        <CardContent 
-        className={cn(
-          "mt-12 md:mt-10 p-6 border rounded-2xl",
-          isDark ? "bg-[#170337] border-[#7F39EC]" : "border-[#7F39EC] bg-[#D9C0FF26]"
-        )}>
+        <CardContent
+          className={cn(
+            "mt-12 md:mt-10 p-6 border rounded-2xl",
+            isDark
+              ? "bg-[#170337] border-[#7F39EC]"
+              : "border-[#7F39EC] bg-[#D9C0FF26]"
+          )}
+        >
           <div className="text-center mb-6">
-            <h3 
-            className={cn(
-              "text-2xl font-bold mb-2",
-              isDark ? "text-white" : "text-gray-900"
-            )}>
+            <h3
+              className={cn(
+                "text-2xl font-bold mb-2",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               Ready to Start?
             </h3>
-            <p 
-             className={cn(
-              isDark ? "text-white" : "text-gray-900"
-            )}>
+            <p className={cn(isDark ? "text-white" : "text-gray-900")}>
               Start creating contests and campaigns
             </p>
           </div>
 
           <div className="text-center">
             <Link href="/dashboard/contests/create">
-              <Button 
+              <Button
                 className={cn(
                   "w-full py-3 px-8 text-lg flex items-center justify-center gap-2",
-                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE] hover:bg-[#4A00BE] text-white"
-                )}>
+                  isDark
+                    ? "bg-[#5F2BB1]"
+                    : "bg-[#4A00BE] hover:bg-[#4A00BE] text-white"
+                )}
+              >
                 <Video className="w-6 h-6" />
                 Create Contest
               </Button>

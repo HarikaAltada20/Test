@@ -727,6 +727,21 @@ function DashboardContent({
         }
       `}</style>
 
+      {/* Ensure page background matches theme for full height incl. zoom/fullscreen */}
+      <style jsx global>{`
+        html,
+        body,
+        #__next {
+          background-color: hsl(var(--background)) !important;
+          min-height: 100dvh;
+        }
+
+        /* Also ensure main content area inherits theme background */
+        .dashboard-main-content {
+          background-color: hsl(var(--background));
+        }
+      `}</style>
+
       {/* Main Layout Container */}
       <div className="flex min-h-screen dashboard-container">
         {/* Desktop Sidebar */}
@@ -2119,12 +2134,14 @@ function DashboardContent({
                                     />
                                   </div>
                                   <div className="flex-1">
-                                    <div  className={cn(
-                                      "font-medium text-md",
-                                      currentMode === "light"
-                                        ? "text-black"
-                                        : "text-white"
-                                    )}>
+                                    <div
+                                      className={cn(
+                                        "font-medium text-md",
+                                        currentMode === "light"
+                                          ? "text-black"
+                                          : "text-white"
+                                      )}
+                                    >
                                       Edit Profile
                                     </div>
                                   </div>
@@ -2150,7 +2167,7 @@ function DashboardContent({
                                   //   backgroundColor: `rgba(${mode.background.secondary}, 0.3)`,
                                   //   borderColor: `rgba(${theme.primary}, 0.2)`,
                                   //   color: `rgba(${mode.text.secondary}, 1)`,
-                                  // }} 
+                                  // }}
                                   // onMouseEnter={(e) => {
                                   //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
                                   //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
@@ -2181,13 +2198,14 @@ function DashboardContent({
                                     />
                                   </div>
                                   <div className="flex-1 text-left">
-                                    <div 
-                                    className={cn(
-                                      "font-medium text-md",
-                                      currentMode === "light"
-                                        ? "text-black"
-                                        : "text-white"
-                                    )}>
+                                    <div
+                                      className={cn(
+                                        "font-medium text-md",
+                                        currentMode === "light"
+                                          ? "text-black"
+                                          : "text-white"
+                                      )}
+                                    >
                                       Dashboard Customization
                                     </div>
                                   </div>
@@ -2352,7 +2370,12 @@ function DashboardContent({
           <main className="flex-1 dashboard-main-content">
             <div className="p-6 md:p-8">
               <Suspense fallback={<LoadingPlaceholder />}>
-                <div data-mode={currentMode}>{children}</div>
+                <div
+                  data-mode={currentMode}
+                  data-compact={isCompactMode ? "true" : "false"}
+                >
+                  {children}
+                </div>
               </Suspense>
 
               {/* Chat Popup */}

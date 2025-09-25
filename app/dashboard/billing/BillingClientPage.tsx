@@ -174,6 +174,7 @@ export default function BillingClientPage({
   const [bankSortCode, setBankSortCode] = useState("");
   const [bankRoutingNumber, setBankRoutingNumber] = useState("");
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [isCompact, setIsCompact] = useState<boolean>(false);
   // Withdrawal form states
   const [withdrawAmountDollars, setWithdrawAmountDollars] = useState<number>(0);
   const [withdrawAmountCoins, setWithdrawAmountCoins] = useState<number>(0);
@@ -182,29 +183,36 @@ export default function BillingClientPage({
   >(null);
   const [withdrawalUserNotes, setWithdrawalUserNotes] = useState("");
 
-  // Read mode from data attribute
+  // Read mode/compact flags from data attributes
   useEffect(() => {
-    const checkMode = () => {
-      const modeElement = document.querySelector("[data-mode]");
+    const checkFlags = () => {
+      const container = document.querySelector("[data-mode][data-compact]");
+      const modeElement = container || document.querySelector("[data-mode]");
       if (modeElement) {
         const currentMode = modeElement.getAttribute("data-mode") as
           | "light"
           | "dark";
-        if (currentMode) {
-          setMode(currentMode);
-        }
+        if (currentMode) setMode(currentMode);
+      }
+      const compactElement =
+        container || document.querySelector("[data-compact]");
+      if (compactElement) {
+        setIsCompact(compactElement.getAttribute("data-compact") === "true");
       }
     };
 
-    checkMode();
+    checkFlags();
 
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
-    const targetNode = document.querySelector("[data-mode]");
+    // Watch for changes in the data attributes
+    const observer = new MutationObserver(checkFlags);
+    const targetNode =
+      document.querySelector("[data-mode][data-compact]") ||
+      document.querySelector("[data-mode]") ||
+      document.querySelector("[data-compact]");
     if (targetNode) {
       observer.observe(targetNode, {
         attributes: true,
-        attributeFilter: ["data-mode"],
+        attributeFilter: ["data-mode", "data-compact"],
       });
     }
 
@@ -794,7 +802,13 @@ export default function BillingClientPage({
   const isDark = mode === "dark";
 
   return (
-    <div className="max-w-[1200px] mx-auto py-8">
+    <div
+      className={cn(
+        "mx-auto py-8",
+        // Full width in compact (85% zoom) mode, else constrain width
+        isCompact ? "max-w-none px-4 md:px-6" : "max-w-[1200px]"
+      )}
+    >
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Billing & Account</h1>
       </div>
