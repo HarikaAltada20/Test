@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -434,7 +433,6 @@ export function WalletTopUp({
     return () => observer.disconnect();
   }, []);
 
-  
   const handleSuccess = async () => {
     console.log("🎉 WalletTopUp: Payment success callback triggered");
 
@@ -516,7 +514,12 @@ export function WalletTopUp({
     <>
       <div>
         <div className="mb-6">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle
+            className={cn(
+              "flex items-center gap-2",
+              isDark ? "text-white" : "text-gray-600"
+            )}
+          >
             {/* <DollarSign className="h-5 w-5" /> */}
             Top Up Wallet
           </CardTitle>
@@ -524,10 +527,20 @@ export function WalletTopUp({
         <div className="space-y-6">
           <div className="p-4 rounded-lg border border-gray-400">
             <div className="flex items-center justify-between">
-              <span className="text-md font-medium text-gray-500">
+              <span
+                className={cn(
+                  "text-md font-medium",
+                  isDark ? "text-white" : "text-gray-600"
+                )}
+              >
                 Current Balance
               </span>
-              <span className="text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out">
+              <span
+                className={cn(
+                  "text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out",
+                  isDark ? "text-white" : "text-gray-600"
+                )}
+              >
                 {formatCurrencyFromCents(currentBalance)}
               </span>
             </div>
@@ -536,11 +549,30 @@ export function WalletTopUp({
           {!showPaymentForm ? (
             <div className="space-y-4">
               <div className="space-y-4">
-                <Label className="text-sm font-medium">Quick amounts</Label>
-                <div className="grid grid-cols-3 gap-3">
+                <Label
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}
+                >
+                  Quick amounts
+                </Label>
+                <div
+                  className={cn(
+                    "grid grid-cols-3 gap-3",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}
+                >
                   {predefinedAmounts.map((presetAmount) => (
                     <Button
-                      className="border-[#4A00BE]"
+                      className={cn(
+                        "border-[#4A00BE]",
+                        amount === presetAmount
+                          ? "text-white"
+                          : isDark
+                          ? "text-white"
+                          : "text-gray-600"
+                      )}
                       key={presetAmount}
                       variant={amount === presetAmount ? "default" : "outline"}
                       size="sm"
@@ -553,12 +585,20 @@ export function WalletTopUp({
               </div>
 
               <div className="space-y-2 mb-6">
-                <Label htmlFor="custom-amount">Or enter custom amount</Label>
+                <Label
+                  htmlFor="custom-amount"
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}
+                >
+                  Or enter custom amount
+                </Label>
                 <Input
                   id="custom-amount"
                   type="number"
                   className={cn(
-                    isDark ? "bg-[#06021D] border border-gray-600" : "bg-white"
+                    isDark ? "bg-[#06021D] border border-gray-600 text-white" : "bg-white text-black"
                   )}
                   min="1"
                   max={WALLET_TOP_UP_MAX_AMOUNT}
@@ -571,7 +611,7 @@ export function WalletTopUp({
               <button
                 onClick={() => setShowPaymentForm(true)}
                 className={cn(
-                  "w-full rounded-full",
+                  "w-full rounded-full text-white",
                   isDark
                     ? "bg-[#7F39EC] py-3"
                     : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
@@ -584,12 +624,14 @@ export function WalletTopUp({
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-medium">Complete Payment</h3>
+                <h3 className={cn("font-medium",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}>Complete Payment</h3>
                 <Button
                   className={cn(
                     "border",
                     isDark
-                      ? "text-white border-white"
+                      ? "text-white border-white text-white"
                       : "text-[#4A00BE] border-[#4A00BE]"
                   )}
                   variant="outline"

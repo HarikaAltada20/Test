@@ -238,7 +238,7 @@ export default function RejectionReasonModal({
                     width: 100% !important;
                 }
             `}</style>
-            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
+            <DialogContent className={cn("max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto", isDark ? "text-white" : "text-gray-800")}>
                 <DialogHeader className="space-y-3">
                     <div className="flex items-center gap-3">
                         {/* <div className="p-2 bg-red-100 rounded-full">
@@ -383,7 +383,7 @@ export default function RejectionReasonModal({
                         className={cn(
                             "w-full text-md rounded-full flex-1 sm:flex-none",
                             isDark
-                              ? "bg-[#7F39EC] py-3"
+                              ? "bg-[#7F39EC] py-3 text-white"
                               : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
                           )}
                     >
