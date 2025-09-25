@@ -143,7 +143,43 @@ export default function CreateContestPage({
   const [showBriefPreview, setShowBriefPreview] = useState(false); // Default to editor mode for better UX
   const [rulesHtml, setRulesHtml] = useState("");
   const [rulesJson, setRulesJson] = useState<any>(null);
-  const [mode, setMode] = useState<"light" | "dark">("light");
+  // Initialize theme state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
+
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
   const [showRulesPreview, setShowRulesPreview] = useState(false);
   const isDark = mode === "dark";
   const [resources, setResources] = useState<ResourceItem[]>([]);
@@ -4867,6 +4903,59 @@ export default function CreateContestPage({
 
   return (
     <div className="container mx-auto py-8 bg-background text-foreground transition-colors duration-300">
+      {/* Prevent theme flash during navigation */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              try {
+                var html = document.documentElement;
+                var getTheme = function() {
+                  // Check data-theme attribute first
+                  var dataTheme = html.getAttribute('data-theme');
+                  if (dataTheme === 'dark' || dataTheme === 'light') {
+                    return dataTheme;
+                  }
+                  
+                  // Check data-mode attribute
+                  var modeElement = document.querySelector('[data-mode]');
+                  if (modeElement) {
+                    var dataMode = modeElement.getAttribute('data-mode');
+                    if (dataMode === 'dark' || dataMode === 'light') {
+                      return dataMode;
+                    }
+                  }
+                  
+                  // Check localStorage
+                  try {
+                    var savedMode = localStorage.getItem('dashboard-mode');
+                    if (savedMode === 'dark' || savedMode === 'light') {
+                      return savedMode;
+                    }
+                    
+                    var preset = localStorage.getItem('dashboard-preset');
+                    if (preset === 'game-of-creators' || preset === 'dark-professional') {
+                      return 'dark';
+                    }
+                  } catch(e) {}
+                  
+                  return 'light';
+                };
+                
+                var theme = getTheme();
+                html.setAttribute('data-theme', theme);
+                if (theme === 'dark') {
+                  html.style.backgroundColor = '#07031E';
+                  html.style.color = 'rgb(248, 250, 252)';
+                } else {
+                  html.style.backgroundColor = '#ffffff';
+                  html.style.color = '#111827';
+                }
+              } catch(e) {}
+            })();
+          `,
+        }}
+      />
       {/* Enhanced Header with Better Back Button */}
       <div className="mb-8">
         <div className="flex items-center gap-4 mb-6">

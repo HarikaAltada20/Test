@@ -633,10 +633,10 @@ function DashboardContent({
           border-color: rgba(var(--mode-border), 0.3) !important;
         }
 
-        /* Smooth theme transitions */
+        /* Instant theme transitions for immediate switching */
         * {
-          transition: color 0.2s ease, background-color 0.2s ease,
-            border-color 0.2s ease !important;
+          transition: color 0.05s ease, background-color 0.05s ease,
+            border-color 0.05s ease !important;
         }
 
         /* Ensure smooth transitions for all elements when zoom changes */
@@ -650,8 +650,9 @@ function DashboardContent({
         /* Theme-based scrollbar for all elements */
         * {
           scrollbar-width: thin;
-          scrollbar-color: ${theme.scrollbar}
-            rgba(${mode.background.secondary}, 0.1);
+          scrollbar-color: ${currentMode === "light"
+            ? "rgba(156, 163, 175, 0.6) rgba(255, 255, 255, 1)"
+            : `${theme.scrollbar} rgba(${mode.background.secondary}, 0.1)`};
         }
 
         /* Webkit scrollbar styling */
@@ -661,21 +662,25 @@ function DashboardContent({
         }
 
         *::-webkit-scrollbar-track {
-          background: rgba(
-            ${mode.background.secondary},
-            ${currentMode === "light" ? "0.5" : "0.1"}
-          );
+          background: ${currentMode === "light"
+            ? "rgba(255, 255, 255, 1)"
+            : `rgba(${mode.background.secondary}, 0.1)`};
           border-radius: 10px;
         }
 
         *::-webkit-scrollbar-thumb {
-          background: ${theme.scrollbar};
+          background: ${currentMode === "light"
+            ? "rgba(156, 163, 175, 0.6)"
+            : theme.scrollbar};
           border-radius: 10px;
-          transition: all 0.2s ease;
+          transition: background-color 0.05s ease;
         }
 
         *::-webkit-scrollbar-thumb:hover {
-          background: ${theme.scrollbarHover};
+          background: ${currentMode === "light"
+            ? "rgba(156, 163, 175, 0.8)"
+            : theme.scrollbarHover};
+          transition: background-color 0.05s ease;
         }
 
         *::-webkit-scrollbar-corner {
