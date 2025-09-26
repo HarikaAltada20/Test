@@ -15,8 +15,9 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-  description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
-  metadataBase: new URL('https://www.gameofcreators.com'),
+  description:
+    "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+  metadataBase: new URL("https://www.gameofcreators.com"),
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -25,13 +26,12 @@ export const metadata: Metadata = {
       { url: "/icon1.png", sizes: "96x96", type: "image/png" },
       { url: "/icon0.svg", type: "image/svg+xml" },
     ],
-    apple: [
-      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
-    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+    description:
+      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
     url: "https://www.gameofcreators.com/",
     siteName: "Game Of Creators",
     images: [
@@ -52,7 +52,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-    description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
+    description:
+      "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers.",
     images: ["https://www.gameofcreators.com/goc_ogc.png"],
     creator: "@gameofcreators",
   },
@@ -77,7 +78,6 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user;
@@ -96,13 +96,20 @@ export default async function RootLayout({
       .maybeSingle();
 
     if (userError) {
-      console.error("Error fetching user profile data in layout:", userError.message);
+      console.error(
+        "Error fetching user profile data in layout:",
+        userError.message
+      );
     }
 
     if (userData) {
       profileFullName = userData.full_name;
       profilePictureUrl = userData.profile_picture_url;
-      userType = userData.user_type as "advertiser" | "creator" | "admin" | null;
+      userType = userData.user_type as
+        | "advertiser"
+        | "creator"
+        | "admin"
+        | null;
     }
 
     // Fetch subscription info only for advertisers
@@ -113,8 +120,11 @@ export default async function RootLayout({
         .eq("id", user.id)
         .maybeSingle();
 
-      if (advertiserError && advertiserError.code !== 'PGRST116') {
-        console.error("Error fetching advertiser profile in layout:", advertiserError.message);
+      if (advertiserError && advertiserError.code !== "PGRST116") {
+        console.error(
+          "Error fetching advertiser profile in layout:",
+          advertiserError.message
+        );
       }
 
       if (advertiserData?.subscription_info) {
@@ -143,6 +153,17 @@ export default async function RootLayout({
         <Toaster />
         <SonnerToaster />
         <Analytics />
+        {process.env.NEXT_PUBLIC_CLARITY_ID ? (
+          <Script id="ms-clarity" strategy="afterInteractive">
+            {`
+              (function(c,l,a,r,i,t,y){
+                  c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "${process.env.NEXT_PUBLIC_CLARITY_ID}");
+            `}
+          </Script>
+        ) : null}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8J6VZKVWLF"
           strategy="afterInteractive"
