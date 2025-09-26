@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { Users } from "lucide-react";
@@ -9,73 +8,79 @@ const homeFaqs = [
   {
     id: "faq-home-1",
     question: "What is Game of Creators?",
-    answer: `<strong>Game of Creators democratizes brand deals</strong> by allowing any creator—even those with zero followers—to participate in contests and earn money based purely on <strong>performance and views</strong>.<br><br><strong>For brands,</strong> this system is a game-changer: a single contest can inspire <strong>hundreds to thousands of creators</strong> to generate viral marketing content for your product. You get <strong>widespread promotion</strong> and a <strong>huge variety of content</strong>, yet you only reward the <strong>best-performing creators</strong>, ensuring you pay just for the most impactful results.`
+    answer: `<strong>Game of Creators democratizes brand deals</strong> by allowing any creator—even those with zero followers—to participate in contests and earn money based purely on <strong>performance and views</strong>.<br><br><strong>For brands,</strong> this system is a game-changer: a single contest can inspire <strong>hundreds to thousands of creators</strong> to generate viral marketing content for your product. You get <strong>widespread promotion</strong> and a <strong>huge variety of content</strong>, yet you only reward the <strong>best-performing creators</strong>, ensuring you pay just for the most impactful results.`,
   },
   {
     id: "faq-home-2",
     question: "Game of Creators is for whom?",
-    answer: `<strong>Brands:</strong> Especially B2C Brands looking to promote their products or services.<br><br><strong>Creators:</strong> Content creators of all sizes who are looking to earn brand deals but have struggled due to low followers. Now, performance and views are what matter, not follower count.`
+    answer: `<strong>Brands:</strong> Especially B2C Brands looking to promote their products or services.<br><br><strong>Creators:</strong> Content creators of all sizes who are looking to earn brand deals but have struggled due to low followers. Now, performance and views are what matter, not follower count.`,
   },
   {
     id: "faq-home-3",
     question: "What are the key features of Game of Creators?",
-    answer: `<strong>🎯 Organic Content at Scale:</strong> Generate high-quality, diverse content without manual sourcing<br><br><strong>💰 Only Pay for Top Performing Content:</strong> Pay for content that drives results<br><br><strong>🚀 Creator Outreach Hassle-Free:</strong> Creators come to you<br><br><strong>⚖️ Supply and Demand Platform:</strong> Creators compete, ensuring top ideas rise to the top<br><br><strong>📈 Scale Winners:</strong> Scale top-performing content into paid campaigns<br><br><strong>🌍 Democratized Brand Deals:</strong> Success is based on creativity and performance<br><br><strong>🎨 Creator Freedom of Choice:</strong> Creators choose which brands to work with`
+    answer: `<strong>🎯 Organic Content at Scale:</strong> Generate high-quality, diverse content without manual sourcing<br><br><strong>💰 Only Pay for Top Performing Content:</strong> Pay for content that drives results<br><br><strong>🚀 Creator Outreach Hassle-Free:</strong> Creators come to you<br><br><strong>⚖️ Supply and Demand Platform:</strong> Creators compete, ensuring top ideas rise to the top<br><br><strong>📈 Scale Winners:</strong> Scale top-performing content into paid campaigns<br><br><strong>🌍 Democratized Brand Deals:</strong> Success is based on creativity and performance<br><br><strong>🎨 Creator Freedom of Choice:</strong> Creators choose which brands to work with`,
   },
   {
     id: "faq-home-4",
     question: "How does someone participate or sign up for Game of Creators?",
-    answer: `<strong>1. Sign up</strong> by registering on the platform and choosing whether you are a <strong>brand</strong> or a <strong>creator</strong>.<br><br><strong>2. For Brands:</strong> Create & launch a contest for viral marketing<br><br><strong>3. For Creators:</strong> Browse available contests, participate, and get paid based on your performance`
+    answer: `<strong>1. Sign up</strong> by registering on the platform and choosing whether you are a <strong>brand</strong> or a <strong>creator</strong>.<br><br><strong>2. For Brands:</strong> Create & launch a contest for viral marketing<br><br><strong>3. For Creators:</strong> Browse available contests, participate, and get paid based on your performance`,
   },
   {
     id: "faq-home-5",
     question: "What are the main benefits for participants?",
-    answer: `<strong>🎯 Full Control:</strong> Choose which brands to promote<br><br><strong>🔍 Full Transparency:</strong> Access to leaderboard rankings, views, and payment details<br><br><strong>🚀 Performance-Based:</strong> Your followers no longer limit your opportunities—performance and views are what matter`
+    answer: `<strong>🎯 Full Control:</strong> Choose which brands to promote<br><br><strong>🔍 Full Transparency:</strong> Access to leaderboard rankings, views, and payment details<br><br><strong>🚀 Performance-Based:</strong> Your followers no longer limit your opportunities—performance and views are what matter`,
   },
   {
     id: "faq-home-6",
     question: "How long does the event or contest last?",
-    answer: "Contests typically last between 3 to 28 days, depending on the brand's selection."
+    answer:
+      "Contests typically last between 3 to 28 days, depending on the brand's selection.",
   },
   {
     id: "faq-home-7",
     question: "What are the prizes or rewards for the winners?",
-    answer: `<strong>🏆 Leaderboard-based contests:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based contests:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.`
+    answer: `<strong>🏆 Leaderboard-based contests:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based contests:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.`,
   },
   {
     id: "faq-home-8",
     question: "What kind of support is available to participants?",
-    answer: `<strong>Brands provide a complete contest brief</strong> including:<br>• Required resources<br>• Inspirational links<br>• Detailed guidance<br><br><strong>Need help?</strong> You can always reach out for assistance or clarification!`
+    answer: `<strong>Brands provide a complete contest brief</strong> including:<br>• Required resources<br>• Inspirational links<br>• Detailed guidance<br><br><strong>Need help?</strong> You can always reach out for assistance or clarification!`,
   },
   {
     id: "faq-home-9",
     question: "What happens if a participant misses a deadline?",
-    answer: "Content must be submitted during the live contest period. Submissions must be posted on YouTube or Instagram and linked to the contest within two hours of posting. Late submissions won't be accepted."
+    answer:
+      "Content must be submitted during the live contest period. Submissions must be posted on YouTube or Instagram and linked to the contest within two hours of posting. Late submissions won't be accepted.",
   },
   {
     id: "faq-home-10",
     question: "How are participants judged or evaluated?",
-    answer: "Judging is based purely on views. Participants must follow the contest's brief, rules, and guidelines to be eligible for payment."
+    answer:
+      "Judging is based purely on views. Participants must follow the contest's brief, rules, and guidelines to be eligible for payment.",
   },
   {
     id: "faq-home-11",
     question: "How can participants track their progress?",
-    answer: "Creators can track all their submissions in My submissions section and see their ranking of each contest they participated by visiting that contest leaderboard section."
+    answer:
+      "Creators can track all their submissions in My submissions section and see their ranking of each contest they participated by visiting that contest leaderboard section.",
   },
   {
     id: "faq-home-12",
     question: "Can participants submit multiple entries?",
-    answer: "No, participants can only submit one entry per contest."
+    answer: "No, participants can only submit one entry per contest.",
   },
   {
     id: "faq-home-13",
     question: "Will there be networking opportunities?",
-    answer: "Yes, creators can join our community channels and follow us on social media for networking and engagement."
+    answer:
+      "Yes, creators can join our community channels and follow us on social media for networking and engagement.",
   },
   {
     id: "faq-home-14",
     question: "How are winners or top creators announced?",
-    answer: "Winners are announced after the contest ends and after a verification process based on views and rankings."
-  }
+    answer:
+      "Winners are announced after the contest ends and after a verification process based on views and rankings.",
+  },
 ];
 const creatorFaqs = [
   {
@@ -297,12 +302,11 @@ export default function FAQ() {
   const faqTriggerRef = useRef<HTMLButtonElement>(null); // 👈 track the button
   const pathname = usePathname();
 
-  const faqs =
-    pathname.includes("brands")
-      ? brandFaqs
-      : pathname === "/"
-        ? homeFaqs
-        : creatorFaqs;
+  const faqs = pathname.includes("brands")
+    ? brandFaqs
+    : pathname === "/"
+    ? homeFaqs
+    : creatorFaqs;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -344,12 +348,13 @@ export default function FAQ() {
 
         {/* Gradient Title */}
         <h2
-          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${animate ? "slide-up" : "hide-before-animate"
-            }`}
+          className={`text-3xl md:text-5xl font-bold flex flex-wrap justify-center gap-4 ${
+            animate ? "slide-up" : "hide-before-animate"
+          }`}
           style={{ animationDelay: "0.2s" }}
         >
           <span
-            className="bg-clip-text text-transparent"
+            className="bg-clip-text text-transparent leading-tight"
             style={{
               backgroundImage:
                 "linear-gradient(180deg, #7F39EC 36.41%, #B16FF4 99.95%)",
@@ -357,9 +362,9 @@ export default function FAQ() {
           >
             Frequently
           </span>
-          <span className="text-white">Asked</span>
+          <span className="text-white leading-tight">Asked</span>
           <span
-            className="bg-clip-text text-transparent"
+            className="bg-clip-text text-transparent leading-tight"
             style={{
               backgroundImage:
                 "linear-gradient(180deg, #FDC155 33.29%, #FF652D 81.2%)",
@@ -370,8 +375,9 @@ export default function FAQ() {
         </h2>
 
         <p
-          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${animate ? "slide-left" : "hide-before-animate"
-            }`}
+          className={`mt-6 mb-10 text-gray-300 md:text-2xl ${
+            animate ? "slide-left" : "hide-before-animate"
+          }`}
           style={{ animationDelay: "1s" }}
         >
           Here are some frequently asked questions
@@ -387,18 +393,20 @@ export default function FAQ() {
               <button
                 onClick={() => toggleFAQ(index)}
                 className={`w-full flex justify-between items-center px-6 py-6 
-                  ${pathname.includes("brands") ||
+                  ${
+                    pathname.includes("brands") ||
                     pathname === "/pricing" ||
                     pathname === "/"
-                    ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
-                    : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
+                      ? "bg-gradient-to-r from-transparent via-transparent to-[#7F39EC50]"
+                      : "bg-gradient-to-r from-transparent via-transparent to-[#ff652d50]"
                   } 
                   hover:bg-[#1A1B35] transition-colors`}
               >
                 <span className="text-left text-xl">{faq.question}</span>
                 <FaChevronDown
-                  className={`transition-transform ${openIndex === index ? "rotate-180" : ""
-                    }`}
+                  className={`transition-transform ${
+                    openIndex === index ? "rotate-180" : ""
+                  }`}
                 />
               </button>
 

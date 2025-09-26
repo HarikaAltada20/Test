@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useLayoutEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,7 +147,22 @@ export function ContestListClient({
   const [sortOption, setSortOption] =
     useState<SortOptionType>("created_at_desc");
   const [internalSelectedTab, setInternalSelectedTab] = useState("all");
-  const [mode, setMode] = useState<"light" | "dark">("light");
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    if (typeof document !== "undefined") {
+      const modeElement = document.querySelector("[data-mode]");
+      const currentMode = (modeElement?.getAttribute("data-mode") || "") as
+        | "light"
+        | "dark"
+        | "";
+      if (currentMode === "light" || currentMode === "dark") {
+        return currentMode;
+      }
+      // Fallback to Tailwind's html.dark class if present
+      const isHtmlDark = document.documentElement.classList.contains("dark");
+      return isHtmlDark ? "dark" : "light";
+    }
+    return "light";
+  });
   // Use external tab if provided, otherwise use internal state
   const selectedTab =
     externalSelectedTab !== undefined
@@ -167,62 +182,38 @@ export function ContestListClient({
     );
     return ["all", ...Array.from(platforms)];
   }, [initialContests]);
-  // Read mode from data attribute
-  useEffect(() => {
+  // Read and react to mode changes from data attribute with minimal flicker
+  useLayoutEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) {
-          setMode(currentMode);
-        }
+      const currentMode = (modeElement?.getAttribute("data-mode") || "") as
+        | "light"
+        | "dark"
+        | "";
+      if (currentMode === "light" || currentMode === "dark") {
+        setMode(currentMode);
+        return;
       }
+      // Fallback to html.dark if attribute missing
+      const isHtmlDark = document.documentElement.classList.contains("dark");
+      setMode(isHtmlDark ? "dark" : "light");
     };
 
     checkMode();
 
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
     const targetNode = document.querySelector("[data-mode]");
+    let observer: MutationObserver | null = null;
     if (targetNode) {
+      observer = new MutationObserver(checkMode);
       observer.observe(targetNode, {
         attributes: true,
         attributeFilter: ["data-mode"],
       });
     }
 
-    return () => observer.disconnect();
-  }, []);
-
-  // Read mode from data attribute
-  useEffect(() => {
-    const checkMode = () => {
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) {
-          setMode(currentMode);
-        }
-      }
+    return () => {
+      if (observer) observer.disconnect();
     };
-
-    checkMode();
-
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
-    const targetNode = document.querySelector("[data-mode]");
-    if (targetNode) {
-      observer.observe(targetNode, {
-        attributes: true,
-        attributeFilter: ["data-mode"],
-      });
-    }
-
-    return () => observer.disconnect();
   }, []);
 
   // Group contests by moderation status and contest lifecycle
@@ -1112,7 +1103,7 @@ export function ContestListClient({
               value={sortOption}
               onValueChange={(value) => setSortOption(value as SortOptionType)}
             >
-              <SelectTrigger  className="w-full sm:w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px]">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>
@@ -1156,7 +1147,7 @@ export function ContestListClient({
             </Select>
 
             <Select value={platformFilter} onValueChange={setPlatformFilter}>
-              <SelectTrigger  className="w-full sm:w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px]">
                 <SelectValue placeholder="Platform" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>
@@ -1173,7 +1164,7 @@ export function ContestListClient({
               value={contestStatusFilter}
               onValueChange={setContestStatusFilter}
             >
-              <SelectTrigger  className="w-full sm:w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px]">
                 <SelectValue placeholder="Contest Status" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>

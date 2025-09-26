@@ -5168,7 +5168,9 @@ export default function EditContestPage({
                       +
                     </Button>
                   </div>
-                  <div className="text-sm text-gray-500">
+                  <div className={cn("text-sm",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                     <span>Max: {planFeatures.maxWinnersPerContest}</span>
                   </div>
                 </div>
@@ -5237,7 +5239,9 @@ export default function EditContestPage({
                           : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
                       )}
                     />
-                    <div className="text-xs sm:text-sm text-gray-500">
+                    <div className={cn("text-xs sm:text-sm",
+                      isDark ? "text-gray-400" : "text-gray-600"
+                    )}>
                       <span>
                         Min: {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
                       </span>
