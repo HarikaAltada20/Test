@@ -3039,17 +3039,20 @@ export default function CreateContestPage({
               >
                 <h3 className="text-lg font-bold mb-4">Your Plan Details</h3>
                 <div className="flex items-start justify-between ">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
                     <div
-                      className={`p-3 rounded-full ${
+                    className={cn(
+                      "rounded-full p-3.5",
+                      isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}>
+                      {/* className={`p-3 rounded-full ${
                         currentPlan && currentPlan.price === 0
                           ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
                           : currentPlan &&
                             currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
                           ? "bg-[#D8C3FF] text-[#4A00BE]" // Bronze plan
                           : "bg-[#D8C3FF] text-[#4A00BE]" // Higher plans
-                      }`}
-                    >
+                      }`} */}
+                    
                       <Trophy className="h-8 w-8" />
                     </div>
                     <div>
@@ -3120,7 +3123,9 @@ export default function CreateContestPage({
                     >
                       <div className="flex items-center gap-4 sm:gap-6">
                         <div
-                          className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center bg-[#D8C3FF] text-[#4A00BE]"
+                           className={cn(
+                            "rounded-full p-3",
+                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
                           // className={`w-16 h-16 rounded-full flex items-center justify-center ${
                           //   userPlan === subscriptionPlans[0].id
                           //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
@@ -3679,8 +3684,11 @@ export default function CreateContestPage({
                     <div className="relative z-10">
                       {/* Header */}
                       <div className="flex items-center gap-4 mb-6">
-                        <div className="w-12 h-12 bg-[#D8C3FF] backdrop-blur-sm rounded-2xl flex items-center justify-center shadow-lg">
-                          <Trophy className="h-6 w-6 text-[#4A00BE]" />
+                        <div 
+                          className={cn(
+                            "rounded-full p-3.5",
+                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}>
+                          <Trophy className="h-6 w-6" />
                         </div>
                         <div>
                           <h4 className="text-xl font-bold">
@@ -3779,7 +3787,7 @@ export default function CreateContestPage({
                       {/* Enhanced Upgrade CTA for lower tier plans */}
                       {(currentPlan.price === 0 ||
                         planFeatures.commissionPercentage >= 20) && (
-                        <div className="bg-white/10 backdrop-blur-sm rounded-2xl py-6 px-4 border border-white/20">
+                        <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
                           <div className="flex items-start justify-between gap-6">
                             <div className="flex-1 min-w-0">
                               <h5 className="text-base font-bold">
@@ -4826,7 +4834,12 @@ export default function CreateContestPage({
         <div className="space-y-3">
           <Button
             onClick={handleSaveDraftAndUpgrade}
-            className="w-full bg-[#D9C0FF61] rounded-full text-[#7F39EC] font-semibold"
+            className={cn(
+              "w-full text-md rounded-full font-semibold",
+              isDark
+                ? "bg-[#7F39EC] py-3 text-white"
+                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+            )}
           >
             Save Draft & Upgrade
           </Button>
@@ -5471,7 +5484,13 @@ export default function CreateContestPage({
                   {thumbnailPreview ? (
                     <div className="relative">
                       {thumbnailPreview === "uploading" ? (
-                        <div className="flex flex-col items-center justify-center h-64 bg-gray-50 rounded">
+                        <div
+                        className={cn(
+                          "flex flex-col items-center justify-center h-64 rounded",
+                          isDark
+                            ? "bg-[#180438]"
+                            : "bg-gray-50"
+                        )}>
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-2"></div>
                           <p className="text-sm text-gray-600">
                             Uploading thumbnail...
@@ -5518,7 +5537,12 @@ export default function CreateContestPage({
                         Max file size: 5MB
                       </p>
                       <Button
-                        className="bg-[#4A00BE] text-white px-4 py-4 rounded-lg text-sm hover:bg-[#4A00BE] hover:text-white"
+                        className={cn(
+                          "px-4 py-4 rounded-lg text-sm hover:text-white",
+                          isDark
+                            ? "bg-[#7F39EC] text-white"
+                            : "bg-[#4A00BE] text-white"
+                        )}
                         variant="outline"
                         size="sm"
                         onClick={(e) => {
@@ -5653,12 +5677,23 @@ export default function CreateContestPage({
                 </p>
 
                 {showBriefPreview ? (
-                  <div className="border rounded-lg p-4 min-h-[300px]">
-                    <h4 className="text-sm font-medium mb-2 text-gray-600">
+                  <div 
+                  className={cn(
+                    "border rounded-lg p-4 min-h-[300px]",
+                    isDark ? "border-gray-600" : "border-gray-400"
+                  )}>
+                    <h4 
+                    className={cn(
+                      "text-sm font-medium mb-2",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                       Preview:
                     </h4>
                     <div
-                      className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
+                      className={cn(
+                        "prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}
                       style={{
                         padding: "12px 15px",
                         minHeight: "250px",
@@ -5726,12 +5761,23 @@ export default function CreateContestPage({
                 </p>
 
                 {showRulesPreview ? (
-                  <div className="border rounded-lg p-4 min-h-[300px]">
-                    <h4 className="text-sm font-medium mb-2 text-gray-600">
+                  <div 
+                  className={cn(
+                    "border rounded-lg p-4 min-h-[300px]",
+                    isDark ? "border-gray-600" : "border-gray-400"
+                  )}>
+                    <h4 
+                    className={cn(
+                      "text-sm font-medium mb-2",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                       Preview:
                     </h4>
                     <div
-                      className="prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none"
+                      className={cn(
+                        "prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}
                       style={{
                         padding: "12px 15px",
                         minHeight: "250px",
@@ -6067,7 +6113,7 @@ export default function CreateContestPage({
                               e.stopPropagation();
                               removeResourceFile();
                             }}
-                            className="text-purple-500 ml-auto"
+                            className="text-purple-500 ml-auto flex items-center gap-1"
                           >
                             <Trash className="h-4 w-4" /> Remove
                           </button>
@@ -6082,7 +6128,12 @@ export default function CreateContestPage({
                             Max file size: 5MB
                           </p>
                           <Button
-                            className="bg-[#4A00BE] text-white px-4 py-2 rounded-lg text-md hover:bg-[#4A00BE]"
+                            className={cn(
+                              "px-4 py-2 rounded-lg text-md",
+                              isDark
+                                ? "bg-[#7F39EC] text-white"
+                                : "bg-[#4A00BE] text-white"
+                            )}
                             variant="outline"
                             size="sm"
                             onClick={(e) => {
@@ -6104,13 +6155,18 @@ export default function CreateContestPage({
                     {/* File Description and Add Button */}
                     {resourceFile && (
                       <div className="mt-4 flex flex-col gap-4 items-end">
-                        <div className="flex-1 w-full">
+                        <div className="flex-1 w-full space-y-2">
                           <Label htmlFor="fileDescription">
                             Description <span className="text-red-500">*</span>
                           </Label>
                           <Input
                             id="fileDescription"
                             placeholder="Describe this asset"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "bg-white"
+                            )}
                             value={resourceDescription}
                             onChange={(e) =>
                               setResourceDescription(e.target.value)
@@ -6121,7 +6177,7 @@ export default function CreateContestPage({
                           type="button"
                           onClick={addFileResource}
                           disabled={!resourceDescription || isUploadingAsset}
-                          className="w-full"
+                          className="w-full py-5 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
                         >
                           {isUploadingAsset ? (
                             <div className="flex items-center gap-2">
@@ -6372,8 +6428,12 @@ export default function CreateContestPage({
                               </span>
                             )}
                             {resource.type === "external" && (
-                              <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
-                                <ExternalLink className="w-6= h-6" />
+                              <div 
+                              className={cn(
+                                "rounded-full flex items-center justify-center w-12 h-12",
+                                isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]"
+                              )}>
+                                <ExternalLink className="w-6 h-6" />
                               </div>
                             )}
                             <div className="flex-1">
@@ -6436,7 +6496,9 @@ export default function CreateContestPage({
                             </div>
                             <button
                               onClick={() => removeResource(idx)}
-                              className="text-[#4A00BE] p-3 mr-2 rounded-full bg-[#D8C3FF]"
+                              className={cn(
+                                "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                 isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
                             >
                               <Trash className="h-4 w-4" />
                             </button>
@@ -6527,7 +6589,9 @@ export default function CreateContestPage({
                                 : " bg-white border-gray-300"
                             )}
                           >
-                            <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
+                            <div className={cn(
+                              "rounded-full flex items-center justify-center w-12 h-12",
+                              isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}>
                               <ExternalLink className="w-6= h-6" />
                             </div>
 
@@ -6549,7 +6613,9 @@ export default function CreateContestPage({
                             </div>
                             <button
                               onClick={() => removeInspirationLink(index)}
-                              className="text-[#4A00BE] bg-[#D8C3FF]  p-3 mr-2 rounded-full"
+                              className={cn(
+                                "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                 isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
                             >
                               <Trash className="h-4 w-4" />
                             </button>

@@ -1653,14 +1653,14 @@ export default function BillingClientPage({
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-600")}
+              className={cn(isDark ? "text-white" : "text-gray-800")}
             >
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
             </DialogTitle>
             <DialogDescription
-              className={cn(isDark ? "text-white" : "text-gray-600")}
+              className={cn(isDark ? "text-white" : "text-gray-800")}
             >
               Manage your payout methods. Your default method will be
               pre-selected for withdrawals.
@@ -1668,7 +1668,7 @@ export default function BillingClientPage({
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Country selector controls which payout methods show */}
-            <div className={cn(isDark ? "text-white" : "text-gray-600")}>
+            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
               <Label htmlFor="payoutCountry">Country</Label>
               <Select
                 value={payoutCountry}

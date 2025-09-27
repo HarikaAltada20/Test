@@ -873,7 +873,12 @@ export function ContestListClient({
               {contest.moderation_status === "approved" ? (
                 <>
                   <button
-                    className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                    className={cn(
+                      "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                      isDark
+                        ? "bg-[#7F39EC] text-white"
+                        : "bg-[#D9C0FF61] text-[#7F39EC]"
+                    )}
                     onClick={async (e) => {
                       e.stopPropagation();
                       try {
@@ -900,7 +905,10 @@ export function ContestListClient({
                   <Button
                     variant="outline"
                     size="md"
-                    className="text-purple-500 text-[13px]"
+                 
+                    className={cn(
+                      isDark ? "border border-purple-400 text-purple-300" : "text-purple-500 text-[13px]"
+               ) }
                     onClick={(e) => {
                       e.stopPropagation();
                       router.push(
@@ -1103,7 +1111,7 @@ export function ContestListClient({
               value={sortOption}
               onValueChange={(value) => setSortOption(value as SortOptionType)}
             >
-              <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px] border border-gray-400">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>
@@ -1147,7 +1155,7 @@ export function ContestListClient({
             </Select>
 
             <Select value={platformFilter} onValueChange={setPlatformFilter}>
-              <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px] border border-gray-400">
                 <SelectValue placeholder="Platform" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>
@@ -1164,7 +1172,7 @@ export function ContestListClient({
               value={contestStatusFilter}
               onValueChange={setContestStatusFilter}
             >
-              <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px] border border-gray-400">
                 <SelectValue placeholder="Contest Status" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>
@@ -1188,7 +1196,7 @@ export function ContestListClient({
               value={contestTypeFilter}
               onValueChange={setContestTypeFilter}
             >
-              <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectTrigger className="w-full sm:w-[150px] border border-gray-400">
                 <SelectValue placeholder="Contest Type" />
               </SelectTrigger>
               <SelectContent isDark={isDark}>

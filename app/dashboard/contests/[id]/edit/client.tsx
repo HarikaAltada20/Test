@@ -4696,7 +4696,11 @@ export default function EditContestPage({
                               </span>
                             )}
                           {resource.type === "external" && (
-                            <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12">
+                            <div 
+                            className={cn(
+                              "rounded-full flex items-center justify-center w-12 h-12",
+                              isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]"
+                            )}>
                               <ExternalLink className="w-6= h-6" />
                             </div>
                           )}
@@ -4777,7 +4781,9 @@ export default function EditContestPage({
                           </div>
                           <button
                             onClick={() => removeResource(idx)}
-                            className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
+                            className={cn(
+                              "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
+                               isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
                           >
                             <Trash className="h-4 w-4" />
                           </button>
@@ -4868,7 +4874,11 @@ export default function EditContestPage({
                             : "bg-white dark:bg-gray-800 border border-gray-200"
                         )}
                       >
-                        <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12">
+                        <div 
+                          className={cn(
+                            "rounded-full flex items-center justify-center w-12 h-12",
+                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]"
+                          )}>
                           <ExternalLink className="w-6 h-6" />
                         </div>
                         <div className="flex-1">
@@ -4894,7 +4904,9 @@ export default function EditContestPage({
                         </div>
                         <button
                           onClick={() => removeInspirationLink(index)}
-                          className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
+                          className={cn(
+                           "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
+                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
                         >
                           <Trash className="h-4 w-4" />
                         </button>
