@@ -36,9 +36,10 @@ async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): 
     try {
         let contestsQuery = supabaseAdmin
             .from('contests')
-            .select('id, contest_based_details')
+            .select('id, contest_based_details, views_locked_at')
             .eq('contest_type', 'cpm')
-            .not('contest_based_details', 'is', null);
+            .not('contest_based_details', 'is', null)
+            .is('views_locked_at', null); // Only update contests that haven't been finalized
 
         // If contest-specific, filter by contest ID
         if (contestId) {
