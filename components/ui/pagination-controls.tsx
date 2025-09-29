@@ -93,9 +93,9 @@ export function PaginationControls({
                         <SelectTrigger className="w-20">
                             <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent isDark>
                             {PAGE_SIZE_OPTIONS.map((size) => (
-                                <SelectItem key={size} value={size.toString()}>
+                                <SelectItem key={size} value={size.toString()} isDark>
                                     {size}
                                 </SelectItem>
                             ))}

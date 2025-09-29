@@ -1409,9 +1409,9 @@ export function ContestClientPage({
                     </Card> */}
                   </div>
                 </div>
-                <Separator />
+                {/* <Separator /> */}
                 <div>
-                  <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">
+                  <h3 className="px-1 font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">
                     {contest.contest_type === "cpm"
                       ? "Earnings & Budget"
                       : "Prize Structure"}
@@ -1550,13 +1550,13 @@ export function ContestClientPage({
                               </div>
                             )}
                         </div>
-                        <Separator />
+                        {/* <Separator /> */}
                         <div>
                           <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
                             Terms & Conditions:
                           </h4>
-                          <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-200 dark:border-slate-700">
-                            <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
+                          <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-400 dark:border-slate-700">
+                            <pre className="whitespace-pre-wrap break-words font-sans text-sm text-gray-700 dark:text-slate-300">
                               {contest.contest_based_details.cpm_contest
                                 .terms_conditions ||
                                 "No specific terms provided."}
@@ -1573,7 +1573,7 @@ export function ContestClientPage({
                     )}
                 </div>
 
-                <Separator />
+                {/* <Separator /> */}
 
                 {/* Rules Section - Always Show */}
                 <div>
@@ -1666,7 +1666,7 @@ export function ContestClientPage({
                   </div>
                 </div>
 
-                <Separator />
+                {/* <Separator /> */}
 
                 {/* Resources Section - Always Show */}
                 <div className="space-y-6">
@@ -1674,7 +1674,7 @@ export function ContestClientPage({
                     {/* <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                       <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div> */}
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    <h3 className="px-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
                       Resources
                     </h3>
                   </div>
@@ -1828,13 +1828,13 @@ export function ContestClientPage({
                     : [];
                   return links.length > 0 ? (
                     <>
-                      <Separator className="my-8" />
-                      <div className="space-y-6">
+                      {/* <Separator className="my-8" /> */}
+                      <div className="space-y-6 mt-8">
                         <div className="flex items-center gap-3">
                           {/* <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                             <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                           </div> */}
-                          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                          <h3 className="px-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
                             Inspiration Links
                           </h3>
                         </div>
@@ -1847,7 +1847,7 @@ export function ContestClientPage({
                             ) => (
                               <div
                                 key={index}
-                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
+                                className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-xl p-5"
                               >
                                 <div className="flex items-start gap-4">
                                   <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">

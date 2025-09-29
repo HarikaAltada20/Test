@@ -1222,7 +1222,10 @@ export function ContestListClient({
         className="w-full mb-8"
       >
         <TabsList className="flex gap-6">
-          <TabsTrigger className="border border-gray-400" value="all">
+          <TabsTrigger className={cn(
+            "border border-gray-500",
+            isDark ? "text-gray-300" : "text-gray-700"
+          )} value="all">
             All{" "}
             <Badge
               variant="secondary"
@@ -1231,7 +1234,10 @@ export function ContestListClient({
               {contestsByStatus.all.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger className="border border-gray-400" value="draft">
+          <TabsTrigger className={cn(
+            "border border-gray-500",
+            isDark ? "text-gray-300" : "text-gray-700"
+          )} value="draft">
             Draft{" "}
             <Badge
               variant="secondary"
@@ -1241,7 +1247,10 @@ export function ContestListClient({
             </Badge>
           </TabsTrigger>
           <TabsTrigger
-            className="border border-gray-400"
+            className={cn(
+              "border border-gray-500",
+              isDark ? "text-gray-300" : "text-gray-700"
+            )}
             value="pending_approval"
           >
             Pending Approval{" "}
@@ -1252,7 +1261,10 @@ export function ContestListClient({
               {contestsByStatus.pending_approval.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger className="border border-gray-400" value="ready">
+          <TabsTrigger className={cn(
+            "border border-gray-500",
+            isDark ? "text-gray-300" : "text-gray-700"
+          )} value="ready">
             Ready{" "}
             <Badge
               variant="secondary"
@@ -1261,7 +1273,10 @@ export function ContestListClient({
               {contestsByStatus.ready.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger className="border border-gray-400" value="active">
+          <TabsTrigger className={cn(
+            "border border-gray-500",
+            isDark ? "text-gray-300" : "text-gray-700"
+          )} value="active">
             Active{" "}
             <Badge
               variant="secondary"
@@ -1271,7 +1286,10 @@ export function ContestListClient({
             </Badge>
           </TabsTrigger>
           <TabsTrigger
-            className="border border-gray-400"
+            className={cn(
+              "border border-gray-500",
+              isDark ? "text-gray-300" : "text-gray-700"
+            )}
             value="pending_verification"
           >
             Pending Verification{" "}
@@ -1282,7 +1300,10 @@ export function ContestListClient({
               {contestsByStatus.pending_verification.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger className="border border-gray-400" value="done">
+          <TabsTrigger className={cn(
+            "border border-gray-500",
+            isDark ? "text-gray-300" : "text-gray-700"
+          )} value="done">
             Done{" "}
             <Badge
               variant="secondary"
@@ -1291,7 +1312,10 @@ export function ContestListClient({
               {contestsByStatus.done.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger className="border border-gray-400" value="rejected">
+          <TabsTrigger className={cn(
+            "border border-gray-500",
+            isDark ? "text-gray-300" : "text-gray-700"
+          )} value="rejected">
             Rejected{" "}
             <Badge
               variant="secondary"

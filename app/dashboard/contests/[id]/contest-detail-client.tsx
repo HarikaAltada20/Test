@@ -404,37 +404,50 @@ export default function ContestDetailClient({
   };
   const contestStatusBadgeInfo = getStatusBadgeProps(currentContest);
 
-  const getSubmissionStatusBadge = (status: Submission["status"]) => {
+  const getSubmissionStatusBadge = (
+    status: Submission["status"],
+    isDark: boolean
+  ) => {
     switch (status) {
       case "pending":
         return {
           text: "Pending",
-          icon: <AlertTriangle className="h-3 w-3 mr-1.5" />,
-          className: "bg-yellow-100 text-yellow-700 border-yellow-300",
+          icon: <AlertTriangle className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-[#FDD36F61] text-[12px] py-1 px-2.5 text-[#FDD36F]"
+            : "bg-yellow-100 text-[12px] py-1 px-2.5 text-yellow-700 border-yellow-300",
         };
       case "verified":
         return {
           text: "Verified",
-          icon: <CheckCircle2 className="h-3 w-3 mr-1.5" />,
-          className: "bg-green-100 text-green-700 border-green-300",
+          icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-[#57D3034F] text-[12px] py-1 px-2.5 text-[#57D303]"
+            : "bg-green-100 text-[12px] py-1 px-2.5 text-green-700 border-green-300",
         };
       case "rejected":
         return {
           text: "Rejected",
-          icon: <XCircle className="h-3 w-3 mr-1.5" />,
-          className: "bg-red-100 text-red-700 border-red-300",
+          icon: <XCircle className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-red-900 text-[12px] py-1 px-2.5 text-red-300"
+            : "bg-red-100 text-[12px] py-1 px-2.5 text-red-700 border-red-300",
         };
       case "paid":
         return {
           text: "Paid",
-          icon: <DollarSign className="h-3 w-3 mr-1.5" />,
-          className: "bg-sky-100 text-sky-700 border-sky-300",
+          icon: <DollarSign className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-sky-900 text-[12px] py-1 px-2.5 text-sky-300"
+            : "bg-sky-100 text-[12px] py-1 px-2.5 text-sky-700 border-sky-300",
         };
       default:
         return {
           text: "Unknown",
-          icon: <AlertTriangle className="h-3 w-3 mr-1.5" />,
-          className: "bg-gray-100 text-gray-700 border-gray-300",
+          icon: <AlertTriangle className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-gray-800 text-[12px] py-1 px-2.5 text-gray-300"
+            : "bg-gray-100 text-[12px] py-1 px-2.5 text-gray-700 border-gray-300",
         };
     }
   };
@@ -1669,7 +1682,13 @@ export default function ContestDetailClient({
                 {/* Contest Info Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Platform Card */}
-                  <div className="border border-[#757272] rounded-xl transition-all duration-300">
+                  <div 
+                   className={cn(
+                    "border rounded-xl transition-all duration-300",
+                    isDark
+                      ? "border-gray-600"
+                      : "border-gray-300"
+                  )}>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-4">
                         <div
@@ -1705,7 +1724,13 @@ export default function ContestDetailClient({
                   </div>
 
                   {/* Status Card */}
-                  <div className="border border-[#757272] rounded-xl transition-all duration-300">
+                  <div
+                   className={cn(
+                    "border rounded-xl transition-all duration-300",
+                    isDark
+                      ? "border-gray-600"
+                      : "border-gray-300"
+                  )}>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-4">
                         <div
@@ -1744,7 +1769,13 @@ export default function ContestDetailClient({
                 {/* Date & Time Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Start Date Card */}
-                  <div className="border border-[#757272] rounded-xl transition-all duration-300">
+                  <div 
+                   className={cn(
+                    "border rounded-xl transition-all duration-300",
+                    isDark
+                      ? "border-gray-600"
+                      : "border-gray-300"
+                  )}>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3">
                         <div
@@ -1770,7 +1801,13 @@ export default function ContestDetailClient({
                   </div>
 
                   {/* End Date Card */}
-                  <div className="border border-[#757272] rounded-xl transition-all duration-300">
+                  <div 
+                   className={cn(
+                    "border rounded-xl transition-all duration-300",
+                    isDark
+                      ? "border-gray-600"
+                      : "border-gray-300"
+                  )}>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3">
                         <div
@@ -1808,7 +1845,13 @@ export default function ContestDetailClient({
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Start Date Card */}
-                        <div className="border border-[#757272] rounded-xl transition-all duration-300">
+                        <div 
+                         className={cn(
+                          "border rounded-xl transition-all duration-300",
+                          isDark
+                            ? "border-gray-600"
+                            : "border-gray-300"
+                        )}>
                           <CardContent className="p-4">
                             <div className="flex items-center gap-3">
                               <div
@@ -1837,7 +1880,13 @@ export default function ContestDetailClient({
                         </div>
 
                         {/* End Date Card */}
-                        <div className="border border-[#757272] rounded-xl transition-all duration-300">
+                        <div 
+                         className={cn(
+                          "border rounded-xl transition-all duration-300",
+                          isDark
+                            ? "border-gray-600"
+                            : "border-gray-300"
+                          )}>
                           <CardContent className="p-4">
                             <div className="flex items-center gap-3">
                               <div
@@ -1931,7 +1980,7 @@ export default function ContestDetailClient({
                                         "w-8 h-8 rounded-full flex items-center justify-center border rounded-full font-bold text-sm",
                                         isDark
                                           ? "border-gray-500 text-gray-300"
-                                          : "border-gray-400 text-gray-400"
+                                          : "border-gray-500 text-gray-500"
                                       )}
                                     >
                                       {prize.position}
@@ -1943,7 +1992,7 @@ export default function ContestDetailClient({
                                   <span
                                     className={cn(
                                       "font-bold text-lg",
-                                      isDark ? "text-gray-300" : "text-gray-500"
+                                      isDark ? "text-gray-300" : "text-gray-600"
                                     )}
                                   >
                                     {formatMoney(prize.amount)}
@@ -3019,7 +3068,8 @@ export default function ContestDetailClient({
                               const metrics =
                                 extractPlatformMetrics(submission);
                               const submissionStatus = getSubmissionStatusBadge(
-                                submission.status
+                                submission.status,
+                                isDark
                               );
                               const isLoading =
                                 isLoadingSubmission[submission.id] || false;

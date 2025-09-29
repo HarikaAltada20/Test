@@ -4076,8 +4076,13 @@ export default function CreateContestPage({
                   </div>
                 </div>
                 {totalPrizePool < planFeatures.minContestBudget && (
-                  <Alert className="mt-2">
-                    <AlertDescription>
+                  <Alert  className={cn("mt-2",
+                    isDark
+                      ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                      : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
+                      
+                  )}>
+                    <AlertDescription >
                       The minimum prize pool for your{" "}
                       {currentPlan?.name || "current"} plan is{" "}
                       {formatCurrencyFromCents(planFeatures.minContestBudget)}.
@@ -4815,15 +4820,21 @@ export default function CreateContestPage({
     >
       <div
         className={cn(
-          "rounded-lg p-6 max-w-md w-full shadow-xl",
+          "rounded-lg p-6 max-w-lg w-full shadow-xl",
           isDark
             ? "bg-[#06021D] border border-gray-800 text-white"
             : "bg-white text-black"
         )}
       >
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-purple-200 rounded-full flex items-center justify-center">
-            <Trophy className="h-5 w-5 text-purple-600" />
+          <div 
+          className={cn(
+            "w-10 h-10 rounded-full flex items-center justify-center",
+            isDark
+              ? "bg-[#FFFFFF36] text-white"
+              : "bg-purple-200 text-purple-600"
+          )}>
+            <Trophy className="h-5 w-5" />
           </div>
           <h2 className="text-xl font-bold">Upgrade Your Plan</h2>
         </div>
@@ -4831,7 +4842,7 @@ export default function CreateContestPage({
           You have unsaved contest data. Would you like to save your progress
           before upgrading your plan?
         </p>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <Button
             onClick={handleSaveDraftAndUpgrade}
             className={cn(
@@ -4846,14 +4857,24 @@ export default function CreateContestPage({
           <Button
             variant="outline"
             onClick={handleUpgradeWithoutSaving}
-            className="w-full border-2 rounded-full border-[#7F39EC] text-[#7F39EC] "
+            className={cn(
+              "w-full border text-md py-3 rounded-full",
+              isDark
+                ? "border-gray-400 text-gray-300" 
+                : "border-[#7F39EC] text-[#7F39EC]"
+            )}
           >
             Upgrade without saving draft
           </Button>
           <Button
             variant="outline"
             onClick={handleCancelUpgrade}
-            className="w-full rounded-full border-[#FF323224] bg-[#FF323224] text-[#E50000]"
+            className={cn(
+              "w-full rounded-full text-md",
+              isDark
+                ? "border-[#FF5353] text-[#FF5353]" 
+                : "border-[#FF323224] bg-[#FF323224] text-[#E50000]"
+            )}
           >
             Cancel
           </Button>

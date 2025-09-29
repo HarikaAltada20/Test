@@ -856,7 +856,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "p-5 rounded-xl border",
                                 isDark
-                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-600"
+                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-700"
                                   : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] border-gray-300"
                               )}>
                                 <h4 className={cn(
@@ -940,7 +940,7 @@ export const SubscriptionManagementBilling = memo(
                               className={cn(
                                 "p-5 rounded-xl border",
                                 isDark
-                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-600"
+                                  ? "bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)] border-gray-700"
                                   : "bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)] border-gray-300"
                               )}>
                                 <h4 className={cn(

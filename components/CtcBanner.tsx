@@ -133,7 +133,7 @@ export default function CtcBanner() {
          
           <Link
             href="/auth/signup"
-            className="relative z-10 flex items-center gap-2"
+            // className="relative z-10 flex items-center gap-2"
             onClick={() => {
               // Store user role based on current page
               if (isHome) {
@@ -146,7 +146,7 @@ export default function CtcBanner() {
                 localStorage.setItem('signupRole', 'brand');
               }
             }}
-            className="rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2"
+            className="relative z-10 flex items-center gap-2 rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2"
             style={{ backgroundImage: theme.btnGradient }}
           >
              <div className="scan-line"></div>

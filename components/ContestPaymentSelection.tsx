@@ -286,12 +286,24 @@ const WalletOnlyPayment = ({
 
     return (
         <div className="space-y-4">
-            <div className="p-4 border rounded-lg bg-green-50 border-green-200">
-                <div className="flex items-center gap-2 text-green-700 mb-2">
+            <div 
+             className={cn(
+                "p-4 border rounded-lg",
+                isDark
+                  ? "text-white border-gray-500"
+                  : "border-gray-500 text-gray-800"
+              )}>
+                <div className="flex items-center gap-2 mb-2">
                     <Wallet className="h-5 w-5" />
                     <span className="font-medium">Wallet Payment</span>
                 </div>
-                <p className="text-sm text-green-600">
+                <p 
+                 className={cn(
+                    "text-sm",
+                    isDark
+                      ? "text-white"
+                      : "text-gray-900"
+                  )}>
                     Your payment of {formatCurrencyFromCents(Math.round(amount * 100))} will be deducted from your wallet balance instantly.
                 </p>
             </div>
@@ -511,7 +523,7 @@ export function ContestPaymentSelection({
                     {/* Contest Summary */}
                     <div className="px-1">
                         <h3 className="font-semibold mb-2">Contest: {contestTitle}</h3>
-                        <div className="space-y-1 text-sm">
+                        <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                                 <span>{isIncrease ? "Prize Pool Increased:" : "Prize Pool:"}</span>
                                 <span className="font-medium">{formatCurrencyFromCents(prizePoolInCents)}</span>
@@ -548,7 +560,11 @@ export function ContestPaymentSelection({
                                                 <CreditCard className="h-3 w-3" />
                                                 {paymentMethod === 'split' ? 'From Card:' : 'Card Payment:'}
                                             </span>
-                                            <span className="font-medium text-blue-900">{formatCurrencyFromCents(stripeAmount)}</span>
+                                            <span 
+                                             className={cn(
+                                                "font-medium",
+                                                isDark ? "text-white" : "text-gray-900"
+                                              )}>{formatCurrencyFromCents(stripeAmount)}</span>
                                         </div>
                                     )}
                                 </>
@@ -557,9 +573,13 @@ export function ContestPaymentSelection({
                     </div>
 
                     {/* Wallet Balance Display */}
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                    <div className="p-4 rounded-lg border border-gray-500">
                         <div className="flex justify-between items-center">
-                            <span className="text-green-700 flex items-center gap-2">
+                            <span 
+                             className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-white" : "text-gray-800"
+                              )}>
                                 <Wallet className="h-4 w-4" />
                                 Available Wallet Balance:
                             </span>
@@ -569,7 +589,11 @@ export function ContestPaymentSelection({
                                     <span className="text-sm">Fetching balance...</span>
                                 </div>
                             ) : (
-                                <span className="text-lg font-semibold text-green-900">
+                                <span 
+                                 className={cn(
+                                    "text-lg font-semibold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}>
                                     {formatCurrencyFromCents(walletBalance)}
                                 </span>
                             )}

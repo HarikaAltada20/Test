@@ -311,10 +311,10 @@ const CheckoutForm = ({
 
       <div
         className={cn(
-          "flex items-center justify-between p-4 rounded-lg",
+          "flex items-center justify-between p-4 rounded-lg border",
           isDark
-            ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
-            : "bg-blue-50 text-blue-600"
+            ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+            : "border-gray-400 text-gray-700"
         )}
       >
         <div className="flex items-center gap-2">
@@ -517,7 +517,7 @@ export function WalletTopUp({
           <CardTitle
             className={cn(
               "flex items-center gap-2",
-              isDark ? "text-white" : "text-gray-600"
+              isDark ? "text-white" : "text-gray-700"
             )}
           >
             {/* <DollarSign className="h-5 w-5" /> */}
@@ -566,12 +566,12 @@ export function WalletTopUp({
                   {predefinedAmounts.map((presetAmount) => (
                     <Button
                       className={cn(
-                        "border-[#4A00BE]",
+                        "border",
                         amount === presetAmount
                           ? "text-white"
                           : isDark
-                          ? "text-white"
-                          : "text-gray-600"
+                          ? "text-white border-gray-500"
+                          : "text-[#4A00BE] border-[#4A00BE]"
                       )}
                       key={presetAmount}
                       variant={amount === presetAmount ? "default" : "outline"}

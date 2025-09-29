@@ -1144,11 +1144,19 @@ export default function BillingClientPage({
                                 transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
                                   : transaction.status === "pending"
-                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
                                   : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
@@ -1494,11 +1502,19 @@ export default function BillingClientPage({
                                 transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
                                   : transaction.status === "pending"
-                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
                                   : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
@@ -1791,14 +1807,14 @@ export default function BillingClientPage({
                 </div>
                 <div
                   className={cn(
-                    "rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs",
-                    isDark ? "text-white" : "text-gray-800"
+                    "rounded-md border px-2 py-3 text-xs",
+                    isDark ? "bg-[#FF535324] border-[#FF5353] text-[#FF5353]" : "text-red-500 border-red-500/40 bg-red-500/10 "
                   )}
                 >
                   We only support BNB Smart Chain (BEP20). Do not enter
                   ERC20/other chain addresses. Wrong address = funds lost.
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   Crypto payouts are optional digital rewards. By choosing this
                   method, you accept responsibility for declaring and paying
                   taxes as per your country’s laws.
@@ -2123,7 +2139,12 @@ export default function BillingClientPage({
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
-                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
+                <div
+                  className={cn(
+                    "space-y-2",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="withdrawAmountDollars">
                     Amount to Withdraw (USD)
                   </Label>
@@ -2182,7 +2203,12 @@ export default function BillingClientPage({
                 </div>
               </>
             )}
-            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
+            <div
+              className={cn(
+                "space-y-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
               <Input
                 id="withdrawalUserNotes"
@@ -2197,7 +2223,12 @@ export default function BillingClientPage({
                 )}
               />
             </div>
-            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
+            <div
+              className={cn(
+                "space-y-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
@@ -2287,7 +2318,7 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] w-[95vw] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
               className={cn(
@@ -2304,7 +2335,7 @@ export default function BillingClientPage({
             </DialogTitle>
             <DialogDescription
               className={cn(
-                "flex items-center gap-2",
+                "flex flex-col gap-2",
                 isDark ? "text-white" : "text-gray-800"
               )}
             >

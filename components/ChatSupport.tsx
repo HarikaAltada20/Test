@@ -149,7 +149,7 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
           onChange={(e) => setQuery(e.target.value)}
           className={cn(
             "w-full border px-3 py-2 rounded mb-3 text-sm h-[200px] resize-none focus:outline-none focus:ring-1 focus:ring-purple-500",
-            isDark ? "bg-[#06021D] border border-gray-800" : "bg-white border-gray-300 "
+            isDark ? "bg-[#06021D] border border-gray-500" : "bg-white border-gray-300 "
           )}
         ></textarea>
 

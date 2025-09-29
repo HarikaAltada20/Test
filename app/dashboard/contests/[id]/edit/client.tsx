@@ -3983,8 +3983,8 @@ export default function EditContestPage({
                       <Button
                         className={`px-4 py-2 rounded-lg text-md transition-colors ${
                           isDark
-                            ? "bg-[#4A00BE] text-white hover:bg-[#6b2ed4] border-slate-600"
-                            : "bg-[#4A00BE] text-white hover:bg-[#6b2ed4]"
+                            ? "bg-[#7F39EC] text-white"
+                            : "bg-[#4A00BE] text-white"
                         }`}
                         variant="outline"
                         size="sm"
@@ -4264,7 +4264,12 @@ export default function EditContestPage({
                           Max file size: 20MB
                         </p>
                         <Button
-                          className="bg-[#4A00BE] text-white px-4 py-2 rounded-lg text-md hover:bg-[#4A00BE]"
+                          
+                          className={`px-4 py-2 rounded-lg text-md transition-colors ${
+                            isDark
+                              ? "bg-[#7F39EC] text-white"
+                              : "bg-[#4A00BE] text-white"
+                          }`}
                           variant="outline"
                           size="sm"
                           onClick={(e) => {
@@ -4286,13 +4291,18 @@ export default function EditContestPage({
                   {/* File Description and Add Button */}
                   {resourceFile && (
                     <div className="mt-4 flex flex-col gap-4 items-end">
-                      <div className="flex-1 w-full">
+                      <div className="flex-1 w-full space-y-2">
                         <Label htmlFor="fileDescription">
                           Description <span className="text-red-500">*</span>
                         </Label>
                         <Input
                           id="fileDescription"
                           placeholder="Describe this asset"
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600"
+                              : "bg-white"
+                          )}
                           value={resourceDescription}
                           onChange={(e) =>
                             setResourceDescription(e.target.value)
@@ -4303,7 +4313,7 @@ export default function EditContestPage({
                         type="button"
                         onClick={addFileResource}
                         disabled={!resourceDescription || isUploadingAsset}
-                        className="w-full"
+                        className="w-full py-5 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
                       >
                         {isUploadingAsset ? (
                           <div className="flex items-center gap-2">
@@ -5252,7 +5262,7 @@ export default function EditContestPage({
                       )}
                     />
                     <div className={cn("text-xs sm:text-sm",
-                      isDark ? "text-gray-400" : "text-gray-600"
+                      isDark ? "text-gray-300" : "text-gray-600"
                     )}>
                       <span>
                         Min: {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
@@ -5612,7 +5622,12 @@ export default function EditContestPage({
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !!validationError}
-                  className="text-white"
+                  className={cn(
+                    "border text-white h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
+                    isDark
+                      ? "bg-[#7F39EC]"
+                      : "bg-[#4A00BE]"
+                  )}
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">
@@ -5866,13 +5881,17 @@ export default function EditContestPage({
                 )}
 
               {budgetChanged && budgetDifference > 0 && (
-                <Alert className="mb-4 border-orange-200 bg-orange-50 w-full">
+                <Alert 
+                className={cn(
+                  "mb-4 w-full border",
+                  isDark ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white" : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
+                )}>
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                   <AlertDescription className="min-w-0">
                     <strong>Prize Pool Increased:</strong> Your prize pool
                     increased by {formatCurrencyFromCents(budgetDifference)}.
                     <br />
-                    <span className="text-sm text-gray-600 break-words">
+                    <span className="text-sm break-words">
                       Original: {formatCurrencyFromCents(originalBudget)} → New
                       Total:{" "}
                       {formatCurrencyFromCents(
