@@ -223,7 +223,30 @@ export async function GET(request: Request) {
         const contestId = url.searchParams.get('contestId');
         const isContestSpecific = !!contestId;
 
-        // Fetch submissions to update
+        // Determine active contests up-front to avoid touching finalized ones
+        let activeIds: string[] | undefined = undefined;
+        if (isContestSpecific) {
+            const { data: c } = await supabaseAdmin
+                .from('contests')
+                .select('id, views_locked_at')
+                .eq('id', contestId)
+                .single();
+            if (!c || c.views_locked_at) {
+                // Finalized or not found: skip submission updates entirely
+                return NextResponse.json({ message: `Contest ${contestId} is finalized or not found; nothing to update` });
+            }
+        } else {
+            const { data: activeContests } = await supabaseAdmin
+                .from('contests')
+                .select('id')
+                .is('views_locked_at', null);
+            activeIds = (activeContests || []).map((c: any) => c.id);
+            if (!activeIds.length) {
+                return NextResponse.json({ message: 'No active contests to update' });
+            }
+        }
+
+        // Fetch submissions to update (only from active contests)
         let submissionsQuery = supabaseAdmin
             .from('submissions')
             .select('id, creator_id, content_link, views, contest_id')
@@ -234,15 +257,16 @@ export async function GET(request: Request) {
         if (isContestSpecific) {
             submissionsQuery = submissionsQuery.eq('contest_id', contestId);
             console.log(`Contest-specific YouTube metrics update for contest: ${contestId}`);
+        } else if (activeIds && activeIds.length) {
+            submissionsQuery = submissionsQuery.in('contest_id', activeIds);
         }
 
         const { data: submissions, error: submissionError } = await submissionsQuery;
 
         if (submissionError) throw new Error(`Submission fetch failed: ${submissionError.message}`);
         if (!submissions?.length) {
-            await updateCpmContestBudgets(supabaseAdmin, isContestSpecific ? contestId : undefined);
             return NextResponse.json({ 
-                message: `No submissions to update${isContestSpecific ? ` for contest ${contestId}` : ''}, budget tracking completed` 
+                message: `No submissions to update${isContestSpecific ? ` for contest ${contestId}` : ''}` 
             });
         }
 

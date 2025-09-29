@@ -182,17 +182,43 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const contestId = url.searchParams.get('contestId');
+
+    // Determine active contests up-front to avoid touching finalized ones
+    let activeIds: string[] | undefined = undefined;
+    if (contestId) {
+      const { data: c } = await supabaseAdmin
+        .from('contests')
+        .select('id, views_locked_at')
+        .eq('id', contestId)
+        .single();
+      if (!c || c.views_locked_at) {
+        return NextResponse.json({ message: `Contest ${contestId} is finalized or not found; nothing to update` });
+      }
+    } else {
+      const { data: activeContests } = await supabaseAdmin
+        .from('contests')
+        .select('id')
+        .is('views_locked_at', null);
+      activeIds = (activeContests || []).map((c: any) => c.id);
+      if (!activeIds.length) {
+        return NextResponse.json({ message: 'No active contests to update' });
+      }
+    }
     
     console.log(`🚀 Starting Instagram insights update${contestId ? ` for contest ${contestId}` : ''}`);
 
-    // 📥 Fetch submissions (only what we need)
+    // 📥 Fetch submissions (only from active contests)
     let submissionsQuery = supabaseAdmin
       .from('submissions')
       .select('id, creator_id, video_id, views, other_stats')
       .eq('platform', 'instagram')
       .not('video_id', 'is', null);
 
-    if (contestId) submissionsQuery = submissionsQuery.eq('contest_id', contestId);
+    if (contestId) {
+      submissionsQuery = submissionsQuery.eq('contest_id', contestId);
+    } else if (activeIds && activeIds.length) {
+      submissionsQuery = submissionsQuery.in('contest_id', activeIds);
+    }
 
     const { data: submissions, error: submissionError } = await submissionsQuery;
 
@@ -201,9 +227,8 @@ export async function GET(request: Request) {
     }
 
     if (!submissions?.length) {
-      await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
       return NextResponse.json({ 
-        message: `No submissions to update${contestId ? ` for contest ${contestId}` : ''}, budget tracking completed` 
+        message: `No submissions to update${contestId ? ` for contest ${contestId}` : ''}` 
       });
     }
 
