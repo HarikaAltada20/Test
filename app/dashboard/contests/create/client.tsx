@@ -4912,21 +4912,36 @@ export default function CreateContestPage({
         <div className="space-y-3">
           <Button
             onClick={handleSaveDraftAndBack}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold"
+            className={cn(
+              "w-full text-md rounded-full font-semibold",
+              isDark
+                ? "bg-[#7F39EC] py-3 text-white"
+                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+            )}
           >
             Save Draft
           </Button>
           <Button
             variant="outline"
             onClick={handleConfirmRefresh}
-            className="w-full border-2"
+            className={cn(
+              "w-full border text-md py-3 rounded-full",
+              isDark
+                ? "border-gray-400 text-gray-300" 
+                : "border-[#7F39EC] text-[#7F39EC]"
+            )}
           >
             Refresh Anyway
           </Button>
           <Button
             variant="ghost"
             onClick={handleCancelRefresh}
-            className="w-full text-gray-600"
+            className={cn(
+              "w-full rounded-full text-md",
+              isDark
+                ? "border-[#FF5353] text-[#FF5353]" 
+                : "border-[#FF323224] bg-[#FF323224] text-[#E50000]"
+            )}
           >
             Cancel
           </Button>

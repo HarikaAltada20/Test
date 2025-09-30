@@ -5731,22 +5731,49 @@ export default function EditContestPage({
         </CardFooter>
       </div>
 
-      {/* Refund Preview Modal */}
-      {showRefundPreview && refundDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+       {/* Refund Preview Modal */}
+       {showRefundPreview && refundDetails && (
+        <div
+          className={cn(
+            "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+            isDark ? "bg-[#100A33]" : "bg-black"
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
+              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
+            )}
+          >
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2
+                  className={cn(
+                    "text-2xl font-bold mb-2",
+                    isDark ? "text-white" : "text-gray-900"
+                  )}
+                >
                   Refund Preview
                 </h2>
-                <p className="text-gray-600">
+                <p
+                  className={cn(
+                    "text-gray-600",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}
+                >
                   Review the refund details before proceeding
                 </p>
               </div>
 
               <div className="mb-6">
-                <Alert className="mb-4 border-green-200 bg-green-50">
+                <Alert
+                  className={cn(
+                    "mb-4 border",
+                    isDark
+                      ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                      : "border-green-200 bg-green-50"
+                  )}
+                >
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
                     <strong>Prize Pool Decreased:</strong> Your prize pool
@@ -5756,8 +5783,20 @@ export default function EditContestPage({
                   </AlertDescription>
                 </Alert>
 
-                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                  <h3 className="font-semibold text-gray-900 mb-3">
+                <div
+                  className={cn(
+                    "p-4 rounded-lg space-y-3",
+                    isDark
+                      ? "bg-[#1F0944] text-white"
+                      : "bg-gray-50 text-gray-800"
+                  )}
+                >
+                  <h3
+                    className={cn(
+                      "font-semibold text-gray-900 mb-3",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
                     Refund Breakdown
                   </h3>
 
@@ -5794,8 +5833,15 @@ export default function EditContestPage({
                   </div>
                 </div>
 
-                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
+                <div
+                  className={cn(
+                    "mt-4 p-3 rounded-lg border",
+                    isDark
+                      ? "bg-[#FDD36F5C] border-[#FDD36F5C] text-[#FDD36F]"
+                      : "border border-blue-200 text-blue-800"
+                  )}
+                >
+                  <p className="text-sm ">
                     <strong>Note:</strong> This refund will be processed to your
                     wallet balance. The contest will be saved as draft and
                     submitted for approval after the refund is completed.
@@ -5803,22 +5849,17 @@ export default function EditContestPage({
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowRefundPreview(false);
-                    setRefundDetails(null);
-                    setIsSubmitting(false);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
+              <div className="flex flex-col gap-3">
+               
+                <button
                   onClick={processRefund}
                   disabled={isSubmitting}
-                  className="bg-green-600 hover:bg-green-700"
+                  className={cn(
+                    "w-full text-md rounded-full py-3 flex items-center justify-center",
+                    isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : " bg-[#D9C0FF61] text-[#7F39EC] "
+                  )}
                 >
                   {isSubmitting ? (
                     <>
@@ -5831,12 +5872,29 @@ export default function EditContestPage({
                       Process Refund
                     </>
                   )}
-                </Button>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRefundPreview(false);
+                    setRefundDetails(null);
+                    setIsSubmitting(false);
+                  }}
+                  className={cn(
+                    "w-full text-md rounded-full py-3",
+                    isDark
+                      ? "border border-[#FF5353] text-[#FF5353]"
+                      : "bg-[#FF323224] text-[#E50000]"
+                  )}
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
 
       {/* Payment Modal */}
       {showPayment && contest && (

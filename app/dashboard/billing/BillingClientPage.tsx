@@ -18,12 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  EnhancedTabs as Tabs,
-  EnhancedTabsContent as TabsContent,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
-} from "@/components/ui/enhanced-tabs";
+// Removed enhanced-tabs primitives in favor of pill-style EnhancedTabs below
 import {
   Dialog,
   DialogContent,
@@ -1708,39 +1703,32 @@ export default function BillingClientPage({
                 </SelectContent>
               </Select>
             </div>
-            {/* Tabs for payout types */}
-            <Tabs
-              defaultValue={selectedPayoutType}
-              onValueChange={(value) =>
-                setSelectedPayoutType(value as PayoutMethodType)
-              }
-              className="w-full"
-            >
-              {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-3 gap-4">
-                  <TabsTrigger className="border border-gray-500" value="upi">
-                    UPI
-                  </TabsTrigger>
-                  <TabsTrigger
-                    className="border border-gray-500"
-                    value="bank_transfer"
-                  >
-                    Bank Transfer
-                  </TabsTrigger>
-                  <TabsTrigger
-                    className="border border-gray-500"
-                    value="crypto"
-                  >
-                    BNB (BEP20)
-                  </TabsTrigger>
-                </TabsList>
-              ) : (
-                <TabsList className="grid w-full grid-cols-1">
-                  <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
-                </TabsList>
-              )}
+            {/* Payout type selector using pill-style EnhancedTabs */}
+            {(() => {
+              const payoutTabs =
+                payoutCountry === "IN"
+                  ? [
+                      { id: "upi", label: "UPI" },
+                      { id: "bank_transfer", label: "Bank Transfer" },
+                      { id: "crypto", label: "BNB (BEP20)" },
+                    ]
+                  : [{ id: "crypto", label: "BNB (BEP20)" }];
+              return (
+                <EnhancedTabs
+                  tabs={payoutTabs}
+                  activeTab={selectedPayoutType}
+                  onTabChange={(val) =>
+                    setSelectedPayoutType(val as PayoutMethodType)
+                  }
+                  className="w-full"
+                  isDark={isDark}
+                  light={!isDark}
+                />
+              );
+            })()}
 
-              <TabsContent value="crypto" className="pt-4 space-y-2">
+            {selectedPayoutType === "crypto" && (
+              <div className="pt-4 space-y-2">
                 <div
                   className={cn(
                     "space-y-1",
@@ -1808,7 +1796,9 @@ export default function BillingClientPage({
                 <div
                   className={cn(
                     "rounded-md border px-2 py-3 text-xs",
-                    isDark ? "bg-[#FF535324] border-[#FF5353] text-[#FF5353]" : "text-red-500 border-red-500/40 bg-red-500/10 "
+                    isDark
+                      ? "bg-[#FF535324] border-[#FF5353] text-[#FF5353]"
+                      : "text-red-500 border-red-500/40 bg-red-500/10 "
                   )}
                 >
                   We only support BNB Smart Chain (BEP20). Do not enter
@@ -1819,10 +1809,12 @@ export default function BillingClientPage({
                   method, you accept responsibility for declaring and paying
                   taxes as per your country’s laws.
                 </p>
-              </TabsContent>
+              </div>
+            )}
 
-              {/* Bank Transfer Form (India) */}
-              <TabsContent value="bank_transfer" className="pt-4 space-y-2">
+            {/* Bank Transfer Form (India) */}
+            {selectedPayoutType === "bank_transfer" && (
+              <div className="pt-4 space-y-2">
                 <div
                   className={cn(
                     "space-y-1",
@@ -1928,10 +1920,12 @@ export default function BillingClientPage({
                   small fee. You are responsible for declaring your earnings and
                   paying any taxes as per Indian law.
                 </p>
-              </TabsContent>
+              </div>
+            )}
 
-              {/* UPI Form (India, default) */}
-              <TabsContent value="upi" className="pt-4 space-y-3">
+            {/* UPI Form (India, default) */}
+            {selectedPayoutType === "upi" && (
+              <div className="pt-4 space-y-3">
                 <div
                   className={cn(
                     "space-y-1",
@@ -1997,8 +1991,8 @@ export default function BillingClientPage({
                   responsible for declaring your earnings and paying any taxes
                   as per Indian law.
                 </p>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <button

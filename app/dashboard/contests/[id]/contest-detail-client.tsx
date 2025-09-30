@@ -4451,7 +4451,11 @@ export default function ContestDetailClient({
         onOpenChange={(open) => !open && setConfirmReversal(null)}
         isdark={isDark}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent 
+          className={cn(
+            "sm:max-w-lg",
+            isDark ? "text-white" : "text-gray-800"
+          )}>
           <DialogHeader>
             <DialogTitle>Revert payment and update status?</DialogTitle>
           </DialogHeader>

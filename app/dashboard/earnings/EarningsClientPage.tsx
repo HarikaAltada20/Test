@@ -868,7 +868,9 @@ export default function EarningsClientPage({
           <div className="mb-6 p-4 border bg-white rounded-md">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
               <div className="flex-1 space-y-1">
-                <Label className="text-md" htmlFor="redeemCode">Redeem a Code</Label>
+                <Label className="text-md" htmlFor="redeemCode">
+                  Redeem a Code
+                </Label>
                 <Input
                   id="redeemCode"
                   placeholder="Enter coupon or promo code"
@@ -998,19 +1000,23 @@ export default function EarningsClientPage({
                     )}`
                   : "Withdraw Balance";
               return (
-                <Button  size="lg" className="bg-[#6C43D0] py-3 flex-1 text-md text-white" disabled>
+                <Button
+                  size="lg"
+                  className="bg-[#6C43D0] py-3 flex-1 text-md text-white"
+                  disabled
+                >
                   <ArrowDownToLine className="h-4 w-4 mr-2" /> {reason}
                 </Button>
               );
             })()}
 
             <Button
-            size="lg"  
+              size="lg"
               onClick={() => {
                 resetPayoutForm();
                 setIsPayoutModalOpen(true);
               }}
-               className="bg-[#6C43D0] flex-1 py-3 text-md text-white"
+              className="bg-[#6C43D0] flex-1 py-3 text-md text-white"
               disabled={isLoading}
             >
               <PlusCircle className="h-4 w-4 mr-2" /> Manage Payout Methods
@@ -1036,7 +1042,7 @@ export default function EarningsClientPage({
               )}
 
               <Table>
-              <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1095,15 +1101,16 @@ export default function EarningsClientPage({
                                 : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
-                              ${transaction.status === "completed" ||
+                              ${
+                                transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                ? "bg-green-100 text-green-700 border-green-300"
-                                : transaction.status === "pending"
+                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
                                   ? "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                    ? "bg-red-100 text-red-700 border-red-300"
-                                    : "bg-gray-100 text-gray-700 border-gray-300"
+                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
                           >
@@ -1143,7 +1150,7 @@ export default function EarningsClientPage({
             </CardHeader>
             <CardContent>
               <Table>
-              <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1225,12 +1232,12 @@ export default function EarningsClientPage({
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4 flex justify-between">
                 <div className="flex-1 text-black space-y-3">
                   <p className="text-lg font-medium">Total Coins Earned</p>
                   <p className="text-xl font-bold">
-                  {formatCoins(userData.total_lifetime_coins_earned)}
+                    {formatCoins(userData.total_lifetime_coins_earned)}
                   </p>
                   <p className="text-md">Lifetime coin earnings</p>
                 </div>
@@ -1260,7 +1267,7 @@ export default function EarningsClientPage({
                 <div className="flex-1 text-black space-y-3">
                   <p className="text-lg font-medium">Coins Available</p>
                   <p className="text-xl font-bold">
-                  {formatCoins(userData.coins)}
+                    {formatCoins(userData.coins)}
                   </p>
                   <p className="text-md">Your current coin balance</p>
                 </div>
@@ -1290,9 +1297,7 @@ export default function EarningsClientPage({
               <CardContent className="p-4 flex justify-between">
                 <div className="flex-1 text-black space-y-3">
                   <p className="text-lg font-medium">Total Referrals</p>
-                  <p className="text-xl font-bold">
-                  {totalReferrals}
-                  </p>
+                  <p className="text-xl font-bold">{totalReferrals}</p>
                   <p className="text-md">Successful referrals</p>
                 </div>
                 <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
@@ -1393,7 +1398,7 @@ export default function EarningsClientPage({
                 </TableBody>
               </Table>
             </CardContent>
-            </div>
+          </div>
 
           {/* Coin Redemption Requests Section - Stays inside coin tab */}
           <div className="mt-8 bg-white rounded-xl shadow">
@@ -1402,7 +1407,7 @@ export default function EarningsClientPage({
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader  className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Coins</TableHead>
@@ -1498,7 +1503,7 @@ export default function EarningsClientPage({
       >
         <DialogContent className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-gray-800">
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
@@ -1508,7 +1513,7 @@ export default function EarningsClientPage({
               pre-selected for withdrawals.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="py-4 space-y-4 text-gray-700">
             {/* Country selector controls which payout methods show */}
             <div>
               <Label htmlFor="payoutCountry">Country</Label>
@@ -1531,52 +1536,60 @@ export default function EarningsClientPage({
               </Select>
             </div>
             {/* Tabs for payout types */}
-            <Tabs
-              defaultValue={selectedPayoutType}
-              onValueChange={(value) =>
-                setSelectedPayoutType(value as PayoutMethodType)
-              }
-              className="w-full"
-            >
-              {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-3 gap-4">
-                  <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500"value="crypto">BNB (BEP20)</TabsTrigger>
-                </TabsList>
-              ) : (
-                <TabsList className="grid w-full grid-cols-1">
-                  <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
-                </TabsList>
-              )}
-              {/* Content for each payout type */}
-              <TabsContent value="crypto" className="space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameCrypto"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My Binance USDT"
-                  disabled={isLoading}
-                />
+            {payoutCountry === "IN" ? (
+              <EnhancedTabs
+                tabs={[
+                  { id: "upi", label: "UPI" },
+                  { id: "bank_transfer", label: "Bank Transfer" },
+                  { id: "crypto", label: "BNB (BEP20)" },
+                ]}
+                activeTab={selectedPayoutType}
+                onTabChange={(value) =>
+                  setSelectedPayoutType(value as PayoutMethodType)
+                }
+                className="w-full mb-4"
+              />
+            ) : (
+              <EnhancedTabs
+                tabs={[{ id: "crypto", label: "BNB (BEP20)" }]}
+                activeTab={selectedPayoutType}
+                onTabChange={(value) =>
+                  setSelectedPayoutType(value as PayoutMethodType)
+                }
+                className="w-full mb-4"
+              />
+            )}
+            {/* Content for each payout type */}
+            {selectedPayoutType === "crypto" && (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameCrypto">
+                    Friendly Name
+                  </Label>
+                  <Input
+                    id="payoutFriendlyNameCrypto"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My Binance USDT"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoNetwork">Network</Label>
-                <Select
-                  value={cryptoNetwork}
-                  onValueChange={(val) => setCryptoNetwork(val)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BNB_BEP20">
-                      BNB Smart Chain (BEP20)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Label htmlFor="cryptoNetwork">Network</Label>
+                  <Select
+                    value={cryptoNetwork}
+                    onValueChange={(val) => setCryptoNetwork(val)}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BNB_BEP20">
+                        BNB Smart Chain (BEP20)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
                   We only support BNB Smart Chain (BEP20). Do not enter
@@ -1588,30 +1601,32 @@ export default function EarningsClientPage({
                   taxes as per your country’s laws.
                 </p>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
-                <Input
-                  id="cryptoAddress"
-                  value={cryptoAddress}
-                  onChange={(e) => setCryptoAddress(e.target.value)}
-                  placeholder={`Enter your ${cryptoNetwork} wallet address`}
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
+                  <Input
+                    id="cryptoAddress"
+                    value={cryptoAddress}
+                    onChange={(e) => setCryptoAddress(e.target.value)}
+                    placeholder={`Enter your ${cryptoNetwork} wallet address`}
+                    disabled={isLoading}
+                  />
                 </div>
-              </TabsContent>
-              {/* Bank Transfer Form (India) */}
-              <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameBank"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., Primary Savings"
-                  disabled={isLoading}
-                />
+              </div>
+            )}
+            {/* Bank Transfer Form (India) */}
+            {selectedPayoutType === "bank_transfer" && (
+              <div className="pt-4 space-y-2">
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameBank"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., Primary Savings"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">            
+                  <div className="space-y-1">
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1655,11 +1670,12 @@ export default function EarningsClientPage({
                   small fee. You are responsible for declaring your earnings and
                   paying any taxes as per Indian law.
                 </p>
-              </TabsContent>
+              </div>
+            )}
 
-              {/* UPI Form (India, default) */}
-              <TabsContent value="upi" className="pt-4 space-y-2">
-
+            {/* UPI Form (India, default) */}
+            {selectedPayoutType === "upi" && (
+              <div className="pt-4 space-y-2">
                 <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
                 <Input
                   id="payoutFriendlyNameUpi"
@@ -1668,42 +1684,49 @@ export default function EarningsClientPage({
                   placeholder="e.g., My UPI"
                   disabled={isLoading}
                 />
-                
+
                 <div className="space-y-1">
-                <Label htmlFor="upiHolder">Account Holder Name</Label>
-                <Input
-                  id="upiHolder"
-                  value={bankAccountHolder}
-                  onChange={(e) => setBankAccountHolder(e.target.value)}
-                  placeholder="e.g., Rahul Kumar"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiHolder">Account Holder Name</Label>
+                  <Input
+                    id="upiHolder"
+                    value={bankAccountHolder}
+                    onChange={(e) => setBankAccountHolder(e.target.value)}
+                    placeholder="e.g., Rahul Kumar"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="upiId">UPI ID</Label>
-                <Input
-                  id="upiId"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="yourname@bank"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiId">UPI ID</Label>
+                  <Input
+                    id="upiId"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="yourname@bank"
+                    disabled={isLoading}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   UPI withdrawals are instant and usually free. You are
                   responsible for declaring your earnings and paying any taxes
                   as per Indian law.
                 </p>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
           </div>
           <DialogFooter className="sm:justify-between">
             <DialogClose asChild>
-              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <Button
+                disabled={isLoading}
+                className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+              >
                 Cancel
               </Button>
             </DialogClose>
-            <Button onClick={handleSavePayoutMethod} disabled={isLoading} className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
+            <Button
+              onClick={handleSavePayoutMethod}
+              disabled={isLoading}
+              className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full"
+            >
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
@@ -1713,7 +1736,7 @@ export default function EarningsClientPage({
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
-            <div className="mt-6 pt-4 border-t">
+            <div className="mt-6 pt-4 border-t text-gray-700">
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {payoutMethods.map((method) => (
