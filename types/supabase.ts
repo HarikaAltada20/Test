@@ -240,6 +240,13 @@ export interface Database {
           approved_by: string | null
           published_at: string | null
           rejection_reason: string | null
+          // New features (2025-10-01)
+          multiple_submissions_enabled: boolean
+          max_submissions_per_creator: number
+          content_type: 'ugc' | 'clipping' | 'other' | null
+          bonus_details: Json | null
+          max_earnings_per_creator: number | null  // Per-contest cap (in cents), NOT platform-wide
+          // Note: flat_fee_bonus is stored in contest_based_details JSONB (in cents)
         }
         Insert: {
           id?: string
@@ -269,6 +276,12 @@ export interface Database {
           approved_by?: string | null
           published_at?: string | null
           rejection_reason?: string | null
+          // New features
+          multiple_submissions_enabled?: boolean
+          max_submissions_per_creator?: number
+          content_type?: 'ugc' | 'clipping' | 'other' | null
+          bonus_details?: Json | null
+          max_earnings_per_creator?: number | null
         }
         Update: {
           id?: string
@@ -298,6 +311,12 @@ export interface Database {
           approved_by?: string | null
           published_at?: string | null
           rejection_reason?: string | null
+          // New features
+          multiple_submissions_enabled?: boolean
+          max_submissions_per_creator?: number
+          content_type?: 'ugc' | 'clipping' | 'other' | null
+          bonus_details?: Json | null
+          max_earnings_per_creator_cents?: number | null
         }
       }
       submissions: {
@@ -523,6 +542,12 @@ export interface Database {
           rejection_reason: string | null
           // Contest lifecycle status (only for published contests) 
           status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'incomplete' | 'upcoming' | 'active' | 'ended' | 'unknown' | null
+          // New features (2025-10-01)
+          multiple_submissions_enabled: boolean | null
+          max_submissions_per_creator: number | null
+          content_type: 'ugc' | 'clipping' | 'other' | null
+          bonus_details: Json | null
+          max_earnings_per_creator: number | null
         }
       }
     }
@@ -546,6 +571,23 @@ export interface CpmContestDetails {
   total_budget: number;
   budget_spent?: number;
   terms_conditions: string;
+  flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
+}
+
+// Leaderboard contest specific details structure (for contest_based_details JSONB)
+export interface LeaderboardContestDetails {
+  prizes: { position: number; amount: number }[];
+  total_prize: number;
+  winner_count: number;
+  flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
+}
+
+// Bonus details structure (for bonus_details JSONB)
+export interface BonusDetails {
+  description_html?: string; // Rich text HTML content
+  description_json?: any; // Rich text JSON content for editing
+  // Legacy support (deprecated, use description_html instead)
+  description?: string;
 }
 
 // Submission metadata types
