@@ -34,6 +34,12 @@ export async function POST(
       "contest_type",
       "contest_based_details",
       "thumbnail_url",
+      // New features (2025-10-01)
+      "multiple_submissions_enabled",
+      "max_submissions_per_creator",
+      "content_type",
+      "bonus_details",
+      "max_earnings_per_creator",
     ]);
 
     const updateData: Record<string, any> = {};

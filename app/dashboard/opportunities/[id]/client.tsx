@@ -32,6 +32,10 @@ import {
   Play,
   FileText,
   DollarSign,
+  CheckCheck,
+  Gift,
+  Tag,
+  Star,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
@@ -613,9 +617,9 @@ export function ContestClientPage({
         {/* <div className="text-center">
           <p>Loading contest details...</p>
         </div> */}
-            
-              <PageLoadingSpinner mode="light" />
-               </div>
+
+        <PageLoadingSpinner mode="light" />
+      </div>
     );
   }
 
@@ -730,10 +734,10 @@ export function ContestClientPage({
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <Badge
                       className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
-                          ? "bg-green-400/90 text-green-900"
-                          : contest.status === "upcoming"
-                            ? "bg-blue-400/90 text-blue-900"
-                            : "bg-slate-400/90 text-slate-900"
+                        ? "bg-green-400/90 text-green-900"
+                        : contest.status === "upcoming"
+                          ? "bg-blue-400/90 text-blue-900"
+                          : "bg-slate-400/90 text-slate-900"
                         }`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -904,8 +908,8 @@ export function ContestClientPage({
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
-                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                       }`}
                   >
                     {/* Animated shine effect for active button */}
@@ -1666,6 +1670,104 @@ export function ContestClientPage({
                   </div>
                 </div>
 
+                {/* New Features Sections (2025-10-01) */}
+                {/* Content Type Section */}
+                {(contest as any).content_type && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <Tag className="h-5 w-5 text-blue-600" />
+                        Content Type
+                      </h3>
+                      <div className="border border-blue-300 bg-blue-50/50 rounded-xl p-4">
+                        <p className="text-lg font-semibold text-blue-900 uppercase tracking-wide">
+                          {(contest as any).content_type.toUpperCase()}
+                        </p>
+                        <p className="text-sm text-blue-700 mt-1">
+                          This contest is looking for {(contest as any).content_type === 'ugc' ? 'User Generated Content' : (contest as any).content_type === 'clipping' ? 'Clipping/Editing' : 'Other'} type submissions.
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Flat Fee Bonus Section */}
+                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                  contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus) && (
+                    <>
+                      <Separator />
+                      <div>
+                        <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                          <Gift className="h-5 w-5 text-green-600" />
+                          Guaranteed Flat Fee Bonus
+                        </h3>
+                        <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
+                          <p className="text-2xl font-bold text-green-900 mb-2">
+                            {formatMoney(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                              contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus || 0)} per verified submission
+                          </p>
+                          <p className="text-sm text-green-700">
+                            🎁 Earn this guaranteed amount for EVERY verified submission, regardless of views or ranking! Paid after the contest ends along with other earnings.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                {/* Multiple Submissions Section */}
+                {(contest as any).multiple_submissions_enabled && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <CheckCheck className="h-5 w-5 text-purple-600" />
+                        Multiple Submissions Allowed
+                      </h3>
+                      <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
+                        <p className="text-lg font-semibold text-purple-900 mb-2">
+                          You can submit up to {(contest as any).max_submissions_per_creator} entries for this contest!
+                        </p>
+                        <p className="text-sm text-purple-700 mb-3">
+                          Submit multiple pieces of content to maximize your chances of winning and earning. Min/max view requirements (if any) apply to ALL submissions.
+                        </p>
+                        {(contest as any).max_earnings_per_creator && (
+                          <div className="mt-3 pt-3 border-t border-purple-200">
+                            <p className="text-sm text-purple-800 font-medium">
+                              💡 Earnings Cap for This Contest: {formatMoney((contest as any).max_earnings_per_creator)}
+                            </p>
+                            <p className="text-xs text-purple-600 mt-1">
+                              You can still submit after reaching this cap, but won't earn more from THIS specific contest. This cap doesn't affect your earnings from other contests!
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Additional Bonus Opportunities Section */}
+                {(contest as any).bonus_details?.description_html && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <Star className="h-5 w-5 text-amber-600" />
+                        Additional Bonus Opportunities
+                      </h3>
+                      <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
+                        <div
+                          className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
+                          dangerouslySetInnerHTML={{ __html: (contest as any).bonus_details.description_html }}
+                        />
+                        <p className="text-xs text-amber-700 mt-3 italic">
+                          ℹ️ These bonuses are handled manually by the contest creator. Read carefully and reach out if you have questions!
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <Separator />
 
                 {/* Resources Section - Always Show */}
@@ -1885,15 +1987,15 @@ export function ContestClientPage({
             {loadingLeaderboard ? (
               // <p className="text-center py-4">Loading leaderboard...</p>
               <div className="flex items-center justify-center h-[60vh]">
-              <PageLoadingSpinner mode="light" />
-                </div>
+                <PageLoadingSpinner mode="light" />
+              </div>
             ) : error ? (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
               <div className="text-center py-8">
-                  <Trophy className="mx-auto h-12 w-12 text-slate-400" />
+                <Trophy className="mx-auto h-12 w-12 text-slate-400" />
                 <p className="text-slate-600 dark:text-slate-400 mb-2">
                   No submissions yet. Be the first!
                 </p>

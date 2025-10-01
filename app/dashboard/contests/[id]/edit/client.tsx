@@ -99,12 +99,14 @@ type CpmContestDetails = {
   budget_spent?: number;
   terms_conditions: string;
   tiered_payouts?: any[];
+  flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
 };
 
 type LeaderboardContestDetails = {
   prizes: { position: number; amount: number }[];
   total_prize: number;
   winner_count: number;
+  flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
 };
 
 // Add ResourceItem type definition
@@ -124,6 +126,8 @@ type ContestData = {
   brief_html?: string | null;
   brief_json?: any | null;
   rules: { list: string[] } | null;
+  rules_html?: string | null;
+  rules_json?: any | null;
   start_date: string | null;
   end_date: string | null;
   inspiration_links: { url: string; description: string }[];
@@ -142,6 +146,12 @@ type ContestData = {
   prizes?: { position: number; amount: number }[];
   total_prize?: number;
   winner_count?: number;
+  // New features (2025-10-01)
+  multiple_submissions_enabled?: boolean;
+  max_submissions_per_creator?: number;
+  content_type?: 'ugc' | 'clipping' | 'other' | null;
+  bonus_details?: { description_html?: string; description_json?: any } | null;
+  max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
 };
 
 export default function EditContestPage({ user, contestId, datesOnly = false, isAdmin = false }: { user: UserResponse["data"]["user"], contestId: string, datesOnly?: boolean, isAdmin?: boolean }) {
@@ -211,6 +221,18 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const [totalBudget, setTotalBudget] = useState<number | string>("");
   const [termsConditions, setTermsConditions] = useState<string>("");
 
+  // New features state (2025-10-01)
+  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] = useState(false);
+  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] = useState<number>(1);
+  const [contentType, setContentType] = useState<'ugc' | 'clipping' | 'other' | ''>('other');
+  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(''); // In dollars
+  const [bonusEnabled, setBonusEnabled] = useState(false);
+  const [bonusHtml, setBonusHtml] = useState('');
+  const [bonusJson, setBonusJson] = useState<any>(null);
+  const [showBonusPreview, setShowBonusPreview] = useState(false);
+  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<number | string>(''); // In dollars
+  const bonusRichTextEditorRef = useRef<any>(null);
+
   // Resources State Variables
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [resourceFile, setResourceFile] = useState<File | null>(null);
@@ -267,13 +289,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       // Re-enable background scroll
       document.body.style.overflow = "";
     }
-  
+
     // Cleanup on unmount
     return () => {
       document.body.style.overflow = "";
     };
   }, [showPayment]);
-  
+
   // Load subscription plans from constants (new system)
   const loadSubscriptionPlans = async () => {
     setIsPlansLoading(true);
@@ -565,6 +587,41 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
             // Load existing resources (array format only)
             setResources(data.resources || []);
+
+            // Load new features (2025-10-01)
+            setMultipleSubmissionsEnabled(data.multiple_submissions_enabled || false);
+            setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
+            setContentType(data.content_type || 'other');
+
+            // Load flat fee bonus from contest_based_details
+            if (data.contest_type === "leaderboard") {
+              const lbDetails = data.contest_based_details?.leaderboard_contest;
+              if (lbDetails?.flat_fee_bonus) {
+                setFlatFeeBonus((lbDetails.flat_fee_bonus / 100).toString());
+              }
+            } else if (data.contest_type === "cpm") {
+              const cpmDetails = data.contest_based_details?.cpm_contest;
+              if (cpmDetails?.flat_fee_bonus) {
+                setFlatFeeBonus((cpmDetails.flat_fee_bonus / 100).toString());
+              }
+            }
+
+            // Load bonus details
+            if (data.bonus_details?.description_html) {
+              setBonusEnabled(true);
+              setBonusHtml(data.bonus_details.description_html);
+              setBonusJson(data.bonus_details.description_json);
+              setTimeout(() => {
+                if (bonusRichTextEditorRef.current) {
+                  bonusRichTextEditorRef.current.setContent(data.bonus_details.description_json);
+                }
+              }, 100);
+            }
+
+            // Load max earnings per creator
+            if (data.max_earnings_per_creator) {
+              setMaxEarningsPerCreator((data.max_earnings_per_creator / 100).toString());
+            }
           }
         } else {
           setError(
@@ -1237,11 +1294,20 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           position: i + 1,
           amount: amount || 0,
         }));
-      contestBasedDetails.leaderboard_contest = {
+
+      // Build leaderboard contest details
+      const leaderboardDetails: any = {
         prizes: prizesArray,
         total_prize: currentTotalPrizePool,
         winner_count: winnerCount,
       };
+
+      // Add flat fee bonus if specified (stored in cents)
+      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
+        leaderboardDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+      }
+
+      contestBasedDetails.leaderboard_contest = leaderboardDetails;
     } else if (!datesOnly && contestType === "cpm") {
       const numCpmRate = parseFloat(cpmRate as string);
       const numTotalBudget = parseFloat(totalBudget as string);
@@ -1343,7 +1409,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         if (submitTimeoutId) clearTimeout(submitTimeoutId);
         return;
       }
-      contestBasedDetails.cpm_contest = {
+      // Build CPM contest details
+      const cpmDetails: any = {
         cpm_rate_usd: numCpmRate,
         total_budget: numTotalBudget * 100, // Convert dollars to cents
         min_views: numMinViews,
@@ -1352,6 +1419,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         budget_spent:
           contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
       };
+
+      // Add flat fee bonus if specified (stored in cents)
+      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
+        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+      }
+
+      contestBasedDetails.cpm_contest = cpmDetails;
     } else if (!datesOnly) {
       toast({
         title: "Invalid Contest Type",
@@ -1368,6 +1442,29 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     if (!datesOnly) {
       updatePayload.contest_type = contestType;
       updatePayload.contest_based_details = contestBasedDetails;
+
+      // Add new features (2025-10-01)
+      updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
+      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1;
+      updatePayload.content_type = contentType || null;
+
+      // Capture bonus content before saving
+      if (bonusEnabled && bonusRichTextEditorRef.current) {
+        const { html, json } = bonusRichTextEditorRef.current.getContent();
+        setBonusHtml(html);
+        setBonusJson(json);
+        updatePayload.bonus_details = html ? {
+          description_html: html,
+          description_json: json
+        } : null;
+      } else {
+        updatePayload.bonus_details = null;
+      }
+
+      // Add max earnings per creator (stored in cents)
+      updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
+        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+        : null;
     }
     try {
       // Use the already-uploaded thumbnail URL (from thumbnailPreview)
@@ -3109,45 +3206,50 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       return;
     }
 
-    // Skip contest type validation for datesOnly mode and draft mode
-    if (!datesOnly && !isDraftMode && contestType === 'leaderboard') {
+    // Skip contest type validation for datesOnly mode
+    if (!datesOnly && contestType === 'leaderboard') {
       const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
-      if (winnerCount > planFeatures.maxWinnersPerContest) {
-        toast({
-          title: "Plan Limit Exceeded",
-          description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-      }
-      if (currentTotalPrizePool < planFeatures.minContestBudget) {
-        toast({
-          title: "Prize Pool Too Low",
-          description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
-      }
-      for (let i = 0; i < winnerCount; i++) {
-        if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+
+      // Validation only for non-draft mode
+      if (!isDraftMode) {
+        if (winnerCount > planFeatures.maxWinnersPerContest) {
           toast({
-            title: "Prize Amount Too Low",
-            description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
+            title: "Plan Limit Exceeded",
+            description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
             variant: "destructive",
           });
           setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
         }
-        if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+        if (currentTotalPrizePool < planFeatures.minContestBudget) {
           toast({
-            title: "Prize Amount Too High",
-            description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+            title: "Prize Pool Too Low",
+            description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
             variant: "destructive",
           });
           setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+        }
+        for (let i = 0; i < winnerCount; i++) {
+          if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
+            toast({
+              title: "Prize Amount Too Low",
+              description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          }
+          if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
+            toast({
+              title: "Prize Amount Too High",
+              description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          }
         }
       }
 
-      contestBasedDetails.leaderboard_contest = {
+      // Always build contest details (for both draft and non-draft)
+      const leaderboardDetails: any = {
         prizes: winnerAmounts.slice(0, winnerCount).map((amount, index) => ({
           position: index + 1,
           amount: amount,
@@ -3155,6 +3257,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         total_prize: currentTotalPrizePool,
         winner_count: winnerCount,
       };
+
+      // Add flat fee bonus if specified (stored in cents)
+      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
+        leaderboardDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+      }
+
+      contestBasedDetails.leaderboard_contest = leaderboardDetails;
       updatePayload.contest_type = "leaderboard";
       updatePayload.contest_based_details = contestBasedDetails;
     }
@@ -3221,7 +3330,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         }
       }
 
-      contestBasedDetails.cpm_contest = {
+      const cpmDetails: any = {
         cpm_rate_usd: parsedCpmRate || 0,
         min_views: parsedMinViews,
         max_views: parsedMaxViews,
@@ -3229,8 +3338,41 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
         terms_conditions: (termsConditions || '').trim()
       };
+
+      // Add flat fee bonus if specified (stored in cents)
+      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
+        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+      }
+
+      contestBasedDetails.cpm_contest = cpmDetails;
       updatePayload.contest_type = 'cpm';
       updatePayload.contest_based_details = contestBasedDetails;
+    }
+
+    // Only update contest type and details if not in datesOnly mode
+    if (!datesOnly) {
+      // Add new features (2025-10-01)
+      updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
+      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1;
+      updatePayload.content_type = contentType || null;
+
+      // Capture bonus content before saving
+      if (bonusEnabled && bonusRichTextEditorRef.current) {
+        const { html, json } = bonusRichTextEditorRef.current.getContent();
+        setBonusHtml(html);
+        setBonusJson(json);
+        updatePayload.bonus_details = html ? {
+          description_html: html,
+          description_json: json
+        } : null;
+      } else {
+        updatePayload.bonus_details = null;
+      }
+
+      // Add max earnings per creator (stored in cents)
+      updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
+        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+        : null;
     }
 
     // Validate active contest limits when submitting for approval
@@ -3504,8 +3646,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       //   <p>Loading contest data...</p>
       // </div>
       <div className="flex items-center justify-center h-[76vh]">
-      <PageLoadingSpinner mode="light" />
-        </div>
+        <PageLoadingSpinner mode="light" />
+      </div>
     );
   }
 
@@ -5114,6 +5256,197 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 <p className="text-xs text-muted-foreground">
                   These terms will be shown to creators. Be clear and concise.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* New Features Section (2025-10-01) - Common for both contest types */}
+          {!datesOnly && (
+            <div className="space-y-6 pt-4">
+              <Separator />
+              <div>
+                <h3 className="text-lg font-medium">Additional Features</h3>
+                <p className="text-sm text-muted-foreground">
+                  Configure optional features for enhanced creator engagement.
+                </p>
+              </div>
+
+              {/* Content Type Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="content-type">Content Type (Optional)</Label>
+                <Select value={contentType || undefined} onValueChange={(value) => setContentType(value as 'ugc' | 'clipping' | 'other')}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select content type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ugc">UGC (User Generated Content)</SelectItem>
+                    <SelectItem value="clipping">Clipping</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Helps creators filter opportunities by content type. Leave empty if not applicable.
+                </p>
+              </div>
+
+              {/* Multiple Submissions Toggle */}
+              <div className="space-y-3 rounded-lg border border-purple-200 bg-purple-50/30 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label htmlFor="multiple-submissions" className="text-base font-medium">
+                      Allow Multiple Submissions
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Enable creators to submit multiple entries to this contest.
+                    </p>
+                  </div>
+                  <input
+                    id="multiple-submissions"
+                    type="checkbox"
+                    checked={multipleSubmissionsEnabled}
+                    onChange={(e) => {
+                      setMultipleSubmissionsEnabled(e.target.checked);
+                      if (!e.target.checked) {
+                        setMaxSubmissionsPerCreator(1);
+                        setMaxEarningsPerCreator('');
+                      } else {
+                        // Set default to minimum (2) when enabling multiple submissions
+                        setMaxSubmissionsPerCreator(2);
+                      }
+                    }}
+                    className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                </div>
+
+                {multipleSubmissionsEnabled && (
+                  <div className="space-y-4 pt-3 border-t border-purple-200">
+                    <div className="space-y-2">
+                      <Label htmlFor="max-submissions">
+                        Maximum Submissions Per Creator <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="max-submissions"
+                        type="number"
+                        min="2"
+                        max="100"
+                        value={maxSubmissionsPerCreator}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value);
+                          if (value >= 2 && value <= 100) {
+                            setMaxSubmissionsPerCreator(value);
+                          }
+                        }}
+                        placeholder="e.g., 5"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Range: 2-100 submissions per creator. Min/max views apply to ALL submissions.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="max-earnings">
+                        Maximum Earnings Per Creator - THIS CONTEST ONLY (Optional)
+                      </Label>
+                      <Input
+                        id="max-earnings"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={maxEarningsPerCreator}
+                        onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
+                        placeholder="e.g., 500"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        💡 Per-contest cap (not platform-wide). Creators can still submit after reaching this cap but won't earn more from THIS specific contest. Leave empty for no cap.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Flat Fee Bonus */}
+              <div className="space-y-2">
+                <Label htmlFor="flat-fee-bonus">
+                  Flat Fee Bonus Per Verified Submission (Optional)
+                </Label>
+                <Input
+                  id="flat-fee-bonus"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={flatFeeBonus}
+                  onChange={(e) => setFlatFeeBonus(e.target.value)}
+                  placeholder="e.g., 10.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  🎁 Guaranteed payment for EVERY verified submission, regardless of views or ranking. Paid after contest ends. Great motivator for creators!
+                </p>
+              </div>
+
+              {/* Bonus Section Toggle & Editor */}
+              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/30 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label htmlFor="bonus-enabled" className="text-base font-medium">
+                      Additional Bonus Opportunities
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Describe other bonuses (top creator rewards, affiliate links, special bonuses). Handled manually by you.
+                    </p>
+                  </div>
+                  <input
+                    id="bonus-enabled"
+                    type="checkbox"
+                    checked={bonusEnabled}
+                    onChange={(e) => setBonusEnabled(e.target.checked)}
+                    className="h-5 w-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                </div>
+
+                {bonusEnabled && (
+                  <div className="space-y-3 pt-3 border-t border-amber-300">
+                    <div className="flex items-center justify-between">
+                      <Label>Bonus Details</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!showBonusPreview && bonusRichTextEditorRef.current) {
+                            const { html, json } = bonusRichTextEditorRef.current.getContent();
+                            setBonusHtml(html);
+                            setBonusJson(json);
+                          }
+                          setShowBonusPreview(!showBonusPreview);
+                        }}
+                        className="text-xs"
+                      >
+                        {showBonusPreview ? "Edit" : "Preview"}
+                      </Button>
+                    </div>
+                    {showBonusPreview ? (
+                      <div className="prose max-w-none p-4 bg-white border rounded-lg min-h-[200px]">
+                        <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-lg border">
+                        <NovelEditor
+                          value={bonusHtml}
+                          placeholder="Example: 🏆 Top 3 Creators Bonus: Extra $100 for most creative submissions! 💰 Affiliate Program: Earn 10% commission on referrals. 🎯 Milestone Bonus: $50 for reaching 100k views."
+                          height="250px"
+                          ref={bonusRichTextEditorRef}
+                          onChange={(html: string, json: any) => {
+                            setBonusHtml(html);
+                            setBonusJson(json);
+                          }}
+                        />
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      ℹ️ These bonuses are visible to creators but handled manually by you. Use formatting and emojis to make it engaging!
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}

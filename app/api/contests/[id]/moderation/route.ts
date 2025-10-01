@@ -24,13 +24,27 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Verify user owns this contest
-    const { data: contest, error: contestError } = await supabase
+    // Check if user is admin
+    const { data: userData } = await supabase
+      .from('users')
+      .select('user_type')
+      .eq('id', user.id)
+      .single();
+
+    const isAdmin = userData?.user_type === 'admin';
+
+    // Verify user owns this contest (or is admin)
+    let contestQuery = supabase
       .from('contests_with_status')
       .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url, payment_details, status')
-      .eq('id', contestId)
-      .eq('advertiser_id', user.id)
-      .single();
+      .eq('id', contestId);
+
+    // Only check ownership if not admin
+    if (!isAdmin) {
+      contestQuery = contestQuery.eq('advertiser_id', user.id);
+    }
+
+    const { data: contest, error: contestError } = await contestQuery.single();
 
     if (contestError || !contest) {
       return NextResponse.json({ error: 'Contest not found' }, { status: 404 });

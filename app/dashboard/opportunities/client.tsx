@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, DollarSign, Trophy, Info, Share2, Users, Clock } from "lucide-react";
+import { Calendar, DollarSign, Trophy, Info, Share2, Users, Clock, CheckCheck, Gift, Tag, Star } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
@@ -29,7 +29,7 @@ type SortOptionType =
   'cpm_rate_desc' | 'cpm_rate_asc' |
   'submissions_desc' | 'submissions_asc';
 
-  
+
 
 export default function OpportunitiesPage({
   user,
@@ -50,7 +50,7 @@ export default function OpportunitiesPage({
     { id: "upcoming", label: "Upcoming", count: availableContests.filter(c => c.moderation_status === "published" && c.status === "upcoming").length },
     { id: "completed", label: "Completed", count: availableContests.filter(c => c.moderation_status === "published" && c.post_contest_status === "payouts_processed").length },
   ]
-  
+
   const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "all" });
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
@@ -270,7 +270,7 @@ export default function OpportunitiesPage({
         {/* <div className="text-center">
           <p>Loading opportunities...</p>
         </div> */}
-        <PageLoadingSpinner mode="light"/>
+        <PageLoadingSpinner mode="light" />
       </div>
     );
   }
@@ -320,31 +320,31 @@ export default function OpportunitiesPage({
       </div>
 
 
-    {/* Tabs */}
-<EnhancedTabs
-  tabs={tabs.map((tab) => ({
-    ...tab,
-    label: (
-      <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
-        <span className="truncate">{tab.label}</span>
-        {tab.count !== undefined && (
-          <Badge
-            variant="secondary"
-            className="ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm bg-gray-200 text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-          >
-            {tab.count}
-          </Badge>
-        )}
-      </div>
-    ),
-  }))}
-  activeTab={statusFilter}
-  onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
-  className="mt-10 mb-8 w-full overflow-x-auto scrollbar-hide"
-/>
+      {/* Tabs */}
+      <EnhancedTabs
+        tabs={tabs.map((tab) => ({
+          ...tab,
+          label: (
+            <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 text-center">
+              <span className="truncate">{tab.label}</span>
+              {tab.count !== undefined && (
+                <Badge
+                  variant="secondary"
+                  className="ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm bg-gray-200 text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
+                >
+                  {tab.count}
+                </Badge>
+              )}
+            </div>
+          ),
+        }))}
+        activeTab={statusFilter}
+        onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
+        className="mt-10 mb-8 w-full overflow-x-auto scrollbar-hide"
+      />
 
 
-      
+
       {/* Enhanced Status Filter Tabs with better visual distinction */}
       {/* <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilterType)} className="mb-8">
         <TabsList>
@@ -453,6 +453,36 @@ export default function OpportunitiesPage({
               </CardHeader>
               <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
                 <div className="space-y-2 text-md mb-3 text-slate-600 dark:text-slate-400">
+                  {/* New Features Indicators */}
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    {contest.multiple_submissions_enabled && (
+                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                        {contest.max_submissions_per_creator > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
+                      </Badge>
+                    )}
+                    {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                      contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus) && (
+                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                          <Gift className="h-3 w-3 mr-1" />
+                          {formatMoney(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                            contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus || 0)}/submission
+                        </Badge>
+                      )}
+                    {contest.content_type && (
+                      <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                        <Tag className="h-3 w-3 mr-1" />
+                        {contest.content_type.toUpperCase()}
+                      </Badge>
+                    )}
+                    {contest.bonus_details?.description_html && (
+                      <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                        <Star className="h-3 w-3 mr-1" />
+                        Bonus Available
+                      </Badge>
+                    )}
+                  </div>
+
                   <div className="flex items-center">
                     <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-gray500" />
                     <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
