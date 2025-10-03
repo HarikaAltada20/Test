@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { MetricsService } from "@/lib/metrics-service";
 import { POST_CONTEST_STATUS } from "@/lib/constants-status";
@@ -100,7 +101,7 @@ export async function POST(
             post_contest_status: status,
             updated_at: nowIso,
         };
-        if (status === POST_CONTEST_STATUS.verification_complete || status === POST_CONTEST_STATUS.payouts_processed) {
+        if (status === POST_CONTEST_STATUS.verification_complete) {
             // record when views were locked for this contest
             // column exists on contests per schema: views_locked_at
             (contestUpdate as any).views_locked_at = nowIso;
@@ -117,8 +118,20 @@ export async function POST(
             }, { status: 500 });
         }
 
-        // Kick off views credit asynchronously to avoid serverless timeouts
-        if (status === POST_CONTEST_STATUS.verification_complete || status === POST_CONTEST_STATUS.payouts_processed) {
+        // If entering a locked state, snapshot verified submissions' views into views_locked (idempotent)
+        if (status === POST_CONTEST_STATUS.verification_complete) {
+            try {
+                const admin = createAdminClient();
+                // Single set-based update for all verified submissions (idempotent)
+                const { error: fnErr } = await admin.rpc('lock_verified_submission_views', { p_contest_id: contestId });
+                if (fnErr) {
+                    console.warn('[update-status] lock_verified_submission_views RPC failed, falling back to no-op:', fnErr);
+                }
+            } catch (e) {
+                console.warn('[update-status] views_locked snapshot step failed (non-blocking):', e);
+            }
+
+            // Kick off views credit asynchronously to avoid serverless timeouts
             try {
                 // Fire-and-forget without blocking the response
                 // Safe: this only updates creator aggregate views and snapshots

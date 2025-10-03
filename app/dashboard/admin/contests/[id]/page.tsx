@@ -152,6 +152,12 @@ export default async function AdminContestDetailPage({
             approved_by: contestData.approved_by,
             published_at: contestData.published_at,
             rejection_reason: contestData.rejection_reason,
+            // New features (2025-10-01)
+            multiple_submissions_enabled: contestData.multiple_submissions_enabled,
+            max_submissions_per_creator: contestData.max_submissions_per_creator,
+            content_type: contestData.content_type,
+            bonus_details: contestData.bonus_details,
+            max_earnings_per_creator: contestData.max_earnings_per_creator,
         };
 
         // Prepare submissions data

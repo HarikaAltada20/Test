@@ -133,6 +133,17 @@ export default function CreateContestPage({
   const [termsConditions, setTermsConditions] = useState<string>("");
   // End Contest Type and CPM-specific state
 
+  // New features state (2025-10-01)
+  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] = useState(false);
+  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] = useState<number>(1);
+  const [contentType, setContentType] = useState<'ugc' | 'clipping' | 'other' | ''>('');
+  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(''); // In dollars
+  const [bonusEnabled, setBonusEnabled] = useState(false);
+  const [bonusHtml, setBonusHtml] = useState('');
+  const [bonusJson, setBonusJson] = useState<any>(null);
+  const [showBonusPreview, setShowBonusPreview] = useState(false);
+  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<number | string>(''); // In dollars
+
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("technology");
   const [thumbnail, setThumbnail] = useState<File | null>(null);
@@ -207,6 +218,7 @@ export default function CreateContestPage({
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resourceFileRef = useRef<HTMLInputElement>(null);
+  const bonusRichTextEditorRef = useRef<any>(null);
   const router = useRouter();
   const supabase = createClient();
   const [userPlan, setUserPlan] = useState<string | null>(null);
@@ -453,6 +465,21 @@ export default function CreateContestPage({
     return "";
   };
 
+  // Function to capture content from bonus rich text editor
+  const captureBonusContent = () => {
+    if (bonusRichTextEditorRef.current) {
+      const content = bonusRichTextEditorRef.current.getContent();
+      console.log(
+        "Captured bonus content:",
+        content ? content.html.substring(0, 100) + "..." : content
+      );
+      setBonusHtml(content.html);
+      setBonusJson(content.json);
+      return content.html;
+    }
+    return "";
+  };
+
   // Function to preview the brief content
   const toggleBriefPreview = () => {
     if (!showBriefPreview) {
@@ -469,6 +496,15 @@ export default function CreateContestPage({
       captureRulesContent();
     }
     setShowRulesPreview(!showRulesPreview);
+  };
+
+  // Function to preview the bonus content
+  const toggleBonusPreview = () => {
+    if (!showBonusPreview) {
+      // Always capture content before showing preview
+      captureBonusContent();
+    }
+    setShowBonusPreview(!showBonusPreview);
   };
 
   // Function to clear toast error when user starts interacting
@@ -507,6 +543,9 @@ export default function CreateContestPage({
     }
   };
 
+
+
+  
   // Helper function to create a draft contest in DB
   const createDraftContest = async (): Promise<string | null> => {
     if (!user?.id) return null;
@@ -546,7 +585,7 @@ export default function CreateContestPage({
                     terms_conditions: "",
                   },
                 }
-              : null,
+                : null,
         })
         .select()
         .single();
@@ -891,6 +930,11 @@ export default function CreateContestPage({
         captureBriefContent();
       }
 
+      // Capture bonus content if enabled and on prize step
+      if (step === "prize" && bonusEnabled && !showBonusPreview) {
+        captureBonusContent();
+      }
+
       // Add timeout to clear loading state if something goes wrong
       const draftTimeoutId = setTimeout(() => {
         setIsLoading(false);
@@ -968,6 +1012,11 @@ export default function CreateContestPage({
       const rulesToValidate = currentRulesHtml || rulesHtml;
       if (!rulesToValidate || isQuillEmpty(rulesToValidate)) {
         return { isValid: false, error: "Contest rules are required" };
+      }
+
+      // Capture bonus content if enabled
+      if (bonusEnabled) {
+        captureBonusContent();
       }
 
       // 3. Resources validation
@@ -1303,11 +1352,16 @@ export default function CreateContestPage({
           position: i + 1,
           amount: winnerAmounts[i] || 0, // Stored in cents
         }));
+        const flatFeeBonusCents = flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+          : undefined;
+
         contestBasedDetails = {
           leaderboard_contest: {
             prizes: prizesArray,
             total_prize: totalPrizePool, // Already in cents
             winner_count: winnerCount,
+            ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
           },
         };
       } else if (contestType === "cpm") {
@@ -1382,6 +1436,10 @@ export default function CreateContestPage({
             return;
           }
         }
+        const flatFeeBonusCents = flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+          : undefined;
+
         contestBasedDetails = {
           cpm_contest: {
             cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
@@ -1396,6 +1454,7 @@ export default function CreateContestPage({
             total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
             budget_spent: 0, // Initial value
             terms_conditions: termsConditions,
+            ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
             // tiered_payouts: [] // Future use
           },
         };
@@ -1520,6 +1579,11 @@ export default function CreateContestPage({
           setIsLoading(false);
           setUploadProgress(null);
           return;
+        }
+
+        // Capture bonus content if enabled
+        if (bonusEnabled) {
+          captureBonusContent();
         }
 
         // Capture rules content before validation
@@ -1791,6 +1855,20 @@ export default function CreateContestPage({
         end_date: formattedEndDate,
         contest_type: contestType,
         contest_based_details: contestBasedDetails,
+        // New features (2025-10-01)
+        multiple_submissions_enabled: multipleSubmissionsEnabled,
+        max_submissions_per_creator: multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1,
+        content_type: contentType || null,
+        bonus_details: bonusEnabled && bonusHtml
+          ? {
+            description_html: bonusHtml,
+            description_json: bonusJson
+          }
+          : null,
+        max_earnings_per_creator: maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
+          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+          : null,
+        // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
       };
 
       let responseData, responseError;
@@ -2315,6 +2393,11 @@ export default function CreateContestPage({
       // Capture content from rich text editor before validation
       const currentBrief = captureBriefContent();
       const currentRules = captureRulesContent();
+
+      // Capture bonus content if enabled
+      if (bonusEnabled) {
+        captureBonusContent();
+      }
 
       // Also check the current brief state as a fallback
       const briefToCheck = currentBrief || briefHtml;
@@ -3876,12 +3959,7 @@ export default function CreateContestPage({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className={cn(
-                    "w-full",
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
-                  )}
+                   className="w-full"
                 />
               </div>
               <div className="space-y-2">
@@ -4306,6 +4384,141 @@ export default function CreateContestPage({
                   )}
               </>
             )}
+
+            {/* New Bonus Features - Apply to both contest types */}
+            <div className="space-y-6 p-6 border-t-2 border-dashed mt-6">
+              <div>
+                <h3 className="text-xl font-semibold mb-4 text-purple-600">💰 Creator Earning Opportunities</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Motivate creators with additional earning opportunities beyond the main prize pool or CPM rate.
+                </p>
+              </div>
+
+              {/* Flat Fee Bonus */}
+              <div className="space-y-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🎁</span>
+                  <Label htmlFor="flatFeeBonus" className="text-base font-semibold">
+                    Flat Fee Bonus (Per Verified Submission)
+                  </Label>
+                </div>
+                <Input
+                  id="flatFeeBonus"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={flatFeeBonus}
+                  onChange={(e) => setFlatFeeBonus(e.target.value)}
+                  placeholder="e.g., 10 for $10 per submission"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional: Give creators a guaranteed payment for each verified submission, regardless of views or ranking. This bonus is paid after the contest ends. Great for encouraging participation!
+                </p>
+                {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
+                  <Alert className="bg-green-100 border-green-300">
+                    <AlertDescription className="text-green-800">
+                      ✓ Creators will earn <strong>${parseFloat(flatFeeBonus.toString()).toFixed(2)}</strong> for each verified submission!
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+
+              {/* Max Earnings Per Creator */}
+              {multipleSubmissionsEnabled && (
+                <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🎯</span>
+                    <Label htmlFor="maxEarnings" className="text-base font-semibold">
+                      Maximum Earnings Per Creator (Optional)
+                    </Label>
+                  </div>
+                  <Input
+                    id="maxEarnings"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={maxEarningsPerCreator}
+                    onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
+                    placeholder="e.g., 500 for $500 max per creator"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Set a maximum earning cap per creator for <strong>THIS CONTEST ONLY</strong>. Once reached, they can still submit but won't earn more from this campaign. This does NOT affect their earnings from other contests on the platform. Helps ensure fair reward distribution within this campaign.
+                  </p>
+                  {maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                    <Alert className="bg-blue-100 border-blue-300">
+                      <AlertDescription className="text-blue-800">
+                        ℹ️ Each creator can earn up to <strong>${parseFloat(maxEarningsPerCreator.toString()).toFixed(2)}</strong> from this contest.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
+              {/* Additional Bonus Section */}
+              <div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">🏆</span>
+                    <Label htmlFor="bonusToggle" className="text-base font-semibold">
+                      Additional Bonus Opportunities
+                    </Label>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="bonusToggle"
+                    checked={bonusEnabled}
+                    onChange={(e) => setBonusEnabled(e.target.checked)}
+                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Offer additional bonuses that you'll handle manually (e.g., top creators bonus, affiliate commissions, special rewards).
+                </p>
+
+                {bonusEnabled && (
+                  <div className="space-y-3 pt-3 border-t border-purple-300">
+                    <div className="flex items-center justify-between">
+                      <Label>Bonus Details</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={toggleBonusPreview}
+                        className="text-xs"
+                      >
+                        {showBonusPreview ? "Edit" : "Preview"}
+                      </Button>
+                    </div>
+
+                    {showBonusPreview ? (
+                      <div className="prose max-w-none p-4 bg-white border rounded-lg min-h-[200px]">
+                        <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-lg border">
+                        <NovelEditor
+                          value={bonusHtml}
+                          placeholder="Example:
+• Top 3 creators get $100 each
+• Affiliate link available: https://yoursite.com/ref - 10% commission on sales  
+• Most creative submission gets an extra $50 bonus
+• Special reward for first 10 submissions"
+                          height="250px"
+                          ref={bonusRichTextEditorRef}
+                          onChange={(html: string, json: any) => {
+                            setBonusHtml(html);
+                            setBonusJson(json);
+                          }}
+                        />
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Describe all additional bonus opportunities. These will be visible to creators and handled manually by you. Use formatting, links, and bullet points to make it clear!
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
 
             <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
               {/* Modern Error Display for Prize step */}
@@ -5444,6 +5657,77 @@ export default function CreateContestPage({
                 <p className="text-sm text-muted-foreground mt-1">
                   Choose the platform where creators will submit content.
                 </p>
+              </div>
+
+              {/* Content Type Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="contentType">Content Type</Label>
+                <Select value={contentType} onValueChange={(value: any) => setContentType(value)}>
+                  <SelectTrigger id="contentType">
+                    <SelectValue placeholder="Select content type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ugc">📹 UGC (User Generated Content)</SelectItem>
+                    <SelectItem value="clipping">✂️ Clipping (Short clips/repurposed content)</SelectItem>
+                    <SelectItem value="other">📋 Other (Check Rules for details)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Specify the type of content you need from creators. This helps creators filter opportunities.
+                </p>
+              </div>
+
+              {/* Multiple Submissions Configuration */}
+              <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="multipleSubmissions" className="text-base font-semibold">
+                      Multiple Submissions
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Allow creators to submit multiple entries to this contest
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="multipleSubmissions"
+                      checked={multipleSubmissionsEnabled}
+                      onChange={(e) => {
+                        setMultipleSubmissionsEnabled(e.target.checked);
+                        if (!e.target.checked) {
+                          setMaxSubmissionsPerCreator(1);
+                        } else {
+                          setMaxSubmissionsPerCreator(2);
+                        }
+                      }}
+                      className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {multipleSubmissionsEnabled && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label htmlFor="maxSubmissions">Maximum Submissions Per Creator</Label>
+                    <Input
+                      id="maxSubmissions"
+                      type="number"
+                      min="2"
+                      max="100"
+                      value={maxSubmissionsPerCreator}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (value >= 2 && value <= 100) {
+                          setMaxSubmissionsPerCreator(value);
+                        }
+                      }}
+                      placeholder="Enter number between 2-100"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Each creator can submit up to {maxSubmissionsPerCreator} entries. Min/max view limits will apply to all submissions.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

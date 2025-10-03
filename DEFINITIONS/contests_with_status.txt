@@ -1,5 +1,4 @@
--- Append views_locked_at as the LAST column of the view (keeps all existing columns/ordinals intact)
-create or replace view public.contests_with_status as
+create view public.contests_with_status as
 select
   contests.id,
   contests.advertiser_id,
@@ -33,10 +32,10 @@ select
   case
     when contests.moderation_status <> 'published'::contest_moderation_status_enum then null::text
     when contests.start_date is null or contests.end_date is null then 'incomplete'::text
-    when (now() at time zone 'UTC') < contests.start_date then 'upcoming'::text
-    when (now() at time zone 'UTC') >= contests.start_date
-         and (now() at time zone 'UTC') < contests.end_date then 'active'::text
-    when (now() at time zone 'UTC') >= contests.end_date then 'ended'::text
+    when (now() AT TIME ZONE 'UTC'::text) < contests.start_date then 'upcoming'::text
+    when (now() AT TIME ZONE 'UTC'::text) >= contests.start_date
+    and (now() AT TIME ZONE 'UTC'::text) < contests.end_date then 'active'::text
+    when (now() AT TIME ZONE 'UTC'::text) >= contests.end_date then 'ended'::text
     else 'unknown'::text
   end as status,
   contests.views_locked_at

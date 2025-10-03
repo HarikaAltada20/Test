@@ -16,8 +16,9 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Game Of Creators - Performance-Based Creator Marketing Platform",
-  description: "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
-  metadataBase: new URL('https://www.gameofcreators.com'),
+  description:
+    "Turn creativity into income with Game of Creators. Get paid based on views or ranking in brand contests - even with 0 followers. Join 1000s of creators earning through performance-based marketing.",
+  metadataBase: new URL("https://www.gameofcreators.com"),
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -217,6 +218,17 @@ export default async function RootLayout({
         <Toaster />
         <SonnerToaster />
         <Analytics />
+        {process.env.NEXT_PUBLIC_CLARITY_ID ? (
+          <Script id="ms-clarity" strategy="afterInteractive">
+            {`
+              (function(c,l,a,r,i,t,y){
+                  c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "${process.env.NEXT_PUBLIC_CLARITY_ID}");
+            `}
+          </Script>
+        ) : null}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8J6VZKVWLF"
           strategy="afterInteractive"
