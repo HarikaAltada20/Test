@@ -52,6 +52,13 @@ interface Contest {
     advertiser_name: string;
     advertiser_id: string;
     contest_based_details: any;
+    // New feature fields
+    multiple_submissions_enabled?: boolean;
+    max_submissions_per_creator?: number;
+    content_type?: string;
+    bonus_details?: {
+        description_html?: string;
+    };
 }
 
 const moderationStatusConfig = {
@@ -305,7 +312,7 @@ export default function ContestModerationClient() {
                         {contest.multiple_submissions_enabled && (
                             <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                 <CheckCheck className="h-3 w-3 mr-1" />
-                                {contest.max_submissions_per_creator > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
+                                {(contest.max_submissions_per_creator ?? 1) > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
                             </Badge>
                         )}
                         {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||

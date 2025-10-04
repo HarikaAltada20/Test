@@ -51,7 +51,12 @@ export default async function ContestModerationPage() {
             brief: contest.brief,
             rules_html: contest.rules_html,
             resources: contest.resources,
-            inspiration_links: contest.inspiration_links
+            inspiration_links: contest.inspiration_links,
+            // New feature fields
+            multiple_submissions_enabled: contest.multiple_submissions_enabled,
+            max_submissions_per_creator: contest.max_submissions_per_creator,
+            content_type: contest.content_type,
+            bonus_details: contest.bonus_details
         }));
 
         return (
