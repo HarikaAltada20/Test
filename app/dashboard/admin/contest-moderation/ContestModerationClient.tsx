@@ -26,6 +26,10 @@ import {
     ExternalLink,
     PlayCircle,
     StopCircle,
+    CheckCheck,
+    Gift,
+    Tag,
+    Star,
 } from "lucide-react";
 
 interface Contest {
@@ -295,6 +299,35 @@ export default function ContestModerationClient() {
                     <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                         <Building className="h-4 w-4" />
                         {contest.advertiser_name}
+                    </div>
+                    {/* New Features Indicators */}
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                        {contest.multiple_submissions_enabled && (
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                                <CheckCheck className="h-3 w-3 mr-1" />
+                                {contest.max_submissions_per_creator > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
+                            </Badge>
+                        )}
+                        {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                            contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus) && (
+                                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                    <Gift className="h-3 w-3 mr-1" />
+                                    {formatMoney(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                                        contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus || 0)}/submission
+                                </Badge>
+                            )}
+                        {contest.content_type && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                <Tag className="h-3 w-3 mr-1" />
+                                {contest.content_type.toUpperCase()}
+                            </Badge>
+                        )}
+                        {contest.bonus_details?.description_html && (
+                            <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
+                                <Star className="h-3 w-3 mr-1" />
+                                Bonus Available
+                            </Badge>
+                        )}
                     </div>
                 </CardHeader>
 
