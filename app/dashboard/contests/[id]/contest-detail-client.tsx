@@ -73,6 +73,7 @@ import {
   Calendar,
   ChevronDown,
   Clock,
+  Copy,
   CreditCard,
   DollarSign,
   Edit,
@@ -117,20 +118,20 @@ interface Contest {
   title: string;
   // Moderation status (admin workflow)
   moderation_status:
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "published"
-  | "rejected";
+    | "draft"
+    | "pending_approval"
+    | "approved"
+    | "published"
+    | "rejected";
   // Contest lifecycle status (only for published contests)
   status: "upcoming" | "active" | "ended" | "incomplete" | "unknown" | null;
   // Post-contest status for ended contests
   post_contest_status?:
-  | "pending_review"
-  | "in_review"
-  | "verification_complete"
-  | "payouts_processed"
-  | null;
+    | "pending_review"
+    | "in_review"
+    | "verification_complete"
+    | "payouts_processed"
+    | null;
   contest_type?: "leaderboard" | "cpm" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
@@ -139,6 +140,7 @@ interface Contest {
   end_date: string | null;
   rules_html?: string | null;
   inspiration_links?: { url: string; description: string }[] | null;
+  tracking_links?: { url: string; description: string }[] | null;
   resources?: any | null;
   contest_based_details?: any | null;
   last_metrics_updated?: string | null;
@@ -424,7 +426,7 @@ export default function ContestDetailClient({
           typeof result === "string" && result.trim().length > 0
             ? result
             : result?.error ||
-            `Failed to update submission status (HTTP ${response.status})`;
+              `Failed to update submission status (HTTP ${response.status})`;
         throw new Error(message);
       }
 
@@ -725,8 +727,9 @@ export default function ContestDetailClient({
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${cooldownInfo.remainingMinutes
-          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${
+          cooldownInfo.remainingMinutes
+        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -904,6 +907,24 @@ export default function ContestDetailClient({
       toast({
         title: "Share Failed",
         description: "There was an error trying to share this opportunity.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCopyTrackingLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link Copied",
+        description: "Tracking link copied to clipboard!",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error copying link:", error);
+      toast({
+        title: "Copy Failed",
+        description: "There was an error trying to copy this link.",
         variant: "destructive",
       });
     }
@@ -1111,9 +1132,7 @@ export default function ContestDetailClient({
               asChild
             >
               <Link
-                href={
-                  `/dashboard/contests/${contestId}/edit`
-                }
+                href={`/dashboard/contests/${contestId}/edit`}
                 className="flex items-center gap-2"
               >
                 <Edit className="h-4 w-4" />
@@ -1259,7 +1278,7 @@ export default function ContestDetailClient({
 
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null && (
+              null && (
               <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
                 <CardContent className="p-4 flex justify-between">
                   <div className="flex-1 text-black space-y-3">
@@ -1659,26 +1678,26 @@ export default function ContestDetailClient({
                         </div>
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
-                            <div className="flex justify-between items-center p-3 rounded border">
-                              <span className="text-md font-medium text-black">
-                                Min Views:
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                          <div className="flex justify-between items-center p-3 rounded border">
+                            <span className="text-md font-medium text-black">
+                              Min Views:
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         {currentContest.contest_based_details.cpm_contest
                           .max_views != null && (
-                            <div className="flex justify-between items-center p-3 rounded border">
-                              <span className="text-md font-medium text-black">
-                                Max Views (Cap):
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                          <div className="flex justify-between items-center p-3 rounded border">
+                            <span className="text-md font-medium text-black">
+                              Max Views (Cap):
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         {/* <div>
                           <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
                             Terms & Conditions
@@ -1730,8 +1749,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.total_prize_pool || 0
@@ -1753,8 +1772,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return (
                                   paymentDetails.commission_percentage || 0
@@ -1768,8 +1787,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.commission_amount || 0
@@ -1797,9 +1816,9 @@ export default function ContestDetailClient({
                                     typeof (currentContest as any)
                                       .payment_details === "string"
                                       ? JSON.parse(
-                                        (currentContest as any)
-                                          .payment_details
-                                      )
+                                          (currentContest as any)
+                                            .payment_details
+                                        )
                                       : (currentContest as any).payment_details;
                                   return formatMoney(
                                     paymentDetails.total_amount_paid || 0
@@ -1812,10 +1831,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                                "string"
+                              "string"
                                 ? JSON.parse(
-                                  (currentContest as any).payment_details
-                                )
+                                    (currentContest as any).payment_details
+                                  )
                                 : (currentContest as any).payment_details;
                             const walletUsed =
                               paymentDetails.wallet_amount_used || 0;
@@ -1904,8 +1923,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details
-                                    )
+                                        (currentContest as any).payment_details
+                                      )
                                     : (currentContest as any).payment_details;
                                 return paymentDetails.payment_status ===
                                   "completed"
@@ -1917,10 +1936,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                                "string"
+                              "string"
                                 ? JSON.parse(
-                                  (currentContest as any).payment_details
-                                )
+                                    (currentContest as any).payment_details
+                                  )
                                 : (currentContest as any).payment_details;
                             return paymentDetails.paid_at ? (
                               <span className="text-xs text-blue-700 dark:text-blue-400">
@@ -1970,31 +1989,54 @@ export default function ContestDetailClient({
                         {(currentContest as any).content_type.toUpperCase()}
                       </p>
                       <p className="text-sm text-blue-700 mt-1">
-                        This contest is looking for {(currentContest as any).content_type === 'ugc' ? 'User Generated Content' : (currentContest as any).content_type === 'clipping' ? 'Clipping/Editing' : 'Other'} type submissions. {(currentContest as any).content_type === 'other' ? '( Check rules for more details what kind of content you can create ) ' : ''}
+                        This contest is looking for{" "}
+                        {(currentContest as any).content_type === "ugc"
+                          ? "User Generated Content"
+                          : (currentContest as any).content_type === "clipping"
+                          ? "Clipping/Editing"
+                          : "Other"}{" "}
+                        type submissions.{" "}
+                        {(currentContest as any).content_type === "other"
+                          ? "( Check rules for more details what kind of content you can create ) "
+                          : ""}
                       </p>
                     </div>
                   </div>
                 )}
 
                 {/* Flat Fee Bonus Section */}
-                {(currentContest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  currentContest.contest_based_details?.leaderboard_contest?.flat_fee_bonus) && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                        <Gift className="h-5 w-5 text-green-600" />
-                        Guaranteed Flat Bonus
-                      </h3>
-                      <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
-                        <p className="text-2xl font-bold text-green-900 mb-2">
-                          {formatMoney((currentContest.contest_based_details?.cpm_contest as any)?.flat_fee_bonus ||
-                            (currentContest.contest_based_details?.leaderboard_contest as any)?.flat_fee_bonus || 0)} per verified submission
-                        </p>
-                        <p className="text-sm text-green-700">
-                          🎁 Each creator earns this guaranteed amount for EVERY verified submission, regardless of views or ranking! Paid after the contest ends along with other earnings.
-                        </p>
-                      </div>
+                {(currentContest.contest_based_details?.cpm_contest
+                  ?.flat_fee_bonus ||
+                  currentContest.contest_based_details?.leaderboard_contest
+                    ?.flat_fee_bonus) && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-green-600" />
+                      Guaranteed Flat Bonus
+                    </h3>
+                    <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
+                      <p className="text-2xl font-bold text-green-900 mb-2">
+                        {formatMoney(
+                          (
+                            currentContest.contest_based_details
+                              ?.cpm_contest as any
+                          )?.flat_fee_bonus ||
+                            (
+                              currentContest.contest_based_details
+                                ?.leaderboard_contest as any
+                            )?.flat_fee_bonus ||
+                            0
+                        )}{" "}
+                        per verified submission
+                      </p>
+                      <p className="text-sm text-green-700">
+                        🎁 Each creator earns this guaranteed amount for EVERY
+                        verified submission, regardless of views or ranking!
+                        Paid after the contest ends along with other earnings.
+                      </p>
                     </div>
-                  )}
+                  </div>
+                )}
 
                 {/* Multiple Submissions Section */}
                 {(currentContest as any).multiple_submissions_enabled && (
@@ -2005,18 +2047,28 @@ export default function ContestDetailClient({
                     </h3>
                     <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
                       <p className="text-lg font-semibold text-purple-900 mb-2">
-                        Creators can submit up to {(currentContest as any).max_submissions_per_creator} entries for this contest!
+                        Creators can submit up to{" "}
+                        {(currentContest as any).max_submissions_per_creator}{" "}
+                        entries for this contest!
                       </p>
                       <p className="text-sm text-purple-700 mb-3">
-                        Allow multiple submissions to maximize creator engagement. Min/max view requirements (if any) apply to ALL submissions.
+                        Allow multiple submissions to maximize creator
+                        engagement. Min/max view requirements (if any) apply to
+                        ALL submissions.
                       </p>
                       {(currentContest as any).max_earnings_per_creator && (
                         <div className="mt-3 pt-3 border-t border-purple-200">
                           <p className="text-sm text-purple-800 font-medium">
-                            💡 Earnings Cap for This Contest: {formatMoney((currentContest as any).max_earnings_per_creator)}
+                            💡 Earnings Cap for This Contest:{" "}
+                            {formatMoney(
+                              (currentContest as any).max_earnings_per_creator
+                            )}
                           </p>
                           <p className="text-xs text-purple-600 mt-1">
-                            Creators can still submit after reaching this cap, but won't earn more from THIS specific contest. This cap doesn't affect their earnings from other contests!
+                            Creators can still submit after reaching this cap,
+                            but won't earn more from THIS specific contest. This
+                            cap doesn't affect their earnings from other
+                            contests!
                           </p>
                         </div>
                       )}
@@ -2034,10 +2086,15 @@ export default function ContestDetailClient({
                     <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
                       <div
                         className="prose prose-md max-w-none text-foreground"
-                        dangerouslySetInnerHTML={{ __html: (currentContest as any).bonus_details.description_html }}
+                        dangerouslySetInnerHTML={{
+                          __html: (currentContest as any).bonus_details
+                            .description_html,
+                        }}
                       />
                       <p className="text-xs text-amber-700 mt-3 italic">
-                        ℹ️ These bonuses are handled manually by you. Make sure to follow through on these commitments to maintain creator trust!
+                        ℹ️ These bonuses are handled manually by you. Make sure
+                        to follow through on these commitments to maintain
+                        creator trust!
                       </p>
                     </div>
                   </div>
@@ -2086,6 +2143,52 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
+                {/* Render tracking links if present */}
+                {Array.isArray(currentContest.tracking_links) &&
+                  currentContest.tracking_links.length > 0 && (
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                          Tracking Links
+                        </h3>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {currentContest.tracking_links.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-white border border-gray-300 rounded-xl p-6 transition-all duration-200"
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
+                                <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="text-base font-medium text-gray-900 dark:text-gray-100 break-all flex-1">
+                                    {item.url}
+                                  </div>
+                                  <button
+                                    onClick={() =>
+                                      handleCopyTrackingLink(item.url)
+                                    }
+                                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                    title="Copy link"
+                                  >
+                                    <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
+                                  </button>
+                                </div>
+                                <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                  {item.description}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                 {currentContest.resources &&
                   ((Array.isArray(currentContest.resources) &&
                     currentContest.resources.length > 0) ||
@@ -2105,12 +2208,12 @@ export default function ContestDetailClient({
                         {(Array.isArray(currentContest.resources)
                           ? currentContest.resources
                           : Object.entries(currentContest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            })
-                          )
+                              ([description, url]) => ({
+                                url,
+                                description,
+                                type: "external",
+                              })
+                            )
                         ).map((resource, idx) => {
                           const isImage =
                             resource.url.startsWith("data:image") ||
@@ -2208,10 +2311,10 @@ export default function ContestDetailClient({
                                     {isPdf
                                       ? "Open PDF"
                                       : isVideo
-                                        ? "Play Video"
-                                        : isImage
-                                          ? "View Image"
-                                          : "View Resource"}
+                                      ? "Play Video"
+                                      : isImage
+                                      ? "View Image"
+                                      : "View Resource"}
                                   </a>
                                 </Button>
                               </div>
@@ -2269,25 +2372,28 @@ export default function ContestDetailClient({
                           currentSubmissions.length > 0 &&
                           currentContest.post_contest_status !== "in_review" &&
                           currentContest.post_contest_status !==
-                          "verification_complete" &&
+                            "verification_complete" &&
                           currentContest.post_contest_status !==
-                          "payouts_processed" && (
+                            "payouts_processed" && (
                             <button
                               onClick={handleRefreshMetrics}
                               disabled={
                                 isRefreshingMetrics || !cooldownInfo.canRefresh
                               }
-                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${cooldownInfo.canRefresh && !isRefreshingMetrics
-                                ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
-                                : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
-                                }`}
+                              className={`flex items-center py-2 px-4 gap-2 rounded-2xl ${
+                                cooldownInfo.canRefresh && !isRefreshingMetrics
+                                  ? "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                                  : "bg-[#6C43D0] text-white hover:bg-[#6C43D0]"
+                              }`}
                               title={
                                 !cooldownInfo.canRefresh
-                                  ? `Please wait ${cooldownInfo.remainingMinutes
-                                  } more minute${cooldownInfo.remainingMinutes !== 1
-                                    ? "s"
-                                    : ""
-                                  }`
+                                  ? `Please wait ${
+                                      cooldownInfo.remainingMinutes
+                                    } more minute${
+                                      cooldownInfo.remainingMinutes !== 1
+                                        ? "s"
+                                        : ""
+                                    }`
                                   : undefined
                               }
                             >
@@ -2299,8 +2405,8 @@ export default function ContestDetailClient({
                               {isRefreshingMetrics
                                 ? "Updating..."
                                 : !cooldownInfo.canRefresh
-                                  ? `Wait ${cooldownInfo.remainingMinutes}m`
-                                  : "Refresh Metrics"}
+                                ? `Wait ${cooldownInfo.remainingMinutes}m`
+                                : "Refresh Metrics"}
                             </button>
                           )}
                       </div>
@@ -2492,22 +2598,22 @@ export default function ContestDetailClient({
                             {currentContest.platform
                               ?.toLowerCase()
                               .includes("instagram") && (
-                                <>
-                                  <TableHead className="text-center">
-                                    Shares
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Saves
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Reach
-                                  </TableHead>
-                                  <TableHead className="text-center">
-                                    Interactions
-                                  </TableHead>
-                                  {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
-                                </>
-                              )}
+                              <>
+                                <TableHead className="text-center">
+                                  Shares
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Saves
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Reach
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Interactions
+                                </TableHead>
+                                {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
+                              </>
+                            )}
                             <TableHead className="text-center">
                               Expected Reward
                             </TableHead>
@@ -2691,7 +2797,7 @@ export default function ContestDetailClient({
                                   className={cn(
                                     "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200",
                                     rank <= 3 &&
-                                    "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
+                                      "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
                                   )}
                                 >
                                   <TableCell className="font-bold text-center">
@@ -2703,8 +2809,8 @@ export default function ContestDetailClient({
                                             rank === 1
                                               ? "text-yellow-500"
                                               : rank === 2
-                                                ? "text-gray-400"
-                                                : "text-amber-600"
+                                              ? "text-gray-400"
+                                              : "text-amber-600"
                                           )}
                                         />
                                       )}
@@ -2797,33 +2903,33 @@ export default function ContestDetailClient({
                                   {currentContest.platform
                                     ?.toLowerCase()
                                     .includes("instagram") && (
-                                      <>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          <div className="flex items-center justify-center gap-1">
-                                            <Share2 className="h-3 w-3 text-purple-500" />
-                                            {formatMetricValue(metrics.shares)}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          {formatMetricValue(
-                                            (metrics as any).saves
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          {formatMetricValue(
-                                            (metrics as any).reach
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          {formatMetricValue(
-                                            (metrics as any).total_interactions
-                                          )}
-                                        </TableCell>
-                                        {/* <TableCell className="text-center font-mono text-sm">
+                                    <>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Share2 className="h-3 w-3 text-purple-500" />
+                                          {formatMetricValue(metrics.shares)}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).saves
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).reach
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).total_interactions
+                                        )}
+                                      </TableCell>
+                                      {/* <TableCell className="text-center font-mono text-sm">
                                                                             {formatMetricValue(metrics.engagement_rate, true)}
                                                                         </TableCell> */}
-                                      </>
-                                    )}
+                                    </>
+                                  )}
                                   <TableCell className="text-center">
                                     <div className="flex flex-col items-center">
                                       <div className="flex flex-col items-center">
@@ -2925,16 +3031,16 @@ export default function ContestDetailClient({
                                       >
                                         {currentContest.post_contest_status !==
                                           "payouts_processed" && (
-                                            <>
-                                              <DropdownMenuLabel className="text-purple-500">
-                                                Change Status
-                                              </DropdownMenuLabel>
-                                              <DropdownMenuSeparator />
-                                            </>
-                                          )}
+                                          <>
+                                            <DropdownMenuLabel className="text-purple-500">
+                                              Change Status
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+                                          </>
+                                        )}
                                         {submission.status !== "verified" &&
                                           currentContest.post_contest_status !==
-                                          "payouts_processed" &&
+                                            "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2962,7 +3068,7 @@ export default function ContestDetailClient({
                                           ))}
                                         {submission.status !== "rejected" &&
                                           currentContest.post_contest_status !==
-                                          "payouts_processed" &&
+                                            "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -2992,7 +3098,7 @@ export default function ContestDetailClient({
                                           ))}
                                         {submission.status !== "pending" &&
                                           currentContest.post_contest_status !==
-                                          "payouts_processed" &&
+                                            "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -3023,9 +3129,9 @@ export default function ContestDetailClient({
                                           (currentContest.post_contest_status ===
                                             "in_review" ||
                                             currentContest.post_contest_status ===
-                                            "verification_complete" ||
+                                              "verification_complete" ||
                                             currentContest.post_contest_status ===
-                                            "payouts_processed") && (
+                                              "payouts_processed") && (
                                             <>
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -3052,8 +3158,8 @@ export default function ContestDetailClient({
                                           )}
                                         {currentContest.post_contest_status !==
                                           "payouts_processed" && (
-                                            <DropdownMenuSeparator />
-                                          )}
+                                          <DropdownMenuSeparator />
+                                        )}
                                         <DropdownMenuItem asChild>
                                           <a
                                             href={submission.content_link}
@@ -3287,11 +3393,11 @@ export default function ContestDetailClient({
                             <p className="text-2xl font-bold text-gray-900">
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.round(
-                                  filteredAnalyticsSubmissions.reduce(
-                                    (sum, s) => sum + (s.views || 0),
-                                    0
-                                  ) / filteredAnalyticsSubmissions.length
-                                ).toLocaleString()
+                                    filteredAnalyticsSubmissions.reduce(
+                                      (sum, s) => sum + (s.views || 0),
+                                      0
+                                    ) / filteredAnalyticsSubmissions.length
+                                  ).toLocaleString()
                                 : 0}
                             </p>
                           </div>
@@ -3311,10 +3417,10 @@ export default function ContestDetailClient({
                             <p className="text-2xl font-bold text-gray-900">
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.max(
-                                  ...filteredAnalyticsSubmissions.map(
-                                    (s) => s.views || 0
-                                  )
-                                ).toLocaleString()
+                                    ...filteredAnalyticsSubmissions.map(
+                                      (s) => s.views || 0
+                                    )
+                                  ).toLocaleString()
                                 : 0}
                             </p>
                           </div>
@@ -3332,14 +3438,14 @@ export default function ContestDetailClient({
                               {activeAnalyticsTab === "verified"
                                 ? "Verified Views"
                                 : activeAnalyticsTab === "paid"
-                                  ? "Paid Views"
-                                  : activeAnalyticsTab === "pending"
-                                    ? "Pending Views"
-                                    : activeAnalyticsTab === "rejected"
-                                      ? "Rejected Views"
-                                      : activeAnalyticsTab === "verified_or_paid"
-                                        ? "Verified/Paid Views"
-                                        : "Filtered Views"}
+                                ? "Paid Views"
+                                : activeAnalyticsTab === "pending"
+                                ? "Pending Views"
+                                : activeAnalyticsTab === "rejected"
+                                ? "Rejected Views"
+                                : activeAnalyticsTab === "verified_or_paid"
+                                ? "Verified/Paid Views"
+                                : "Filtered Views"}
                             </p>
                             <p className="text-2xl font-bold text-gray-900">
                               {filteredAnalyticsSubmissions
@@ -3431,16 +3537,16 @@ export default function ContestDetailClient({
                                   {activeAnalyticsTab === "all"
                                     ? "All Submissions"
                                     : activeAnalyticsTab === "verified"
-                                      ? "Verified Only"
-                                      : activeAnalyticsTab === "paid"
-                                        ? "Paid Only"
-                                        : activeAnalyticsTab === "pending"
-                                          ? "Pending Only"
-                                          : activeAnalyticsTab === "rejected"
-                                            ? "Rejected Only"
-                                            : activeAnalyticsTab === "verified_or_paid"
-                                              ? "Verified/Paid"
-                                              : "Filtered"}
+                                    ? "Verified Only"
+                                    : activeAnalyticsTab === "paid"
+                                    ? "Paid Only"
+                                    : activeAnalyticsTab === "pending"
+                                    ? "Pending Only"
+                                    : activeAnalyticsTab === "rejected"
+                                    ? "Rejected Only"
+                                    : activeAnalyticsTab === "verified_or_paid"
+                                    ? "Verified/Paid"
+                                    : "Filtered"}
                                 </p>
                               </div>
                               <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">

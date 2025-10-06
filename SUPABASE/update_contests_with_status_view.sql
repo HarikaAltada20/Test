@@ -9,6 +9,7 @@ CREATE VIEW public.contests_with_status WITH (security_invoker='on') AS
     contests.resources,
     contests.category,
     contests.inspiration_links,
+    contests.tracking_links,
     contests.created_at,
     contests.subscription_info_of_user,
     contests.updated_at,
