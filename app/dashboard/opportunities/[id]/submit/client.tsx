@@ -22,6 +22,10 @@ import {
   Eye,
   MessageSquare,
   ThumbsUp,
+  Plus,
+  Minus,
+  AlertTriangle,
+  CheckCheck,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -52,13 +56,12 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 //   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 const SUBMISSION_WINDOW_VALUE: number = 2;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "hour";
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "year";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
-const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${
-  IS_SUBMISSION_WINDOW_SINGULAR ? "" : "s"
-}`;
+const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${IS_SUBMISSION_WINDOW_SINGULAR ? "" : "s"
+  }`;
 // -----------------------------------
 
 interface YouTubeVideo {
@@ -123,6 +126,30 @@ export default function SubmitContentPage({
 }) {
   const [contentLink, setContentLink] = useState("");
   const [selectedVideo, setSelectedVideo] = useState<YouTubeVideo | null>(null);
+
+  // Multiple submissions state
+  const [submissionLinks, setSubmissionLinks] = useState<string[]>([""]);
+  const [selectedVideos, setSelectedVideos] = useState<YouTubeVideo[]>([]);
+  const [selectedReels, setSelectedReels] = useState<InstagramReel[]>([]);
+  const [currentSubmissionIndex, setCurrentSubmissionIndex] = useState(0);
+
+  // Fetched videos for multiple submissions
+  const [fetchedVideos, setFetchedVideos] = useState<YouTubeVideo[]>([]);
+  const [fetchedReels, setFetchedReels] = useState<InstagramReel[]>([]);
+  const [selectedVideoIndices, setSelectedVideoIndices] = useState<number[]>([]);
+  const [selectedReelIndices, setSelectedReelIndices] = useState<number[]>([]);
+
+  // Track which links have been fetched
+  const [fetchedLinkIndices, setFetchedLinkIndices] = useState<Set<number>>(new Set());
+  const [linkFetchStatus, setLinkFetchStatus] = useState<{ [key: number]: 'idle' | 'fetching' | 'success' | 'error' }>({});
+
+  // Track submitted videos and progress
+  const [submittedVideos, setSubmittedVideos] = useState<Set<string>>(new Set());
+  const [submissionProgress, setSubmissionProgress] = useState<{ submitted: number; maxAllowed: number }>({ submitted: 0, maxAllowed: 0 });
+
+  // Multiple selection from tabs
+  const [selectedVideosFromTabs, setSelectedVideosFromTabs] = useState<YouTubeVideo[]>([]);
+  const [selectedReelsFromTabs, setSelectedReelsFromTabs] = useState<InstagramReel[]>([]);
   const [youtubeAccount, setYoutubeAccount] = useState<any>(null);
   const [userVideos, setUserVideos] = useState<YouTubeVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
@@ -377,7 +404,7 @@ export default function SubmitContentPage({
       console.log(
         "Is token expired?",
         instagramAccount.token_expiry &&
-          dayjs().isAfter(dayjs(instagramAccount.token_expiry))
+        dayjs().isAfter(dayjs(instagramAccount.token_expiry))
       );
 
       if (instagramAccount?.access_token) {
@@ -434,7 +461,7 @@ export default function SubmitContentPage({
           } else {
             setError(
               "Instagram account must be a Business or Creator account to fetch reels. Current type: " +
-                (instagramAccount.account_type || "Unknown")
+              (instagramAccount.account_type || "Unknown")
             );
             setIsLoadingReels(false);
           }
@@ -546,7 +573,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing YouTube token:", err);
       setError(
         err.message ||
-          "Failed to refresh YouTube token. Please try reconnecting your account."
+        "Failed to refresh YouTube token. Please try reconnecting your account."
       );
       setIsTokenExpired(true);
       toast({
@@ -635,7 +662,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing Instagram token:", err);
       setError(
         err.message ||
-          "Failed to refresh Instagram token. Please try reconnecting your account."
+        "Failed to refresh Instagram token. Please try reconnecting your account."
       );
       setIsInstagramTokenExpired(true);
       toast({
@@ -722,11 +749,10 @@ export default function SubmitContentPage({
   const handleReconnectYouTube = () => {
     router.push(
       "/api/youtube/auth?returnTo=" +
-        encodeURIComponent(
-          `/dashboard/opportunities/${contestId}/submit?platform=${
-            contestPlatform || ""
-          }`
-        ) // pass platform back
+      encodeURIComponent(
+        `/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ""
+        }`
+      ) // pass platform back
     );
   };
 
@@ -758,24 +784,10 @@ export default function SubmitContentPage({
       }
       setIsLoadingContest(true);
 
-      // First check if user has already submitted
-      const { data: existingSubmission } = await supabase
-        .from("submissions")
-        .select("*")
-        .eq("contest_id", contestId)
-        .eq("creator_id", user.id);
-
-      if (existingSubmission && existingSubmission.length > 0) {
-        // User has already submitted
-        redirect(
-          `/dashboard/opportunities/${contestId}?error=already_submitted`
-        );
-      }
-
-      // Get contest details
+      // Get contest details first to check multiple submissions setting
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
-        .select("platform, contest_type") // Include contest_type for verification logic
+        .select("id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details") // Include new feature fields
         .eq("id", contestId)
         .single();
 
@@ -794,6 +806,34 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
+
+      // Fetch existing submissions for progress tracking
+      const { data: existingSubmissions } = await supabase
+        .from("submissions")
+        .select("*")
+        .eq("contest_id", contestId)
+        .eq("creator_id", user.id);
+
+      if (existingSubmissions && existingSubmissions.length > 0) {
+        // Track submitted videos and progress
+        const videoIds = existingSubmissions.map((sub: any) => sub.video_id || sub.content_link);
+        setSubmittedVideos(new Set(videoIds));
+        setSubmissionProgress({
+          submitted: existingSubmissions.length,
+          maxAllowed: contestData.max_submissions_per_creator || 1
+        });
+
+        // Check if user has reached max submissions
+        const maxSubmissions = contestData.max_submissions_per_creator || 1;
+
+        // Only redirect if max submissions reached
+        if (existingSubmissions.length >= maxSubmissions) {
+          redirect(
+            `/dashboard/opportunities/${contestId}?error=already_submitted`
+          );
+          return;
+        }
+      }
 
       if (contestData.platform) {
         setContestPlatform(contestData.platform.toLowerCase());
@@ -911,7 +951,7 @@ export default function SubmitContentPage({
       // This will catch errors from fetch itself (network error) or SyntaxError from response.json() if body is not valid JSON, or errors thrown above.
       setError(
         err.message ||
-          "An unexpected error occurred while fetching YouTube video."
+        "An unexpected error occurred while fetching YouTube video."
       );
       setVideoPreview(null);
       setSelectedVideo(null);
@@ -1037,12 +1077,378 @@ export default function SubmitContentPage({
       console.error("Error in handleFetchInstagramByLink:", err); // Keep user's console.error for this one
       setError(
         err.message ||
-          "An unexpected error occurred while fetching Instagram media."
+        "An unexpected error occurred while fetching Instagram media."
       );
       setInstagramMediaPreview(null);
       setSelectedReel(null);
     } finally {
       setIsFetchingInstagramMedia(false);
+    }
+  };
+
+  // Multiple submission handlers
+  const handleFetchVideoMultiple = async (link: string, index: number) => {
+    if (!link.trim()) {
+      setError("Please enter a YouTube video URL");
+      return;
+    }
+
+    setIsFetchingVideo(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/youtube/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ videoUrl: link }),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        let errorMessage = "Failed to verify YouTube video";
+        if (responseData && typeof responseData.error === "string") {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === "string") {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (responseData && responseData.valid && responseData.videoInfo) {
+        const videoData: YouTubeVideo = responseData.videoInfo;
+        if (videoData?.snippet?.publishedAt) {
+          if (isContentTooOld(videoData.snippet.publishedAt)) {
+            const errorMessage = `Video ${index + 1} was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            setError(errorMessage);
+            toast({
+              title: "Content Too Old",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          } else {
+            const newFetchedVideos = [...fetchedVideos];
+            newFetchedVideos[index] = videoData;
+            setFetchedVideos(newFetchedVideos);
+            setError(null);
+          }
+        } else {
+          const errorMessage = `Could not determine publication date for video ${index + 1}.`;
+          setError(errorMessage);
+          toast({
+            title: "Missing Publication Date",
+            description: errorMessage,
+            variant: "destructive",
+          });
+        }
+      } else {
+        let errorMessage = `YouTube video verification failed for video ${index + 1}.`;
+        if (responseData && typeof responseData.error === "string") {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === "string") {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
+      }
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred while fetching YouTube video.");
+    } finally {
+      setIsFetchingVideo(false);
+    }
+  };
+
+  const handleFetchInstagramVideoMultiple = async (link: string, index: number) => {
+    if (!link.trim()) {
+      setError("Please enter an Instagram video URL");
+      return;
+    }
+
+    setIsFetchingVideo(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/instagram/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mediaUrl: link }),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        let errorMessage = "Failed to verify Instagram video";
+        if (responseData && typeof responseData.error === "string") {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === "string") {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (responseData && responseData.valid && responseData.mediaInfo) {
+        const mediaDetails: InstagramReel = responseData.mediaInfo;
+        if (mediaDetails?.timestamp) {
+          if (isContentTooOld(mediaDetails.timestamp)) {
+            const errorMessage = `Video ${index + 1} was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            setError(errorMessage);
+            toast({
+              title: "Content Too Old",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          } else {
+            const newFetchedReels = [...fetchedReels];
+            newFetchedReels[index] = mediaDetails;
+            setFetchedReels(newFetchedReels);
+            setError(null);
+          }
+        } else {
+          const errorMessage = `Could not determine publication date for video ${index + 1}.`;
+          setError(errorMessage);
+          toast({
+            title: "Missing Publication Date",
+            description: errorMessage,
+            variant: "destructive",
+          });
+        }
+      } else {
+        let errorMessage = `Instagram video verification failed for video ${index + 1}.`;
+        if (responseData && typeof responseData.error === "string") {
+          errorMessage = responseData.error;
+        } else if (responseData && typeof responseData.message === "string") {
+          errorMessage = responseData.message;
+        }
+        throw new Error(errorMessage);
+      }
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred while fetching Instagram video.");
+    } finally {
+      setIsFetchingVideo(false);
+    }
+  };
+
+  const handleFetchAllVideos = async () => {
+    const unfetchedLinks = submissionLinks
+      .map((link, index) => ({ link, index }))
+      .filter(({ link, index }) => link.trim() && !fetchedLinkIndices.has(index));
+
+    if (unfetchedLinks.length === 0) {
+      toast({
+        title: "All Links Fetched",
+        description: "All links have already been fetched",
+        variant: "default",
+      });
+      return;
+    }
+
+    setIsFetchingVideo(true);
+    setError(null);
+
+    try {
+      const promises = unfetchedLinks.map(({ link, index }) => {
+        if (contestPlatform?.toLowerCase() === 'youtube') {
+          return handleFetchVideoMultiple(link, index);
+        } else {
+          return handleFetchInstagramVideoMultiple(link, index);
+        }
+      });
+
+      await Promise.all(promises);
+
+      // Mark all as fetched
+      setFetchedLinkIndices(prev => {
+        const newSet = new Set(prev);
+        unfetchedLinks.forEach(({ index }) => newSet.add(index));
+        return newSet;
+      });
+
+      toast({
+        title: "Fetch Complete",
+        description: `Successfully fetched ${unfetchedLinks.length} new videos`,
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error fetching all videos:", error);
+      toast({
+        title: "Fetch Failed",
+        description: "Failed to fetch some videos. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingVideo(false);
+    }
+  };
+
+  // Fetch existing submissions to track progress and prevent duplicates
+  const fetchExistingSubmissions = async () => {
+    if (!user || !contestId) return;
+
+    try {
+      const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.submissions) {
+          const videoIds = data.submissions.map((sub: any) => sub.video_id || sub.content_link);
+          setSubmittedVideos(new Set(videoIds));
+          setSubmissionProgress({
+            submitted: data.submissions.length,
+            maxAllowed: contest?.max_submissions_per_creator || 1
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching existing submissions:", error);
+    }
+  };
+
+  // Helper function to check if a video is already selected
+  const isVideoAlreadySelected = (videoId: string, platform: 'youtube' | 'instagram') => {
+    if (platform === 'youtube') {
+      return selectedVideosFromTabs.some(v => v.id.videoId === videoId) ||
+        selectedVideos.some(v => v.id.videoId === videoId);
+    } else {
+      return selectedReelsFromTabs.some(r => r.id === videoId) ||
+        selectedReels.some(r => r.id === videoId);
+    }
+  };
+
+  // Helper function to check if a video has already been submitted
+  const isVideoAlreadySubmitted = (videoId: string, contentUrl: string) => {
+    return submittedVideos.has(videoId) || submittedVideos.has(contentUrl);
+  };
+
+  // Individual fetch function for a single link
+  const handleIndividualFetch = async (link: string, index: number) => {
+    if (!link.trim()) {
+      toast({
+        title: "Empty Link",
+        description: "Please enter a video URL before fetching",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLinkFetchStatus(prev => ({ ...prev, [index]: 'fetching' }));
+
+    try {
+      if (contestPlatform?.toLowerCase() === 'youtube') {
+        await handleFetchVideoMultiple(link, index);
+      } else {
+        await handleFetchInstagramVideoMultiple(link, index);
+      }
+
+      setFetchedLinkIndices(prev => new Set([...prev, index]));
+      setLinkFetchStatus(prev => ({ ...prev, [index]: 'success' }));
+    } catch (error) {
+      setLinkFetchStatus(prev => ({ ...prev, [index]: 'error' }));
+      toast({
+        title: "Fetch Failed",
+        description: `Failed to fetch video from link ${index + 1}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Individual remove function for a single link
+  const handleIndividualRemove = (index: number) => {
+    const newLinks = [...submissionLinks];
+    newLinks.splice(index, 1);
+    setSubmissionLinks(newLinks);
+
+    // Remove from fetched indices if it was fetched
+    setFetchedLinkIndices(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(index);
+      return newSet;
+    });
+
+    // Remove from fetched videos/reels if it was fetched
+    if (contestPlatform?.toLowerCase() === 'youtube') {
+      setFetchedVideos(prev => prev.filter((_, i) => i !== index));
+    } else {
+      setFetchedReels(prev => prev.filter((_, i) => i !== index));
+    }
+
+    // Clear fetch status
+    setLinkFetchStatus(prev => {
+      const newStatus = { ...prev };
+      delete newStatus[index];
+      return newStatus;
+    });
+  };
+
+  // Handle video selection for multiple submissions
+  const handleVideoSelection = (index: number, isSelected: boolean) => {
+    if (contestPlatform?.toLowerCase() === 'youtube') {
+      if (isSelected) {
+        const video = fetchedVideos[index];
+        if (video) {
+          // Check if video is already selected elsewhere
+          if (isVideoAlreadySelected(video.id.videoId, 'youtube')) {
+            toast({
+              title: "Video Already Selected",
+              description: "This video is already selected from another source",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          // Check limit
+          const maxSubmissions = contest?.max_submissions_per_creator || 1;
+          const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+          if (totalSelected >= maxSubmissions) {
+            toast({
+              title: "Selection Limit Reached",
+              description: `You can only select up to ${maxSubmissions} videos for this contest`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          setSelectedVideoIndices([...selectedVideoIndices, index]);
+          setSelectedVideos([...selectedVideos, video]);
+        }
+      } else {
+        setSelectedVideoIndices(selectedVideoIndices.filter(i => i !== index));
+        setSelectedVideos(selectedVideos.filter((_, i) => selectedVideoIndices[i] !== index));
+      }
+    } else {
+      if (isSelected) {
+        const reel = fetchedReels[index];
+        if (reel) {
+          // Check if reel is already selected elsewhere
+          if (isVideoAlreadySelected(reel.id, 'instagram')) {
+            toast({
+              title: "Video Already Selected",
+              description: "This video is already selected from another source",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          // Check limit
+          const maxSubmissions = contest?.max_submissions_per_creator || 1;
+          const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+          if (totalSelected >= maxSubmissions) {
+            toast({
+              title: "Selection Limit Reached",
+              description: `You can only select up to ${maxSubmissions} videos for this contest`,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          setSelectedReelIndices([...selectedReelIndices, index]);
+          setSelectedReels([...selectedReels, reel]);
+        }
+      } else {
+        setSelectedReelIndices(selectedReelIndices.filter(i => i !== index));
+        setSelectedReels(selectedReels.filter((_, i) => selectedReelIndices[i] !== index));
+      }
     }
   };
 
@@ -1076,247 +1482,17 @@ export default function SubmitContentPage({
     }
 
     try {
-      // All submissions start as pending for manual verification regardless of contest type
-      const initialStatus = "pending";
+      // Check if this is multiple submission mode
+      const isMultipleSubmission = contest?.multiple_submissions_enabled &&
+        (selectedVideosFromTabs.length > 0 || selectedReelsFromTabs.length > 0 || selectedVideos.length > 0 || selectedReels.length > 0);
 
-      let submissionPayload: any = {
-        contest_id: contestId,
-        creator_id: user.id,
-        status: initialStatus,
-      };
-
-      if (
-        contestPlatform === "instagram" &&
-        selectedReel &&
-        instagramAccount?.access_token &&
-        currentInstagramBusinessAccountID
-      ) {
-        setMessage("Fetching Instagram Reel insights...");
-        // console.log("This is the selectedReel from the instagram submit route", selectedReel);
-        // console.log("This is the currentInstagramBusinessAccountID from the instagram submit route", currentInstagramBusinessAccountID);
-        // console.log("This is the instagramAccount.access_token from the instagram submit route", instagramAccount.access_token);
-
-        const insightsRes = await fetch(
-          `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
-        );
-
-        const insightsData = await insightsRes.json();
-        // console.log("This is the data from the instagram insights route", insightsData);
-
-        if (!insightsRes.ok || insightsData.error) {
-          const specificConversionErrorMessage =
-            "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select and submit a different Reel.";
-          const genericInsightErrorMessage =
-            "Failed to fetch Instagram Reel insights. Submission cannot proceed without metrics.";
-
-          if (insightsData.error) {
-            console.error(
-              "Error fetching Instagram insights:",
-              insightsData.error
-            );
-            if (
-              insightsData.error.error_subcode === 2108006 ||
-              (insightsData.error.message &&
-                insightsData.error.message.includes(
-                  "The media was posted before the most recent time that the user's account was converted"
-                ))
-            ) {
-              setError(specificConversionErrorMessage);
-              toast({
-                title: "Instagram Insights Error",
-                description: specificConversionErrorMessage,
-                variant: "destructive",
-              });
-            } else {
-              const errorMessage =
-                insightsData.error.message || genericInsightErrorMessage;
-              setError(errorMessage);
-              toast({
-                title: "Instagram Insights Error",
-                description: errorMessage,
-                variant: "destructive",
-              });
-            }
-          } else {
-            // !insightsRes.ok but no insightsData.error
-            const errorMessage =
-              genericInsightErrorMessage + ` (Status: ${insightsRes.status})`;
-            setError(errorMessage);
-            toast({
-              title: "Instagram Insights Error",
-              description: errorMessage,
-              variant: "destructive",
-            });
-          }
-          setIsLoading(false);
-          setMessage(null);
-          return; // Prevent submission
-        }
-
-        let primaryViews = 0;
-        const instagramApiMetrics: any = {}; // To store all metrics from the API response
-
-        if (insightsData?.data && Array.isArray(insightsData.data)) {
-          insightsData.data.forEach(
-            (metric: { name: string; values: { value: number }[] }) => {
-              const value = metric.values[0]?.value || 0;
-              instagramApiMetrics[metric.name] = value; // Store each metric by its name
-
-              if (metric.name === "views") {
-                // Primary source for views count
-                primaryViews = value;
-              }
-            }
-          );
-        } else {
-          console.warn(
-            "Instagram insights data field is missing, not an array, or empty. Instagram stats will be empty or defaults."
-          );
-        }
-
-        // Fallback logic: If 'views' metric was 0 or not found, and 'reach' is available and greater than 0, use 'reach'.
-        if (
-          primaryViews === 0 &&
-          instagramApiMetrics.reach !== undefined &&
-          instagramApiMetrics.reach > 0
-        ) {
-          console.log(
-            "Primary 'views' metric from Instagram API was 0 or not found. Falling back to 'reach' metric value:",
-            instagramApiMetrics.reach
-          );
-          primaryViews = instagramApiMetrics.reach;
-        } else if (primaryViews === 0) {
-          console.log(
-            "Primary 'views' metric from Instagram API is 0 or not found, and 'reach' is also 0 or not available. Submission views will be 0."
-          );
-        }
-
-        // Ensure all expected other_stats fields are at least defaulted if not present in API response
-        const defaultStats = {
-          reach: 0,
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          saved: 0,
-          total_interactions: 0,
-          views: 0,
-        };
-        const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
-
-        submissionPayload = {
-          ...submissionPayload,
-          platform: "instagram",
-          views: primaryViews, // Use the determined primary views count
-          content_link: selectedReel.permalink,
-          video_id: selectedReel.id,
-          video_title: selectedReel.caption || "Instagram Content",
-          video_thumbnail_url: selectedReel.thumbnail_url,
-          other_stats: { instagram: finalInstagramStats }, // Store all fetched/defaulted metrics
-        };
-        console.log(
-          "This is the submissionPayload from the instagram submit route",
-          submissionPayload
-        );
-      } else if (
-        contestPlatform === "youtube" &&
-        (selectedVideo || videoPreview)
-      ) {
-        // YouTube Video Submission
-        const videoToSubmit = selectedVideo || videoPreview; // Prioritize actively selected library video
-
-        if (!videoToSubmit) {
-          setError("No YouTube video selected or fetched for submission.");
-          setIsLoading(false);
-          return;
-        }
-
-        setMessage("Fetching YouTube video insights...");
-        console.log("videoToSubmit", videoToSubmit);
-
-        const youtubeStats = {
-          likes: videoToSubmit?.statistics?.likeCount
-            ? parseInt(videoToSubmit.statistics.likeCount)
-            : 0,
-          comments: videoToSubmit?.statistics?.commentCount
-            ? parseInt(videoToSubmit.statistics.commentCount)
-            : 0,
-          // Add any other YouTube specific stats you want in other_stats.youtube
-        };
-
-        submissionPayload = {
-          ...submissionPayload,
-          platform: "youtube",
-          views: videoToSubmit?.statistics?.viewCount
-            ? parseInt(videoToSubmit.statistics.viewCount)
-            : 0,
-          content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
-          video_id: videoToSubmit.id.videoId,
-          video_title: videoToSubmit.snippet.title,
-          video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
-          other_stats: { youtube: youtubeStats },
-        };
-      } else if (
-        contestPlatform === "youtube" &&
-        contentLink &&
-        !selectedVideo &&
-        !videoPreview
-      ) {
-        setError(
-          "For YouTube, please fetch and verify the link first, or select a video from your library."
-        );
-        setIsLoading(false);
-        return;
-      } else if (
-        contestPlatform === "instagram" &&
-        instagramLink &&
-        !selectedReel &&
-        !instagramMediaPreview
-      ) {
-        setError(
-          "For Instagram, please fetch and verify the link first, or select an item from your library."
-        );
-        setIsLoading(false);
-        return;
-      } else {
-        setError(
-          "Please select a video or Reel to submit, or ensure your linked content is fetched and verified."
-        );
-        setIsLoading(false);
+      if (isMultipleSubmission) {
+        await handleMultipleSubmission();
         return;
       }
 
-      setMessage("Submitting your content...");
-      const { data: submissionData, error: submissionError } = await supabase
-        .from("submissions")
-        .insert([submissionPayload])
-        .select();
-
-      if (submissionError) {
-        throw submissionError;
-      }
-
-      console.log("Submission successful:", submissionData);
-
-      // Idempotent participation increment (application-level)
-      try {
-        await fetch("/api/metrics/participation", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contestId }),
-        });
-      } catch {}
-
-      // Show success toast
-      toast({
-        title: "🎉 Content Submitted!",
-        description: "Your submission has been received and is pending review",
-        duration: 4000,
-      });
-
-      setMessage("Content submitted successfully! Redirecting...");
-      router.push(
-        `/dashboard/opportunities/${contestId}?success=content_submitted`
-      );
+      // Single submission logic (existing code)
+      await handleSingleSubmission();
     } catch (err: any) {
       console.error("Error during submission:", err);
 
@@ -1333,6 +1509,627 @@ export default function SubmitContentPage({
     } finally {
       setIsLoading(false);
       setMessage(null);
+    }
+  };
+
+  const handleSingleSubmission = async () => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    // All submissions start as pending for manual verification regardless of contest type
+    const initialStatus = "pending";
+
+    let submissionPayload: any = {
+      contest_id: contestId,
+      creator_id: user.id,
+      status: initialStatus,
+    };
+
+    if (
+      contestPlatform === "instagram" &&
+      selectedReel &&
+      instagramAccount?.access_token &&
+      currentInstagramBusinessAccountID
+    ) {
+      setMessage("Fetching Instagram Reel insights...");
+
+      const insightsRes = await fetch(
+        `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+      );
+
+      const insightsData = await insightsRes.json();
+
+      if (!insightsRes.ok || insightsData.error) {
+        const specificConversionErrorMessage =
+          "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select and submit a different Reel.";
+        const genericInsightErrorMessage =
+          "Failed to fetch Instagram Reel insights. Submission cannot proceed without metrics.";
+
+        if (insightsData.error) {
+          console.error(
+            "Error fetching Instagram insights:",
+            insightsData.error
+          );
+          if (
+            insightsData.error.error_subcode === 2108006 ||
+            (insightsData.error.message &&
+              insightsData.error.message.includes(
+                "The media was posted before the most recent time that the user's account was converted"
+              ))
+          ) {
+            setError(specificConversionErrorMessage);
+            toast({
+              title: "Instagram Insights Error",
+              description: specificConversionErrorMessage,
+              variant: "destructive",
+            });
+          } else {
+            const errorMessage =
+              insightsData.error.message || genericInsightErrorMessage;
+            setError(errorMessage);
+            toast({
+              title: "Instagram Insights Error",
+              description: errorMessage,
+              variant: "destructive",
+            });
+          }
+        } else {
+          // !insightsRes.ok but no insightsData.error
+          const errorMessage =
+            genericInsightErrorMessage + ` (Status: ${insightsRes.status})`;
+          setError(errorMessage);
+          toast({
+            title: "Instagram Insights Error",
+            description: errorMessage,
+            variant: "destructive",
+          });
+        }
+        setIsLoading(false);
+        setMessage(null);
+        return; // Prevent submission
+      }
+
+      let primaryViews = 0;
+      const instagramApiMetrics: any = {}; // To store all metrics from the API response
+
+      if (insightsData?.data && Array.isArray(insightsData.data)) {
+        insightsData.data.forEach(
+          (metric: { name: string; values: { value: number }[] }) => {
+            const value = metric.values[0]?.value || 0;
+            instagramApiMetrics[metric.name] = value; // Store each metric by its name
+
+            if (metric.name === "views") {
+              // Primary source for views count
+              primaryViews = value;
+            }
+          }
+        );
+      } else {
+        console.warn(
+          "Instagram insights data field is missing, not an array, or empty. Instagram stats will be empty or defaults."
+        );
+      }
+
+      // Fallback logic: If 'views' metric was 0 or not found, and 'reach' is available and greater than 0, use 'reach'.
+      if (
+        primaryViews === 0 &&
+        instagramApiMetrics.reach !== undefined &&
+        instagramApiMetrics.reach > 0
+      ) {
+        console.log(
+          "Primary 'views' metric from Instagram API was 0 or not found. Falling back to 'reach' metric value:",
+          instagramApiMetrics.reach
+        );
+        primaryViews = instagramApiMetrics.reach;
+      } else if (primaryViews === 0) {
+        console.log(
+          "Primary 'views' metric from Instagram API is 0 or not found, and 'reach' is also 0 or not available. Submission views will be 0."
+        );
+      }
+
+      // Ensure all expected other_stats fields are at least defaulted if not present in API response
+      const defaultStats = {
+        reach: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        saved: 0,
+        total_interactions: 0,
+        views: 0,
+      };
+      const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
+
+      submissionPayload = {
+        ...submissionPayload,
+        platform: "instagram",
+        views: primaryViews, // Use the determined primary views count
+        content_link: selectedReel.permalink,
+        video_id: selectedReel.id,
+        video_title: selectedReel.caption || "Instagram Content",
+        video_thumbnail_url: selectedReel.thumbnail_url,
+        other_stats: { instagram: finalInstagramStats }, // Store all fetched/defaulted metrics
+      };
+    } else if (
+      contestPlatform === "youtube" &&
+      (selectedVideo || videoPreview)
+    ) {
+      // YouTube Video Submission
+      const videoToSubmit = selectedVideo || videoPreview; // Prioritize actively selected library video
+
+      if (!videoToSubmit) {
+        setError("No YouTube video selected or fetched for submission.");
+        setIsLoading(false);
+        return;
+      }
+
+      setMessage("Fetching YouTube video insights...");
+
+      const youtubeStats = {
+        likes: videoToSubmit?.statistics?.likeCount
+          ? parseInt(videoToSubmit.statistics.likeCount)
+          : 0,
+        comments: videoToSubmit?.statistics?.commentCount
+          ? parseInt(videoToSubmit.statistics.commentCount)
+          : 0,
+        // Add any other YouTube specific stats you want in other_stats.youtube
+      };
+
+      submissionPayload = {
+        ...submissionPayload,
+        platform: "youtube",
+        views: videoToSubmit?.statistics?.viewCount
+          ? parseInt(videoToSubmit.statistics.viewCount)
+          : 0,
+        content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
+        video_id: videoToSubmit.id.videoId,
+        video_title: videoToSubmit.snippet.title,
+        video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
+        other_stats: { youtube: youtubeStats },
+      };
+    } else if (
+      contestPlatform === "youtube" &&
+      contentLink &&
+      !selectedVideo &&
+      !videoPreview
+    ) {
+      setError(
+        "For YouTube, please fetch and verify the link first, or select a video from your library."
+      );
+      setIsLoading(false);
+      return;
+    } else if (
+      contestPlatform === "instagram" &&
+      instagramLink &&
+      !selectedReel &&
+      !instagramMediaPreview
+    ) {
+      setError(
+        "For Instagram, please fetch and verify the link first, or select an item from your library."
+      );
+      setIsLoading(false);
+      return;
+    } else {
+      setError(
+        "Please select a video or Reel to submit, or ensure your linked content is fetched and verified."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    setMessage("Submitting your content...");
+    const { data: submissionData, error: submissionError } = await supabase
+      .from("submissions")
+      .insert([submissionPayload])
+      .select();
+
+    if (submissionError) {
+      throw submissionError;
+    }
+
+
+    // Idempotent participation increment (application-level)
+    try {
+      await fetch("/api/metrics/participation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contestId }),
+      });
+    } catch { }
+
+    // Show success toast
+    toast({
+      title: "🎉 Content Submitted!",
+      description: "Your submission has been received and is pending review",
+      duration: 4000,
+    });
+
+    setMessage("Content submitted successfully! Redirecting...");
+    router.push(
+      `/dashboard/opportunities/${contestId}?success=content_submitted`
+    );
+  };
+
+  const handleMultipleSubmission = async () => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    // Validate submission limits (include all selected videos)
+    const totalSubmissions = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+    const maxSubmissions = contest?.max_submissions_per_creator || 1;
+    const currentSubmitted = submissionProgress.submitted;
+
+    if (totalSubmissions === 0) {
+      toast({
+        title: "No Videos Selected",
+        description: "Please select at least one video to submit",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (currentSubmitted + totalSubmissions > maxSubmissions) {
+      toast({
+        title: "Submission Limit Exceeded",
+        description: `You have already submitted ${currentSubmitted} videos. You can only submit up to ${maxSubmissions} total videos for this contest.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check for already submitted videos
+    const alreadySubmittedVideos: string[] = [];
+
+    // Check videos from tabs
+    selectedVideosFromTabs.forEach(video => {
+      if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+        alreadySubmittedVideos.push(video.snippet.title);
+      }
+    });
+
+    selectedReelsFromTabs.forEach(reel => {
+      if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
+        alreadySubmittedVideos.push(reel.caption || "Instagram Reel");
+      }
+    });
+
+    // Check fetched videos
+    selectedVideos.forEach(video => {
+      if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+        alreadySubmittedVideos.push(video.snippet.title);
+      }
+    });
+
+    selectedReels.forEach(reel => {
+      if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
+        alreadySubmittedVideos.push(reel.caption || "Instagram Reel");
+      }
+    });
+
+    if (alreadySubmittedVideos.length > 0) {
+      toast({
+        title: "Duplicate Submissions Detected",
+        description: `The following videos have already been submitted: ${alreadySubmittedVideos.slice(0, 3).join(", ")}${alreadySubmittedVideos.length > 3 ? "..." : ""}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check for existing submissions
+    const { data: existingSubmissions, error: existingError } = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("contest_id", contestId)
+      .eq("creator_id", user!.id);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    const currentSubmissionCount = existingSubmissions?.length || 0;
+    if (currentSubmissionCount + totalSubmissions > maxSubmissions) {
+      setError(`You have already submitted ${currentSubmissionCount} videos. You can only submit ${maxSubmissions - currentSubmissionCount} more.`);
+      return;
+    }
+
+    // Check earnings cap if applicable
+    const earningsCap = contest?.contest_based_details?.cpm_contest?.max_earnings_per_creator;
+    if (earningsCap) {
+      // TODO: Calculate current earnings and show warning if approaching cap
+      // This would require fetching existing submission earnings
+    }
+
+    setMessage(`Submitting ${totalSubmissions} videos...`);
+
+    const submissionPromises = [];
+
+    // Process videos selected from tabs first
+    for (let i = 0; i < selectedVideosFromTabs.length; i++) {
+      const video = selectedVideosFromTabs[i];
+      if (video) {
+        const youtubeStats = {
+          likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
+          comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
+        };
+
+        const submissionPayload = {
+          contest_id: contestId,
+          creator_id: user.id,
+          platform: "youtube",
+          content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+          video_id: video.id.videoId,
+          video_title: video.snippet.title,
+          video_thumbnail_url: video.snippet.thumbnails.default.url,
+          views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
+          other_stats: { youtube: youtubeStats },
+        };
+
+        submissionPromises.push(
+          supabase.from("submissions").insert([submissionPayload]).select()
+        );
+      }
+    }
+
+    // Process reels selected from tabs
+    for (let i = 0; i < selectedReelsFromTabs.length; i++) {
+      const reel = selectedReelsFromTabs[i];
+      if (reel) {
+        try {
+          const insightsResponse = await fetch(`/api/instagram/insights?mediaId=${reel.id}`);
+          const insightsData = await insightsResponse.json();
+
+          const finalInstagramStats = {
+            reach: insightsData.reach || 0,
+            impressions: insightsData.impressions || 0,
+            likes: insightsData.likes || 0,
+            comments: insightsData.comments || 0,
+            shares: insightsData.shares || 0,
+            saves: insightsData.saves || 0,
+          };
+
+          const submissionPayload = {
+            contest_id: contestId,
+            creator_id: user.id,
+            platform: "instagram",
+            content_link: reel.permalink,
+            video_id: reel.id,
+            video_title: reel.caption || "Instagram Reel",
+            video_thumbnail_url: reel.thumbnail_url,
+            views: finalInstagramStats.reach || 0,
+            other_stats: { instagram: finalInstagramStats },
+          };
+
+          submissionPromises.push(
+            supabase.from("submissions").insert([submissionPayload]).select()
+          );
+        } catch (error) {
+          console.error(`Error fetching insights for Instagram reel ${i + 1}:`, error);
+          // Still submit without insights
+          const submissionPayload = {
+            contest_id: contestId,
+            creator_id: user.id,
+            platform: "instagram",
+            content_link: reel.permalink,
+            video_title: reel.caption || "Instagram Reel",
+            video_thumbnail_url: reel.thumbnail_url,
+            other_stats: { instagram: {} },
+          };
+
+          submissionPromises.push(
+            supabase.from("submissions").insert([submissionPayload]).select()
+          );
+        }
+      }
+    }
+
+    // Process single selected video (if any)
+    if (selectedVideo) {
+      if (contestPlatform?.toLowerCase() === 'youtube') {
+        const youtubeStats = {
+          likes: selectedVideo?.statistics?.likeCount ? parseInt(selectedVideo.statistics.likeCount) : 0,
+          comments: selectedVideo?.statistics?.commentCount ? parseInt(selectedVideo.statistics.commentCount) : 0,
+        };
+
+        const submissionPayload = {
+          contest_id: contestId,
+          creator_id: user.id,
+          platform: "youtube",
+          content_link: `https://www.youtube.com/watch?v=${selectedVideo.id}`,
+          video_id: selectedVideo.id.videoId,
+          video_title: selectedVideo.snippet.title,
+          video_thumbnail_url: selectedVideo.snippet.thumbnails.default.url,
+          views: selectedVideo?.statistics?.viewCount ? parseInt(selectedVideo.statistics.viewCount) : 0,
+          other_stats: { youtube: youtubeStats },
+        };
+
+        submissionPromises.push(
+          supabase.from("submissions").insert([submissionPayload]).select()
+        );
+      }
+    }
+
+    // Process YouTube videos from multiple submissions
+    for (let i = 0; i < selectedVideos.length; i++) {
+      const video = selectedVideos[i];
+      if (video) {
+        const youtubeStats = {
+          likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
+          comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
+        };
+
+        const submissionPayload = {
+          contest_id: contestId,
+          creator_id: user!.id,
+          status: "pending",
+          platform: "youtube",
+          views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
+          content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+          video_id: video.id.videoId,
+          video_title: video.snippet.title,
+          video_thumbnail_url: video.snippet.thumbnails.default.url,
+          other_stats: { youtube: youtubeStats },
+        };
+
+        submissionPromises.push(
+          supabase.from("submissions").insert([submissionPayload]).select()
+        );
+      }
+    }
+
+    // Process Instagram videos
+    for (let i = 0; i < selectedReels.length; i++) {
+      const reel = selectedReels[i];
+      if (reel) {
+        // For Instagram, we need to fetch insights for each reel
+        if (instagramAccount?.access_token && currentInstagramBusinessAccountID) {
+          try {
+            const insightsRes = await fetch(
+              `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+            );
+
+            const insightsData = await insightsRes.json();
+
+            if (insightsRes.ok && !insightsData.error) {
+              let primaryViews = 0;
+              const instagramApiMetrics: any = {};
+
+              if (insightsData?.data && Array.isArray(insightsData.data)) {
+                insightsData.data.forEach(
+                  (metric: { name: string; values: { value: number }[] }) => {
+                    const value = metric.values[0]?.value || 0;
+                    instagramApiMetrics[metric.name] = value;
+                    if (metric.name === "views") {
+                      primaryViews = value;
+                    }
+                  }
+                );
+              }
+
+              if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
+                primaryViews = instagramApiMetrics.reach;
+              }
+
+              const defaultStats = {
+                reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
+                total_interactions: 0, views: 0,
+              };
+              const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
+
+              const submissionPayload = {
+                contest_id: contestId,
+                creator_id: user!.id,
+                status: "pending",
+                platform: "instagram",
+                views: primaryViews,
+                content_link: reel.permalink,
+                video_id: reel.id,
+                video_title: reel.caption || "Instagram Content",
+                video_thumbnail_url: reel.thumbnail_url,
+                other_stats: { instagram: finalInstagramStats },
+              };
+
+              submissionPromises.push(
+                supabase.from("submissions").insert([submissionPayload]).select()
+              );
+            }
+          } catch (error) {
+            console.error(`Error fetching insights for Instagram video ${i + 1}:`, error);
+            // Still submit without insights
+            const submissionPayload = {
+              contest_id: contestId,
+              creator_id: user!.id,
+              status: "pending",
+              platform: "instagram",
+              views: 0,
+              content_link: reel.permalink,
+              video_id: reel.id,
+              video_title: reel.caption || "Instagram Content",
+              video_thumbnail_url: reel.thumbnail_url,
+              other_stats: { instagram: {} },
+            };
+
+            submissionPromises.push(
+              supabase.from("submissions").insert([submissionPayload]).select()
+            );
+          }
+        }
+      }
+    }
+
+    // Submit all videos
+    const results = await Promise.all(submissionPromises);
+
+    // Check for errors - results should be arrays with data property
+    const errors = results.filter(result => result && result.error);
+    if (errors.length > 0) {
+      console.error("Submission errors:", errors);
+      throw new Error(`Failed to submit ${errors.length} videos. Please try again.`);
+    }
+
+    // Idempotent participation increment
+    try {
+      await fetch("/api/metrics/participation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contestId }),
+      });
+    } catch { }
+
+    // Update submission progress
+    const newSubmittedCount = currentSubmitted + totalSubmissions;
+    setSubmissionProgress(prev => ({ ...prev, submitted: newSubmittedCount }));
+
+    // Add submitted videos to the set
+    const newSubmittedVideos = new Set(submittedVideos);
+    selectedVideosFromTabs.forEach(video => {
+      newSubmittedVideos.add(video.id.videoId);
+      newSubmittedVideos.add(`https://www.youtube.com/watch?v=${video.id.videoId}`);
+    });
+    selectedReelsFromTabs.forEach(reel => {
+      newSubmittedVideos.add(reel.id);
+      newSubmittedVideos.add(reel.permalink);
+    });
+    selectedVideos.forEach(video => {
+      newSubmittedVideos.add(video.id.videoId);
+      newSubmittedVideos.add(`https://www.youtube.com/watch?v=${video.id.videoId}`);
+    });
+    selectedReels.forEach(reel => {
+      newSubmittedVideos.add(reel.id);
+      newSubmittedVideos.add(reel.permalink);
+    });
+    setSubmittedVideos(newSubmittedVideos);
+
+    // Show success toast with progress
+    const remainingSubmissions = maxSubmissions - newSubmittedCount;
+    toast({
+      title: "🎉 Videos Submitted Successfully!",
+      description: `Submitted ${totalSubmissions} videos. You have ${remainingSubmissions} submissions remaining.`,
+      duration: 4000,
+    });
+
+    // Clear selections
+    setSelectedVideosFromTabs([]);
+    setSelectedReelsFromTabs([]);
+    setSelectedVideos([]);
+    setSelectedReels([]);
+    setSelectedVideoIndices([]);
+    setSelectedReelIndices([]);
+
+    // Only redirect if max submissions reached
+    if (newSubmittedCount >= maxSubmissions) {
+      toast({
+        title: "All Submissions Complete",
+        description: `You have reached the maximum of ${maxSubmissions} submissions for this contest.`,
+        variant: "default",
+      });
+      setMessage("All submissions complete! Redirecting...");
+      router.push(
+        `/dashboard/opportunities/${contestId}?success=content_submitted`
+      );
+    } else {
+      setMessage(`${totalSubmissions} videos submitted! You can submit more videos.`);
+      // Don't redirect - let user continue submitting
     }
   };
 
@@ -1360,10 +2157,6 @@ export default function SubmitContentPage({
     setError(null); // Clear previous errors specific to reel fetching
     setLibraryMessage(null); // Clear previous library message
     setUserReels([]);
-    console.log(
-      "[fetchInstagramReels] Starting fetch for IGBA ID:",
-      igBusinessAccountID
-    );
 
     const performFetch = async () => {
       try {
@@ -1373,10 +2166,6 @@ export default function SubmitContentPage({
         // Added media_product_type, video_title to fields if available, to better identify reels.
 
         const mediaData = await mediaRes.json();
-        console.log(
-          "[fetchInstagramReels] Raw mediaData from API:",
-          JSON.stringify(mediaData, null, 2)
-        );
 
         if (!mediaRes.ok || mediaData.error) {
           console.error(
@@ -1418,24 +2207,17 @@ export default function SubmitContentPage({
 
           throw new Error(
             mediaData.error?.message ||
-              "Failed to fetch Instagram media IDs using Business Account ID"
+            "Failed to fetch Instagram media IDs using Business Account ID"
           );
         }
 
         const potentialContent = mediaData.data;
         if (!potentialContent || potentialContent.length === 0) {
-          console.log(
-            "[fetchInstagramReels] No potential content found in API response data."
-          );
           setUserReels([]);
           // setIsLoadingReels(false); // Done in finally
           return;
         }
 
-        console.log(
-          `[fetchInstagramReels] Received ${potentialContent.length} items from /media endpoint. Full list:`,
-          JSON.stringify(potentialContent, null, 2)
-        );
 
         const allFetchedReels: InstagramReel[] = [];
         // The /media endpoint returns a mix. We need to filter for Reels.
@@ -1444,22 +2226,13 @@ export default function SubmitContentPage({
         // We may need to iterate and fetch full details for each *potential* reel if thumbnail_url or other specific fields are missing here.
         // For now, let's assume the direct /media call with expanded fields gives enough info.
 
-        console.log(
-          "[fetchInstagramReels] Starting to filter items for Reels..."
-        );
         for (const item of potentialContent) {
-          console.log(
-            `[fetchInstagramReels] Processing item: id=${item.id}, media_type=${item.media_type}, media_product_type=${item.media_product_type}`
-          );
           // Prioritize media_product_type if available, otherwise check media_type.
           // Instagram API can be a bit varied here. If it's a VIDEO, we should include it.
           if (
             item.media_product_type === "REELS" ||
             item.media_type === "VIDEO"
           ) {
-            console.log(
-              `[fetchInstagramReels] ✅ Including item id=${item.id} as a Reel/Video.`
-            );
             // Create a reel object matching our InstagramReel interface
             allFetchedReels.push({
               id: item.id,
@@ -1472,14 +2245,8 @@ export default function SubmitContentPage({
               permalink: item.permalink,
             });
           } else {
-            console.log(
-              `[fetchInstagramReels] ❌ Skipping item id=${item.id} - media_type: ${item.media_type}, media_product_type: ${item.media_product_type}`
-            );
           }
         }
-        console.log(
-          `[fetchInstagramReels] Filtered down to ${allFetchedReels.length} reels.`
-        );
 
         // Client-side filter based on submission window
         const filteredReels = allFetchedReels.filter(
@@ -1507,7 +2274,6 @@ export default function SubmitContentPage({
           setIsInstagramTokenExpired(true);
         }
       } finally {
-        console.log("[fetchInstagramReels] Fetch operation complete.");
         setIsLoadingReels(false);
       }
     };
@@ -1519,11 +2285,11 @@ export default function SubmitContentPage({
     return (
       <div className="flex flex-col items-center justify-center h-[76vh]">
         {/* <RefreshCw className="w-12 h-12 animate-spin text-primary mb-4" /> */}
-        
+
         {/* <p className="text-lg text-muted-foreground">
           Loading contest details...
         </p>  */}
-        <PageLoadingSpinner mode="light"/>
+        <PageLoadingSpinner mode="light" />
       </div>
     );
   }
@@ -1605,14 +2371,13 @@ export default function SubmitContentPage({
                 onClick={handleSubmit}
                 disabled={
                   isLoading ||
-                  (contestPlatform === "youtube" &&
-                    !selectedVideo &&
-                    !videoPreview) ||
-                  (contestPlatform === "instagram" &&
-                    !selectedReel &&
-                    !instagramMediaPreview) ||
                   isFetchingVideo ||
-                  isFetchingInstagramMedia
+                  isFetchingInstagramMedia ||
+                  (contest?.multiple_submissions_enabled
+                    ? (selectedVideosFromTabs.length === 0 && selectedReelsFromTabs.length === 0 && selectedVideos.length === 0 && selectedReels.length === 0)
+                    : ((contestPlatform === "youtube" && !selectedVideo && !videoPreview) ||
+                      (contestPlatform === "instagram" && !selectedReel && !instagramMediaPreview))
+                  )
                 }
                 className="w-full sm:w-auto"
               >
@@ -1723,11 +2488,10 @@ export default function SubmitContentPage({
                           text-gray-700 hover:text-gray-800 hover:bg-gray-200
                           ${isFirst ? "data-[state=active]:rounded-l-full" : ""}
                           ${isLast ? "data-[state=active]:rounded-r-full" : ""}
-                          ${
-                            arr.length === 1
-                              ? "data-[state=active]:rounded-full"
-                              : ""
-                          }
+                          ${arr.length === 1
+                                ? "data-[state=active]:rounded-full"
+                                : ""
+                              }
                         `}
                           >
                             {tab === "youtube-library" ? (
@@ -1761,7 +2525,7 @@ export default function SubmitContentPage({
                   <TabsContent value="youtube-library" className="mt-8">
                     {isLoadingVideos ? (
                       <div className="text-center py-4">
-                        <PageLoadingSpinner mode="light"/>
+                        <PageLoadingSpinner mode="light" />
                         Loading YouTube videos...
                       </div>
                     ) : userVideos.length === 0 ? (
@@ -1779,9 +2543,8 @@ export default function SubmitContentPage({
                             disabled={isLoadingVideos}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 ${
-                                isLoadingVideos ? "animate-spin" : ""
-                              }`}
+                              className={`h-4 w-4 ${isLoadingVideos ? "animate-spin" : ""
+                                }`}
                             />{" "}
                             Reload Videos
                           </Button>
@@ -1830,40 +2593,106 @@ export default function SubmitContentPage({
                             </Button>
                           </div>
                         )}
+
+                        {/* Multiple Submissions Counter - YouTube */}
+                        {contest?.multiple_submissions_enabled && contestPlatform === "youtube" && (
+                          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <CheckCheck className="h-4 w-4 text-purple-600" />
+                                <span className="text-sm font-medium text-purple-800">
+                                  Multiple Submissions Enabled
+                                </span>
+                              </div>
+                              <div className="text-sm font-semibold text-purple-800">
+                                Selected: {selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length} / {Math.max(0, (contest.max_submissions_per_creator || 1) - submissionProgress.submitted)} remaining videos
+                              </div>
+                            </div>
+                            <p className="text-xs text-purple-600 mt-1">
+                              Click on videos below to select them. You can mix videos from your channel and custom links.
+                            </p>
+                          </div>
+                        )}
+
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
                           {paginatedUserVideos.map((video, index) => (
                             <div
                               key={video.id.videoId}
-                              className={`cursor-pointer max-w-[1200px] mx-auto ${
-                                index === 0 ? "mt-4" : ""
-                              } ${
-                                index === paginatedUserVideos.length - 1
+                              className={`cursor-pointer max-w-[1200px] mx-auto ${index === 0 ? "mt-4" : ""
+                                } ${index === paginatedUserVideos.length - 1
                                   ? "mb-4"
                                   : ""
-                              } ${
-                                selectedVideo?.id.videoId === video.id.videoId
+                                } ${(contest?.multiple_submissions_enabled
+                                  ? selectedVideosFromTabs.some(v => v.id.videoId === video.id.videoId)
+                                  : selectedVideo?.id.videoId === video.id.videoId)
                                   ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                   : "border-2 border-[#7F39EC] rounded-lg"
-                              }`}
+                                }`}
                               onClick={() => {
-                                setSelectedVideo(video);
-                                setSelectedReel(null);
-                                setInstagramMediaPreview(null);
-                                setInstagramLink("");
-                                setSubmissionType("youtube");
-                                setContentLink(
-                                  `https://www.youtube.com/watch?v=${video.id.videoId}`
-                                );
-                                setVideoPreview(null); // Clear manual link preview
+                                if (contest?.multiple_submissions_enabled) {
+                                  // Multiple selection mode
+                                  const isAlreadySelected = selectedVideosFromTabs.some(v => v.id.videoId === video.id.videoId);
+                                  if (isAlreadySelected) {
+                                    // Remove from selection
+                                    setSelectedVideosFromTabs(selectedVideosFromTabs.filter(v => v.id.videoId !== video.id.videoId));
+                                  } else {
+                                    // Check if video is already selected elsewhere
+                                    if (isVideoAlreadySelected(video.id.videoId, 'youtube')) {
+                                      toast({
+                                        title: "Video Already Selected",
+                                        description: "This video is already selected from another source",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+
+                                    // Check if video is already submitted
+                                    if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+                                      toast({
+                                        title: "Video Already Submitted",
+                                        description: "This video has already been submitted for this contest",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+
+                                    // Add to selection (check limit against remaining submissions)
+                                    const maxSubmissions = contest?.max_submissions_per_creator || 1;
+                                    const remainingSubmissions = maxSubmissions - submissionProgress.submitted;
+                                    const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+
+                                    if (totalSelected < remainingSubmissions) {
+                                      setSelectedVideosFromTabs([...selectedVideosFromTabs, video]);
+                                    } else {
+                                      toast({
+                                        title: "Selection Limit Reached",
+                                        description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }
+                                } else {
+                                  // Single selection mode
+                                  setSelectedVideo(video);
+                                  setSelectedReel(null);
+                                  setInstagramMediaPreview(null);
+                                  setInstagramLink("");
+                                  setSubmissionType("youtube");
+                                  setContentLink(
+                                    `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                  );
+                                  setVideoPreview(null); // Clear manual link preview
+                                }
                               }}
                             >
                               <CardContent className="p-4 sm:p-6 relative">
-                                {selectedVideo?.id.videoId ===
-                                  video.id.videoId && (
-                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
-                                    <Check className="h-4 w-4" />
-                                  </div>
-                                )}
+                                {((contest?.multiple_submissions_enabled
+                                  ? selectedVideosFromTabs.some(v => v.id.videoId === video.id.videoId)
+                                  : selectedVideo?.id.videoId === video.id.videoId)) && (
+                                    <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
+                                      <Check className="h-4 w-4" />
+                                    </div>
+                                  )}
                                 <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                                   {/* Thumbnail */}
                                   <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -1962,33 +2791,34 @@ export default function SubmitContentPage({
                     )}
                   </TabsContent>
                   <TabsContent value="youtube-link" className="mt-6">
-                    <div className="flex flex-col items-center sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 py-4 ">
-                      <Input
-                        type="text"
-                        placeholder="Enter YouTube video URL"
-                        value={contentLink}
-                        onChange={(e) => setContentLink(e.target.value)}
-                        className="flex-1 text-base font-medium border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200"
-                      />
-                      <Button
-                        onClick={handleFetchVideo}
-                        disabled={isFetchingVideo || isLoadingVideos}
-                        size="default"
-                        className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
-                      >
-                        {isFetchingVideo ? (
-                          <RefreshCw className="animate-spin mr-2 h-4 w-4" />
-                        ) : null}
-                        Fetch Video
-                      </Button>
-                    </div>
+                    {!contest?.multiple_submissions_enabled && (
+                      <div className="flex flex-col items-center sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 py-4 ">
+                        <Input
+                          type="text"
+                          placeholder="Enter YouTube video URL"
+                          value={contentLink}
+                          onChange={(e) => setContentLink(e.target.value)}
+                          className="flex-1 text-base font-medium border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                        />
+                        <Button
+                          onClick={handleFetchVideo}
+                          disabled={isFetchingVideo || isLoadingVideos}
+                          size="default"
+                          className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md w-full sm:w-auto"
+                        >
+                          {isFetchingVideo ? (
+                            <RefreshCw className="animate-spin mr-2 h-4 w-4" />
+                          ) : null}
+                          Fetch Video
+                        </Button>
+                      </div>
+                    )}
                     {videoPreview && (
                       <Card
-                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                          selectedVideo?.id.videoId === videoPreview.id.videoId
-                            ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                            : "border-2 border-[#7F39EC] rounded-lg "
-                        }`}
+                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${selectedVideo?.id.videoId === videoPreview.id.videoId
+                          ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                          : "border-2 border-[#7F39EC] rounded-lg "
+                          }`}
                         onClick={() => {
                           setSelectedVideo(videoPreview);
                           setSelectedReel(null);
@@ -2009,10 +2839,10 @@ export default function SubmitContentPage({
                         <CardContent className="p-3 sm:p-4 relative">
                           {selectedVideo?.id.videoId ===
                             videoPreview.id.videoId && (
-                            <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
-                              <Check className="h-4 w-4" />
-                            </div>
-                          )}
+                              <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
+                                <Check className="h-4 w-4" />
+                              </div>
+                            )}
                           <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                             {/* Thumbnail */}
                             <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -2234,7 +3064,7 @@ export default function SubmitContentPage({
                   <TabsContent value="instagram-library" className="mt-4">
                     {isLoadingReels ? (
                       <div className="text-center py-4">
-                        <PageLoadingSpinner mode="light"/>
+                        <PageLoadingSpinner mode="light" />
                         Loading Instagram Reels...
                       </div>
                     ) : userReels.length === 0 ? (
@@ -2256,13 +3086,12 @@ export default function SubmitContentPage({
                                 currentInstagramBusinessAccountID || ""
                               )
                             }
-                            
+
                             disabled={isLoadingReels}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 mr-2 ${
-                                isLoadingReels ? "animate-spin" : ""
-                              }`}
+                              className={`h-4 w-4 mr-2 ${isLoadingReels ? "animate-spin" : ""
+                                }`}
                             />{" "}
                             Reload Reels
                           </Button>
@@ -2313,37 +3142,104 @@ export default function SubmitContentPage({
                             </Button>
                           </div>
                         )}
+
+                        {/* Multiple Submissions Counter - Instagram */}
+                        {contest?.multiple_submissions_enabled && contestPlatform === "instagram" && (
+                          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <CheckCheck className="h-4 w-4 text-purple-600" />
+                                <span className="text-sm font-medium text-purple-800">
+                                  Multiple Submissions Enabled
+                                </span>
+                              </div>
+                              <div className="text-sm font-semibold text-purple-800">
+                                Selected: {selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length} / {Math.max(0, (contest.max_submissions_per_creator || 1) - submissionProgress.submitted)} remaining videos
+                              </div>
+                            </div>
+                            <p className="text-xs text-purple-600 mt-1">
+                              Click on videos below to select them. You can mix videos from your channel and custom links.
+                            </p>
+                          </div>
+                        )}
+
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
                           {paginatedUserReels.map((reel, index) => (
                             <div
                               key={reel.id}
-                              className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${
-                                index === 0 ? "mt-4" : ""
-                              } ${
-                                index === paginatedUserReels.length - 1
+                              className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${index === 0 ? "mt-4" : ""
+                                } ${index === paginatedUserReels.length - 1
                                   ? "mb-4"
                                   : ""
-                              } ${
-                                selectedReel?.id === reel.id
-                                 ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                            : "border-2 border-[#7F39EC] rounded-lg "
-                              }`}
+                                } ${(contest?.multiple_submissions_enabled
+                                  ? selectedReelsFromTabs.some(r => r.id === reel.id)
+                                  : selectedReel?.id === reel.id)
+                                  ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                                  : "border-2 border-[#7F39EC] rounded-lg "
+                                }`}
                               onClick={() => {
-                                setSelectedReel(reel);
-                                setSelectedVideo(null);
-                                setVideoPreview(null);
-                                setContentLink("");
-                                setSubmissionType("instagram");
-                                setInstagramLink(reel.permalink);
-                                setInstagramMediaPreview(null); // Clear manual link preview
+                                if (contest?.multiple_submissions_enabled) {
+                                  // Multiple selection mode
+                                  const isAlreadySelected = selectedReelsFromTabs.some(r => r.id === reel.id);
+                                  if (isAlreadySelected) {
+                                    // Remove from selection
+                                    setSelectedReelsFromTabs(selectedReelsFromTabs.filter(r => r.id !== reel.id));
+                                  } else {
+                                    // Check if reel is already selected elsewhere
+                                    if (isVideoAlreadySelected(reel.id, 'instagram')) {
+                                      toast({
+                                        title: "Video Already Selected",
+                                        description: "This video is already selected from another source",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+
+                                    // Check if reel is already submitted
+                                    if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
+                                      toast({
+                                        title: "Reel Already Submitted",
+                                        description: "This reel has already been submitted for this contest",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+
+                                    // Add to selection (check limit against remaining submissions)
+                                    const maxSubmissions = contest?.max_submissions_per_creator || 1;
+                                    const remainingSubmissions = maxSubmissions - submissionProgress.submitted;
+                                    const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+
+                                    if (totalSelected < remainingSubmissions) {
+                                      setSelectedReelsFromTabs([...selectedReelsFromTabs, reel]);
+                                    } else {
+                                      toast({
+                                        title: "Selection Limit Reached",
+                                        description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }
+                                } else {
+                                  // Single selection mode
+                                  setSelectedReel(reel);
+                                  setSelectedVideo(null);
+                                  setVideoPreview(null);
+                                  setContentLink("");
+                                  setSubmissionType("instagram");
+                                  setInstagramLink(reel.permalink);
+                                  setInstagramMediaPreview(null); // Clear manual link preview
+                                }
                               }}
                             >
                               <CardContent className="p-4 sm:p-6 relative">
-                                {selectedReel?.id === reel.id && (
-                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
-                                    <Check className="h-4 w-4" />
-                                  </div>
-                                )}
+                                {((contest?.multiple_submissions_enabled
+                                  ? selectedReelsFromTabs.some(r => r.id === reel.id)
+                                  : selectedReel?.id === reel.id)) && (
+                                    <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
+                                      <Check className="h-4 w-4" />
+                                    </div>
+                                  )}
                                 <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                                   {/* Thumbnail */}
                                   <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -2415,33 +3311,34 @@ export default function SubmitContentPage({
                     )}
                   </TabsContent>
                   <TabsContent value="instagram-link" className="mt-4">
-                    <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3 p-4">
-                      <Input
-                        type="text"
-                        placeholder="Enter Instagram media URL"
-                        value={instagramLink}
-                        onChange={(e) => setInstagramLink(e.target.value)}
-                        className="flex-1 text-base font-medium border-2"
-                      />
-                      <Button
-                        onClick={handleFetchInstagramByLink}
-                        disabled={isFetchingInstagramMedia || isLoadingReels}
-                        size="default"
-                        className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base shadow-sm w-full sm:w-auto"
-                      >
-                        {isFetchingInstagramMedia ? (
-                          <RefreshCw className="animate-spin mr-2 h-4 w-4" />
-                        ) : null}
-                        Fetch Media
-                      </Button>
-                    </div>
+                    {!contest?.multiple_submissions_enabled && (
+                      <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3 p-4">
+                        <Input
+                          type="text"
+                          placeholder="Enter Instagram media URL"
+                          value={instagramLink}
+                          onChange={(e) => setInstagramLink(e.target.value)}
+                          className="flex-1 text-base font-medium border-2"
+                        />
+                        <Button
+                          onClick={handleFetchInstagramByLink}
+                          disabled={isFetchingInstagramMedia || isLoadingReels}
+                          size="default"
+                          className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base shadow-sm w-full sm:w-auto"
+                        >
+                          {isFetchingInstagramMedia ? (
+                            <RefreshCw className="animate-spin mr-2 h-4 w-4" />
+                          ) : null}
+                          Fetch Media
+                        </Button>
+                      </div>
+                    )}
                     {instagramMediaPreview && (
                       <div
-                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                          selectedReel?.id === instagramMediaPreview.id
-                             ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                            : "border-2 border-[#7F39EC] rounded-lg "
-                        }`}
+                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${selectedReel?.id === instagramMediaPreview.id
+                          ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                          : "border-2 border-[#7F39EC] rounded-lg "
+                          }`}
                         onClick={() => {
                           setSelectedReel(instagramMediaPreview);
                           setSelectedVideo(null);
@@ -2537,7 +3434,274 @@ export default function SubmitContentPage({
                   </TabsContent>
                 </Tabs>
               )}
+
             </>
+          )}
+
+
+
+          {/* Multiple Submissions UI - Only show if contest allows multiple submissions */}
+          {contest?.multiple_submissions_enabled && (
+            <div className="mt-8">
+              <Card className="border-purple-200 bg-purple-50/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-purple-800">
+                    <CheckCheck className="h-5 w-5" />
+                    Multiple Submissions Allowed
+                  </CardTitle>
+                  <CardDescription className="text-purple-700">
+                    You can submit up to {contest.max_submissions_per_creator || 1} videos for this contest.
+                    Choose from your recent videos above or add custom links below.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Submission Counter */}
+                    <div className="flex items-center justify-between p-3 bg-purple-100 rounded-lg">
+                      <div>
+                        <span className="text-sm font-medium text-purple-800">
+                          Selected: {selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length} / {Math.max(0, (contest.max_submissions_per_creator || 1) - submissionProgress.submitted)} remaining submissions
+                        </span>
+                        {submissionProgress.submitted > 0 && (
+                          <div className="text-xs text-purple-600 mt-1">
+                            Already submitted: {submissionProgress.submitted} / {submissionProgress.maxAllowed} videos
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            if (submissionLinks.length < (contest.max_submissions_per_creator || 1)) {
+                              setSubmissionLinks([...submissionLinks, ""]);
+                            }
+                          }}
+                          disabled={submissionLinks.length >= (contest.max_submissions_per_creator || 1)}
+                          className="text-purple-700 border-purple-300 hover:bg-purple-100"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Link
+                        </Button>
+                        {submissionLinks.length > 1 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const newLinks = [...submissionLinks];
+                              newLinks.pop();
+                              setSubmissionLinks(newLinks);
+                            }}
+                            className="text-purple-700 border-purple-300 hover:bg-purple-100"
+                          >
+                            <Minus className="h-4 w-4 mr-1" />
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Multiple Link Inputs */}
+                    <div className="space-y-3">
+                      {submissionLinks.map((link, index) => (
+                        <div key={index} className="flex items-center gap-3">
+                          <div className="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm font-medium">
+                            {index + 1}
+                          </div>
+                          <Input
+                            type="text"
+                            placeholder={`Enter ${contestPlatform?.toLowerCase() === 'youtube' ? 'YouTube' : 'Instagram'} video URL ${index + 1}`}
+                            value={link}
+                            onChange={(e) => {
+                              const newLinks = [...submissionLinks];
+                              newLinks[index] = e.target.value;
+                              setSubmissionLinks(newLinks);
+
+                              // Mark as not fetched if link is changed
+                              if (fetchedLinkIndices.has(index)) {
+                                setFetchedLinkIndices(prev => {
+                                  const newSet = new Set(prev);
+                                  newSet.delete(index);
+                                  return newSet;
+                                });
+                                setLinkFetchStatus(prev => ({ ...prev, [index]: 'idle' }));
+                              }
+                            }}
+                            className="flex-1"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => handleIndividualFetch(link, index)}
+                            disabled={!link.trim() || linkFetchStatus[index] === 'fetching'}
+                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                          >
+                            {linkFetchStatus[index] === 'fetching' ? (
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                            ) : fetchedLinkIndices.has(index) ? (
+                              <Check className="h-4 w-4" />
+                            ) : (
+                              "Fetch"
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleIndividualRemove(index)}
+                            className="text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Fetch All Button */}
+                    {submissionLinks.some(link => link.trim()) && (
+                      <div className="flex justify-center">
+                        <Button
+                          onClick={handleFetchAllVideos}
+                          disabled={isFetchingVideo || submissionLinks.every(link => !link.trim())}
+                          className="bg-purple-600 hover:bg-purple-700 text-white px-8"
+                        >
+                          {isFetchingVideo ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                              Fetching New Videos...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Fetch New Videos ({submissionLinks.filter((link, index) => link.trim() && !fetchedLinkIndices.has(index)).length})
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Fetched Videos Display */}
+                    {(fetchedVideos.length > 0 || fetchedReels.length > 0) && (
+                      <div className="mt-6">
+                        <h4 className="text-lg font-semibold text-purple-800 mb-4">
+                          Fetched Videos - Select the ones you want to submit:
+                        </h4>
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {/* YouTube Videos */}
+                          {fetchedVideos.map((video, index) => (
+                            video && (
+                              <Card
+                                key={`youtube-${index}`}
+                                className={`cursor-pointer transition-all duration-200 ${selectedVideoIndices.includes(index)
+                                  ? "border-2 border-purple-500 bg-purple-50"
+                                  : "border border-gray-200 hover:border-purple-300"
+                                  }`}
+                                onClick={() => handleVideoSelection(index, !selectedVideoIndices.includes(index))}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex items-start gap-4">
+                                    <div className="flex-shrink-0">
+                                      <Image
+                                        src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default.url}
+                                        alt={video.snippet.title}
+                                        width={120}
+                                        height={68}
+                                        className="rounded-lg object-cover aspect-video"
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <h5 className="font-medium text-sm line-clamp-2 mb-2">
+                                            {video.snippet.title}
+                                          </h5>
+                                          <div className="flex items-center gap-4 text-xs text-gray-600">
+                                            <span>👁️ {video.statistics?.viewCount || 0} views</span>
+                                            <span>👍 {video.statistics?.likeCount || 0} likes</span>
+                                            <span>💬 {video.statistics?.commentCount || 0} comments</span>
+                                          </div>
+                                        </div>
+                                        <div className="flex-shrink-0 ml-2">
+                                          {selectedVideoIndices.includes(index) ? (
+                                            <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
+                                              <Check className="h-4 w-4" />
+                                            </div>
+                                          ) : (
+                                            <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )
+                          ))}
+
+                          {/* Instagram Reels */}
+                          {fetchedReels.map((reel, index) => (
+                            reel && (
+                              <Card
+                                key={`instagram-${index}`}
+                                className={`cursor-pointer transition-all duration-200 ${selectedReelIndices.includes(index)
+                                  ? "border-2 border-purple-500 bg-purple-50"
+                                  : "border border-gray-200 hover:border-purple-300"
+                                  }`}
+                                onClick={() => handleVideoSelection(index, !selectedReelIndices.includes(index))}
+                              >
+                                <CardContent className="p-4">
+                                  <div className="flex items-start gap-4">
+                                    <div className="flex-shrink-0">
+                                      <Image
+                                        src={reel.thumbnail_url || "/placeholder-reel.jpg"}
+                                        alt={reel.caption || "Instagram Reel"}
+                                        width={120}
+                                        height={120}
+                                        className="rounded-lg object-cover aspect-square"
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-start justify-between">
+                                        <div className="flex-1">
+                                          <h5 className="font-medium text-sm line-clamp-2 mb-2">
+                                            {reel.caption || "Instagram Reel"}
+                                          </h5>
+                                          <div className="flex items-center gap-4 text-xs text-gray-600">
+                                            <span>📅 {dayjs(reel.timestamp).format("MMM D, YYYY")}</span>
+                                            <span>🎬 {reel.media_type}</span>
+                                          </div>
+                                        </div>
+                                        <div className="flex-shrink-0 ml-2">
+                                          {selectedReelIndices.includes(index) ? (
+                                            <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
+                                              <Check className="h-4 w-4" />
+                                            </div>
+                                          ) : (
+                                            <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Earnings Cap Warning */}
+                    {contest.contest_based_details?.cpm_contest?.max_earnings_per_creator && (
+                      <Alert className="border-amber-200 bg-amber-50">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <AlertDescription className="text-amber-800">
+                          <strong>Earnings Cap:</strong> You can earn up to ${(contest.contest_based_details.cpm_contest.max_earnings_per_creator / 100).toFixed(2)} total from this contest.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </CardContent>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -175,11 +175,12 @@ export function ContestClientPage({
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const { activeTab, setActiveTab } = useTabState(tabs, {
-    defaultTab: "details",
-  });
+  const [submissionCount, setSubmissionCount] = useState(0);
+  const [maxSubmissions, setMaxSubmissions] = useState(1);
+  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "details" });
 
   // Pagination state for leaderboard
   const [leaderboardCurrentPage, setLeaderboardCurrentPage] = useState(1);
@@ -510,6 +511,17 @@ export function ContestClientPage({
     }
   };
 
+  // Clean up URL parameters on component mount
+  useEffect(() => {
+    const errorParam = searchParams.get('error');
+    if (errorParam === 'already_submitted') {
+      // Clear the error parameter from URL
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('error');
+      router.replace(newUrl.pathname + newUrl.search, { scroll: false });
+    }
+  }, [searchParams, router]);
+
   useEffect(() => {
     isMounted = true;
 
@@ -554,22 +566,30 @@ export function ContestClientPage({
         // Fetch existing submission status for the current user (if logged in)
         // This is separate from the main leaderboard logic.
         if (user) {
-          const { data: submissionData, error: submissionError } =
-            await supabase
-              .from("submissions")
-              .select("id, created_at")
-              .eq("contest_id", contestId)
-              .eq("creator_id", user.id)
-              .limit(1);
+          try {
+            const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data && data.submissions && data.submissions.length > 0 && isMounted) {
+                const maxSubmissions = contestData.max_submissions_per_creator || 1;
+                setSubmissionCount(data.submissions.length);
+                setMaxSubmissions(maxSubmissions);
 
-          if (submissionError)
-            console.error(
-              "Error checking existing submission:",
-              submissionError
-            );
-          else if (submissionData && submissionData.length > 0 && isMounted) {
-            setHasSubmitted(true);
-            setExistingSubmission(submissionData[0]);
+                // For multiple submissions, only show "Submission Complete" if max reached
+                if (contestData.multiple_submissions_enabled) {
+                  if (data.submissions.length >= maxSubmissions) {
+                    setHasSubmitted(true);
+                    setExistingSubmission(data.submissions[0]);
+                  }
+                } else {
+                  // For single submission contests, show complete if any submission exists
+                  setHasSubmitted(true);
+                  setExistingSubmission(data.submissions[0]);
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching user submissions:", error);
           }
         }
       } catch (err: any) {
@@ -935,6 +955,47 @@ export function ContestClientPage({
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     Submitted {formatTimeAgo(existingSubmission.created_at)}
                   </p>
+                </div>
+              ) : submissionCount > 0 && contest?.multiple_submissions_enabled ? (
+                <div className="flex flex-col items-center">
+                  <div className="relative mb-4">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                      <CheckCircle className="h-10 w-10 text-white" />
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">{submissionCount}</span>
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">
+                    Submissions in Progress
+                  </p>
+                  <p className="text-base text-slate-600 dark:text-slate-300 mb-1">
+                    You have submitted {submissionCount} out of {maxSubmissions} videos
+                  </p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+                    You can still submit {maxSubmissions - submissionCount} more videos
+                  </p>
+
+                  {/* Submit Button for Partial Submissions */}
+                  <Button
+                    size="lg"
+                    onClick={handleSubmitContent}
+                    disabled={contest.status?.toLowerCase() !== "active"}
+                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
+                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      }`}
+                  >
+                    <span className="relative z-10">
+                      {contest.status?.toLowerCase() === "active"
+                        ? `Submit More Videos (${maxSubmissions - submissionCount} remaining)`
+                        : "Contest Not Active"
+                      }
+                    </span>
+                    {contest.status?.toLowerCase() === "active" && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
+                    )}
+                  </Button>
                 </div>
               ) : (
                 <div>
@@ -2203,7 +2264,7 @@ export function ContestClientPage({
                       <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                         <div className="flex items-center space-x-2">
                           <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
-                            {myLeaderboardEntry.views.toLocaleString()} views
+                            {myLeaderboardEntry.views ? myLeaderboardEntry.views.toLocaleString() : '0'} views
                           </p>
                           {myLeaderboardEntry.content_link && (
                             <Button
@@ -2352,12 +2413,20 @@ export function ContestClientPage({
                       const isEarned =
                         entry.status === "verified" || entry.status === "paid";
                       const earningsLabel = isEarned ? "Earned" : "Expected";
+
+                      // Check if there's a flat fee bonus
+                      const flatFeeBonus = (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0;
+
+                      // Calculate total earnings (CPM + Bonus if applicable)
+                      const totalEarnings = entry.earnings + flatFeeBonus;
+
                       prizeDisplay = (
                         <span className="font-semibold text-green-600 dark:text-green-400">
-                          {earningsLabel}: {formatMoney(entry.earnings)}
+                          {earningsLabel}: {formatMoney(totalEarnings)}
                         </span>
                       );
                     } else {
+                      // Non-CPM contest
                       prizeDisplay = (
                         <span className="font-semibold text-green-600 dark:text-green-400">
                           Earned: {formatMoney(entry.earnings)}
@@ -2426,7 +2495,7 @@ export function ContestClientPage({
                         <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                           <div className="flex items-center space-x-2">
                             <p className="text-base sm:text-lg font-bold text-slate-700 dark:text-slate-200">
-                              {entry.views.toLocaleString()} views
+                              {entry.views ? entry.views.toLocaleString() : '0'} views
                             </p>
                             {entry.content_link && (
                               <Button

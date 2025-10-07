@@ -415,7 +415,8 @@ export default function OpportunitiesPage({
           displayedContests.map((contest) => (
             <Card
               key={contest.id}
-              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full"
+              onClick={() => handleViewDetails(contest.id)}
+              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full cursor-pointer"
             >
               <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
                 {contest.thumbnail_url ? (
@@ -534,29 +535,43 @@ export default function OpportunitiesPage({
                 </div>
 
                 {/* Budget Spent Progress Bar for CPM contests */}
-                {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
-                  <div className="mt-3 mb-3">
-                    <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
-                      <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
-                      <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (() => {
+                  const totalBudget = contest.contest_based_details.cpm_contest.total_budget;
+                  const budgetSpent = contest.contest_based_details.cpm_contest.budget_spent || 0;
+                  const percentage = (budgetSpent / totalBudget) * 100;
+                  const remaining = totalBudget - budgetSpent;
+
+                  return (
+                    <div className="mt-3 mb-3">
+                      <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mb-2">
+                        <span className="font-medium">Budget Tracker</span>
+                        <span className="font-semibold">{formatMoney(budgetSpent)} / {formatMoney(totalBudget)}</span>
+                      </div>
                       <div
-                        className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
-                      ></div>
+                        className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                        title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                        <span>{percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(remaining)} remaining</span>
+                      </div>
                     </div>
-                    <div className="flex justify-center text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      <span>Remaining: {formatMoney(contest.contest_based_details.cpm_contest.total_budget - (contest.contest_based_details.cpm_contest.budget_spent || 0))}</span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 <button
-                  onClick={() => handleViewDetails(contest.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleViewDetails(contest.id);
+                  }}
                   // size="sm"
                   // variant="white"
-                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full hover:bg-[#D9C0FF] transition-colors"
                 >
                   View Details
                 </button>

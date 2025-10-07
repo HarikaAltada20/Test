@@ -16,8 +16,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Submission ID and action are required' }, { status: 400 });
     }
 
-    if (!['verified', 'rejected', 'pending', 'paid'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid action. Must be verified, rejected, pending, or paid' }, { status: 400 });
+    if (!['verified', 'rejected', 'pending', 'paid', 'mark_bonus_paid', 'mark_both_paid'].includes(action)) {
+      return NextResponse.json({ error: 'Invalid action. Must be verified, rejected, pending, paid, mark_bonus_paid, or mark_both_paid' }, { status: 400 });
     }
 
     // Verify admin access first
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     // Fetch submission with earnings and creator_id
     const { data: submissionFull, error: submissionFullErr } = await supabase
       .from('submissions')
-      .select('id, contest_id, creator_id, status, earnings, views')
+      .select('id, contest_id, creator_id, status, earnings, views, paid, paid_at, bonus_paid, bonus_paid_at')
       .eq('id', submissionId)
       .single();
     if (submissionFullErr || !submissionFull) {
@@ -237,8 +237,65 @@ export async function POST(request: Request) {
       }
     }
 
+    // Handle flat fee bonus payments
+    if (action === 'mark_bonus_paid' || action === 'mark_both_paid') {
+      const flatFeeBonus = (contest.contest_based_details as any)?.flat_fee_bonus || 0;
+      
+      if (flatFeeBonus > 0 && submissionFull.status === 'verified') {
+        // Check if bonus already paid
+        if (!submissionFull.bonus_paid) {
+          // Credit bonus to creator wallet
+          const creditResult = await creditCreatorWithdrawableBalance(
+            submissionFull.creator_id, 
+            flatFeeBonus, 
+            `Flat fee bonus for submission in contest ${contest.title || 'Contest'}`,
+            {
+              remarks: paymentDetails?.customRemarks || 'Flat fee bonus credited to creator wallet',
+              metadata: { 
+                submission_id: submissionId, 
+                contest_id: submissionFull.contest_id,
+                bonus_type: 'flat_fee'
+              }
+            }
+          );
+          
+          if (!creditResult.success) {
+            return NextResponse.json({ error: `Failed to credit flat fee bonus: ${creditResult.error}` }, { status: 500 });
+          }
+          
+          // Update submission bonus_paid status and amount
+          const { error: bonusUpdateError } = await supabaseAdmin
+            .from('submissions')
+            .update({ 
+              bonus_paid: true, 
+              bonus_paid_at: new Date().toISOString(),
+              bonus_amount: flatFeeBonus  // Store actual bonus amount paid (in cents)
+            })
+            .eq('id', submissionId);
+            
+          if (bonusUpdateError) {
+            console.error('Error updating bonus_paid status:', bonusUpdateError);
+          }
+        }
+      } else if (flatFeeBonus <= 0) {
+        return NextResponse.json({ error: 'No flat fee bonus configured for this contest' }, { status: 400 });
+      } else if (submissionFull.status !== 'verified') {
+        return NextResponse.json({ error: 'Submission must be verified before paying bonus' }, { status: 400 });
+      }
+    }
+
+    // If action is mark_both_paid, continue to regular payment logic
+    // Otherwise, return success for mark_bonus_paid
+    if (action === 'mark_bonus_paid') {
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Flat fee bonus paid successfully',
+        submission: updatedSubmission 
+      });
+    }
+
     // Enqueue payout job instead of doing full payout synchronously (avoid timeouts)
-    if (action === SUBMISSION_STATUS.paid) {
+    if (action === SUBMISSION_STATUS.paid || action === 'mark_both_paid') {
       // Try to enqueue; on failure, fall back to inline payout logic below
       const { error: enqueueErr } = await supabaseAdmin
         .from('payout_jobs')
@@ -253,7 +310,7 @@ export async function POST(request: Request) {
 
       // Fallback path below keeps previous inline behavior if enqueue fails
       // Handle wallet credit/debit on status changes
-      if (action === SUBMISSION_STATUS.paid) {
+      if (action === SUBMISSION_STATUS.paid || action === 'mark_both_paid') {
       // Determine amount: custom from paymentDetails or default to earnings
       const customAmount = paymentDetails?.amountInCents && paymentDetails?.isCustom ? Number(paymentDetails.amountInCents) : null;
       const customRemarks = (paymentDetails as any)?.customRemarks as string | undefined;
@@ -340,7 +397,20 @@ export async function POST(request: Request) {
         if (!submissionFull.earnings || submissionFull.earnings <= 0 || customAmount) {
           await supabaseAdmin
             .from('submissions')
-            .update({ earnings: rewardAmount })
+            .update({ 
+              earnings: rewardAmount,
+              paid: true,
+              paid_at: new Date().toISOString()
+            })
+            .eq('id', submissionId);
+        } else {
+          // Update paid status even if earnings already set
+          await supabaseAdmin
+            .from('submissions')
+            .update({ 
+              paid: true,
+              paid_at: new Date().toISOString()
+            })
             .eq('id', submissionId);
         }
       }
@@ -406,10 +476,14 @@ export async function POST(request: Request) {
         // No longer keep earnings on reversal; it should be cleared when leaving Paid
       }
 
-      // Always clear earnings once we move away from Paid, regardless of reversalAmount
+      // Always clear earnings and paid status once we move away from Paid, regardless of reversalAmount
       await supabaseAdmin
         .from('submissions')
-        .update({ earnings: null })
+        .update({ 
+          earnings: null,
+          paid: false,
+          paid_at: null
+        })
         .eq('id', submissionId);
     }
 

@@ -159,7 +159,12 @@ export async function GET(request: Request) {
       end_date: contest.end_date,
       advertiser_name: contest.advertiser_profiles?.company_name || 'Unknown Brand',
       advertiser_id: contest.advertiser_id,
-      contest_based_details: contest.contest_based_details
+      contest_based_details: contest.contest_based_details,
+      // New feature fields
+      multiple_submissions_enabled: contest.multiple_submissions_enabled,
+      max_submissions_per_creator: contest.max_submissions_per_creator,
+      content_type: contest.content_type,
+      bonus_details: contest.bonus_details
     }));
 
     return NextResponse.json({ 

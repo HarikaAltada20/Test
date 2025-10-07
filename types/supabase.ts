@@ -368,66 +368,81 @@ export interface Database {
           published_at?: string | null;
           rejection_reason?: string | null;
           // New features
-          multiple_submissions_enabled?: boolean;
-          max_submissions_per_creator?: number;
-          content_type?: "ugc" | "clipping" | "other" | null;
-          bonus_details?: Json | null;
-          max_earnings_per_creator_cents?: number | null;
-        };
-      };
+          multiple_submissions_enabled?: boolean
+          max_submissions_per_creator?: number
+          content_type?: 'ugc' | 'clipping' | 'other' | null
+          bonus_details?: Json | null
+          max_earnings_per_creator?: number | null
+        }
+      }
       submissions: {
         Row: {
-          id: string;
-          contest_id: string;
-          creator_id: string;
-          content_link: string;
-          views: number;
-          metadata: Json | null;
-          other_stats: Json | null;
-          created_at: string;
-          status: "pending" | "verified" | "rejected" | "paid";
-          earnings: number | null;
-          last_insights_update: string | null;
-          platform: string | null;
-          video_id: string | null;
-          video_title: string | null;
-          video_thumbnail_url: string | null;
-        };
+          id: string
+          contest_id: string
+          creator_id: string
+          content_link: string
+          views: number
+          metadata: Json | null
+          other_stats: Json | null
+          created_at: string
+          status: 'pending' | 'verified' | 'rejected' | 'paid'
+          earnings: number | null
+          last_insights_update: string | null
+          platform: string | null
+          video_id: string | null
+          video_title: string | null
+          video_thumbnail_url: string | null
+          paid: boolean
+          paid_at: string | null
+          bonus_paid: boolean
+          bonus_paid_at: string | null
+          bonus_amount: number
+        }
         Insert: {
-          id?: string;
-          contest_id: string;
-          creator_id: string;
-          content_link: string;
-          views?: number;
-          metadata?: Json | null;
-          other_stats?: Json | null;
-          created_at?: string;
-          status?: "pending" | "verified" | "rejected" | "paid";
-          earnings?: number | null;
-          last_insights_update?: string | null;
-          platform?: string | null;
-          video_id?: string | null;
-          video_title?: string | null;
-          video_thumbnail_url?: string | null;
-        };
+          id?: string
+          contest_id: string
+          creator_id: string
+          content_link: string
+          views?: number
+          metadata?: Json | null
+          other_stats?: Json | null
+          created_at?: string
+          status?: 'pending' | 'verified' | 'rejected' | 'paid'
+          earnings?: number | null
+          last_insights_update?: string | null
+          platform?: string | null
+          video_id?: string | null
+          video_title?: string | null
+          video_thumbnail_url?: string | null
+          paid?: boolean
+          paid_at?: string | null
+          bonus_paid?: boolean
+          bonus_paid_at?: string | null
+          bonus_amount?: number
+        }
         Update: {
-          id?: string;
-          contest_id?: string;
-          creator_id?: string;
-          content_link?: string;
-          views?: number;
-          metadata?: Json | null;
-          other_stats?: Json | null;
-          created_at?: string;
-          status?: "pending" | "verified" | "rejected" | "paid";
-          earnings?: number | null;
-          last_insights_update?: string | null;
-          platform?: string | null;
-          video_id?: string | null;
-          video_title?: string | null;
-          video_thumbnail_url?: string | null;
-        };
-      };
+          id?: string
+          contest_id?: string
+          creator_id?: string
+          content_link?: string
+          views?: number
+          metadata?: Json | null
+          other_stats?: Json | null
+          created_at?: string
+          status?: 'pending' | 'verified' | 'rejected' | 'paid'
+          earnings?: number | null
+          last_insights_update?: string | null
+          platform?: string | null
+          video_id?: string | null
+          video_title?: string | null
+          video_thumbnail_url?: string | null
+          paid?: boolean
+          paid_at?: string | null
+          bonus_paid?: boolean
+          bonus_paid_at?: string | null
+          bonus_amount?: number
+        }
+      }
       money_transactions: {
         Row: {
           id: string;
@@ -704,6 +719,18 @@ export interface LeaderboardContestDetails {
   total_prize: number;
   winner_count: number;
   flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
+}
+
+// Bonus Payment tracking interface
+export interface BonusPayment {
+  submission_id: string;
+  creator_id: string;
+  contest_id: string;
+  bonus_amount: number; // in cents
+  paid: boolean;
+  paid_at?: string;
+  payment_proof_url?: string;
+  payment_remarks?: string;
 }
 
 // Bonus details structure (for bonus_details JSONB)
