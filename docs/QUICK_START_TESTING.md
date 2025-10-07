@@ -35,7 +35,7 @@ AND column_name IN (
   'max_submissions_per_creator', 
   'content_type',
   'bonus_details',
-  'max_earnings_per_creator_cents'
+  'max_earnings_per_creator'
 );
 ```
 
@@ -152,7 +152,7 @@ DROP COLUMN IF EXISTS multiple_submissions_enabled,
 DROP COLUMN IF EXISTS max_submissions_per_creator,
 DROP COLUMN IF EXISTS content_type,
 DROP COLUMN IF EXISTS bonus_details,
-DROP COLUMN IF EXISTS max_earnings_per_creator_cents;
+DROP COLUMN IF EXISTS max_earnings_per_creator;
 ```
 
 ---

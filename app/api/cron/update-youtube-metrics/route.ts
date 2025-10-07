@@ -57,20 +57,80 @@ async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: string): 
             const cpmConfig = contest.contest_based_details?.cpm_contest;
             if (!cpmConfig?.cpm_rate_usd) continue;
 
+            // Fetch contest details for cap
+            const { data: contestDetails } = await supabaseAdmin
+                .from('contests')
+                .select('max_earnings_per_creator')
+                .eq('id', contest.id)
+                .single();
+
+            const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator || null;
+
+            // Get submissions with payment status
             const { data: submissions } = await supabaseAdmin
                 .from('submissions')
-                .select('views')
+                .select('views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount')
                 .eq('contest_id', contest.id)
-                .eq('status', 'verified');
+                .in('status', ['verified', 'paid'])
+                .order('created_at', { ascending: true });
 
             if (!submissions?.length) continue;
 
-            const totalSpent = submissions.reduce((sum: number, sub: any) => {
-                let views = sub.views || 0;
-                if (cpmConfig.min_views && views < cpmConfig.min_views) views = 0;
-                if (cpmConfig.max_views && views > cpmConfig.max_views) views = cpmConfig.max_views;
-                return sum + (views * cpmConfig.cpm_rate_usd) / 1000;
-            }, 0);
+            // Group by creator to respect earnings cap
+            const creatorEarnings = new Map<string, { cpmTotal: number; bonusTotal: number }>();
+            const flatFeeBonus = cpmConfig.flat_fee_bonus || 0;
+
+            for (const sub of submissions) {
+                const creatorId = sub.creator_id;
+                if (!creatorEarnings.has(creatorId)) {
+                    creatorEarnings.set(creatorId, { cpmTotal: 0, bonusTotal: 0 });
+                }
+
+                const creatorData = creatorEarnings.get(creatorId)!;
+
+                // Use actual paid earnings if paid, otherwise calculate expected
+                if (sub.paid && sub.earnings != null) {
+                    // Use actual paid amount from database
+                    creatorData.cpmTotal += (sub.earnings / 100); // Convert cents to dollars
+                } else {
+                    // Calculate expected CPM earnings for verified but unpaid submissions
+                    let views = sub.views || 0;
+                    if (cpmConfig.min_views && views < cpmConfig.min_views) views = 0;
+                    if (cpmConfig.max_views && views > cpmConfig.max_views) views = cpmConfig.max_views;
+                    
+                    const submissionEarnings = (views * cpmConfig.cpm_rate_usd) / 1000;
+                    
+                    // Apply creator cap if exists
+                    if (maxEarningsPerCreator) {
+                        const maxEarningsInDollars = maxEarningsPerCreator / 100;
+                        const remainingCap = maxEarningsInDollars - creatorData.cpmTotal;
+                        if (remainingCap > 0) {
+                            creatorData.cpmTotal += Math.min(submissionEarnings, remainingCap);
+                        }
+                    } else {
+                        creatorData.cpmTotal += submissionEarnings;
+                    }
+                }
+
+                // Use actual bonus amount if bonus_paid, otherwise calculate expected
+                if (sub.bonus_paid && sub.bonus_amount != null) {
+                    // Use actual bonus amount from database
+                    creatorData.bonusTotal += (sub.bonus_amount / 100); // Convert cents to dollars
+                } else if (flatFeeBonus > 0) {
+                    // Add expected flat fee bonus for verified but unpaid submissions
+                    creatorData.bonusTotal += (flatFeeBonus / 100);
+                }
+            }
+
+            // Sum up all creator earnings
+            let totalCPM = 0;
+            let totalBonus = 0;
+            for (const [_, earnings] of creatorEarnings) {
+                totalCPM += earnings.cpmTotal;
+                totalBonus += earnings.bonusTotal;
+            }
+
+            const totalSpent = totalCPM + totalBonus;
 
             const now = new Date().toISOString();
             await supabaseAdmin

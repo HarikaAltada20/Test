@@ -1834,7 +1834,7 @@ export default function SubmitContentPage({
     }
 
     // Check earnings cap if applicable
-    const earningsCap = contest?.contest_based_details?.cpm_contest?.max_earnings_per_creator_cents;
+    const earningsCap = contest?.contest_based_details?.cpm_contest?.max_earnings_per_creator;
     if (earningsCap) {
       // TODO: Calculate current earnings and show warning if approaching cap
       // This would require fetching existing submission earnings
@@ -3690,11 +3690,11 @@ export default function SubmitContentPage({
                     )}
 
                     {/* Earnings Cap Warning */}
-                    {contest.contest_based_details?.cpm_contest?.max_earnings_per_creator_cents && (
+                    {contest.contest_based_details?.cpm_contest?.max_earnings_per_creator && (
                       <Alert className="border-amber-200 bg-amber-50">
                         <AlertTriangle className="h-4 w-4 text-amber-600" />
                         <AlertDescription className="text-amber-800">
-                          <strong>Earnings Cap:</strong> You can earn up to ${(contest.contest_based_details.cpm_contest.max_earnings_per_creator_cents / 100).toFixed(2)} total from this contest.
+                          <strong>Earnings Cap:</strong> You can earn up to ${(contest.contest_based_details.cpm_contest.max_earnings_per_creator / 100).toFixed(2)} total from this contest.
                         </AlertDescription>
                       </Alert>
                     )}

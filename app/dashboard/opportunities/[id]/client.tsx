@@ -2246,12 +2246,20 @@ export function ContestClientPage({
                       const isEarned =
                         entry.status === "verified" || entry.status === "paid";
                       const earningsLabel = isEarned ? "Earned" : "Expected";
+
+                      // Check if there's a flat fee bonus
+                      const flatFeeBonus = (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0;
+
+                      // Calculate total earnings (CPM + Bonus if applicable)
+                      const totalEarnings = entry.earnings + flatFeeBonus;
+
                       prizeDisplay = (
                         <span className="font-semibold text-green-600 dark:text-green-400">
-                          {earningsLabel}: {formatMoney(entry.earnings)}
+                          {earningsLabel}: {formatMoney(totalEarnings)}
                         </span>
                       );
                     } else {
+                      // Non-CPM contest
                       prizeDisplay = (
                         <span className="font-semibold text-green-600 dark:text-green-400">
                           Earned: {formatMoney(entry.earnings)}

@@ -59,12 +59,14 @@ type Contest = {
             total_prize?: number;
             prizes?: Array<{ amount: number; position: number }>;
             winner_count?: number;
+            flat_fee_bonus?: number;
         };
         cpm_contest?: {
             total_budget?: number;
             cpm_rate_usd?: number;
             budget_spent?: number;
             max_views?: number;
+            flat_fee_bonus?: number;
         };
     } | null;
     thumbnail_url: string | null;
@@ -72,6 +74,10 @@ type Contest = {
     submitted_for_approval_at?: string | null;
     published_at?: string | null;
     rejection_reason?: string | null;
+    multiple_submissions_enabled?: boolean;
+    max_submissions_per_creator?: number;
+    content_type?: string;
+    bonus_details?: any;
 };
 
 interface ContestListClientProps {
@@ -354,7 +360,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             {contest.multiple_submissions_enabled && (
                                 <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
                                     <CheckCheck className="h-3 w-3 mr-1" />
-                                    {contest.max_submissions_per_creator > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
+                                    {(contest.max_submissions_per_creator ?? 1) > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
                                 </Badge>
                             )}
                             {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
@@ -432,23 +438,34 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         </div>
 
                         {/* Budget Spent Progress Bar for CPM contests */}
-                        {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
-                            <div className="mt-3 mb-3">
-                                <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
-                                    <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
-                                    <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                        {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (() => {
+                            const totalBudget = contest.contest_based_details.cpm_contest.total_budget;
+                            const budgetSpent = contest.contest_based_details.cpm_contest.budget_spent || 0;
+                            const percentage = (budgetSpent / totalBudget) * 100;
+                            const remaining = totalBudget - budgetSpent;
+
+                            return (
+                                <div className="mt-3 mb-3">
+                                    <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mb-2">
+                                        <span className="font-medium">Budget Tracker</span>
+                                        <span className="font-semibold">{formatMoney(budgetSpent)} / {formatMoney(totalBudget)}</span>
+                                    </div>
                                     <div
-                                        className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
-                                        style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
-                                    ></div>
+                                        className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                                        title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                                    >
+                                        <div
+                                            className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                                        ></div>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                                        <span>{percentage.toFixed(1)}% used</span>
+                                        <span>{formatMoney(remaining)} remaining</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-center text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                    <span>Remaining: {formatMoney(contest.contest_based_details.cpm_contest.total_budget - (contest.contest_based_details.cpm_contest.budget_spent || 0))}</span>
-                                </div>
-                            </div>
-                        )}
+                            );
+                        })()}
 
                         <button
 

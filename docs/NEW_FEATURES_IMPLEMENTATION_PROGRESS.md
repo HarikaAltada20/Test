@@ -169,7 +169,7 @@ if (existingSubmissions.length >= contest.max_submissions_per_creator) {
 
 // Check earnings cap (warning only, don't block)
 const totalEarnings = calculateCreatorEarnings(existingSubmissions);
-if (totalEarnings >= contest.max_earnings_per_creator_cents) {
+if (totalEarnings >= contest.max_earnings_per_creator) {
   showWarning("You've reached the earning cap. You can submit but won't earn more.");
 }
 ```

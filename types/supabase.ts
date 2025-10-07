@@ -316,7 +316,7 @@ export interface Database {
           max_submissions_per_creator?: number
           content_type?: 'ugc' | 'clipping' | 'other' | null
           bonus_details?: Json | null
-          max_earnings_per_creator_cents?: number | null
+          max_earnings_per_creator?: number | null
         }
       }
       submissions: {
@@ -336,6 +336,11 @@ export interface Database {
           video_id: string | null
           video_title: string | null
           video_thumbnail_url: string | null
+          paid: boolean
+          paid_at: string | null
+          bonus_paid: boolean
+          bonus_paid_at: string | null
+          bonus_amount: number
         }
         Insert: {
           id?: string
@@ -353,6 +358,11 @@ export interface Database {
           video_id?: string | null
           video_title?: string | null
           video_thumbnail_url?: string | null
+          paid?: boolean
+          paid_at?: string | null
+          bonus_paid?: boolean
+          bonus_paid_at?: string | null
+          bonus_amount?: number
         }
         Update: {
           id?: string
@@ -370,6 +380,11 @@ export interface Database {
           video_id?: string | null
           video_title?: string | null
           video_thumbnail_url?: string | null
+          paid?: boolean
+          paid_at?: string | null
+          bonus_paid?: boolean
+          bonus_paid_at?: string | null
+          bonus_amount?: number
         }
       }
       money_transactions: {
@@ -580,6 +595,18 @@ export interface LeaderboardContestDetails {
   total_prize: number;
   winner_count: number;
   flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
+}
+
+// Bonus Payment tracking interface
+export interface BonusPayment {
+  submission_id: string;
+  creator_id: string;
+  contest_id: string;
+  bonus_amount: number; // in cents
+  paid: boolean;
+  paid_at?: string;
+  payment_proof_url?: string;
+  payment_remarks?: string;
 }
 
 // Bonus details structure (for bonus_details JSONB)
