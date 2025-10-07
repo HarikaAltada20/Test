@@ -202,7 +202,24 @@ export function ContestClientPage({
     null
   );
 
+  // User profile data for link processing
+  const [userProfile, setUserProfile] = useState<{ full_name: string } | null>(
+    null
+  );
+
   const { toast } = useToast();
+
+  // Utility function to extract firstName from full_name
+  const getFirstName = (fullName: string): string => {
+    if (!fullName) return "";
+    return fullName.trim().split(" ")[0];
+  };
+
+  // Utility function to replace [creator] placeholder with firstName
+  const processUrlWithCreator = (url: string, firstName: string): string => {
+    if (!url || !firstName) return url;
+    return url.replace(/\[creator\]/gi, firstName);
+  };
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -601,6 +618,34 @@ export function ContestClientPage({
     };
     // Added leaderboardItemsPerPage to dependencies as it affects dummy data pagination
   }, [contestId, user, router, supabase, leaderboardItemsPerPage]);
+
+  // Fetch user profile data for link processing
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user?.id) return;
+
+      try {
+        const { data: userData, error } = await supabase
+          .from("users")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching user profile:", error);
+          return;
+        }
+
+        if (userData) {
+          setUserProfile(userData);
+        }
+      } catch (error) {
+        console.error("Error in fetchUserProfile:", error);
+      }
+    };
+
+    fetchUserProfile();
+  }, [user?.id, supabase]);
 
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
@@ -1977,33 +2022,44 @@ export function ContestClientPage({
                             (
                               item: { url: string; description: string },
                               index: number
-                            ) => (
-                              <div
-                                key={index}
-                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
-                              >
-                                <div className="flex items-start gap-4">
-                                  <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
-                                    <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <a
-                                      href={item.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
-                                    >
-                                      {item.url}
-                                    </a>
-                                    {item.description && (
-                                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                        {item.description}
-                                      </p>
-                                    )}
+                            ) => {
+                              // Process URL to replace [creator] with firstName
+                              const firstName = userProfile
+                                ? getFirstName(userProfile.full_name)
+                                : "";
+                              const processedUrl = processUrlWithCreator(
+                                item.url,
+                                firstName
+                              );
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
+                                >
+                                  <div className="flex items-start gap-4">
+                                    <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
+                                      <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <a
+                                        href={processedUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
+                                      >
+                                        {processedUrl}
+                                      </a>
+                                      {item.description && (
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                          {item.description}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )
+                              );
+                            }
                           )}
                         </div>
                       </div>
@@ -2031,33 +2087,44 @@ export function ContestClientPage({
                             (
                               item: { url: string; description: string },
                               index: number
-                            ) => (
-                              <div
-                                key={index}
-                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
-                              >
-                                <div className="flex items-start gap-4">
-                                  <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
-                                    <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <a
-                                      href={item.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
-                                    >
-                                      {item.url}
-                                    </a>
-                                    {item.description && (
-                                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                        {item.description}
-                                      </p>
-                                    )}
+                            ) => {
+                              // Process URL to replace [creator] with firstName
+                              const firstName = userProfile
+                                ? getFirstName(userProfile.full_name)
+                                : "";
+                              const processedUrl = processUrlWithCreator(
+                                item.url,
+                                firstName
+                              );
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
+                                >
+                                  <div className="flex items-start gap-4">
+                                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
+                                      <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <a
+                                        href={processedUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
+                                      >
+                                        {processedUrl}
+                                      </a>
+                                      {item.description && (
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                          {item.description}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )
+                              );
+                            }
                           )}
                         </div>
                       </div>
