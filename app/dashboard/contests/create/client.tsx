@@ -1291,12 +1291,17 @@ export default function CreateContestPage({
           ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
           : undefined;
 
+        const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
+          ? Math.round(parseFloat(totalBudget.toString()) * 100)
+          : undefined;
+
         contestBasedDetails = {
           leaderboard_contest: {
             prizes: prizesArray,
             total_prize: totalPrizePool, // Already in cents
             winner_count: winnerCount,
             ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
+            ...(totalBudgetCents && { total_budget: totalBudgetCents }), // Only include if set
           },
         };
       } else if (contestType === "cpm") {
@@ -4062,6 +4067,41 @@ export default function CreateContestPage({
                   </Alert>
                 )}
               </div>
+
+              {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+              {contestType === "leaderboard" && flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
+                <div className="space-y-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">💰</span>
+                    <Label htmlFor="totalBudget" className="text-base font-semibold">
+                      Total Budget for Bonuses (Optional)
+                    </Label>
+                  </div>
+                  <Input
+                    id="totalBudget"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={totalBudget}
+                    onChange={(e) => setTotalBudget(e.target.value)}
+                    placeholder="e.g., 500 for $500 total budget"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Optional: Set a budget limit for flat fee bonuses and future features. Leave empty for no limit.
+                    <br />
+                    <strong>Prize Pool:</strong> {formatCurrencyFromCents(totalPrizePool)} (for rankings)
+                    <br />
+                    <strong>Total Budget:</strong> {totalBudget ? `$${parseFloat(totalBudget.toString()).toFixed(2)}` : 'No limit'} (for bonuses & extras)
+                  </p>
+                  {totalBudget && parseFloat(totalBudget.toString()) > 0 && (
+                    <Alert className="bg-blue-100 border-blue-300">
+                      <AlertDescription className="text-blue-800">
+                        ✓ Budget set to <strong>${parseFloat(totalBudget.toString()).toFixed(2)}</strong> for bonuses and extras!
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
 
               {/* Max Earnings Per Creator */}
               {multipleSubmissionsEnabled && (

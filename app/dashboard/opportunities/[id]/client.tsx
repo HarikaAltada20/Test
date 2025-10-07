@@ -305,44 +305,27 @@ export function ContestClientPage({
 
   let isMounted = true; // Flag to track component mount status
 
-  // Helper function to render verification badge
-  const renderVerificationBadge = (status: string) => {
+  // Helper function to render verification badges
+  const renderVerificationBadges = (status: string) => {
     if (contestType !== "cpm") return null; // Only show for CPM contests
 
-    switch (status) {
-      case "verified":
-        return (
-          <Badge
-            variant="default"
-            className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs font-medium"
-          >
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Verified
-          </Badge>
-        );
-      case "pending":
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800 text-xs font-medium"
-          >
-            <Info className="h-3 w-3 mr-1" />
-            Pending
-          </Badge>
-        );
-      case "rejected":
-        return (
-          <Badge
-            variant="destructive"
-            className="bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 text-xs font-medium"
-          >
-            <ExternalLink className="h-3 w-3 mr-1" />
-            Rejected
-          </Badge>
-        );
-      default:
-        return null;
+    // Only show badge for pending status - warns viewers content is not verified
+    // This prevents false inspiration from unverified content
+    if (status === "pending") {
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800 text-xs font-medium"
+        >
+          <Info className="h-3 w-3 mr-1" />
+          Pending
+        </Badge>
+      );
     }
+
+    // No badges for verified/paid - content is credible
+    // Amount presence clearly indicates paid status
+    return null;
   };
 
   const renderPostContestStatusBadge = (status: string | null) => {
@@ -1770,9 +1753,26 @@ export function ContestClientPage({
                             {formatMoney(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                               contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus || 0)} per verified submission
                           </p>
-                          <p className="text-sm text-green-700">
+                          <p className="text-sm text-green-700 mb-3">
                             🎁 Earn this guaranteed amount for EVERY verified submission, regardless of views or ranking! Paid after the contest ends along with other earnings.
                           </p>
+
+                          {/* Show Total Bonus Budget for leaderboard contests */}
+                          {contest.contest_type === 'leaderboard' &&
+                            contest.contest_based_details?.leaderboard_contest?.total_budget && (
+                              <div className="mt-3 p-3 bg-white rounded-lg border border-green-200">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-lg">💰</span>
+                                  <span className="font-semibold text-green-900">Total Bonus Budget</span>
+                                </div>
+                                <p className="text-xl font-bold text-green-900 mb-1">
+                                  {formatMoney(contest.contest_based_details.leaderboard_contest.total_budget)}
+                                </p>
+                                <p className="text-xs text-green-700">
+                                  This is the total budget allocated for flat fee bonuses. Once this budget is reached, no more bonus payments will be made for this contest.
+                                </p>
+                              </div>
+                            )}
                         </div>
                       </div>
                     </>
@@ -2103,7 +2103,7 @@ export function ContestClientPage({
                           >
                             {myLeaderboardEntry.user_platform_username} (You)
                           </p>
-                          {renderVerificationBadge(myLeaderboardEntry.status)}
+                          {renderVerificationBadges(myLeaderboardEntry.status)}
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
                           Submitted:{" "}
@@ -2188,7 +2188,7 @@ export function ContestClientPage({
                   </Card>
                 )}
 
-                {/* Main Leaderboard List */}
+                {/* Leaderboard Header */}
                 <div className="flex items-center justify-between mb-4">
                   <div className="text-md text-black">
                     Last updated:{" "}
@@ -2197,12 +2197,6 @@ export function ContestClientPage({
                       : lastUpdated
                         ? formatTimeAgo(lastUpdated)
                         : "Never"}
-                    {totalLeaderboardEntries > 0 && (
-                      <span className="ml-2">
-                        | Total Submissions:{" "}
-                        {totalLeaderboardEntries.toLocaleString()}
-                      </span>
-                    )}
                   </div>
 
                   {/* Refresh Metrics Button - Only show for active contests with submissions and not finalized */}
@@ -2219,7 +2213,7 @@ export function ContestClientPage({
                           size="sm"
                           onClick={handleRefreshMetrics}
                           disabled={isRefreshingMetrics || !cooldownInfo.canRefresh}
-                          className="ml-2 py-2 rounded-lg text-md bg-[#4A00BE] text-white"
+                          className="py-2 rounded-lg text-md bg-[#4A00BE] text-white"
                           title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
                         >
                           <RefreshCw className={`h-4 w-4 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
@@ -2232,6 +2226,43 @@ export function ContestClientPage({
                         </Button>
                       );
                     })()}
+                </div>
+
+                {/* Submission Stats and Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
+                      <Info className="w-3 h-3 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-900">
+                        Leaderboard Display
+                      </p>
+                      <div className="text-xs text-blue-700 mt-1 space-y-1">
+                        <p>Only non-rejected submissions are shown in the leaderboard.</p>
+                        {contest?.live_submission_count !== null && contest?.live_submission_count !== undefined && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="font-medium">Submissions:</span>
+                            <span className="text-green-700 font-semibold">
+                              {totalLeaderboardEntries} active
+                            </span>
+                            {contest.live_submission_count !== totalLeaderboardEntries && (
+                              <>
+                                <span className="text-blue-600">•</span>
+                                <span className="text-red-700 font-semibold">
+                                  {contest.live_submission_count - totalLeaderboardEntries} rejected
+                                </span>
+                                <span className="text-blue-600">•</span>
+                                <span className="text-blue-700">
+                                  {contest.live_submission_count} total
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 {leaderboard.map((entry, index) => {
                   const rank =
@@ -2318,7 +2349,7 @@ export function ContestClientPage({
                               <p className="text-sm sm:text-base font-semibold truncate text-slate-800 dark:text-slate-100">
                                 {entry.user_platform_username}
                               </p>
-                              {renderVerificationBadge(entry.status)}
+                              {renderVerificationBadges(entry.status)}
                             </div>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
                               Submitted: {formatTimeAgo(entry.created_at)}
