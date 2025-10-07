@@ -253,8 +253,10 @@ export default function ContestDetailClient({
   >("views_desc");
 
   // Creator-wise view state
-  const [viewMode, setViewMode] = useState<'normal' | 'creator-wise'>('normal');
-  const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"normal" | "creator-wise">("normal");
+  const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<
+    string | null
+  >(null);
   const [customizableHeaders, setCustomizableHeaders] = useState({
     averageViews: false,
     averageLikes: false,
@@ -291,7 +293,7 @@ export default function ContestDetailClient({
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
-    if (!filteredSubmissions || viewMode !== 'creator-wise') return null;
+    if (!filteredSubmissions || viewMode !== "creator-wise") return null;
 
     const grouped = filteredSubmissions.reduce((acc: any, submission: any) => {
       const creatorId = submission.creator_id;
@@ -300,8 +302,9 @@ export default function ContestDetailClient({
         acc[creatorId] = {
           creator: {
             id: creatorId,
-            username: submission.creator?.username || 'Unknown',
-            profile_picture_url: submission.creator?.profile_picture_url || null,
+            username: submission.creator?.username || "Unknown",
+            profile_picture_url:
+              submission.creator?.profile_picture_url || null,
             full_name: submission.creator?.full_name || null,
           },
           submissions: [],
@@ -312,7 +315,7 @@ export default function ContestDetailClient({
             paid: 0,
             pending: 0,
             rejected: 0,
-            verified_paid: 0
+            verified_paid: 0,
           },
           metrics: {
             views: 0,
@@ -321,7 +324,7 @@ export default function ContestDetailClient({
             shares: 0,
             saves: 0,
             reach: 0,
-            interactions: 0
+            interactions: 0,
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
@@ -336,46 +339,61 @@ export default function ContestDetailClient({
       group.totalCount++;
 
       // Update status counts
-      const status = submission.status?.toLowerCase() || 'pending';
+      const status = submission.status?.toLowerCase() || "pending";
       group.statusCounts.all++;
-      if (status === 'verified') {
+      if (status === "verified") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
       }
       if (submission.paid) group.statusCounts.paid++;
-      if (status === 'pending') group.statusCounts.pending++;
-      if (status === 'rejected') group.statusCounts.rejected++;
+      if (status === "pending") group.statusCounts.pending++;
+      if (status === "rejected") group.statusCounts.rejected++;
 
       // Aggregate metrics
       group.metrics.views += submission.views || 0;
-      group.metrics.likes += submission.other_stats?.youtube?.likes || submission.other_stats?.instagram?.likes || 0;
-      group.metrics.comments += submission.other_stats?.youtube?.comments || submission.other_stats?.instagram?.comments || 0;
+      group.metrics.likes +=
+        submission.other_stats?.youtube?.likes ||
+        submission.other_stats?.instagram?.likes ||
+        0;
+      group.metrics.comments +=
+        submission.other_stats?.youtube?.comments ||
+        submission.other_stats?.instagram?.comments ||
+        0;
       group.metrics.shares += submission.other_stats?.instagram?.shares || 0;
       group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
       group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
-      group.metrics.interactions += submission.other_stats?.instagram?.interactions || 0;
+      group.metrics.interactions +=
+        submission.other_stats?.instagram?.interactions || 0;
 
       // Calculate earnings and bonus
       let expectedEarnings = submission.earnings || 0;
 
       // If earnings not stored, calculate dynamically for CPM contests
-      if (!expectedEarnings && currentContest?.contest_type === 'cpm') {
-        const cpmConfig = (currentContest?.contest_based_details as any)?.cpm_contest;
+      if (!expectedEarnings && currentContest?.contest_type === "cpm") {
+        const cpmConfig = (currentContest?.contest_based_details as any)
+          ?.cpm_contest;
         if (cpmConfig?.cpm_rate_usd) {
           let effectiveViews = submission.views || 0;
 
           // Apply min_views threshold
-          if (cpmConfig.min_views != null && effectiveViews < cpmConfig.min_views) {
+          if (
+            cpmConfig.min_views != null &&
+            effectiveViews < cpmConfig.min_views
+          ) {
             effectiveViews = 0;
           }
 
           // Apply max_views cap
-          if (cpmConfig.max_views != null && effectiveViews > cpmConfig.max_views) {
+          if (
+            cpmConfig.max_views != null &&
+            effectiveViews > cpmConfig.max_views
+          ) {
             effectiveViews = cpmConfig.max_views;
           }
 
           // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-          const calculatedEarnings = (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
+          const calculatedEarnings =
+            (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
           expectedEarnings = Math.round(calculatedEarnings);
         }
       }
@@ -384,18 +402,21 @@ export default function ContestDetailClient({
 
       // For granted earnings, use ACTUAL earnings from database (which respects cap)
       if (submission.paid) {
-        group.earnings.granted += (submission.earnings || 0);
+        group.earnings.granted += submission.earnings || 0;
       }
 
       // Track uncapped earnings for display purposes
       group.earningsBeforeCap += expectedEarnings;
 
       // Get flat_fee_bonus from the correct nested location
-      const flatFeeBonus = currentContest?.contest_type === 'cpm'
-        ? (currentContest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0
-        : (currentContest?.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+      const flatFeeBonus =
+        currentContest?.contest_type === "cpm"
+          ? (currentContest?.contest_based_details as any)?.cpm_contest
+              ?.flat_fee_bonus || 0
+          : (currentContest?.contest_based_details as any)?.leaderboard_contest
+              ?.flat_fee_bonus || 0;
 
-      if (flatFeeBonus > 0 && (status === 'verified' || status === 'paid')) {
+      if (flatFeeBonus > 0 && (status === "verified" || status === "paid")) {
         group.bonus.expected += flatFeeBonus;
       }
       if (submission.bonus_paid) {
@@ -1496,15 +1517,19 @@ export default function ContestDetailClient({
           {/* Budget Progress Tracker - Two-Color Visualization */}
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null &&
-            currentContest.contest_based_details.cpm_contest.total_budget > 0 && (
+              null &&
+            currentContest.contest_based_details.cpm_contest.total_budget >
+              0 && (
               <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6">
                 <BudgetProgress
                   contest={{
-                    prize_pool_cents: currentContest.contest_based_details.cpm_contest.total_budget,
+                    prize_pool_cents:
+                      currentContest.contest_based_details.cpm_contest
+                        .total_budget,
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type,
-                    max_earnings_per_creator: currentContest.max_earnings_per_creator,
+                    max_earnings_per_creator:
+                      currentContest.max_earnings_per_creator,
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
@@ -2326,10 +2351,15 @@ export default function ContestDetailClient({
                 {Array.isArray(currentContest.tracking_links) &&
                   currentContest.tracking_links.length > 0 && (
                     <div className="space-y-6">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                      <div className="flex flex-col gap-3">
+                        <h3 className="px-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
                           Tracking Links
                         </h3>
+                        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
+                        <span className="font-medium">Note:</span> Copy the link
+                        and change the submission number (for example, from sub1
+                        to sub2 or sub3) to access other links.
+                      </div>
                       </div>
 
                       <div className="grid gap-4">
@@ -2365,6 +2395,7 @@ export default function ContestDetailClient({
                           </div>
                         ))}
                       </div>
+                      
                     </div>
                   )}
 
@@ -2741,14 +2772,20 @@ export default function ContestDetailClient({
                           <span className="text-slate-600">View</span>
                           <Select
                             value={viewMode}
-                            onValueChange={(v) => setViewMode(v as 'normal' | 'creator-wise')}
+                            onValueChange={(v) =>
+                              setViewMode(v as "normal" | "creator-wise")
+                            }
                           >
                             <SelectTrigger className="h-12 w-[180px]">
                               <SelectValue placeholder="View mode" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="normal">Normal View</SelectItem>
-                              <SelectItem value="creator-wise">Creator-wise</SelectItem>
+                              <SelectItem value="normal">
+                                Normal View
+                              </SelectItem>
+                              <SelectItem value="creator-wise">
+                                Creator-wise
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -2781,14 +2818,18 @@ export default function ContestDetailClient({
                       </div>
 
                       {/* Normal View Table */}
-                      {viewMode === 'normal' && (
+                      {viewMode === "normal" && (
                         <Table>
                           <TableHeader>
                             <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
                               <TableHead className="w-12">#</TableHead>
                               <TableHead>Creator</TableHead>
-                              <TableHead className="text-center">Views</TableHead>
-                              <TableHead className="text-center">Likes</TableHead>
+                              <TableHead className="text-center">
+                                Views
+                              </TableHead>
+                              <TableHead className="text-center">
+                                Likes
+                              </TableHead>
                               <TableHead className="text-center">
                                 Comments
                               </TableHead>
@@ -2796,22 +2837,22 @@ export default function ContestDetailClient({
                               {currentContest.platform
                                 ?.toLowerCase()
                                 .includes("instagram") && (
-                                  <>
-                                    <TableHead className="text-center">
-                                      Shares
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Saves
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Reach
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Interactions
-                                    </TableHead>
-                                    {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
-                                  </>
-                                )}
+                                <>
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Saves
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Reach
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Interactions
+                                  </TableHead>
+                                  {/* <TableHead className="text-center">Engagement Rate</TableHead> */}
+                                </>
+                              )}
                               <TableHead className="text-center">
                                 Expected Reward
                               </TableHead>
@@ -2861,9 +2902,8 @@ export default function ContestDetailClient({
                               .map((submission, index) => {
                                 const metrics =
                                   extractPlatformMetrics(submission);
-                                const submissionStatus = getSubmissionStatusBadge(
-                                  submission.status
-                                );
+                                const submissionStatus =
+                                  getSubmissionStatusBadge(submission.status);
                                 const isLoading =
                                   isLoadingSubmission[submission.id] || false;
                                 const rank = index + 1;
@@ -2871,7 +2911,8 @@ export default function ContestDetailClient({
                                 // Compute expected and granted rewards separately
                                 const getExpectedReward = () => {
                                   if (
-                                    currentContest.contest_type === "leaderboard"
+                                    currentContest.contest_type ===
+                                    "leaderboard"
                                   ) {
                                     const contestDetails =
                                       currentContest.contest_based_details
@@ -2934,7 +2975,8 @@ export default function ContestDetailClient({
                                       return {
                                         amount: calculatedEarnings,
                                         label: "Expected",
-                                        className: "text-slate-700 font-semibold",
+                                        className:
+                                          "text-slate-700 font-semibold",
                                       };
                                     }
                                     return {
@@ -2974,7 +3016,9 @@ export default function ContestDetailClient({
                                     submission.earnings > 0
                                   ) {
                                     return {
-                                      amount: centsToDollars(submission.earnings),
+                                      amount: centsToDollars(
+                                        submission.earnings
+                                      ),
                                       label: "Pending",
                                       className: "text-amber-600 font-semibold",
                                     };
@@ -2995,7 +3039,7 @@ export default function ContestDetailClient({
                                     className={cn(
                                       "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200",
                                       rank <= 3 &&
-                                      "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
+                                        "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
                                     )}
                                   >
                                     <TableCell className="font-bold text-center">
@@ -3007,8 +3051,8 @@ export default function ContestDetailClient({
                                               rank === 1
                                                 ? "text-yellow-500"
                                                 : rank === 2
-                                                  ? "text-gray-400"
-                                                  : "text-amber-600"
+                                                ? "text-gray-400"
+                                                : "text-amber-600"
                                             )}
                                           />
                                         )}
@@ -3089,7 +3133,9 @@ export default function ContestDetailClient({
                                         <div className="flex items-center gap-1">
                                           <MessageCircle className="h-3 w-3 text-green-500" />
                                           <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                                            {formatMetricValue(metrics.comments)}
+                                            {formatMetricValue(
+                                              metrics.comments
+                                            )}
                                           </span>
                                         </div>
                                         <span className="text-xs text-slate-500">
@@ -3101,33 +3147,33 @@ export default function ContestDetailClient({
                                     {currentContest.platform
                                       ?.toLowerCase()
                                       .includes("instagram") && (
-                                        <>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            <div className="flex items-center justify-center gap-1">
-                                              <Share2 className="h-3 w-3 text-purple-500" />
-                                              {formatMetricValue(metrics.shares)}
-                                            </div>
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).saves
-                                            )}
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).reach
-                                            )}
-                                          </TableCell>
-                                          <TableCell className="text-center font-mono text-sm">
-                                            {formatMetricValue(
-                                              (metrics as any).total_interactions
-                                            )}
-                                          </TableCell>
-                                          {/* <TableCell className="text-center font-mono text-sm">
+                                      <>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          <div className="flex items-center justify-center gap-1">
+                                            <Share2 className="h-3 w-3 text-purple-500" />
+                                            {formatMetricValue(metrics.shares)}
+                                          </div>
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {formatMetricValue(
+                                            (metrics as any).saves
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {formatMetricValue(
+                                            (metrics as any).reach
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-center font-mono text-sm">
+                                          {formatMetricValue(
+                                            (metrics as any).total_interactions
+                                          )}
+                                        </TableCell>
+                                        {/* <TableCell className="text-center font-mono text-sm">
                                                                             {formatMetricValue(metrics.engagement_rate, true)}
                                                                         </TableCell> */}
-                                        </>
-                                      )}
+                                      </>
+                                    )}
                                     <TableCell className="text-center">
                                       <div className="flex flex-col items-center">
                                         <div className="flex flex-col items-center">
@@ -3229,16 +3275,16 @@ export default function ContestDetailClient({
                                         >
                                           {currentContest.post_contest_status !==
                                             "payouts_processed" && (
-                                              <>
-                                                <DropdownMenuLabel className="text-purple-500">
-                                                  Change Status
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                              </>
-                                            )}
+                                            <>
+                                              <DropdownMenuLabel className="text-purple-500">
+                                                Change Status
+                                              </DropdownMenuLabel>
+                                              <DropdownMenuSeparator />
+                                            </>
+                                          )}
                                           {submission.status !== "verified" &&
                                             currentContest.post_contest_status !==
-                                            "payouts_processed" &&
+                                              "payouts_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -3266,7 +3312,7 @@ export default function ContestDetailClient({
                                             ))}
                                           {submission.status !== "rejected" &&
                                             currentContest.post_contest_status !==
-                                            "payouts_processed" &&
+                                              "payouts_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -3296,7 +3342,7 @@ export default function ContestDetailClient({
                                             ))}
                                           {submission.status !== "pending" &&
                                             currentContest.post_contest_status !==
-                                            "payouts_processed" &&
+                                              "payouts_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -3327,9 +3373,9 @@ export default function ContestDetailClient({
                                             (currentContest.post_contest_status ===
                                               "in_review" ||
                                               currentContest.post_contest_status ===
-                                              "verification_complete" ||
+                                                "verification_complete" ||
                                               currentContest.post_contest_status ===
-                                              "payouts_processed") && (
+                                                "payouts_processed") && (
                                               <>
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
@@ -3356,8 +3402,8 @@ export default function ContestDetailClient({
                                             )}
                                           {currentContest.post_contest_status !==
                                             "payouts_processed" && (
-                                              <DropdownMenuSeparator />
-                                            )}
+                                            <DropdownMenuSeparator />
+                                          )}
                                           <DropdownMenuItem asChild>
                                             <a
                                               href={submission.content_link}
@@ -3380,116 +3426,209 @@ export default function ContestDetailClient({
                       )}
 
                       {/* Creator-wise View Table */}
-                      {viewMode === 'creator-wise' && groupSubmissionsByCreator && (
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
-                              <TableHead className="w-12">#</TableHead>
-                              <TableHead>Creator</TableHead>
-                              <TableHead className="text-center">Total Submissions</TableHead>
-                              <TableHead className="text-center">Status</TableHead>
-                              <TableHead className="text-center">Views</TableHead>
-                              <TableHead className="text-center">Likes</TableHead>
-                              <TableHead className="text-center">Comments</TableHead>
-                              <TableHead className="text-center">Expected Reward</TableHead>
-                              <TableHead className="text-center">Reward Granted</TableHead>
-                              {(() => {
-                                const flatFeeBonus = currentContest.contest_type === 'cpm'
-                                  ? (currentContest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus
-                                  : (currentContest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus;
-                                return flatFeeBonus > 0;
-                              })() && (
+                      {viewMode === "creator-wise" &&
+                        groupSubmissionsByCreator && (
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
+                                <TableHead className="w-12">#</TableHead>
+                                <TableHead>Creator</TableHead>
+                                <TableHead className="text-center">
+                                  Total Submissions
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Status
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Views
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Likes
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Comments
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Expected Reward
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Reward Granted
+                                </TableHead>
+                                {(() => {
+                                  const flatFeeBonus =
+                                    currentContest.contest_type === "cpm"
+                                      ? (
+                                          currentContest.contest_based_details as any
+                                        )?.cpm_contest?.flat_fee_bonus
+                                      : (
+                                          currentContest.contest_based_details as any
+                                        )?.leaderboard_contest?.flat_fee_bonus;
+                                  return flatFeeBonus > 0;
+                                })() && (
                                   <>
-                                    <TableHead className="text-center">Bonus Expected</TableHead>
-                                    <TableHead className="text-center">Bonus Granted</TableHead>
+                                    <TableHead className="text-center">
+                                      Bonus Expected
+                                    </TableHead>
+                                    <TableHead className="text-center">
+                                      Bonus Granted
+                                    </TableHead>
                                   </>
                                 )}
-                              <TableHead className="text-center">First Submitted</TableHead>
-                              <TableHead className="text-center">Actions</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {(groupSubmissionsByCreator as any[]).length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={12} className="text-center py-8 text-gray-500">
-                                  No creators found for the selected status filter.
-                                </TableCell>
+                                <TableHead className="text-center">
+                                  First Submitted
+                                </TableHead>
+                                <TableHead className="text-center">
+                                  Actions
+                                </TableHead>
                               </TableRow>
-                            ) : (
-                              (groupSubmissionsByCreator as any[]).map((group: any, index: number) => (
-                                <TableRow key={group.creator.id}>
-                                  <TableCell className="font-medium">{index + 1}</TableCell>
-                                  <TableCell>
-                                    <div className="flex items-center gap-2">
-                                      <Avatar className="h-8 w-8">
-                                        <AvatarImage src={group.creator.profile_picture_url || undefined} />
-                                        <AvatarFallback>{group.creator.username?.[0]?.toUpperCase() || 'U'}</AvatarFallback>
-                                      </Avatar>
-                                      <span className="font-medium">{group.creator.username}</span>
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-center font-semibold">{group.totalCount}</TableCell>
-                                  <TableCell>
-                                    <div className="flex flex-wrap gap-1 justify-center">
-                                      <Badge variant="outline" className="text-xs">All: {group.statusCounts.all}</Badge>
-                                      {group.statusCounts.verified > 0 && (
-                                        <Badge className="bg-green-500 text-white text-xs">V: {group.statusCounts.verified}</Badge>
-                                      )}
-                                      {group.statusCounts.paid > 0 && (
-                                        <Badge className="bg-blue-500 text-white text-xs">P: {group.statusCounts.paid}</Badge>
-                                      )}
-                                      {group.statusCounts.pending > 0 && (
-                                        <Badge className="bg-yellow-500 text-white text-xs">Pend: {group.statusCounts.pending}</Badge>
-                                      )}
-                                      {group.statusCounts.rejected > 0 && (
-                                        <Badge className="bg-red-500 text-white text-xs">R: {group.statusCounts.rejected}</Badge>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-center">{group.metrics.views.toLocaleString()}</TableCell>
-                                  <TableCell className="text-center">{group.metrics.likes.toLocaleString()}</TableCell>
-                                  <TableCell className="text-center">{group.metrics.comments.toLocaleString()}</TableCell>
-                                  <TableCell className="text-center font-medium">
-                                    <div className="flex items-center justify-center gap-1">
-                                      {formatMoney(group.earnings.expected)}
-                                      {group.isCapped && (
-                                        <span
-                                          className="text-amber-600 cursor-help"
-                                          title={`Capped at ${formatMoney(currentContest.max_earnings_per_creator)}. Original: ${formatMoney(group.earningsBeforeCap)}`}
-                                        >
-                                          ⚠️
-                                        </span>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="text-center font-medium text-green-600">{formatMoney(group.earnings.granted)}</TableCell>
-                                  {(() => {
-                                    const flatFeeBonus = currentContest.contest_type === 'cpm'
-                                      ? (currentContest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus
-                                      : (currentContest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus;
-                                    return flatFeeBonus > 0;
-                                  })() && (
-                                      <>
-                                        <TableCell className="text-center font-medium">{formatMoney(group.bonus.expected)}</TableCell>
-                                        <TableCell className="text-center font-medium text-green-600">{formatMoney(group.bonus.granted)}</TableCell>
-                                      </>
-                                    )}
-                                  <TableCell className="text-center text-sm">{formatLocalDateTime(group.firstSubmittedAt)}</TableCell>
-                                  <TableCell className="text-center">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => setSelectedCreatorForModal(group.creator.id)}
-                                    >
-                                      View All ({group.totalCount})
-                                    </Button>
+                            </TableHeader>
+                            <TableBody>
+                              {(groupSubmissionsByCreator as any[]).length ===
+                              0 ? (
+                                <TableRow>
+                                  <TableCell
+                                    colSpan={12}
+                                    className="text-center py-8 text-gray-500"
+                                  >
+                                    No creators found for the selected status
+                                    filter.
                                   </TableCell>
                                 </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      )}
+                              ) : (
+                                (groupSubmissionsByCreator as any[]).map(
+                                  (group: any, index: number) => (
+                                    <TableRow key={group.creator.id}>
+                                      <TableCell className="font-medium">
+                                        {index + 1}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex items-center gap-2">
+                                          <Avatar className="h-8 w-8">
+                                            <AvatarImage
+                                              src={
+                                                group.creator
+                                                  .profile_picture_url ||
+                                                undefined
+                                              }
+                                            />
+                                            <AvatarFallback>
+                                              {group.creator.username?.[0]?.toUpperCase() ||
+                                                "U"}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <span className="font-medium">
+                                            {group.creator.username}
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-semibold">
+                                        {group.totalCount}
+                                      </TableCell>
+                                      <TableCell>
+                                        <div className="flex flex-wrap gap-1 justify-center">
+                                          <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                          >
+                                            All: {group.statusCounts.all}
+                                          </Badge>
+                                          {group.statusCounts.verified > 0 && (
+                                            <Badge className="bg-green-500 text-white text-xs">
+                                              V: {group.statusCounts.verified}
+                                            </Badge>
+                                          )}
+                                          {group.statusCounts.paid > 0 && (
+                                            <Badge className="bg-blue-500 text-white text-xs">
+                                              P: {group.statusCounts.paid}
+                                            </Badge>
+                                          )}
+                                          {group.statusCounts.pending > 0 && (
+                                            <Badge className="bg-yellow-500 text-white text-xs">
+                                              Pend: {group.statusCounts.pending}
+                                            </Badge>
+                                          )}
+                                          {group.statusCounts.rejected > 0 && (
+                                            <Badge className="bg-red-500 text-white text-xs">
+                                              R: {group.statusCounts.rejected}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        {group.metrics.views.toLocaleString()}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        {group.metrics.likes.toLocaleString()}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        {group.metrics.comments.toLocaleString()}
+                                      </TableCell>
+                                      <TableCell className="text-center font-medium">
+                                        <div className="flex items-center justify-center gap-1">
+                                          {formatMoney(group.earnings.expected)}
+                                          {group.isCapped && (
+                                            <span
+                                              className="text-amber-600 cursor-help"
+                                              title={`Capped at ${formatMoney(
+                                                currentContest.max_earnings_per_creator
+                                              )}. Original: ${formatMoney(
+                                                group.earningsBeforeCap
+                                              )}`}
+                                            >
+                                              ⚠️
+                                            </span>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-medium text-green-600">
+                                        {formatMoney(group.earnings.granted)}
+                                      </TableCell>
+                                      {(() => {
+                                        const flatFeeBonus =
+                                          currentContest.contest_type === "cpm"
+                                            ? (
+                                                currentContest.contest_based_details as any
+                                              )?.cpm_contest?.flat_fee_bonus
+                                            : (
+                                                currentContest.contest_based_details as any
+                                              )?.leaderboard_contest
+                                                ?.flat_fee_bonus;
+                                        return flatFeeBonus > 0;
+                                      })() && (
+                                        <>
+                                          <TableCell className="text-center font-medium">
+                                            {formatMoney(group.bonus.expected)}
+                                          </TableCell>
+                                          <TableCell className="text-center font-medium text-green-600">
+                                            {formatMoney(group.bonus.granted)}
+                                          </TableCell>
+                                        </>
+                                      )}
+                                      <TableCell className="text-center text-sm">
+                                        {formatLocalDateTime(
+                                          group.firstSubmittedAt
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() =>
+                                            setSelectedCreatorForModal(
+                                              group.creator.id
+                                            )
+                                          }
+                                        >
+                                          View All ({group.totalCount})
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  )
+                                )
+                              )}
+                            </TableBody>
+                          </Table>
+                        )}
                     </div>
                   </CardContent>
                 </div>
@@ -4184,13 +4323,21 @@ export default function ContestDetailClient({
         <CreatorSubmissionsModal
           isOpen={!!selectedCreatorForModal}
           onClose={() => setSelectedCreatorForModal(null)}
-          creator={(groupSubmissionsByCreator as any[]).find((g: any) => g.creator.id === selectedCreatorForModal)?.creator || {}}
-          submissions={(groupSubmissionsByCreator as any[]).find((g: any) => g.creator.id === selectedCreatorForModal)?.submissions || []}
+          creator={
+            (groupSubmissionsByCreator as any[]).find(
+              (g: any) => g.creator.id === selectedCreatorForModal
+            )?.creator || {}
+          }
+          submissions={
+            (groupSubmissionsByCreator as any[]).find(
+              (g: any) => g.creator.id === selectedCreatorForModal
+            )?.submissions || []
+          }
           contest={currentContest}
           onVerify={async (ids: string[]) => {
             // Handle bulk verify
             for (const id of ids) {
-              await handleUpdateSubmissionStatus(id, 'verified');
+              await handleUpdateSubmissionStatus(id, "verified");
             }
             setSelectedCreatorForModal(null);
           }}
@@ -4204,13 +4351,21 @@ export default function ContestDetailClient({
           onSetPending={async (ids: string[]) => {
             // Handle bulk pending
             for (const id of ids) {
-              await handleUpdateSubmissionStatus(id, 'pending');
+              await handleUpdateSubmissionStatus(id, "pending");
             }
             setSelectedCreatorForModal(null);
           }}
-          onPayment={async (submissionId: string, type: 'standard' | 'bonus' | 'both') => {
+          onPayment={async (
+            submissionId: string,
+            type: "standard" | "bonus" | "both"
+          ) => {
             // Handle payment based on type
-            const action = type === 'bonus' ? 'mark_bonus_paid' : type === 'both' ? 'mark_both_paid' : 'paid';
+            const action =
+              type === "bonus"
+                ? "mark_bonus_paid"
+                : type === "both"
+                ? "mark_both_paid"
+                : "paid";
             await handleUpdateSubmissionStatus(submissionId, action as any);
           }}
           onCustomPayment={(submissionId: string) => {

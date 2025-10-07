@@ -2723,6 +2723,13 @@ export default function CreateContestPage({
       setInspirationLinks([]);
     }
 
+    // Set tracking links if available
+    if (Array.isArray(draft.tracking_links)) {
+      setTrackingLinks(draft.tracking_links);
+    } else {
+      setTrackingLinks([]);
+    }
+
     // Set winner count and amounts if available
     if (draft.winner_count) {
       setWinnerCount(draft.winner_count);
