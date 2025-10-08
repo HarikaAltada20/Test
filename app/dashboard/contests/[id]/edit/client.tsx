@@ -69,7 +69,6 @@ import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
-import { canCreateNewContest } from "@/lib/contest-utils-client";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 // Dynamically import the Novel editor
@@ -2773,11 +2772,23 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     }
     // 3. Active contest limit (only if submitting for approval, not draft)
     try {
-      const activeCheck = await canCreateNewContest(
-        userId,
-        planFeatures.maxActiveContests,
-        contestId
-      );
+      const response = await fetch("/api/contests/validate-limit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          maxActiveContests: planFeatures.maxActiveContests,
+          contestId: contestId, // Exclude current contest from count
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to validate contest limit");
+      }
+
+      const activeCheck = await response.json();
+
       if (!activeCheck.canCreate) {
         setIsSubmitting(false);
         return {
@@ -3394,61 +3405,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
         ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
         : null;
-    }
-
-    // Validate active contest limits when submitting for approval
-    if (moderationStatus === "pending_approval") {
-      try {
-        // Import getActiveContestCount for custom validation
-        const { getActiveContestCount } = await import(
-          "@/lib/contest-utils-client"
-        );
-        const countResult = await getActiveContestCount(user.id, contestId);
-
-        if (!countResult.success) {
-          toast({
-            title: "Contest Limit Check Failed",
-            description:
-              countResult.error ||
-              "Unable to validate contest limits. Please try again.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        // Check if current contest would be considered "new" active contest
-        // If it's currently draft or rejected, then changing to pending_approval adds +1 to active count
-        let effectiveActiveCount = countResult.activeCount;
-        if (
-          contest.moderation_status === "draft" ||
-          contest.moderation_status === "rejected"
-        ) {
-          effectiveActiveCount += 1; // This contest will become active
-        }
-
-        if (effectiveActiveCount > planFeatures.maxActiveContests) {
-          toast({
-            title: "Active Contest Limit Exceeded",
-            description: `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. You currently have ${countResult.activeCount} active contests. Please upgrade your plan or wait for existing contests to end.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-      } catch (error: any) {
-        console.error("Error checking active contest limit:", error);
-        toast({
-          title: "Contest Limit Check Failed",
-          description: "Unable to validate contest limits. Please try again.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
     }
 
     try {
