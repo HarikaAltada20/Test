@@ -239,11 +239,14 @@ export default function EditContestPage({
       setTrackingError("URL cannot be empty.");
       return;
     }
-    const processedUrl = url.includes("[creator]")
-      ? url.replace(/\[creator\]/gi, encodeURIComponent(currentUserFirstName))
+    // Store the URL with [creator] placeholder intact for dynamic replacement
+    const processedUrl = url;
+    // Validate URL format - create a test URL with placeholder replaced for validation
+    const testUrl = url.includes("[creator]")
+      ? url.replace(/\[creator\]/gi, "testcreator")
       : url;
     try {
-      const urlObj = new URL(processedUrl);
+      const urlObj = new URL(testUrl);
       if (urlObj.protocol !== "https:") {
         setTrackingError("URL must start with https://");
         return;
@@ -5021,12 +5024,24 @@ export default function EditContestPage({
                           </div>
                           <div className="flex-1">
                             <a
-                              href={item.url}
+                              href={
+                                item.url.includes("[creator]")
+                                  ? item.url.replace(
+                                      /\[creator\]/gi,
+                                      encodeURIComponent(currentUserFirstName)
+                                    )
+                                  : item.url
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="font-medium text-blue-600 hover:underline break-all"
                             >
-                              {item.url}
+                              {item.url.includes("[creator]")
+                                ? item.url.replace(
+                                    /\[creator\]/gi,
+                                    currentUserFirstName
+                                  )
+                                : item.url}
                             </a>
                             <div className="text-xs text-gray-500 mt-1">
                               {item.description}

@@ -2137,10 +2137,15 @@ export function ContestClientPage({
                     <>
                       <Separator className="my-8" />
                       <div className="space-y-6">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col px-2 gap-3">
                           <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                             Tracking Links
                           </h3>
+                          <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
+                          <span className="font-medium">Note:</span> Copy the
+                          link and change the submission number (for example,
+                          from sub1 to sub2 or sub3) to access other links.
+                        </div>
                         </div>
 
                         <div className="grid gap-4">

@@ -185,6 +185,7 @@ interface ContestDetailClientProps {
   durationDays: number | null;
   contestId: string;
   isAdminView?: boolean;
+  user?: any; // Add user prop for dynamic [creator] replacement
 }
 
 export default function ContestDetailClient({
@@ -193,12 +194,45 @@ export default function ContestDetailClient({
   durationDays,
   contestId,
   isAdminView = false,
+  user,
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
   const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
     initialSubmissions || []
   );
+
+  // Utility function to extract firstName from full_name
+  const getFirstName = (fullName: string): string => {
+    if (!fullName) return "";
+    return fullName.trim().split(" ")[0];
+  };
+
+  // Utility function to replace [creator] placeholder with firstName
+  const processUrlWithCreator = (url: string, firstName: string): string => {
+    if (!url || !firstName) return url;
+    return url.replace(/\[creator\]/gi, firstName);
+  };
+
+  // Get current user's firstName for [creator] replacement
+  const getCurrentUserFirstName = (): string => {
+    if (!user) return "";
+
+    // Try to get firstName from user metadata first
+    const metadata: any = user?.user_metadata || {};
+    const rawFirst =
+      metadata.first_name ||
+      metadata.given_name ||
+      (metadata.full_name ? String(metadata.full_name).split(" ")[0] : null);
+
+    if (rawFirst && String(rawFirst).trim()) {
+      return rawFirst.trim();
+    }
+
+    // Fallback to email local part
+    const emailLocal = (user?.email || "").split("@")[0];
+    return emailLocal || "Creator";
+  };
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -2356,46 +2390,59 @@ export default function ContestDetailClient({
                           Tracking Links
                         </h3>
                         <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
-                        <span className="font-medium">Note:</span> Copy the link
-                        and change the submission number (for example, from sub1
-                        to sub2 or sub3) to access other links.
-                      </div>
+                          <span className="font-medium">Note:</span> Copy the
+                          link and change the submission number (for example,
+                          from sub1 to sub2 or sub3) to access other links.
+                        </div>
                       </div>
 
                       <div className="grid gap-4">
-                        {currentContest.tracking_links.map((item, idx) => (
-                          <div
-                            key={idx}
-                            className="bg-white border border-gray-300 rounded-xl p-6 transition-all duration-200"
-                          >
-                            <div className="flex items-start gap-4">
-                              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
-                                <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="text-base font-medium text-gray-900 dark:text-gray-100 break-all flex-1">
-                                    {item.url}
-                                  </div>
-                                  <button
-                                    onClick={() =>
-                                      handleCopyTrackingLink(item.url)
-                                    }
-                                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
-                                    title="Copy link"
-                                  >
-                                    <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
-                                  </button>
+                        {currentContest.tracking_links.map((item, idx) => {
+                          // Process URL to replace [creator] with current user's firstName
+                          const firstName = getCurrentUserFirstName();
+                          const processedUrl = processUrlWithCreator(
+                            item.url,
+                            firstName
+                          );
+
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-white border border-gray-300 rounded-xl p-6 transition-all duration-200"
+                            >
+                              <div className="flex items-start gap-4">
+                                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
+                                  <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
                                 </div>
-                                <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                  {item.description}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <a
+                                      href={processedUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline break-all flex-1"
+                                    >
+                                      {processedUrl}
+                                    </a>
+                                    <button
+                                      onClick={() =>
+                                        handleCopyTrackingLink(processedUrl)
+                                      }
+                                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                      title="Copy link"
+                                    >
+                                      <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
+                                    </button>
+                                  </div>
+                                  <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                    {item.description}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                      
                     </div>
                   )}
 

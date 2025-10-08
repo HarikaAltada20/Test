@@ -86,7 +86,8 @@ export default async function ContestDetailPage({
       paid_at,
       bonus_paid,
       bonus_paid_at
-    `)
+    `
+    )
     .eq("contest_id", contestId)
     .order("created_at", { ascending: false });
 
@@ -284,34 +285,34 @@ export default async function ContestDetailPage({
           creatorAvatarUrl = user?.profile_picture_url || null;
         }
 
-      return {
-        id: sub.id,
-        created_at: sub.created_at,
-        content_link: sub.content_link,
-        status: sub.status,
-        views: sub.views,
-        earnings: sub.earnings,
-        other_stats: sub.other_stats,
-        platform: sub.platform,
-        video_thumbnail_url: sub.video_thumbnail_url,
-        video_title: sub.video_title,
-        paid: sub.paid,
-        paid_at: sub.paid_at,
-        bonus_paid: sub.bonus_paid,
-        bonus_paid_at: sub.bonus_paid_at,
-        creator_display_name: creatorDisplayName,
-        creator_username: creatorUsername,
-        creator_avatar_url: creatorAvatarUrl,
-        creator_id: actualCreatorProfileId,
-        // Add nested creator object for creator-wise grouping compatibility
-        creator: {
-          id: actualCreatorProfileId,
-          username: creatorUsername,
-          profile_picture_url: creatorAvatarUrl,
-          full_name: creatorDisplayName
-        }
-      };
-    })
+        return {
+          id: sub.id,
+          created_at: sub.created_at,
+          content_link: sub.content_link,
+          status: sub.status,
+          views: sub.views,
+          earnings: sub.earnings,
+          other_stats: sub.other_stats,
+          platform: sub.platform,
+          video_thumbnail_url: sub.video_thumbnail_url,
+          video_title: sub.video_title,
+          paid: sub.paid,
+          paid_at: sub.paid_at,
+          bonus_paid: sub.bonus_paid,
+          bonus_paid_at: sub.bonus_paid_at,
+          creator_display_name: creatorDisplayName,
+          creator_username: creatorUsername,
+          creator_avatar_url: creatorAvatarUrl,
+          creator_id: actualCreatorProfileId,
+          // Add nested creator object for creator-wise grouping compatibility
+          creator: {
+            id: actualCreatorProfileId,
+            username: creatorUsername,
+            profile_picture_url: creatorAvatarUrl,
+            full_name: creatorDisplayName,
+          },
+        };
+      })
     : [];
 
   console.log(
@@ -326,6 +327,7 @@ export default async function ContestDetailPage({
       durationDays={durationDays}
       contestId={contestId}
       isAdminView={isAdmin}
+      user={user}
     />
   );
 }
