@@ -1368,17 +1368,8 @@ export default function CreateContestPage({
           position: i + 1,
           amount: winnerAmounts[i] || 0, // Stored in cents
         }));
-        const flatFeeBonusCents =
-          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
-            ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
-            : undefined;
-
-        const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
-          ? Math.round(parseFloat(totalBudget.toString()) * 100)
-          : undefined;
-
-        const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
-          ? Math.round(parseFloat(totalBudget.toString()) * 100)
+        const flatFeeBonusCents = flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
           : undefined;
 
         const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
