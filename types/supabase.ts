@@ -718,6 +718,7 @@ export interface LeaderboardContestDetails {
   prizes: { position: number; amount: number }[];
   total_prize: number;
   winner_count: number;
+  total_budget?: number | null; // OPTIONAL - budget for flat fee bonuses and future features (in cents)
   flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
 }
 

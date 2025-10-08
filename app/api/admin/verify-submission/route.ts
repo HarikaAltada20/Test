@@ -239,9 +239,39 @@ export async function POST(request: Request) {
 
     // Handle flat fee bonus payments
     if (action === 'mark_bonus_paid' || action === 'mark_both_paid') {
-      const flatFeeBonus = (contest.contest_based_details as any)?.flat_fee_bonus || 0;
+      // Get flat fee bonus from contest details based on contest type
+      const contestDetails = contest.contest_type === 'cpm' 
+        ? (contest.contest_based_details as any)?.cpm_contest
+        : (contest.contest_based_details as any)?.leaderboard_contest;
+      
+      const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
+      const totalBudget = contestDetails?.total_budget || null;
       
       if (flatFeeBonus > 0 && submissionFull.status === 'verified') {
+        // For leaderboard contests with total_budget, check if budget would be exceeded
+        if (contest.contest_type === 'leaderboard' && totalBudget) {
+          // Calculate current bonus spending
+          const { data: bonusSpendingData } = await supabaseAdmin
+            .from('submissions')
+            .select('bonus_amount')
+            .eq('contest_id', submissionFull.contest_id)
+            .eq('bonus_paid', true);
+          
+          const currentBonusSpent = (bonusSpendingData || [])
+            .reduce((sum, sub) => sum + (sub.bonus_amount || 0), 0);
+          
+          if (currentBonusSpent + flatFeeBonus > totalBudget) {
+            return NextResponse.json({
+              error: 'Total budget exceeded',
+              details: {
+                currentSpent: currentBonusSpent,
+                bonusAmount: flatFeeBonus,
+                budgetLimit: totalBudget,
+                remaining: totalBudget - currentBonusSpent
+              }
+            }, { status: 400 });
+          }
+        }
         // Check if bonus already paid
         if (!submissionFull.bonus_paid) {
           // Credit bonus to creator wallet

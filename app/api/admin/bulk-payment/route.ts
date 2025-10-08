@@ -76,12 +76,44 @@ export async function POST(request: NextRequest) {
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
-    // Get flat fee bonus
-    const flatFeeBonus = contest.contest_type === "cpm"
-      ? (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0
-      : (contest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+    // Get flat fee bonus and total budget
+    const contestDetails = contest.contest_type === "cpm"
+      ? (contest.contest_based_details as any)?.cpm_contest
+      : (contest.contest_based_details as any)?.leaderboard_contest;
+    
+    const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
+    const totalBudget = contestDetails?.total_budget || null;
 
     const maxEarnings = contest.max_earnings_per_creator || null;
+
+    // For leaderboard contests with total_budget, check if budget would be exceeded
+    if (contest.contest_type === "leaderboard" && totalBudget && (payment_type === "bonus" || payment_type === "both")) {
+      // Calculate current bonus spending
+      const { data: bonusSpendingData } = await supabaseAdmin
+        .from('submissions')
+        .select('bonus_amount')
+        .eq('contest_id', contest_id)
+        .eq('bonus_paid', true);
+      
+      const currentBonusSpent = (bonusSpendingData || [])
+        .reduce((sum, sub) => sum + (sub.bonus_amount || 0), 0);
+      
+      // Calculate potential bonus spending for this bulk payment
+      const potentialBonusSpending = verifiedSubmissions.length * flatFeeBonus;
+      
+      if (currentBonusSpent + potentialBonusSpending > totalBudget) {
+        return NextResponse.json({
+          error: 'Total budget would be exceeded',
+          details: {
+            currentSpent: currentBonusSpent,
+            potentialSpending: potentialBonusSpending,
+            budgetLimit: totalBudget,
+            remaining: totalBudget - currentBonusSpent,
+            maxSubmissions: Math.floor((totalBudget - currentBonusSpent) / flatFeeBonus)
+          }
+        }, { status: 400 });
+      }
+    }
 
     // Calculate earnings for each submission
     let runningTotal = 0;

@@ -40,6 +40,8 @@ import {
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { calculateLeaderboardBudgetSpent, Submission } from "@/lib/contest-utils-client";
+import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 
 // Define the type for a contest
 type Contest = {
@@ -388,7 +390,9 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                     <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
                         <div className="space-y-1.5 text-md mb-4 text-slate-600 dark:text-slate-400">
                             <div className="flex items-center">
-                                <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
+                                <div className="mr-2 flex-shrink-0">
+                                    {getPlatformIconWithFallback(contest.platform, 'sm')}
+                                </div>
                                 <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
                             </div>
                             {contest.start_date && (
@@ -435,6 +439,14 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     </span></span>
                                 </div>
                             )}
+                            {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_budget != null && contest.contest_based_details.leaderboard_contest.total_budget > 0 && (
+                                <div className="flex items-center">
+                                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                                    <span>Total Bonus Budget: <span className="font-medium text-green-700 dark:text-green-300">
+                                        {formatMoney(contest.contest_based_details.leaderboard_contest.total_budget)}
+                                    </span></span>
+                                </div>
+                            )}
                         </div>
 
                         {/* Budget Spent Progress Bar for CPM contests */}
@@ -466,6 +478,38 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                 </div>
                             );
                         })()}
+
+                        {/* Bonus Budget Tracker for Leaderboard contests */}
+                        {contest.contest_type === 'leaderboard' &&
+                            contest.contest_based_details?.leaderboard_contest?.total_budget != null &&
+                            contest.contest_based_details.leaderboard_contest.total_budget > 0 && (() => {
+                                const totalBudget = contest.contest_based_details.leaderboard_contest.total_budget;
+                                const budgetSpent = contest.contest_based_details.leaderboard_contest.budget_spent || 0;
+                                const percentage = (budgetSpent / totalBudget) * 100;
+                                const remaining = totalBudget - budgetSpent;
+
+                                return (
+                                    <div className="mt-3 mb-3">
+                                        <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mb-2">
+                                            <span className="font-medium">Flat Fee Bonus Budget Tracker</span>
+                                            <span className="font-semibold">{formatMoney(budgetSpent)} / {formatMoney(totalBudget)}</span>
+                                        </div>
+                                        <div
+                                            className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                                            title={`Flat Fee Bonus Budget Spent: ${formatMoney(budgetSpent)}`}
+                                        >
+                                            <div
+                                                className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                                                style={{ width: `${Math.min(percentage, 100)}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                                            <span>{percentage.toFixed(1)}% used</span>
+                                            <span>{formatMoney(remaining)} remaining</span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                         <button
 
