@@ -1014,10 +1014,35 @@ export default function ContestDetailClient({
   const getPlatformIcon = (platform?: string | null) => {
     const lowerPlatform = platform?.toLowerCase();
     if (lowerPlatform?.includes("youtube"))
-      return <Youtube className="h-5 w-5 text-[#4A00BE] flex-shrink-0" />;
+      return (
+        <div className="flex items-center justify-center w-6 h-6">
+          <svg viewBox="0 0 24 24" className="w-6 h-6">
+            <path
+              fill="#FF0000"
+              d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+            />
+          </svg>
+        </div>
+      );
     if (lowerPlatform?.includes("instagram"))
-      return <Instagram className="h-5 w-5 text-[#4A00BE] flex-shrink-0" />;
-    return <Share2 className="h-5 w-5 text-[#4A00BE] flex-shrink-0" />;
+      return (
+        <div className="flex items-center justify-center w-6 h-6">
+          <svg viewBox="0 0 24 24" className="w-6 h-6">
+            <defs>
+              <linearGradient id="instagram-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#833AB4" />
+                <stop offset="50%" stopColor="#FD1D1D" />
+                <stop offset="100%" stopColor="#FCB045" />
+              </linearGradient>
+            </defs>
+            <path
+              fill="url(#instagram-gradient)"
+              d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"
+            />
+          </svg>
+        </div>
+      );
+    return <Share2 className="h-6 w-6 text-gray-600 flex-shrink-0" />;
   };
 
   const extractPlatformMetrics = (submission: Submission) => {
@@ -1368,23 +1393,24 @@ export default function ContestDetailClient({
 
       {/* Modern Contest Overview - Redesigned for better UX */}
       <div className="space-y-6 mb-8">
-        {/* Colorful Contest Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Enhanced Contest Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Platform Card */}
-
-          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-            <CardContent className="p-4 flex justify-between">
-              <div className="flex-1 text-black space-y-3">
-                <p className="text-lg font-medium">Platform</p>
-                <p className="text-xl font-bold">
-                  {currentContest.platform || "N/A"}
-                </p>
-                {/* <p className="text-md">https:youtube.com</p> */}
+          <div className="group bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-white shadow-lg border border-gray-200">
+                  {getPlatformIcon(currentContest.platform)}
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Platform</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {currentContest.platform || "N/A"}
+                  </p>
+                </div>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
-                {getPlatformIcon(currentContest.platform)}
-              </div>
-            </CardContent>
+              <div className="h-1 w-full bg-gradient-to-r from-purple-200 to-purple-300 rounded-full"></div>
+            </div>
           </div>
           {/* <div className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-4">
@@ -1401,17 +1427,24 @@ export default function ContestDetailClient({
                     </div> */}
 
           {/* Duration Card */}
-          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-            <CardContent className="p-4 flex justify-between">
-              <div className="flex-1 text-black space-y-3">
-                <p className="text-lg font-medium">Duration</p>
-                <p className="text-xl font-bold">
-                  {durationDays !== null
-                    ? `${durationDays} ${durationDays === 1 ? "day" : "days"}`
-                    : "N/A"}
-                </p>
-                {currentContest.start_date && currentContest.end_date && (
-                  <p className="text-md">
+          <div className="group bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-blue-100 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
+                  <Calendar className="h-6 w-6" />
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Duration</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                    {durationDays !== null
+                      ? `${durationDays} ${durationDays === 1 ? "day" : "days"}`
+                      : "N/A"}
+                  </p>
+                </div>
+              </div>
+              {currentContest.start_date && currentContest.end_date && (
+                <div className="mb-3">
+                  <p className="text-sm text-gray-600 font-medium">
                     {formatLocalDateTime(currentContest.start_date, {
                       month: "short",
                       day: "numeric",
@@ -1422,12 +1455,10 @@ export default function ContestDetailClient({
                       day: "numeric",
                     })}
                   </p>
-                )}
-              </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
-                <Calendar className="h-5 w-5" />
-              </div>
-            </CardContent>
+                </div>
+              )}
+              <div className="h-1 w-full bg-gradient-to-r from-blue-200 to-blue-300 rounded-full"></div>
+            </div>
           </div>
           {/* <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-4">
@@ -1448,21 +1479,28 @@ export default function ContestDetailClient({
                         </CardContent>
                     </Card> */}
 
-          {/* Prize/Budget Card */}
+          {/* Prize Pool Card */}
           {currentContest.contest_type === "leaderboard" &&
             currentContest.contest_based_details?.leaderboard_contest
               ?.total_prize != null && (
-              <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-                <CardContent className="p-4 flex justify-between">
-                  <div className="flex-1 text-black space-y-3">
-                    <p className="text-lg font-medium">Prize Pool</p>
-                    <p className="text-xl font-bold">
-                      {formatMoney(
-                        currentContest.contest_based_details.leaderboard_contest
-                          .total_prize
-                      )}
-                    </p>
-                    <p className="text-md">
+              <div className="group bg-gradient-to-br from-white to-yellow-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-yellow-100 overflow-hidden">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-yellow-500 to-yellow-600 text-white shadow-lg">
+                      <Trophy className="h-6 w-6" />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Prize Pool</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">
+                        {formatMoney(
+                          currentContest.contest_based_details.leaderboard_contest
+                            .total_prize
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 font-medium">
                       {
                         currentContest.contest_based_details.leaderboard_contest
                           .winner_count
@@ -1470,10 +1508,32 @@ export default function ContestDetailClient({
                       winners
                     </p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
-                    <Trophy className="h-5 w-5" />
-                  </div>
-                </CardContent>
+
+                  {/* Total Budget (if set) */}
+                  {currentContest.contest_based_details?.leaderboard_contest?.total_budget && (
+                    <div className="border-t border-yellow-200 pt-4 mb-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Budget</p>
+                          <p className="text-xl font-bold text-blue-600 mt-1">
+                            {formatMoney(
+                              currentContest.contest_based_details.leaderboard_contest
+                                .total_budget
+                            )}
+                          </p>
+                          <p className="text-xs text-gray-600 mt-1">
+                            For bonuses & extras
+                          </p>
+                        </div>
+                        <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                          <span className="text-lg">💰</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="h-1 w-full bg-gradient-to-r from-yellow-200 to-yellow-300 rounded-full"></div>
+                </div>
               </div>
               // <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
               //     <CardContent className="p-4">
@@ -1493,18 +1553,25 @@ export default function ContestDetailClient({
 
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-              null && (
-              <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-                <CardContent className="p-4 flex justify-between">
-                  <div className="flex-1 text-black space-y-3">
-                    <p className="text-lg font-medium"> Total Budget</p>
-                    <p className="text-xl font-bold">
-                      {formatMoney(
-                        currentContest.contest_based_details.cpm_contest
-                          .total_budget
-                      )}
-                    </p>
-                    <p className="text-md">
+            null && (
+              <div className="group bg-gradient-to-br from-white to-green-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-green-100 overflow-hidden">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg">
+                      <DollarSign className="h-6 w-6" />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Budget</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">
+                        {formatMoney(
+                          currentContest.contest_based_details.cpm_contest
+                            .total_budget
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <p className="text-sm text-gray-600 font-medium">
                       $
                       {
                         currentContest.contest_based_details.cpm_contest
@@ -1513,10 +1580,8 @@ export default function ContestDetailClient({
                       CPM
                     </p>
                   </div>
-                  <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
-                    <DollarSign className="h-5 w-5" />
-                  </div>
-                </CardContent>
+                  <div className="h-1 w-full bg-gradient-to-r from-green-200 to-green-300 rounded-full"></div>
+                </div>
               </div>
               // <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
               //   <CardContent className="p-4">
@@ -1548,42 +1613,83 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
-          {/* Budget Progress Tracker - Two-Color Visualization */}
+          {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-              null &&
-            currentContest.contest_based_details.cpm_contest.total_budget >
-              0 && (
-              <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6">
-                <BudgetProgress
-                  contest={{
-                    prize_pool_cents:
-                      currentContest.contest_based_details.cpm_contest
-                        .total_budget,
-                    contest_based_details: currentContest.contest_based_details,
-                    contest_type: currentContest.contest_type,
-                    max_earnings_per_creator:
-                      currentContest.max_earnings_per_creator,
-                  }}
-                  submissions={currentSubmissions as any}
-                  showDetailed={true}
-                />
+            null &&
+            currentContest.contest_based_details.cpm_contest.total_budget > 0 && (
+              <div className="group bg-gradient-to-br from-white to-indigo-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-indigo-100 overflow-hidden">
+                <div className="p-6">
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-lg mr-4">
+                      <span className="text-lg">📊</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Budget Tracker</h3>
+                      <p className="text-sm text-gray-600">Monitor spending progress</p>
+                    </div>
+                  </div>
+                  <BudgetProgress
+                    contest={{
+                      total_budget: currentContest.contest_based_details.cpm_contest.total_budget,
+                      contest_based_details: currentContest.contest_based_details,
+                      contest_type: currentContest.contest_type,
+                      max_earnings_per_creator: currentContest.max_earnings_per_creator,
+                    }}
+                    submissions={currentSubmissions as any}
+                    showDetailed={true}
+                  />
+                </div>
+              </div>
+            )}
+
+          {/* Budget Progress Tracker - For Leaderboard with total_budget */}
+          {currentContest.contest_type === "leaderboard" &&
+            currentContest.contest_based_details?.leaderboard_contest?.total_budget !=
+            null &&
+            currentContest.contest_based_details.leaderboard_contest.total_budget > 0 && (
+              <div className="group bg-gradient-to-br from-white to-emerald-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-emerald-100 overflow-hidden">
+                <div className="p-6">
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg mr-4">
+                      <span className="text-lg">📊</span>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Budget Tracker</h3>
+                      <p className="text-sm text-gray-600">Monitor bonus spending progress</p>
+                    </div>
+                  </div>
+                  <BudgetProgress
+                    contest={{
+                      total_budget: currentContest.contest_based_details.leaderboard_contest.total_budget,
+                      contest_based_details: currentContest.contest_based_details,
+                      contest_type: currentContest.contest_type,
+                      max_earnings_per_creator: currentContest.max_earnings_per_creator,
+                    }}
+                    submissions={currentSubmissions as any}
+                    showDetailed={true}
+                  />
+                </div>
               </div>
             )}
 
           {/* Submissions Count Card */}
-
-          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
-            <CardContent className="p-4 flex justify-between">
-              <div className="flex-1 text-black space-y-3">
-                <p className="text-lg font-medium">Submissions</p>
-                <p className="text-xl font-bold">{currentSubmissions.length}</p>
-                <p className="text-md">Total entries</p>
+          <div className="group bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-purple-100 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg">
+                  <Users className="h-6 w-6" />
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Submissions</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{currentSubmissions.length}</p>
+                </div>
               </div>
-              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
-                <Users className="h-5 w-5 " />
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 font-medium">Total entries</p>
               </div>
-            </CardContent>
+              <div className="h-1 w-full bg-gradient-to-r from-purple-200 to-purple-300 rounded-full"></div>
+            </div>
           </div>
           {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
             <CardContent className="p-4">
@@ -3418,9 +3524,9 @@ export default function ContestDetailClient({
                                             (currentContest.post_contest_status ===
                                               "in_review" ||
                                               currentContest.post_contest_status ===
-                                                "verification_complete" ||
+                                              "verification_complete" ||
                                               currentContest.post_contest_status ===
-                                                "payouts_processed") && (
+                                              "payouts_processed") && (
                                               <>
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
