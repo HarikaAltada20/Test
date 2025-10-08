@@ -10,7 +10,7 @@ interface Submission {
 }
 
 interface Contest {
-    prize_pool_cents: number | null;
+    total_budget?: number | null;
     contest_based_details: any;
     contest_type: string;
     max_earnings_per_creator?: number | null;
@@ -23,14 +23,27 @@ interface BudgetProgressProps {
 }
 
 export function BudgetProgress({ contest, submissions, showDetailed = true }: BudgetProgressProps) {
-    const { cpmPaid, bonusPaid, totalBudget, cpmPercentage, bonusPercentage, totalPercentage } = useMemo(() => {
-        const totalBudget = contest.prize_pool_cents || 0;
+    // Get contest config outside useMemo so it's available in the component
+    const cpmConfig = contest.contest_type === 'cpm'
+        ? (contest.contest_based_details as any)?.cpm_contest
+        : null;
+    const leaderboardConfig = contest.contest_type === 'leaderboard'
+        ? (contest.contest_based_details as any)?.leaderboard_contest
+        : null;
 
-        // Get contest config
-        const cpmConfig = contest.contest_type === 'cpm'
-            ? (contest.contest_based_details as any)?.cpm_contest
-            : null;
-        const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
+    const flatFeeBonus = cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
+    const hasFlatFeeBonus = flatFeeBonus > 0;
+
+    const { cpmPaid, bonusPaid, totalBudget, cpmPercentage, bonusPercentage, totalPercentage, prizePoolSpent, prizePoolTotal, bonusBudget, bonusSpent } = useMemo(() => {
+        // Use total_budget from the contest object (works for both CPM and Leaderboard)
+        const totalBudget = contest.total_budget || 0;
+
+        const prizePoolTotal = contest.contest_type === 'leaderboard'
+            ? (leaderboardConfig?.total_prize || 0)
+            : 0;
+
+        const bonusBudget = contest.total_budget || 0;
+
         const maxEarningsPerCreator = (contest as any).max_earnings_per_creator || null;
         const cpmRate = cpmConfig?.cpm_rate_usd || 0;
         const minViews = cpmConfig?.min_views;
@@ -107,11 +120,46 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
         const bonusPaid = Math.round(bonusTotal * 100); // Convert back to cents
         const totalSpent = cpmPaid + bonusPaid;
 
+        // For leaderboard contests, calculate prize pool spending (from actual paid submissions)
+        let prizePoolSpent = 0;
+        if (contest.contest_type === 'leaderboard') {
+            // Calculate how much of the prize pool has been paid out
+            const paidSubmissions = relevantSubmissions.filter(s => s.paid);
+            const leaderboardPrizes = leaderboardConfig?.prizes || [];
+
+            // Sort paid submissions by views (descending) to determine ranking
+            const sortedPaidSubmissions = paidSubmissions.sort((a, b) => {
+                const viewsA = (a as any).views || 0;
+                const viewsB = (b as any).views || 0;
+                return viewsB - viewsA;
+            });
+
+            // Calculate prize pool spending based on actual rankings
+            for (let i = 0; i < sortedPaidSubmissions.length; i++) {
+                const rank = i + 1;
+                const prizeForRank = leaderboardPrizes.find((p: any) => p.position === rank);
+                if (prizeForRank) {
+                    prizePoolSpent += prizeForRank.amount;
+                }
+            }
+        }
+
         const cpmPercentage = totalBudget > 0 ? Math.min((cpmPaid / totalBudget) * 100, 100) : 0;
-        const bonusPercentage = totalBudget > 0 ? Math.min((bonusPaid / totalBudget) * 100, 100) : 0;
+        const bonusPercentage = bonusBudget && bonusBudget > 0 ? Math.min((bonusPaid / bonusBudget) * 100, 100) : 0;
         const totalPercentage = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
 
-        return { cpmPaid, bonusPaid, totalBudget, cpmPercentage, bonusPercentage, totalPercentage };
+        return {
+            cpmPaid,
+            bonusPaid,
+            totalBudget,
+            cpmPercentage,
+            bonusPercentage,
+            totalPercentage,
+            prizePoolSpent,
+            prizePoolTotal,
+            bonusBudget,
+            bonusSpent: bonusPaid
+        };
     }, [contest, submissions]);
 
     const formatCurrency = (cents: number) => {
@@ -123,8 +171,8 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
     const isNearLimit = totalPercentage >= 80;
     const isOverBudget = totalPercentage >= 100;
 
-    // Only show for CPM contests (leaderboard doesn't track budget the same way)
-    if (contest.contest_type !== 'cpm') {
+    // Only show for CPM and leaderboard contests
+    if (contest.contest_type !== 'cpm' && contest.contest_type !== 'leaderboard') {
         return null;
     }
 
@@ -154,7 +202,82 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
         );
     }
 
-    // Detailed view with CPM/Leaderboard and Bonus breakdown
+    // Special handling for leaderboard contests with total budget for bonuses
+    if (contest.contest_type === 'leaderboard' && hasFlatFeeBonus && bonusBudget) {
+        const bonusPercentage = bonusBudget > 0 ? Math.min((bonusSpent / bonusBudget) * 100, 100) : 0;
+        const isNearLimit = bonusPercentage >= 80;
+        const isOverBudget = bonusPercentage >= 100;
+        const remaining = Math.max(0, bonusBudget - bonusSpent);
+
+        return (
+            <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Budget Tracker</span>
+                    <span className="font-bold text-gray-900 dark:text-gray-100">
+                        {formatCurrency(bonusSpent)} / {formatCurrency(bonusBudget)}
+                    </span>
+                </div>
+
+                {/* Progress bar for Total Budget only */}
+                <div className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                        className={`absolute h-full transition-all duration-300 ${isOverBudget ? 'bg-red-500' : isNearLimit ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}
+                        style={{ width: `${Math.min(bonusPercentage, 100)}%` }}
+                    />
+                    {/* Warning indicator if over budget */}
+                    {isOverBudget && (
+                        <div
+                            className="absolute h-full bg-red-500 transition-all duration-300"
+                            style={{
+                                left: '100%',
+                                width: `${bonusPercentage - 100}%`,
+                                transform: 'translateX(-100%)'
+                            }}
+                        />
+                    )}
+                </div>
+
+                {/* Legend */}
+                <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+                    <div className="flex-1">
+                        <p className="font-medium text-gray-700 dark:text-gray-300 text-xs">Flat Fee Bonus</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-xs">{formatCurrency(bonusSpent)}</p>
+                    </div>
+                </div>
+
+                {/* Status message */}
+                {isOverBudget ? (
+                    <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <div className="flex-shrink-0 w-1 h-8 bg-red-500 rounded-full" />
+                        <div className="flex-1 text-xs">
+                            <p className="font-semibold text-red-900 dark:text-red-100">Over Budget</p>
+                            <p className="text-red-700 dark:text-red-300">
+                                Exceeded by {formatCurrency(bonusSpent - bonusBudget)}
+                            </p>
+                        </div>
+                    </div>
+                ) : isNearLimit ? (
+                    <div className="flex items-center gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <div className="flex-shrink-0 w-1 h-8 bg-yellow-500 rounded-full" />
+                        <div className="flex-1 text-xs">
+                            <p className="font-semibold text-yellow-900 dark:text-yellow-100">Near Limit</p>
+                            <p className="text-yellow-700 dark:text-yellow-300">
+                                {formatCurrency(remaining)} remaining
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-xs text-gray-600 dark:text-gray-400 text-right">
+                        {formatCurrency(remaining)} remaining ({(100 - bonusPercentage).toFixed(1)}% available)
+                    </p>
+                )}
+            </div>
+        );
+    }
+
+    // Detailed view with CPM/Leaderboard and Bonus breakdown (for CPM contests or leaderboard without total_budget)
     return (
         <div className="space-y-3">
             <div className="flex justify-between text-sm">
@@ -170,9 +293,9 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
             {/* Two-color progress bar */}
             <div
                 className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"
-                title={bonusPaid > 0
-                    ? `CPM Earnings: ${formatCurrency(cpmPaid)} | Flat Fee Bonus: ${formatCurrency(bonusPaid)} | Total: ${formatCurrency(totalSpent)}`
-                    : `Total based on views: ${formatCurrency(cpmPaid)}`
+                title={hasFlatFeeBonus && bonusPaid > 0
+                    ? `${contest.contest_type === 'cpm' ? 'CPM' : 'Contest'} Earnings: ${formatCurrency(cpmPaid)} | Flat Fee Bonus: ${formatCurrency(bonusPaid)} | Total: ${formatCurrency(totalSpent)}`
+                    : `Total ${contest.contest_type === 'cpm' ? 'based on views' : 'contest earnings'}: ${formatCurrency(cpmPaid)}`
                 }
             >
                 {/* CPM/Leaderboard earnings portion */}
@@ -181,7 +304,7 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
                     style={{ width: `${Math.min(cpmPercentage, 100)}%` }}
                 />
                 {/* Flat fee bonus portion */}
-                {bonusPaid > 0 && (
+                {hasFlatFeeBonus && bonusPaid > 0 && (
                     <div
                         className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-300"
                         style={{
@@ -204,21 +327,25 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
             </div>
 
             {/* Legend */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className={`grid gap-2 text-xs ${hasFlatFeeBonus ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
                     <div className="flex-1">
-                        <p className="font-medium text-gray-700 dark:text-gray-300">CPM Earnings</p>
+                        <p className="font-medium text-gray-700 dark:text-gray-300">
+                            {contest.contest_type === 'cpm' ? 'CPM Earnings' : 'Contest Earnings'}
+                        </p>
                         <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(cpmPaid)}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
-                    <div className="flex-1">
-                        <p className="font-medium text-gray-700 dark:text-gray-300">Flat Fee Bonus</p>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(bonusPaid)}</p>
+                {hasFlatFeeBonus && (
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
+                        <div className="flex-1">
+                            <p className="font-medium text-gray-700 dark:text-gray-300">Flat Fee Bonus</p>
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(bonusPaid)}</p>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Status message */}

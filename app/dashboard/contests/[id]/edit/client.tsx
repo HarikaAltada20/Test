@@ -112,6 +112,7 @@ type LeaderboardContestDetails = {
   prizes: { position: number; amount: number }[];
   total_prize: number;
   winner_count: number;
+  total_budget?: number | null; // OPTIONAL - budget for flat fee bonuses and future features (in cents)
   flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
 };
 
@@ -697,6 +698,9 @@ export default function EditContestPage({
               if (lbDetails?.flat_fee_bonus) {
                 setFlatFeeBonus((lbDetails.flat_fee_bonus / 100).toString());
               }
+              if (lbDetails?.total_budget) {
+                setTotalBudget((lbDetails.total_budget / 100).toString());
+              }
             } else if (data.contest_type === "cpm") {
               const cpmDetails = data.contest_based_details?.cpm_contest;
               if (cpmDetails?.flat_fee_bonus) {
@@ -924,7 +928,12 @@ export default function EditContestPage({
   const getMinDateTime = () => {
     const now = new Date();
     const minStartDate = new Date(now);
-    minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+
+    // If contest is approved, allow immediate start (no 2-day restriction)
+    // Otherwise, apply the 2-day minimum restriction
+    if (contest?.moderation_status !== "approved") {
+      minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+    }
 
     const year = minStartDate.getFullYear();
     const month = String(minStartDate.getMonth() + 1).padStart(2, "0");
@@ -1259,8 +1268,9 @@ export default function EditContestPage({
         const isNewContest = !originalStartDate || originalStartDate > now;
 
         if (isNewContest) {
-          // CRITICAL: Use exact same logic as getMinDateTime for consistency
-          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+          // For approved contests, only check that start time is in the future
+          // For non-approved contests, apply the 2-day minimum restriction
+          if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
               description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
@@ -1419,6 +1429,11 @@ export default function EditContestPage({
         leaderboardDetails.flat_fee_bonus = Math.round(
           parseFloat(flatFeeBonus.toString()) * 100
         );
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
@@ -3273,8 +3288,9 @@ export default function EditContestPage({
         const isNewContest = !originalStartDate || originalStartDate > now;
 
         if (isNewContest) {
-          // CRITICAL: Use exact same logic as getMinDateTime for consistency
-          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+          // For approved contests, only check that start time is in the future
+          // For non-approved contests, apply the 2-day minimum restriction
+          if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
               description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
@@ -3434,6 +3450,11 @@ export default function EditContestPage({
         leaderboardDetails.flat_fee_bonus = Math.round(
           parseFloat(flatFeeBonus.toString()) * 100
         );
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
@@ -5136,9 +5157,18 @@ export default function EditContestPage({
               </Alert>
             )}
             <p className="text-sm text-gray-500 mt-1">
-              <strong>Start Date Rule:</strong> Contest must start at least{" "}
-              {MIN_DAYS_UNTIL_START} days from today.{" "}
-              {getStartDateRuleExample()}
+              <strong>Start Date Rule:</strong>{" "}
+              {contest?.moderation_status === "approved" ? (
+                <>
+                  Approved contests can start immediately after admin approval.
+                  Only requirement is that the start time must be in the future.
+                </>
+              ) : (
+                <>
+                  Contest must start at least {MIN_DAYS_UNTIL_START} days from today.{" "}
+                  {getStartDateRuleExample()}
+                </>
+              )}
               <br />
               <strong>Duration:</strong> Contest must run between{" "}
               {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
@@ -5724,6 +5754,31 @@ export default function EditContestPage({
                   motivator for creators!
                 </p>
               </div>
+
+              {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+              {contestType === "leaderboard" && flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="total-budget">
+                    Total Budget for Bonuses (Optional)
+                  </Label>
+                  <Input
+                    id="total-budget"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={totalBudget}
+                    onChange={(e) => setTotalBudget(e.target.value)}
+                    placeholder="e.g., 500.00"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    💰 Set a budget limit for flat fee bonuses and future features. Leave empty for no limit.
+                    <br />
+                    <strong>Prize Pool:</strong> {formatCurrencyFromCents(totalPrizePool)} (for rankings)
+                    <br />
+                    <strong>Total Budget:</strong> {totalBudget ? `$${parseFloat(totalBudget.toString()).toFixed(2)}` : 'No limit'} (for bonuses & extras)
+                  </p>
+                </div>
+              )}
 
               {/* Bonus Section Toggle & Editor */}
               <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/30 p-4">

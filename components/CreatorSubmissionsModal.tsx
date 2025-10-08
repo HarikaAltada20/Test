@@ -517,57 +517,61 @@ export function CreatorSubmissionsModal({
                                         <Clock className="h-4 w-4 mr-1" />
                                         Mark as Pending
                                     </Button>
-                                    <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2"></div>
-                                    <Button
-                                        size="sm"
-                                        onClick={() => handleBulkPayment('standard', false)}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
-                                    >
-                                        <DollarSign className="h-4 w-4 mr-1" />
-                                        Mark as Paid
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={() => handleBulkPayment('standard', true)}
-                                        className="bg-blue-500 hover:bg-blue-600 text-white whitespace-nowrap"
-                                    >
-                                        <DollarSign className="h-4 w-4 mr-1" />
-                                        Mark as Paid (Bulk)
-                                    </Button>
-                                    {hasBonus && (
+                                    {contest?.post_contest_status === 'verification_complete' && (
                                         <>
+                                            <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2"></div>
                                             <Button
                                                 size="sm"
-                                                onClick={() => handleBulkPayment('bonus', false)}
-                                                className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
+                                                onClick={() => handleBulkPayment('standard', false)}
+                                                className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
                                             >
                                                 <DollarSign className="h-4 w-4 mr-1" />
-                                                Mark Bonus as Paid
+                                                Mark as Paid
                                             </Button>
                                             <Button
                                                 size="sm"
-                                                onClick={() => handleBulkPayment('bonus', true)}
-                                                className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
+                                                onClick={() => handleBulkPayment('standard', true)}
+                                                className="bg-blue-500 hover:bg-blue-600 text-white whitespace-nowrap"
                                             >
                                                 <DollarSign className="h-4 w-4 mr-1" />
-                                                Mark Bonus as Paid (Bulk)
+                                                Mark as Paid (Bulk)
                                             </Button>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleBulkPayment('both', false)}
-                                                className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap"
-                                            >
-                                                <DollarSign className="h-4 w-4 mr-1" />
-                                                Mark Both as Paid
-                                            </Button>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => handleBulkPayment('both', true)}
-                                                className="bg-purple-500 hover:bg-purple-600 text-white whitespace-nowrap"
-                                            >
-                                                <DollarSign className="h-4 w-4 mr-1" />
-                                                Mark Both as Paid (Bulk)
-                                            </Button>
+                                            {hasBonus && (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleBulkPayment('bonus', false)}
+                                                        className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
+                                                    >
+                                                        <DollarSign className="h-4 w-4 mr-1" />
+                                                        Mark Bonus as Paid
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleBulkPayment('bonus', true)}
+                                                        className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
+                                                    >
+                                                        <DollarSign className="h-4 w-4 mr-1" />
+                                                        Mark Bonus as Paid (Bulk)
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleBulkPayment('both', false)}
+                                                        className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap"
+                                                    >
+                                                        <DollarSign className="h-4 w-4 mr-1" />
+                                                        Mark Both as Paid
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        onClick={() => handleBulkPayment('both', true)}
+                                                        className="bg-purple-500 hover:bg-purple-600 text-white whitespace-nowrap"
+                                                    >
+                                                        <DollarSign className="h-4 w-4 mr-1" />
+                                                        Mark Both as Paid (Bulk)
+                                                    </Button>
+                                                </>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -717,7 +721,7 @@ export function CreatorSubmissionsModal({
                                                                 </DropdownMenuItem>
                                                             )}
 
-                                                            {submission.status === 'verified' && !submission.paid && (
+                                                            {contest?.post_contest_status === 'verification_complete' && submission.status === 'verified' && !submission.paid && (
                                                                 <>
                                                                     <DropdownMenuSeparator />
                                                                     <DropdownMenuItem onClick={() => onPayment(submission.id, 'standard')}>
@@ -745,10 +749,14 @@ export function CreatorSubmissionsModal({
                                                                 </>
                                                             )}
 
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem onClick={() => onCustomPayment(submission.id)}>
-                                                                Custom Pay
-                                                            </DropdownMenuItem>
+                                                            {contest?.post_contest_status === 'verification_complete' && (
+                                                                <>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem onClick={() => onCustomPayment(submission.id)}>
+                                                                        Custom Pay
+                                                                    </DropdownMenuItem>
+                                                                </>
+                                                            )}
 
                                                             {submission.content_link && (
                                                                 <>
