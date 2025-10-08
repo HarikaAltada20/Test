@@ -1250,13 +1250,22 @@ export default function CreateContestPage({
 
       // 7. Active contest limit validation
       try {
-        const { canCreateNewContest } = await import(
-          "@/lib/contest-utils-client"
-        );
-        const activeCheck = await canCreateNewContest(
-          userId,
-          planFeatures.maxActiveContests
-        );
+        const response = await fetch("/api/contests/validate-limit", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            maxActiveContests: planFeatures.maxActiveContests,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to validate contest limit");
+        }
+
+        const activeCheck = await response.json();
+
         if (!activeCheck.canCreate) {
           return {
             isValid: false,
@@ -1363,6 +1372,14 @@ export default function CreateContestPage({
           flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
             ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
             : undefined;
+
+        const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
+          ? Math.round(parseFloat(totalBudget.toString()) * 100)
+          : undefined;
+
+        const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
+          ? Math.round(parseFloat(totalBudget.toString()) * 100)
+          : undefined;
 
         const totalBudgetCents = totalBudget && parseFloat(totalBudget.toString()) > 0
           ? Math.round(parseFloat(totalBudget.toString()) * 100)
@@ -1535,38 +1552,6 @@ export default function CreateContestPage({
               `The minimum contest budget for your plan is ${formatCurrencyFromCents(
                 planFeatures.minContestBudget
               )}. Please increase your total budget.`
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-        }
-
-        // Validate active contest limits before submission
-        if (userId) {
-          try {
-            const { canCreateNewContest } = await import(
-              "@/lib/contest-utils-client"
-            );
-            const activeCheck = await canCreateNewContest(
-              userId,
-              planFeatures.maxActiveContests
-            );
-            if (!activeCheck.canCreate) {
-              setFormFeedback(
-                activeCheck.error ||
-                  `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.`
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
-            }
-          } catch (error: any) {
-            console.error("Error checking active contest limit:", error);
-            setFormFeedback(
-              "Unable to validate contest limits. Please try again."
             );
             setFormFeedbackType("error");
             setIsLoading(false);

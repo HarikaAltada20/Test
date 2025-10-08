@@ -83,10 +83,14 @@ export async function getActiveContestCount(userId: string): Promise<ActiveConte
 
 /**
  * Check if user can create a new contest based on their plan limits
+ * @param userId - The user's ID
+ * @param maxActiveContests - Maximum number of active contests allowed
+ * @param excludeContestId - Optional contest ID to exclude from count (for editing existing contests)
  */
 export async function canCreateNewContest(
   userId: string, 
-  maxActiveContests: number
+  maxActiveContests: number,
+  excludeContestId?: string
 ): Promise<{ canCreate: boolean; currentCount: number; error?: string }> {
   
   const result = await getActiveContestCount(userId);
@@ -99,12 +103,36 @@ export async function canCreateNewContest(
     };
   }
 
-  const canCreate = result.activeCount < maxActiveContests;
+  // If editing an existing contest, we need to check if it's currently counted as active
+  let adjustedCount = result.activeCount;
+  if (excludeContestId) {
+    const supabase = await createClient();
+    const { data: contest } = await supabase
+      .from('contests_with_status')
+      .select('id, moderation_status, status')
+      .eq('id', excludeContestId)
+      .single();
+    
+    // If the contest being edited is currently counted as active, subtract 1
+    if (contest) {
+      const isCurrentlyActive = 
+        contest.moderation_status === 'pending_approval' || 
+        contest.moderation_status === 'approved' ||
+        (contest.moderation_status === 'published' && 
+         (contest.status === 'upcoming' || contest.status === 'active'));
+      
+      if (isCurrentlyActive) {
+        adjustedCount = Math.max(0, adjustedCount - 1);
+      }
+    }
+  }
+
+  const canCreate = adjustedCount < maxActiveContests;
   
   return {
     canCreate,
-    currentCount: result.activeCount,
-    error: canCreate ? undefined : `You have reached your plan limit of ${maxActiveContests} active contests. You currently have ${result.activeCount} active contests.`
+    currentCount: adjustedCount,
+    error: canCreate ? undefined : `You have reached your plan limit of ${maxActiveContests} active contests. You currently have ${adjustedCount} active contests.`
   };
 }
 

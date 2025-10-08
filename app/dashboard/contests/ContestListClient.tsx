@@ -62,6 +62,8 @@ type Contest = {
             prizes?: Array<{ amount: number; position: number }>;
             winner_count?: number;
             flat_fee_bonus?: number;
+            total_budget?: number;
+            budget_spent?: number;
         };
         cpm_contest?: {
             total_budget?: number;

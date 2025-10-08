@@ -3521,12 +3521,7 @@ export default function ContestDetailClient({
                                             ))}
                                           {submission.status !== "paid" &&
                                             isAdminView &&
-                                            (currentContest.post_contest_status ===
-                                              "in_review" ||
-                                              currentContest.post_contest_status ===
-                                              "verification_complete" ||
-                                              currentContest.post_contest_status ===
-                                              "payouts_processed") && (
+                                            currentContest.post_contest_status === "verification_complete" && (
                                               <>
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
