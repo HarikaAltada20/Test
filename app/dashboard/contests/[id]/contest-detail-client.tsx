@@ -2390,9 +2390,7 @@ export default function ContestDetailClient({
                           Tracking Links
                         </h3>
                         <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
-                          <span className="font-medium">Note:</span> Copy the
-                          link and change the submission number (for example,
-                          from sub1 to sub2 or sub3) to access other links.
+                          <span className="font-medium">Note:</span> change the sub1 and sub2 ... according to your submission number if you are doing multiple submissions ..
                         </div>
                       </div>
 
