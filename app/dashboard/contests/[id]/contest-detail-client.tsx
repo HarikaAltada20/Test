@@ -75,6 +75,7 @@ import {
   Calendar,
   ChevronDown,
   Clock,
+  Copy,
   CreditCard,
   DollarSign,
   Edit,
@@ -141,6 +142,7 @@ interface Contest {
   end_date: string | null;
   rules_html?: string | null;
   inspiration_links?: { url: string; description: string }[] | null;
+  tracking_links?: { url: string; description: string }[] | null;
   resources?: any | null;
   contest_based_details?: any | null;
   last_metrics_updated?: string | null;
@@ -183,6 +185,7 @@ interface ContestDetailClientProps {
   durationDays: number | null;
   contestId: string;
   isAdminView?: boolean;
+  user?: any; // Add user prop for dynamic [creator] replacement
 }
 
 export default function ContestDetailClient({
@@ -191,12 +194,42 @@ export default function ContestDetailClient({
   durationDays,
   contestId,
   isAdminView = false,
+  user,
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
   const [currentSubmissions, setCurrentSubmissions] = useState<Submission[]>(
     initialSubmissions || []
   );
+
+  // Utility function to extract firstName from full_name
+  const getFirstName = (fullName: string): string => {
+    if (!fullName) return "";
+    return fullName.trim().split(" ")[0];
+  };
+
+  // Utility function to replace [creator] placeholder with username
+  const processUrlWithCreator = (url: string, username: string): string => {
+    if (!url || !username) return url;
+    return url.replace(/\[creator\]/gi, username);
+  };
+
+  // Get current user's username for [creator] replacement
+  const getCurrentUserUsername = (): string => {
+    if (!user) return "";
+
+    // Try to get username from user metadata first
+    const metadata: any = user?.user_metadata || {};
+    const username = metadata.username || metadata.user_name;
+
+    if (username && String(username).trim()) {
+      return String(username).trim();
+    }
+
+    // Fallback to email local part
+    const emailLocal = (user?.email || "").split("@")[0];
+    return emailLocal || "Creator";
+  };
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -251,8 +284,10 @@ export default function ContestDetailClient({
   >("views_desc");
 
   // Creator-wise view state
-  const [viewMode, setViewMode] = useState<'normal' | 'creator-wise'>('normal');
-  const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"normal" | "creator-wise">("normal");
+  const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<
+    string | null
+  >(null);
   const [customizableHeaders, setCustomizableHeaders] = useState({
     averageViews: false,
     averageLikes: false,
@@ -289,7 +324,7 @@ export default function ContestDetailClient({
 
   // Creator-wise grouping logic
   const groupSubmissionsByCreator = useMemo(() => {
-    if (!filteredSubmissions || viewMode !== 'creator-wise') return null;
+    if (!filteredSubmissions || viewMode !== "creator-wise") return null;
 
     const grouped = filteredSubmissions.reduce((acc: any, submission: any) => {
       const creatorId = submission.creator_id;
@@ -298,8 +333,9 @@ export default function ContestDetailClient({
         acc[creatorId] = {
           creator: {
             id: creatorId,
-            username: submission.creator?.username || 'Unknown',
-            profile_picture_url: submission.creator?.profile_picture_url || null,
+            username: submission.creator?.username || "Unknown",
+            profile_picture_url:
+              submission.creator?.profile_picture_url || null,
             full_name: submission.creator?.full_name || null,
           },
           submissions: [],
@@ -310,7 +346,7 @@ export default function ContestDetailClient({
             paid: 0,
             pending: 0,
             rejected: 0,
-            verified_paid: 0
+            verified_paid: 0,
           },
           metrics: {
             views: 0,
@@ -319,7 +355,7 @@ export default function ContestDetailClient({
             shares: 0,
             saves: 0,
             reach: 0,
-            interactions: 0
+            interactions: 0,
           },
           earnings: { expected: 0, granted: 0 },
           earningsBeforeCap: 0,
@@ -334,46 +370,61 @@ export default function ContestDetailClient({
       group.totalCount++;
 
       // Update status counts
-      const status = submission.status?.toLowerCase() || 'pending';
+      const status = submission.status?.toLowerCase() || "pending";
       group.statusCounts.all++;
-      if (status === 'verified') {
+      if (status === "verified") {
         group.statusCounts.verified++;
         if (submission.paid) group.statusCounts.verified_paid++;
       }
       if (submission.paid) group.statusCounts.paid++;
-      if (status === 'pending') group.statusCounts.pending++;
-      if (status === 'rejected') group.statusCounts.rejected++;
+      if (status === "pending") group.statusCounts.pending++;
+      if (status === "rejected") group.statusCounts.rejected++;
 
       // Aggregate metrics
       group.metrics.views += submission.views || 0;
-      group.metrics.likes += submission.other_stats?.youtube?.likes || submission.other_stats?.instagram?.likes || 0;
-      group.metrics.comments += submission.other_stats?.youtube?.comments || submission.other_stats?.instagram?.comments || 0;
+      group.metrics.likes +=
+        submission.other_stats?.youtube?.likes ||
+        submission.other_stats?.instagram?.likes ||
+        0;
+      group.metrics.comments +=
+        submission.other_stats?.youtube?.comments ||
+        submission.other_stats?.instagram?.comments ||
+        0;
       group.metrics.shares += submission.other_stats?.instagram?.shares || 0;
       group.metrics.saves += submission.other_stats?.instagram?.saves || 0;
       group.metrics.reach += submission.other_stats?.instagram?.reach || 0;
-      group.metrics.interactions += submission.other_stats?.instagram?.interactions || 0;
+      group.metrics.interactions +=
+        submission.other_stats?.instagram?.interactions || 0;
 
       // Calculate earnings and bonus
       let expectedEarnings = submission.earnings || 0;
 
       // If earnings not stored, calculate dynamically for CPM contests
-      if (!expectedEarnings && currentContest?.contest_type === 'cpm') {
-        const cpmConfig = (currentContest?.contest_based_details as any)?.cpm_contest;
+      if (!expectedEarnings && currentContest?.contest_type === "cpm") {
+        const cpmConfig = (currentContest?.contest_based_details as any)
+          ?.cpm_contest;
         if (cpmConfig?.cpm_rate_usd) {
           let effectiveViews = submission.views || 0;
 
           // Apply min_views threshold
-          if (cpmConfig.min_views != null && effectiveViews < cpmConfig.min_views) {
+          if (
+            cpmConfig.min_views != null &&
+            effectiveViews < cpmConfig.min_views
+          ) {
             effectiveViews = 0;
           }
 
           // Apply max_views cap
-          if (cpmConfig.max_views != null && effectiveViews > cpmConfig.max_views) {
+          if (
+            cpmConfig.max_views != null &&
+            effectiveViews > cpmConfig.max_views
+          ) {
             effectiveViews = cpmConfig.max_views;
           }
 
           // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-          const calculatedEarnings = (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
+          const calculatedEarnings =
+            (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
           expectedEarnings = Math.round(calculatedEarnings);
         }
       }
@@ -382,18 +433,21 @@ export default function ContestDetailClient({
 
       // For granted earnings, use ACTUAL earnings from database (which respects cap)
       if (submission.paid) {
-        group.earnings.granted += (submission.earnings || 0);
+        group.earnings.granted += submission.earnings || 0;
       }
 
       // Track uncapped earnings for display purposes
       group.earningsBeforeCap += expectedEarnings;
 
       // Get flat_fee_bonus from the correct nested location
-      const flatFeeBonus = currentContest?.contest_type === 'cpm'
-        ? (currentContest?.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0
-        : (currentContest?.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+      const flatFeeBonus =
+        currentContest?.contest_type === "cpm"
+          ? (currentContest?.contest_based_details as any)?.cpm_contest
+            ?.flat_fee_bonus || 0
+          : (currentContest?.contest_based_details as any)?.leaderboard_contest
+            ?.flat_fee_bonus || 0;
 
-      if (flatFeeBonus > 0 && (status === 'verified' || status === 'paid')) {
+      if (flatFeeBonus > 0 && (status === "verified" || status === "paid")) {
         group.bonus.expected += flatFeeBonus;
       }
       if (submission.bonus_paid) {
@@ -1094,6 +1148,24 @@ export default function ContestDetailClient({
     }
   };
 
+  const handleCopyTrackingLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link Copied",
+        description: "Tracking link copied to clipboard!",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Error copying link:", error);
+      toast({
+        title: "Copy Failed",
+        description: "There was an error trying to copy this link.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const isContestEditable =
     currentContest.moderation_status === "draft" ||
     currentContest.moderation_status === "rejected" ||
@@ -1296,9 +1368,7 @@ export default function ContestDetailClient({
               asChild
             >
               <Link
-                href={
-                  `/dashboard/contests/${contestId}/edit`
-                }
+                href={`/dashboard/contests/${contestId}/edit`}
                 className="flex items-center gap-2"
               >
                 <Edit className="h-4 w-4" />
@@ -2259,15 +2329,26 @@ export default function ContestDetailClient({
                         {(currentContest as any).content_type.toUpperCase()}
                       </p>
                       <p className="text-sm text-blue-700 mt-1">
-                        This contest is looking for {(currentContest as any).content_type === 'ugc' ? 'User Generated Content' : (currentContest as any).content_type === 'clipping' ? 'Clipping/Editing' : 'Other'} type submissions. {(currentContest as any).content_type === 'other' ? '( Check rules for more details what kind of content you can create ) ' : ''}
+                        This contest is looking for{" "}
+                        {(currentContest as any).content_type === "ugc"
+                          ? "User Generated Content"
+                          : (currentContest as any).content_type === "clipping"
+                            ? "Clipping/Editing"
+                            : "Other"}{" "}
+                        type submissions.{" "}
+                        {(currentContest as any).content_type === "other"
+                          ? "( Check rules for more details what kind of content you can create ) "
+                          : ""}
                       </p>
                     </div>
                   </div>
                 )}
 
                 {/* Flat Fee Bonus Section */}
-                {(currentContest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  currentContest.contest_based_details?.leaderboard_contest?.flat_fee_bonus) && (
+                {(currentContest.contest_based_details?.cpm_contest
+                  ?.flat_fee_bonus ||
+                  currentContest.contest_based_details?.leaderboard_contest
+                    ?.flat_fee_bonus) && (
                     <div className="space-y-3">
                       <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                         <Gift className="h-5 w-5 text-green-600" />
@@ -2275,11 +2356,23 @@ export default function ContestDetailClient({
                       </h3>
                       <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
                         <p className="text-2xl font-bold text-green-900 mb-2">
-                          {formatMoney((currentContest.contest_based_details?.cpm_contest as any)?.flat_fee_bonus ||
-                            (currentContest.contest_based_details?.leaderboard_contest as any)?.flat_fee_bonus || 0)} per verified submission
+                          {formatMoney(
+                            (
+                              currentContest.contest_based_details
+                                ?.cpm_contest as any
+                            )?.flat_fee_bonus ||
+                            (
+                              currentContest.contest_based_details
+                                ?.leaderboard_contest as any
+                            )?.flat_fee_bonus ||
+                            0
+                          )}{" "}
+                          per verified submission
                         </p>
                         <p className="text-sm text-green-700">
-                          🎁 Each creator earns this guaranteed amount for EVERY verified submission, regardless of views or ranking! Paid after the contest ends along with other earnings.
+                          🎁 Each creator earns this guaranteed amount for EVERY
+                          verified submission, regardless of views or ranking!
+                          Paid after the contest ends along with other earnings.
                         </p>
                       </div>
                     </div>
@@ -2294,18 +2387,28 @@ export default function ContestDetailClient({
                     </h3>
                     <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
                       <p className="text-lg font-semibold text-purple-900 mb-2">
-                        Creators can submit up to {(currentContest as any).max_submissions_per_creator} entries for this contest!
+                        Creators can submit up to{" "}
+                        {(currentContest as any).max_submissions_per_creator}{" "}
+                        entries for this contest!
                       </p>
                       <p className="text-sm text-purple-700 mb-3">
-                        Allow multiple submissions to maximize creator engagement. Min/max view requirements (if any) apply to ALL submissions.
+                        Allow multiple submissions to maximize creator
+                        engagement. Min/max view requirements (if any) apply to
+                        ALL submissions.
                       </p>
                       {(currentContest as any).max_earnings_per_creator && (
                         <div className="mt-3 pt-3 border-t border-purple-200">
                           <p className="text-sm text-purple-800 font-medium">
-                            💡 Earnings Cap for This Contest: {formatMoney((currentContest as any).max_earnings_per_creator)}
+                            💡 Earnings Cap for This Contest:{" "}
+                            {formatMoney(
+                              (currentContest as any).max_earnings_per_creator
+                            )}
                           </p>
                           <p className="text-xs text-purple-600 mt-1">
-                            Creators can still submit after reaching this cap, but won't earn more from THIS specific contest. This cap doesn't affect their earnings from other contests!
+                            Creators can still submit after reaching this cap,
+                            but won't earn more from THIS specific contest. This
+                            cap doesn't affect their earnings from other
+                            contests!
                           </p>
                         </div>
                       )}
@@ -2323,10 +2426,15 @@ export default function ContestDetailClient({
                     <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
                       <div
                         className="prose prose-md max-w-none text-foreground"
-                        dangerouslySetInnerHTML={{ __html: (currentContest as any).bonus_details.description_html }}
+                        dangerouslySetInnerHTML={{
+                          __html: (currentContest as any).bonus_details
+                            .description_html,
+                        }}
                       />
                       <p className="text-xs text-amber-700 mt-3 italic">
-                        ℹ️ These bonuses are handled manually by you. Make sure to follow through on these commitments to maintain creator trust!
+                        ℹ️ These bonuses are handled manually by you. Make sure
+                        to follow through on these commitments to maintain
+                        creator trust!
                       </p>
                     </div>
                   </div>
@@ -2375,6 +2483,68 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
+                {/* Render tracking links if present */}
+                {Array.isArray(currentContest.tracking_links) &&
+                  currentContest.tracking_links.length > 0 && (
+                    <div className="space-y-6">
+                      <div className="flex flex-col gap-3">
+                        <h3 className="px-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
+                          Tracking Links
+                        </h3>
+                        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
+                          <span className="font-medium">Note:</span> change the sub1 and sub2 ... according to your submission number if you are doing multiple submissions ..
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {currentContest.tracking_links.map((item, idx) => {
+                          // Process URL to replace [creator] with current user's username
+                          const username = getCurrentUserUsername();
+                          const processedUrl = processUrlWithCreator(
+                            item.url,
+                            username
+                          );
+
+                          return (
+                            <div
+                              key={idx}
+                              className="bg-white border border-gray-300 rounded-xl p-6 transition-all duration-200"
+                            >
+                              <div className="flex items-start gap-4">
+                                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
+                                  <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <a
+                                      href={processedUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline break-all flex-1"
+                                    >
+                                      {processedUrl}
+                                    </a>
+                                    <button
+                                      onClick={() =>
+                                        handleCopyTrackingLink(processedUrl)
+                                      }
+                                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                      title="Copy link"
+                                    >
+                                      <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
+                                    </button>
+                                  </div>
+                                  <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                    {item.description}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 {currentContest.resources &&
                   ((Array.isArray(currentContest.resources) &&
                     currentContest.resources.length > 0) ||

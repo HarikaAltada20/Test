@@ -70,6 +70,12 @@ import { useToast } from "@/hooks/use-toast";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { formatName } from "@/lib/name-utils";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -149,21 +155,31 @@ type ContestData = {
   // New features (2025-10-01)
   multiple_submissions_enabled?: boolean;
   max_submissions_per_creator?: number;
-  content_type?: 'ugc' | 'clipping' | 'other' | null;
+  content_type?: "ugc" | "clipping" | "other" | null;
   bonus_details?: { description_html?: string; description_json?: any } | null;
   max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
 };
 
-export default function EditContestPage({ user, contestId, datesOnly = false, isAdmin = false }: { user: UserResponse["data"]["user"], contestId: string, datesOnly?: boolean, isAdmin?: boolean }) {
-  const router = useRouter()
-  const supabase = createClient()
-  const { toast } = useToast()
+export default function EditContestPage({
+  user,
+  contestId,
+  datesOnly = false,
+  isAdmin = false,
+}: {
+  user: UserResponse["data"]["user"];
+  contestId: string;
+  datesOnly?: boolean;
+  isAdmin?: boolean;
+}) {
+  const router = useRouter();
+  const supabase = createClient();
+  const { toast } = useToast();
 
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
-  const [error, setError] = useState<string | null>(null)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  const [contest, setContest] = useState<ContestData | null>(null)
+  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [contest, setContest] = useState<ContestData | null>(null);
 
   // State for subscription plans and user plan
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -174,8 +190,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const [isUserPlanLoading, setIsUserPlanLoading] = useState(true);
 
   // State for plan information
-  const [contestCommissionRate, setContestCommissionRate] = useState<number | null>(null);
-  const [currentPlanCommissionRate, setCurrentPlanCommissionRate] = useState<number | null>(null);
+  const [contestCommissionRate, setContestCommissionRate] = useState<
+    number | null
+  >(null);
+  const [currentPlanCommissionRate, setCurrentPlanCommissionRate] = useState<
+    number | null
+  >(null);
 
   // Common contest fields
   const [title, setTitle] = useState("");
@@ -193,6 +213,70 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const [inspirationLinks, setInspirationLinks] = useState<
     { url: string; description: string }[]
   >([]);
+  const [trackingLinksOpen, setTrackingLinksOpen] = useState(false);
+  const [trackingLinks, setTrackingLinks] = useState<
+    { url: string; description: string }[]
+  >([]);
+  const [newTrackingUrl, setNewTrackingUrl] = useState("");
+  const [newTrackingDescription, setNewTrackingDescription] = useState("");
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const currentUserFirstName = (() => {
+    const metadata: any = (user as any)?.user_metadata || {};
+    const rawFirst =
+      metadata.first_name ||
+      metadata.given_name ||
+      (metadata.full_name ? String(metadata.full_name).split(" ")[0] : null);
+    if (rawFirst && String(rawFirst).trim())
+      return formatName(String(rawFirst));
+    const emailLocal = (user?.email || "").split("@")[0];
+    return emailLocal ? formatName(emailLocal) : "Creator";
+  })();
+  const addTrackingLink = () => {
+    setTrackingError(null);
+    const url = newTrackingUrl.trim();
+    const description = newTrackingDescription.trim();
+    if (!url) {
+      setTrackingError("URL cannot be empty.");
+      return;
+    }
+    // Store the URL with [creator] placeholder intact for dynamic replacement
+    const processedUrl = url;
+    // Validate URL format - create a test URL with placeholder replaced for validation
+    const testUrl = url.includes("[creator]")
+      ? url.replace(/\[creator\]/gi, "testcreator")
+      : url;
+    try {
+      const urlObj = new URL(testUrl);
+      if (urlObj.protocol !== "https:") {
+        setTrackingError("URL must start with https://");
+        return;
+      }
+    } catch {
+      setTrackingError("Invalid URL format.");
+      return;
+    }
+    if (!description) {
+      setTrackingError("Description is required.");
+      return;
+    }
+    if (trackingLinks.some((link) => link.url === processedUrl)) {
+      setTrackingError("This tracking link has already been added.");
+      return;
+    }
+    const updatedTracking = [
+      ...trackingLinks,
+      { url: processedUrl, description },
+    ];
+    setTrackingLinks(updatedTracking);
+    setNewTrackingUrl("");
+    setNewTrackingDescription("");
+    toast({ title: "Success", description: "Tracking link added!" });
+  };
+
+  const removeTrackingLink = (index: number) => {
+    setTrackingLinks(trackingLinks.filter((_, i) => i !== index));
+    toast({ title: "Success", description: "Tracking link removed!" });
+  };
   const [newInspirationUrl, setNewInspirationUrl] = useState("");
   const [newInspirationDescription, setNewInspirationDescription] =
     useState("");
@@ -222,15 +306,21 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
   const [termsConditions, setTermsConditions] = useState<string>("");
 
   // New features state (2025-10-01)
-  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] = useState(false);
-  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] = useState<number>(1);
-  const [contentType, setContentType] = useState<'ugc' | 'clipping' | 'other' | ''>('other');
-  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(''); // In dollars
+  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
+    useState(false);
+  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
+    useState<number>(1);
+  const [contentType, setContentType] = useState<
+    "ugc" | "clipping" | "other" | ""
+  >("other");
+  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [bonusEnabled, setBonusEnabled] = useState(false);
-  const [bonusHtml, setBonusHtml] = useState('');
+  const [bonusHtml, setBonusHtml] = useState("");
   const [bonusJson, setBonusJson] = useState<any>(null);
   const [showBonusPreview, setShowBonusPreview] = useState(false);
-  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<number | string>(''); // In dollars
+  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<
+    number | string
+  >(""); // In dollars
   const bonusRichTextEditorRef = useRef<any>(null);
 
   // Resources State Variables
@@ -431,19 +521,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           return;
         }
 
-
         if (data) {
           // Extract commission rate from contest payment details
           if (data.payment_details) {
             try {
-              const paymentDetails = typeof data.payment_details === "string"
-                ? JSON.parse(data.payment_details)
-                : data.payment_details;
+              const paymentDetails =
+                typeof data.payment_details === "string"
+                  ? JSON.parse(data.payment_details)
+                  : data.payment_details;
               if (paymentDetails.commission_percentage) {
                 setContestCommissionRate(paymentDetails.commission_percentage);
               }
             } catch (error) {
-              console.error('Error parsing payment details:', error);
+              console.error("Error parsing payment details:", error);
             }
           }
 
@@ -525,10 +615,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               [];
             if (Array.isArray(data.inspiration_links)) {
               parsedInspirationLinks = data.inspiration_links;
-            } else {
-              parsedInspirationLinks = [];
             }
             setInspirationLinks(parsedInspirationLinks);
+
+            // Parse tracking_links
+            let parsedTrackingLinks: { url: string; description: string }[] =
+              [];
+            if (Array.isArray((data as any).tracking_links)) {
+              parsedTrackingLinks = (data as any).tracking_links as any;
+            }
+            setTrackingLinks(parsedTrackingLinks);
 
             setThumbnailPreview(data.thumbnail_url || null);
             setContestType(data.contest_type || "leaderboard"); // Default to leaderboard if null for some reason
@@ -589,9 +685,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             setResources(data.resources || []);
 
             // Load new features (2025-10-01)
-            setMultipleSubmissionsEnabled(data.multiple_submissions_enabled || false);
+            setMultipleSubmissionsEnabled(
+              data.multiple_submissions_enabled || false
+            );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
-            setContentType(data.content_type || 'other');
+            setContentType(data.content_type || "other");
 
             // Load flat fee bonus from contest_based_details
             if (data.contest_type === "leaderboard") {
@@ -616,14 +714,18 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               setBonusJson(data.bonus_details.description_json);
               setTimeout(() => {
                 if (bonusRichTextEditorRef.current) {
-                  bonusRichTextEditorRef.current.setContent(data.bonus_details.description_json);
+                  bonusRichTextEditorRef.current.setContent(
+                    data.bonus_details.description_json
+                  );
                 }
               }, 100);
             }
 
             // Load max earnings per creator
             if (data.max_earnings_per_creator) {
-              setMaxEarningsPerCreator((data.max_earnings_per_creator / 100).toString());
+              setMaxEarningsPerCreator(
+                (data.max_earnings_per_creator / 100).toString()
+              );
             }
           }
         } else {
@@ -884,23 +986,28 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
-        }`;
+      startMessage = `Your contest will be live in ${daysUntilStart} day${
+        daysUntilStart !== 1 ? "s" : ""
+      }`;
       if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
-          }`;
-    } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        startMessage += ` and ${hoursUntilStart} hour${
+          hoursUntilStart !== 1 ? "s" : ""
         }`;
+    } else if (hoursUntilStart > 0) {
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
+        hoursUntilStart !== 1 ? "s" : ""
+      }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
-      }${durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${
+      durationDays !== 1 ? "s" : ""
+    }${
+      durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-      }`;
+    }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -952,15 +1059,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-        " and " +
-        disallowed[disallowed.length - 1];
+          " and " +
+          disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
-      } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${
+      disallowed.length > 1 ? "are" : "is"
+    } not allowed.`;
   };
   // Get minimum allowed end date (at least 3 days after the start date)
   const getMinEndDate = () => {
@@ -1113,6 +1221,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
+        tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
       };
     }
 
@@ -1149,7 +1258,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-          (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -1163,8 +1272,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-                } day gap required).`,
+              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+                MIN_DAYS_UNTIL_START - 1
+              } day gap required).`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -1275,10 +1385,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too Low",
-            description: `Prize for Winner ${i + 1
-              } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
-              )}`,
+            description: `Prize for Winner ${
+              i + 1
+            } must be at least ${formatCurrencyFromCents(
+              MIN_PRIZE_PER_WINNER
+            )}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1288,8 +1399,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too High",
-            description: `Prize for Winner ${i + 1
-              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+            description: `Prize for Winner ${
+              i + 1
+            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1313,7 +1425,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        leaderboardDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        leaderboardDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
       }
 
       // Add total budget if specified (stored in cents)
@@ -1436,7 +1555,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        cpmDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
       }
 
       contestBasedDetails.cpm_contest = cpmDetails;
@@ -1459,7 +1580,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       // Add new features (2025-10-01)
       updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
-      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1;
+      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
+        ? maxSubmissionsPerCreator
+        : 1;
       updatePayload.content_type = contentType || null;
 
       // Capture bonus content before saving
@@ -1467,18 +1590,22 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
-        updatePayload.bonus_details = html ? {
-          description_html: html,
-          description_json: json
-        } : null;
+        updatePayload.bonus_details = html
+          ? {
+              description_html: html,
+              description_json: json,
+            }
+          : null;
       } else {
         updatePayload.bonus_details = null;
       }
 
       // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
-        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-        : null;
+      updatePayload.max_earnings_per_creator =
+        maxEarningsPerCreator &&
+        parseFloat(maxEarningsPerCreator.toString()) > 0
+          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+          : null;
     }
     try {
       // Use the already-uploaded thumbnail URL (from thumbnailPreview)
@@ -1494,13 +1621,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       // For admins, call a secure API that uses the service role to bypass RLS
       if (isAdmin) {
         const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatePayload)
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
         });
         if (!resp.ok) {
           const j = await resp.json().catch(() => ({}));
-          throw new Error(j.error || 'Admin update failed');
+          throw new Error(j.error || "Admin update failed");
         }
       } else {
         let updateQuery = supabase
@@ -1513,7 +1640,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           throw updateError;
         }
       }
-
 
       // Show success toast
       toast({
@@ -1559,8 +1685,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       if (file.size > maxSize) {
         toast({
           title: "File Too Large",
-          description: "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
-          variant: "destructive"
+          description:
+            "Thumbnail must be 5MB or smaller. Please choose a smaller file.",
+          variant: "destructive",
         });
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
@@ -1569,7 +1696,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       }
       try {
         if (!user?.id) {
-          toast({ title: "Authentication Error", description: "User not authenticated. Please sign in again.", variant: "destructive" });
+          toast({
+            title: "Authentication Error",
+            description: "User not authenticated. Please sign in again.",
+            variant: "destructive",
+          });
           return;
         }
         // Remove any existing thumbnail for this contest (all extensions)
@@ -1577,14 +1708,16 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           .from("contest-assets")
           .list("contest_thumbnails");
         if (existingFiles) {
-          const matching = existingFiles.filter(f => f.name.startsWith(`${contestId}_`));
+          const matching = existingFiles.filter((f) =>
+            f.name.startsWith(`${contestId}_`)
+          );
           if (matching.length > 0) {
-            const paths = matching.map(f => `contest_thumbnails/${f.name}`);
+            const paths = matching.map((f) => `contest_thumbnails/${f.name}`);
             await supabase.storage.from("contest-assets").remove(paths);
           }
         }
         // Get extension and timestamp
-        const ext = file.name.split('.').pop() || 'jpg';
+        const ext = file.name.split(".").pop() || "jpg";
         const timestamp = Date.now();
         const fileName = `contest_thumbnails/${contestId}_${timestamp}.${ext}`;
         setThumbnail(file);
@@ -1612,12 +1745,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           thumbQuery = thumbQuery.eq("advertiser_id", user.id);
         }
         await thumbQuery;
-        toast({ title: "Success", description: "Thumbnail uploaded successfully!" });
+        toast({
+          title: "Success",
+          description: "Thumbnail uploaded successfully!",
+        });
       } catch (error: any) {
         console.error("Error uploading thumbnail:", error);
         setThumbnail(null);
         setThumbnailPreview(null);
-        toast({ title: "Upload Error", description: `Failed to upload thumbnail: ${error.message}`, variant: "destructive" });
+        toast({
+          title: "Upload Error",
+          description: `Failed to upload thumbnail: ${error.message}`,
+          variant: "destructive",
+        });
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
@@ -2164,17 +2304,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       // Show detailed refund breakdown if available
       const refundMessage = refundResult.breakdown
         ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-          2
-        )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-          2
-        )} + $${refundResult.breakdown.commissionRefund.toFixed(
-          2
-        )} commission (${refundDetails.commissionPercentage}%) = $${refundResult.breakdown.totalRefunded.toFixed(
-          2
-        )} total.`
+            2
+          )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
+            2
+          )} + $${refundResult.breakdown.commissionRefund.toFixed(
+            2
+          )} commission (${
+            refundDetails.commissionPercentage
+          }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
         : `$${(refundDetails.totalRefund / 100).toFixed(
-          2
-        )} has been refunded to your wallet (using original ${refundDetails.commissionPercentage}% commission rate)`;
+            2
+          )} has been refunded to your wallet (using original ${
+            refundDetails.commissionPercentage
+          }% commission rate)`;
 
       toast({
         title: "Refund Processed",
@@ -2193,7 +2335,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       // Submit for approval after successful refund
       await submitForApproval();
-
     } catch (error: any) {
       console.error("❌ Error processing refund:", error);
       toast({
@@ -2210,43 +2351,47 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     if (!refundDetails) return;
 
     try {
-      const contestBasedDetails = contestType === "leaderboard"
-        ? {
-          leaderboard_contest: {
-            prizes: winnerAmounts.map((amount, index) => ({
-              position: index + 1,
-              amount: amount,
-            })),
-            total_prize: winnerAmounts.reduce(
-              (sum, amount) => sum + amount,
-              0
-            ),
-            winner_count: winnerCount,
-          },
-        }
-        : {
-          cpm_contest: {
-            cpm_rate_usd: parseFloat(cpmRate.toString()),
-            min_views: minViews ? parseInt(minViews.toString()) : null,
-            max_views: maxViews ? parseInt(maxViews.toString()) : null,
-            total_budget: Math.round(
-              parseFloat(totalBudget.toString()) * 100
-            ),
-            terms_conditions: termsConditions,
-          },
-        };
+      const contestBasedDetails =
+        contestType === "leaderboard"
+          ? {
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
+          : {
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
       const { error: updateError } = await supabase
-        .from('contests')
+        .from("contests")
         .update({
           contest_based_details: contestBasedDetails,
-          moderation_status: "draft" // Save as draft after successful refund
+          moderation_status: "draft", // Save as draft after successful refund
         })
-        .eq('id', contestId)
-        .eq('advertiser_id', user?.id);
+        .eq("id", contestId)
+        .eq("advertiser_id", user?.id);
 
       if (updateError) {
-        console.error("Error updating contest details after refund:", updateError);
+        console.error(
+          "Error updating contest details after refund:",
+          updateError
+        );
         throw new Error("Failed to update contest details");
       }
 
@@ -2265,18 +2410,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           `Submission attempt ${attempt}/${retries} for contest ${contestId}`
         );
 
-        const response = await fetch(
-          `/api/contests/${contestId}/moderation`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              action: "submit_for_approval",
-            }),
-          }
-        );
+        const response = await fetch(`/api/contests/${contestId}/moderation`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "submit_for_approval",
+          }),
+        });
 
         const result = await response.json();
 
@@ -2384,8 +2526,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       if (isNewContest) {
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-            } day gap required).`;
+          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+            MIN_DAYS_UNTIL_START - 1
+          } day gap required).`;
         }
       } else if (startDateTime < now) {
         return "Contest start time must be in the future.";
@@ -2430,12 +2573,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       for (let i = 0; i < winnerCount; i++) {
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${i + 1
-            } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${
+            i + 1
+          } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
         }
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${i + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${
+            i + 1
+          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
         }
       }
     }
@@ -2497,29 +2642,29 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-              leaderboard_contest: {
-                prizes: winnerAmounts.map((amount, index) => ({
-                  position: index + 1,
-                  amount: amount,
-                })),
-                total_prize: winnerAmounts.reduce(
-                  (sum, amount) => sum + amount,
-                  0
-                ),
-                winner_count: winnerCount,
-              },
-            }
+                leaderboard_contest: {
+                  prizes: winnerAmounts.map((amount, index) => ({
+                    position: index + 1,
+                    amount: amount,
+                  })),
+                  total_prize: winnerAmounts.reduce(
+                    (sum, amount) => sum + amount,
+                    0
+                  ),
+                  winner_count: winnerCount,
+                },
+              }
             : {
-              cpm_contest: {
-                cpm_rate_usd: parseFloat(cpmRate.toString()),
-                min_views: minViews ? parseInt(minViews.toString()) : null,
-                max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                total_budget: Math.round(
-                  parseFloat(totalBudget.toString()) * 100
-                ),
-                terms_conditions: termsConditions,
-              },
-            };
+                cpm_contest: {
+                  cpm_rate_usd: parseFloat(cpmRate.toString()),
+                  min_views: minViews ? parseInt(minViews.toString()) : null,
+                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                  total_budget: Math.round(
+                    parseFloat(totalBudget.toString()) * 100
+                  ),
+                  terms_conditions: termsConditions,
+                },
+              };
 
         // Prepare complete contest update with ALL form data
         const contestUpdate = {
@@ -2572,29 +2717,29 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-              leaderboard_contest: {
-                prizes: winnerAmounts.map((amount, index) => ({
-                  position: index + 1,
-                  amount: amount,
-                })),
-                total_prize: winnerAmounts.reduce(
-                  (sum, amount) => sum + amount,
-                  0
-                ),
-                winner_count: winnerCount,
-              },
-            }
+                leaderboard_contest: {
+                  prizes: winnerAmounts.map((amount, index) => ({
+                    position: index + 1,
+                    amount: amount,
+                  })),
+                  total_prize: winnerAmounts.reduce(
+                    (sum, amount) => sum + amount,
+                    0
+                  ),
+                  winner_count: winnerCount,
+                },
+              }
             : {
-              cpm_contest: {
-                cpm_rate_usd: parseFloat(cpmRate.toString()),
-                min_views: minViews ? parseInt(minViews.toString()) : null,
-                max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                total_budget: Math.round(
-                  parseFloat(totalBudget.toString()) * 100
-                ),
-                terms_conditions: termsConditions,
-              },
-            };
+                cpm_contest: {
+                  cpm_rate_usd: parseFloat(cpmRate.toString()),
+                  min_views: minViews ? parseInt(minViews.toString()) : null,
+                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                  total_budget: Math.round(
+                    parseFloat(totalBudget.toString()) * 100
+                  ),
+                  terms_conditions: termsConditions,
+                },
+              };
 
         const contestUpdate = {
           title: title.trim(),
@@ -2853,12 +2998,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         // First try to get from payment details (most accurate)
         if (contest?.payment_details) {
           try {
-            const paymentDetails = typeof contest.payment_details === "string"
-              ? JSON.parse(contest.payment_details)
-              : contest.payment_details;
+            const paymentDetails =
+              typeof contest.payment_details === "string"
+                ? JSON.parse(contest.payment_details)
+                : contest.payment_details;
             if (paymentDetails.commission_percentage) {
               commissionPercentage = paymentDetails.commission_percentage;
-              console.log(`💰 Using original commission percentage from payment details: ${commissionPercentage}%`);
+              console.log(
+                `💰 Using original commission percentage from payment details: ${commissionPercentage}%`
+              );
             }
           } catch (error) {
             console.warn("Failed to parse payment details:", error);
@@ -2868,16 +3016,22 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         // If not found in payment details, try to get from subscription info
         else if (!commissionPercentage && contest?.subscription_info_of_user) {
           try {
-            const subscriptionInfo = typeof contest.subscription_info_of_user === "string"
-              ? JSON.parse(contest.subscription_info_of_user)
-              : contest.subscription_info_of_user;
+            const subscriptionInfo =
+              typeof contest.subscription_info_of_user === "string"
+                ? JSON.parse(contest.subscription_info_of_user)
+                : contest.subscription_info_of_user;
 
             // Get plan features from the subscription that was active when contest was created
             // Pass the product_id to getPlanFeatures
-            const subscriptionPlanFeatures = getPlanFeatures(subscriptionInfo.product_id);
+            const subscriptionPlanFeatures = getPlanFeatures(
+              subscriptionInfo.product_id
+            );
             if (subscriptionPlanFeatures.commissionPercentage) {
-              commissionPercentage = subscriptionPlanFeatures.commissionPercentage;
-              console.log(`💰 Using commission percentage from original subscription (product_id: ${subscriptionInfo.product_id}): ${commissionPercentage}%`);
+              commissionPercentage =
+                subscriptionPlanFeatures.commissionPercentage;
+              console.log(
+                `💰 Using commission percentage from original subscription (product_id: ${subscriptionInfo.product_id}): ${commissionPercentage}%`
+              );
             }
           } catch (error) {
             console.warn("Failed to parse subscription info:", error);
@@ -2887,7 +3041,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         // Final fallback to current plan (should rarely happen)
         if (!commissionPercentage) {
           commissionPercentage = getPlanFeatures(userPlan).commissionPercentage;
-          console.warn(`💰 Using current plan commission as fallback: ${commissionPercentage}%`);
+          console.warn(
+            `💰 Using current plan commission as fallback: ${commissionPercentage}%`
+          );
         }
 
         const commissionRefund = Math.round(
@@ -2900,12 +3056,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           prizePoolDecrease,
           commissionRefund,
           totalRefund: totalRefundAmount,
-          commissionPercentage
+          commissionPercentage,
         });
         setShowRefundPreview(true);
         setIsSubmitting(false);
         return;
-
       } catch (error: any) {
         console.error("❌ Error preparing refund preview:", error);
         toast({
@@ -3090,6 +3245,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
+        tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
       };
     }
 
@@ -3139,7 +3295,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-          (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -3153,8 +3309,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
           if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-                } day gap required).`,
+              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+                MIN_DAYS_UNTIL_START - 1
+              } day gap required).`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -3234,8 +3391,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     }
 
     // Skip contest type validation for datesOnly mode
-    if (!datesOnly && contestType === 'leaderboard') {
-      const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+    if (!datesOnly && contestType === "leaderboard") {
+      const currentTotalPrizePool = winnerAmounts.reduce(
+        (sum, amount) => sum + (amount || 0),
+        0
+      );
 
       // Validation only for non-draft mode
       if (!isDraftMode) {
@@ -3245,32 +3405,48 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
         if (currentTotalPrizePool < planFeatures.minContestBudget) {
           toast({
             title: "Prize Pool Too Low",
-            description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+            description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(
+              planFeatures.minContestBudget
+            )}.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too Low",
-              description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${
+                i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
               variant: "destructive",
             });
-            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
           }
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too High",
-              description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${
+                i + 1
+              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
               variant: "destructive",
             });
-            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
           }
         }
       }
@@ -3287,7 +3463,14 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        leaderboardDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        leaderboardDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
       }
 
       // Add total budget if specified (stored in cents)
@@ -3300,11 +3483,21 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
-    if (!datesOnly && contestType === 'cpm') {
-      const parsedCpmRate = typeof cpmRate === 'string' ? parseFloat(cpmRate) : cpmRate;
-      const parsedMinViews = minViews ? (typeof minViews === 'string' ? parseInt(minViews) : minViews) : null;
-      const parsedMaxViews = maxViews ? (typeof maxViews === 'string' ? parseInt(maxViews) : maxViews) : null;
-      const parsedTotalBudget = typeof totalBudget === 'string' ? parseFloat(totalBudget) : totalBudget;
+    if (!datesOnly && contestType === "cpm") {
+      const parsedCpmRate =
+        typeof cpmRate === "string" ? parseFloat(cpmRate) : cpmRate;
+      const parsedMinViews = minViews
+        ? typeof minViews === "string"
+          ? parseInt(minViews)
+          : minViews
+        : null;
+      const parsedMaxViews = maxViews
+        ? typeof maxViews === "string"
+          ? parseInt(maxViews)
+          : maxViews
+        : null;
+      const parsedTotalBudget =
+        typeof totalBudget === "string" ? parseFloat(totalBudget) : totalBudget;
 
       if (!isDraftMode) {
         if (!parsedCpmRate || parsedCpmRate <= 0) {
@@ -3313,7 +3506,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             description: "CPM rate must be a positive number.",
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
 
         if (parsedCpmRate < MIN_CPM_RATE) {
@@ -3322,7 +3517,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
 
         if (parsedCpmRate > MAX_CPM_RATE) {
@@ -3331,25 +3528,40 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
 
-        if (!parsedTotalBudget || (parsedTotalBudget * 100) < planFeatures.minContestBudget) {
+        if (
+          !parsedTotalBudget ||
+          parsedTotalBudget * 100 < planFeatures.minContestBudget
+        ) {
           toast({
             title: "Budget Too Low",
-            description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+            description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(
+              planFeatures.minContestBudget
+            )}.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
 
-        if (parsedMinViews && parsedMaxViews && parsedMinViews >= parsedMaxViews) {
+        if (
+          parsedMinViews &&
+          parsedMaxViews &&
+          parsedMinViews >= parsedMaxViews
+        ) {
           toast({
             title: "Invalid View Range",
             description: "Minimum views must be less than maximum views.",
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
 
         if (!termsConditions || termsConditions.trim() === "") {
@@ -3358,7 +3570,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
             description: "Terms and conditions are required for CPM contests.",
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
       }
 
@@ -3367,17 +3581,20 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         min_views: parsedMinViews,
         max_views: parsedMaxViews,
         total_budget: parsedTotalBudget ? parsedTotalBudget * 100 : 0, // cents
-        budget_spent: contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
-        terms_conditions: (termsConditions || '').trim()
+        budget_spent:
+          contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
+        terms_conditions: (termsConditions || "").trim(),
       };
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        cpmDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
       }
 
       contestBasedDetails.cpm_contest = cpmDetails;
-      updatePayload.contest_type = 'cpm';
+      updatePayload.contest_type = "cpm";
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
@@ -3385,7 +3602,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     if (!datesOnly) {
       // Add new features (2025-10-01)
       updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
-      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1;
+      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
+        ? maxSubmissionsPerCreator
+        : 1;
       updatePayload.content_type = contentType || null;
 
       // Capture bonus content before saving
@@ -3393,18 +3612,22 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
-        updatePayload.bonus_details = html ? {
-          description_html: html,
-          description_json: json
-        } : null;
+        updatePayload.bonus_details = html
+          ? {
+              description_html: html,
+              description_json: json,
+            }
+          : null;
       } else {
         updatePayload.bonus_details = null;
       }
 
       // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
-        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-        : null;
+      updatePayload.max_earnings_per_creator =
+        maxEarningsPerCreator &&
+        parseFloat(maxEarningsPerCreator.toString()) > 0
+          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+          : null;
     }
 
     try {
@@ -3418,13 +3641,13 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
       if (isAdmin) {
         const resp = await fetch(`/api/admin/contests/${contestId}/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updatePayload)
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
         });
         if (!resp.ok) {
           const j = await resp.json().catch(() => ({}));
-          throw new Error(j.error || 'Admin update failed');
+          throw new Error(j.error || "Admin update failed");
         }
       } else {
         const { error: updateError } = await supabase
@@ -3699,7 +3922,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
     );
   }
 
-
   // Get plan features for the current user for UI elements
   const planFeatures = getPlanFeatures(userPlan);
   const totalPrizePool = winnerAmounts.reduce(
@@ -3750,7 +3972,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
             </div>
             {userPlan !== PRODUCT_IDS.CHAMPION && (
-              <Link href="/dashboard/billing?tab=subscription" className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition text-center">
+              <Link
+                href="/dashboard/billing?tab=subscription"
+                className="px-4 py-2 rounded-lg bg-[#4A00BE] text-white text-sm font-medium hover:bg-[#6b2ed4] transition text-center"
+              >
                 Upgrade Plan
               </Link>
             )}
@@ -3759,16 +3984,19 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
       </div>
 
       {/* Commission Rate Information */}
-      {contestCommissionRate !== null && currentPlanCommissionRate !== null &&
+      {contestCommissionRate !== null &&
+        currentPlanCommissionRate !== null &&
         contestCommissionRate !== currentPlanCommissionRate && (
           <Alert className="mb-6 border-blue-200 bg-blue-50 w-full">
             <Info className="h-4 w-4 flex-shrink-0" />
             <AlertDescription className="min-w-0">
-              <strong>Commission Rate Notice:</strong> This contest was created with a {contestCommissionRate}% commission rate.
-              Your current plan has a {currentPlanCommissionRate}% commission rate.
+              <strong>Commission Rate Notice:</strong> This contest was created
+              with a {contestCommissionRate}% commission rate. Your current plan
+              has a {currentPlanCommissionRate}% commission rate.
               <br />
               <span className="text-sm text-gray-600">
-                If you want to use your new plan's commission rate, you'll need to create a new contest.
+                If you want to use your new plan's commission rate, you'll need
+                to create a new contest.
               </span>
             </AlertDescription>
           </Alert>
@@ -3833,10 +4061,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
-                    ? "border-rose-500 bg-rose-50"
-                    : "border-gray-300 bg-white"
-                    }`}
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
+                    isDragActive
+                      ? "border-rose-500 bg-rose-50"
+                      : "border-gray-300 bg-white"
+                  }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -3857,8 +4086,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           {thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                              2
-                            )}MB`
+                                2
+                              )}MB`
                             : ""}
                         </p>
                         <Button
@@ -4056,10 +4285,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 {/* Asset Upload */}
                 <div className="flex flex-col gap-6">
                   <div
-                    className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${isDragActive
-                      ? "border-rose-500 bg-rose-50"
-                      : "border-gray-300 bg-white"
-                      }`}
+                    className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${
+                      isDragActive
+                        ? "border-rose-500 bg-rose-50"
+                        : "border-gray-300 bg-white"
+                    }`}
                     onClick={() => resourceFileRef.current?.click()}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -4611,7 +4841,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                             )}
                           </div>
                           <button
-
                             onClick={() => removeResource(idx)}
                             className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
                           >
@@ -4647,8 +4876,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 )}
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="inspirationUrlInput">
-                    Inspiration Link{" "}
-                    <span className="text-red-500">*</span>
+                    Inspiration Link <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="inspirationUrlInput"
@@ -4686,7 +4914,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         key={index}
                         className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-gray-800 
                         border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
-
                       >
                         <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
                           <ExternalLink className="w-6= h-6" />
@@ -4705,8 +4932,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           </div>
                         </div>
                         <button
-
-
                           onClick={() => removeInspirationLink(index)}
                           className="text-[#4A00BE] bg-[#D8C3FF] p-3 rounded-full flex-shrink-0 self-end sm:self-auto"
                         >
@@ -4717,6 +4942,110 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   </ul>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Tracking Links (Collapsible) */}
+          {!datesOnly && (
+            <div className="mt-6">
+              <div className="my-6 border-t border-gray-300"></div>
+              <Collapsible
+                open={trackingLinksOpen}
+                onOpenChange={setTrackingLinksOpen}
+              >
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition"
+                  >
+                    <span>Tracking Links</span>
+                    <span className="text-sm font-normal opacity-70">
+                      {trackingLinksOpen ? "Hide" : "Show"}
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4 space-y-4">
+                  {trackingError && (
+                    <div className="text-red-500 text-sm">{trackingError}</div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="trackingUrlInput">External Link</Label>
+                    <Input
+                      id="trackingUrlInput"
+                      type="url"
+                      placeholder="https://example.com/tracking-link"
+                      value={newTrackingUrl}
+                      onChange={(e) => setNewTrackingUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="trackingDescriptionInput">
+                      Description
+                    </Label>
+                    <Input
+                      id="trackingDescriptionInput"
+                      placeholder="Describe this link"
+                      value={newTrackingDescription}
+                      onChange={(e) =>
+                        setNewTrackingDescription(e.target.value)
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={addTrackingLink}
+                    disabled={!newTrackingUrl || !newTrackingDescription}
+                    className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                  >
+                    Add Tracking Link
+                  </Button>
+                  {trackingLinks.length > 0 && (
+                    <ul className="space-y-3 mt-2">
+                      {trackingLinks.map((item, index) => (
+                        <li
+                          key={index}
+                          className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                        >
+                          <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
+                            <ExternalLink className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <a
+                              href={
+                                item.url.includes("[creator]")
+                                  ? item.url.replace(
+                                      /\[creator\]/gi,
+                                      encodeURIComponent(currentUserFirstName)
+                                    )
+                                  : item.url
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-blue-600 hover:underline break-all"
+                            >
+                              {item.url.includes("[creator]")
+                                ? item.url.replace(
+                                    /\[creator\]/gi,
+                                    currentUserFirstName
+                                  )
+                                : item.url}
+                            </a>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {item.description}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeTrackingLink(index)}
+                            className="text-[#4A00BE] bg-[#D8C3FF] p-3 mr-2 rounded-full"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           )}
 
@@ -4831,16 +5160,18 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
               {/* Plan Requirements Info */}
 
-
               <div className="mb-6">
                 <div className="border border-[#7F39EC] bg-[#D9C0FF26] text-black px-4 py-3 rounded-lg">
                   <AlertDescription className="flex items-center justify-between">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <Info className="h-4 w-4 shrink-0" />
                       <span className="font-medium">Plan Requirements: </span>
-                      <span className="whitespace-normal">Minimum total prize pool:{" "}
+                      <span className="whitespace-normal">
+                        Minimum total prize pool:{" "}
                         <strong>
-                          {formatCurrencyFromCents(planFeatures.minContestBudget)}
+                          {formatCurrencyFromCents(
+                            planFeatures.minContestBudget
+                          )}
                         </strong>
                       </span>
                       <span className="whitespace-normal">
@@ -4848,15 +5179,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         <strong>{planFeatures.maxWinnersPerContest}</strong>
                       </span>
                       <span className="whitespace-normal">
-                        • Minimum
-                        per winner:{" "}
+                        • Minimum per winner:{" "}
                         <strong>
                           {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
                         </strong>
                       </span>
                     </div>
-
-
                   </AlertDescription>
                 </div>
               </div>
@@ -4920,7 +5248,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                           const position = newCount;
                           newAmounts.push(
                             DEFAULT_PRIZE_ALLOCATIONS[
-                            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+                              position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
                             ] || MIN_PRIZE_PER_WINNER
                           );
                           setWinnerAmounts(newAmounts);
@@ -4948,7 +5276,10 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                 </div>
 
                 {Array.from({ length: winnerCount }).map((_, i) => (
-                  <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-4">
+                  <div
+                    key={i}
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-4"
+                  >
                     <Label className="w-40 md:w-48">Winner {i + 1}</Label>
                     <Input
                       type="number"
@@ -5260,18 +5591,26 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               {/* Content Type Selection */}
               <div className="space-y-2">
                 <Label htmlFor="content-type">Content Type (Optional)</Label>
-                <Select value={contentType || undefined} onValueChange={(value) => setContentType(value as 'ugc' | 'clipping' | 'other')}>
+                <Select
+                  value={contentType || undefined}
+                  onValueChange={(value) =>
+                    setContentType(value as "ugc" | "clipping" | "other")
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ugc">UGC (User Generated Content)</SelectItem>
+                    <SelectItem value="ugc">
+                      UGC (User Generated Content)
+                    </SelectItem>
                     <SelectItem value="clipping">Clipping</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Helps creators filter opportunities by content type. Leave empty if not applicable.
+                  Helps creators filter opportunities by content type. Leave
+                  empty if not applicable.
                 </p>
               </div>
 
@@ -5279,11 +5618,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               <div className="space-y-3 rounded-lg border border-purple-200 bg-purple-50/30 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label htmlFor="multiple-submissions" className="text-base font-medium">
+                    <Label
+                      htmlFor="multiple-submissions"
+                      className="text-base font-medium"
+                    >
                       Allow Multiple Submissions
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Enable creators to submit multiple entries to this contest.
+                      Enable creators to submit multiple entries to this
+                      contest.
                     </p>
                   </div>
                   <input
@@ -5294,7 +5637,7 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                       setMultipleSubmissionsEnabled(e.target.checked);
                       if (!e.target.checked) {
                         setMaxSubmissionsPerCreator(1);
-                        setMaxEarningsPerCreator('');
+                        setMaxEarningsPerCreator("");
                       } else {
                         // Set default to minimum (2) when enabling multiple submissions
                         setMaxSubmissionsPerCreator(2);
@@ -5308,7 +5651,8 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   <div className="space-y-4 pt-3 border-t border-purple-200">
                     <div className="space-y-2">
                       <Label htmlFor="max-submissions">
-                        Maximum Submissions Per Creator <span className="text-red-500">*</span>
+                        Maximum Submissions Per Creator{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="max-submissions"
@@ -5325,13 +5669,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         placeholder="e.g., 5"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Range: 2-100 submissions per creator. Min/max views apply to ALL submissions.
+                        Range: 2-100 submissions per creator. Min/max views
+                        apply to ALL submissions.
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="max-earnings">
-                        Maximum Earnings Per Creator - THIS CONTEST ONLY (Optional)
+                        Maximum Earnings Per Creator - THIS CONTEST ONLY
+                        (Optional)
                       </Label>
                       <Input
                         id="max-earnings"
@@ -5339,11 +5685,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         step="0.01"
                         min="0"
                         value={maxEarningsPerCreator}
-                        onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
+                        onChange={(e) =>
+                          setMaxEarningsPerCreator(e.target.value)
+                        }
                         placeholder="e.g., 500"
                       />
                       <p className="text-xs text-muted-foreground">
-                        💡 Per-contest cap (not platform-wide). Creators can still submit after reaching this cap but won't earn more from THIS specific contest. Leave empty for no cap.
+                        💡 Per-contest cap (not platform-wide). Creators can
+                        still submit after reaching this cap but won't earn more
+                        from THIS specific contest. Leave empty for no cap.
                       </p>
                     </div>
                   </div>
@@ -5365,7 +5715,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   placeholder="e.g., 10.00"
                 />
                 <p className="text-xs text-muted-foreground">
-                  🎁 Guaranteed payment for EVERY verified submission, regardless of views or ranking. Paid after contest ends. Great motivator for creators!
+                  🎁 Guaranteed payment for EVERY verified submission,
+                  regardless of views or ranking. Paid after contest ends. Great
+                  motivator for creators!
                 </p>
               </div>
 
@@ -5398,11 +5750,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/30 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label htmlFor="bonus-enabled" className="text-base font-medium">
+                    <Label
+                      htmlFor="bonus-enabled"
+                      className="text-base font-medium"
+                    >
                       Additional Bonus Opportunities
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Describe other bonuses (top creator rewards, affiliate links, special bonuses). Handled manually by you.
+                      Describe other bonuses (top creator rewards, affiliate
+                      links, special bonuses). Handled manually by you.
                     </p>
                   </div>
                   <input
@@ -5423,8 +5779,12 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          if (!showBonusPreview && bonusRichTextEditorRef.current) {
-                            const { html, json } = bonusRichTextEditorRef.current.getContent();
+                          if (
+                            !showBonusPreview &&
+                            bonusRichTextEditorRef.current
+                          ) {
+                            const { html, json } =
+                              bonusRichTextEditorRef.current.getContent();
                             setBonusHtml(html);
                             setBonusJson(json);
                           }
@@ -5454,7 +5814,9 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      ℹ️ These bonuses are visible to creators but handled manually by you. Use formatting and emojis to make it engaging!
+                      ℹ️ These bonuses are visible to creators but handled
+                      manually by you. Use formatting and emojis to make it
+                      engaging!
                     </p>
                   </div>
                 )}
@@ -5516,11 +5878,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   <div className="text-sm mt-1 break-words">
                     {budgetDifference > 0
                       ? `Prize pool increased by ${formatCurrencyFromCents(
-                        budgetDifference
-                      )}. Original: ${formatCurrencyFromCents(originalBudget)} → New Total: ${formatCurrencyFromCents(originalBudget + budgetDifference)}. Additional payment (including commission) will be required.`
+                          budgetDifference
+                        )}. Original: ${formatCurrencyFromCents(
+                          originalBudget
+                        )} → New Total: ${formatCurrencyFromCents(
+                          originalBudget + budgetDifference
+                        )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
-                        Math.abs(budgetDifference)
-                      )}. You will be refunded this amount plus commission.`}
+                          Math.abs(budgetDifference)
+                        )}. You will be refunded this amount plus commission.`}
                   </div>
                 </div>
               </Alert>
@@ -5559,7 +5925,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               ) : contest?.moderation_status !== "published" ? (
                 // Full edit mode for non-published contests: Draft/Save and Submit buttons
                 <>
-
                   <div className="flex flex-col sm:flex-row gap-2 w-full">
                     <button
                       className="border h-[38px] font-semibold border-[#4A00BE] px-3 sm:px-4 py-2 rounded-lg text-sm text-[#4A00BE] w-full sm:w-auto flex-shrink-0 whitespace-nowrap"
@@ -5587,9 +5952,15 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                         </div>
                       ) : contest?.moderation_status === "pending_approval" ? (
                         <>
-                          <span className="hidden xl:inline">Update & Resubmit for Approval</span>
-                          <span className="hidden md:inline xl:hidden">Update & Resubmit</span>
-                          <span className="hidden sm:inline md:hidden">Update & Submit</span>
+                          <span className="hidden xl:inline">
+                            Update & Resubmit for Approval
+                          </span>
+                          <span className="hidden md:inline xl:hidden">
+                            Update & Resubmit
+                          </span>
+                          <span className="hidden sm:inline md:hidden">
+                            Update & Submit
+                          </span>
                           <span className="sm:hidden">Update</span>
                         </>
                       ) : contest && isContestPaid() && !budgetChanged ? (
@@ -5651,38 +6022,55 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertDescription>
                     <strong>Prize Pool Decreased:</strong> Your prize pool
-                    decreased by {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
+                    decreased by{" "}
+                    {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
                     You will receive a refund of this amount plus commission.
                   </AlertDescription>
                 </Alert>
 
                 <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                  <h3 className="font-semibold text-gray-900 mb-3">Refund Breakdown</h3>
+                  <h3 className="font-semibold text-gray-900 mb-3">
+                    Refund Breakdown
+                  </h3>
 
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Prize Pool Reduction:</span>
-                      <span className="font-medium">{formatCurrencyFromCents(refundDetails.prizePoolDecrease)}</span>
+                      <span className="font-medium">
+                        {formatCurrencyFromCents(
+                          refundDetails.prizePoolDecrease
+                        )}
+                      </span>
                     </div>
 
                     <div className="flex justify-between text-sm">
-                      <span>Commission Refund ({refundDetails.commissionPercentage}%):</span>
-                      <span className="font-medium">{formatCurrencyFromCents(refundDetails.commissionRefund)}</span>
+                      <span>
+                        Commission Refund ({refundDetails.commissionPercentage}
+                        %):
+                      </span>
+                      <span className="font-medium">
+                        {formatCurrencyFromCents(
+                          refundDetails.commissionRefund
+                        )}
+                      </span>
                     </div>
 
                     <Separator />
 
                     <div className="flex justify-between text-lg font-semibold">
                       <span>Total Refund Amount:</span>
-                      <span className="text-green-600">{formatCurrencyFromCents(refundDetails.totalRefund)}</span>
+                      <span className="text-green-600">
+                        {formatCurrencyFromCents(refundDetails.totalRefund)}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Note:</strong> This refund will be processed to your wallet balance.
-                    The contest will be saved as draft and submitted for approval after the refund is completed.
+                    <strong>Note:</strong> This refund will be processed to your
+                    wallet balance. The contest will be saved as draft and
+                    submitted for approval after the refund is completed.
                   </p>
                 </div>
               </div>
@@ -5737,16 +6125,20 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
               </div>
 
               {/* Plan Commission Rate Information */}
-              {contestCommissionRate !== null && currentPlanCommissionRate !== null &&
+              {contestCommissionRate !== null &&
+                currentPlanCommissionRate !== null &&
                 contestCommissionRate !== currentPlanCommissionRate && (
                   <Alert className="mb-4 border-blue-200 bg-blue-50 w-full">
                     <Info className="h-4 w-4 flex-shrink-0" />
                     <AlertDescription className="min-w-0">
-                      <strong>Commission Rate Notice:</strong> This contest was created with a {contestCommissionRate}% commission rate.
-                      Your current plan has a {currentPlanCommissionRate}% commission rate.
+                      <strong>Commission Rate Notice:</strong> This contest was
+                      created with a {contestCommissionRate}% commission rate.
+                      Your current plan has a {currentPlanCommissionRate}%
+                      commission rate.
                       <br />
                       <span className="text-sm text-gray-600">
-                        If you want to use your new plan's commission rate, you'll need to create a new contest.
+                        If you want to use your new plan's commission rate,
+                        you'll need to create a new contest.
                       </span>
                     </AlertDescription>
                   </Alert>
@@ -5760,7 +6152,11 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                     increased by {formatCurrencyFromCents(budgetDifference)}.
                     <br />
                     <span className="text-sm text-gray-600 break-words">
-                      Original: {formatCurrencyFromCents(originalBudget)} → New Total: {formatCurrencyFromCents(originalBudget + budgetDifference)}
+                      Original: {formatCurrencyFromCents(originalBudget)} → New
+                      Total:{" "}
+                      {formatCurrencyFromCents(
+                        originalBudget + budgetDifference
+                      )}
                     </span>
                     <br />
                     The payment below includes this amount plus commission.
@@ -5773,16 +6169,18 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                      ? winnerAmounts.reduce(
+                    ? winnerAmounts.reduce(
                         (sum, amount) => sum + (amount || 0),
                         0
                       ) / 100 // Convert cents to dollars
-                      : parseFloat(totalBudget.toString()) || 0
+                    : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
                 commissionPercentage={
-                  contestCommissionRate !== null ? contestCommissionRate : getPlanFeatures(userPlan).commissionPercentage
+                  contestCommissionRate !== null
+                    ? contestCommissionRate
+                    : getPlanFeatures(userPlan).commissionPercentage
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
@@ -5793,7 +6191,6 @@ export default function EditContestPage({ user, contestId, datesOnly = false, is
 
               <div className="mt-6">
                 <Button
-
                   className="w-full bg-[#FF323224] text-[#E50000] py-6 text-md rounded-full"
                   onClick={() => setShowPayment(false)}
                   disabled={isSubmitting}

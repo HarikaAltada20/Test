@@ -36,6 +36,7 @@ import {
   Gift,
   Tag,
   Star,
+  Copy,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
@@ -73,8 +74,7 @@ type PrizeInfo = {
 const tabs = [
   { id: "details", label: "Contest Details" },
   { id: "leaderboard", label: "Leaderboard" },
-
-]
+];
 // LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
   id: string;
@@ -180,7 +180,9 @@ export function ContestClientPage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [maxSubmissions, setMaxSubmissions] = useState(1);
-  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "details" });
+  const { activeTab, setActiveTab } = useTabState(tabs, {
+    defaultTab: "details",
+  });
 
   // Pagination state for leaderboard
   const [leaderboardCurrentPage, setLeaderboardCurrentPage] = useState(1);
@@ -203,7 +205,24 @@ export function ContestClientPage({
     null
   );
 
+  // User profile data for link processing
+  const [userProfile, setUserProfile] = useState<{ full_name: string; username: string } | null>(
+    null
+  );
+
   const { toast } = useToast();
+
+  // Utility function to extract firstName from full_name
+  const getFirstName = (fullName: string): string => {
+    if (!fullName) return "";
+    return fullName.trim().split(" ")[0];
+  };
+
+  // Utility function to replace [creator] placeholder with username
+  const processUrlWithCreator = (url: string, username: string): string => {
+    if (!url || !username) return url;
+    return url.replace(/\[creator\]/gi, username);
+  };
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -479,11 +498,11 @@ export function ContestClientPage({
 
   // Clean up URL parameters on component mount
   useEffect(() => {
-    const errorParam = searchParams.get('error');
-    if (errorParam === 'already_submitted') {
+    const errorParam = searchParams.get("error");
+    if (errorParam === "already_submitted") {
       // Clear the error parameter from URL
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('error');
+      newUrl.searchParams.delete("error");
       router.replace(newUrl.pathname + newUrl.search, { scroll: false });
     }
   }, [searchParams, router]);
@@ -533,11 +552,19 @@ export function ContestClientPage({
         // This is separate from the main leaderboard logic.
         if (user) {
           try {
-            const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+            const response = await fetch(
+              `/api/leaderboard/${contestId}/my-submission`
+            );
             if (response.ok) {
               const data = await response.json();
-              if (data && data.submissions && data.submissions.length > 0 && isMounted) {
-                const maxSubmissions = contestData.max_submissions_per_creator || 1;
+              if (
+                data &&
+                data.submissions &&
+                data.submissions.length > 0 &&
+                isMounted
+              ) {
+                const maxSubmissions =
+                  contestData.max_submissions_per_creator || 1;
                 setSubmissionCount(data.submissions.length);
                 setMaxSubmissions(maxSubmissions);
 
@@ -604,6 +631,34 @@ export function ContestClientPage({
     };
     // Added leaderboardItemsPerPage to dependencies as it affects dummy data pagination
   }, [contestId, user, router, supabase, leaderboardItemsPerPage]);
+
+  // Fetch user profile data for link processing
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user?.id) return;
+
+      try {
+        const { data: userData, error } = await supabase
+          .from("users")
+          .select("full_name, username")
+          .eq("id", user.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching user profile:", error);
+          return;
+        }
+
+        if (userData) {
+          setUserProfile(userData);
+        }
+      } catch (error) {
+        console.error("Error in fetchUserProfile:", error);
+      }
+    };
+
+    fetchUserProfile();
+  }, [user?.id, supabase]);
 
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
@@ -739,10 +794,10 @@ export function ContestClientPage({
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <Badge
                       className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
-                        ? "bg-green-400/90 text-green-900"
-                        : contest.status === "upcoming"
-                          ? "bg-blue-400/90 text-blue-900"
-                          : "bg-slate-400/90 text-slate-900"
+                          ? "bg-green-400/90 text-green-900"
+                          : contest.status === "upcoming"
+                            ? "bg-blue-400/90 text-blue-900"
+                            : "bg-slate-400/90 text-slate-900"
                         }`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -893,24 +948,29 @@ export function ContestClientPage({
                     Submitted {formatTimeAgo(existingSubmission.created_at)}
                   </p>
                 </div>
-              ) : submissionCount > 0 && contest?.multiple_submissions_enabled ? (
+              ) : submissionCount > 0 &&
+                contest?.multiple_submissions_enabled ? (
                 <div className="flex flex-col items-center">
                   <div className="relative mb-4">
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg">
                       <CheckCircle className="h-10 w-10 text-white" />
                     </div>
                     <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">{submissionCount}</span>
+                      <span className="text-white text-xs font-bold">
+                        {submissionCount}
+                      </span>
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">
                     Submissions in Progress
                   </p>
                   <p className="text-base text-slate-600 dark:text-slate-300 mb-1">
-                    You have submitted {submissionCount} out of {maxSubmissions} videos
+                    You have submitted {submissionCount} out of {maxSubmissions}{" "}
+                    videos
                   </p>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                    You can still submit {maxSubmissions - submissionCount} more videos
+                    You can still submit {maxSubmissions - submissionCount} more
+                    videos
                   </p>
 
                   {/* Submit Button for Partial Submissions */}
@@ -919,15 +979,15 @@ export function ContestClientPage({
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
                     className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
-                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
+                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                       }`}
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? `Submit More Videos (${maxSubmissions - submissionCount} remaining)`
-                        : "Contest Not Active"
-                      }
+                        ? `Submit More Videos (${maxSubmissions - submissionCount
+                        } remaining)`
+                        : "Contest Not Active"}
                     </span>
                     {contest.status?.toLowerCase() === "active" && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
@@ -954,8 +1014,8 @@ export function ContestClientPage({
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
-                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
+                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                       }`}
                   >
                     {/* Animated shine effect for active button */}
@@ -1283,7 +1343,6 @@ export function ContestClientPage({
           </Card>
         )}
 
-
         {/* Tabs */}
         <EnhancedTabs
           tabs={tabs.map((tab) => ({
@@ -1476,7 +1535,6 @@ export function ContestClientPage({
                         {/* Prize Pool Summary */}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
                           <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
                             <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
                               <Trophy className="h-5 w-5" />
@@ -1510,7 +1568,6 @@ export function ContestClientPage({
                             </div>
                           </div>
                         </div>
-
 
                         {/* Prize Distribution */}
                         <div className="py-4">
@@ -1731,7 +1788,13 @@ export function ContestClientPage({
                           {(contest as any).content_type.toUpperCase()}
                         </p>
                         <p className="text-sm text-blue-700 mt-1">
-                          This contest is looking for {(contest as any).content_type === 'ugc' ? 'User Generated Content' : (contest as any).content_type === 'clipping' ? 'Clipping/Editing' : 'Other'} type submissions.
+                          This contest is looking for{" "}
+                          {(contest as any).content_type === "ugc"
+                            ? "User Generated Content"
+                            : (contest as any).content_type === "clipping"
+                              ? "Clipping/Editing"
+                              : "Other"}{" "}
+                          type submissions.
                         </p>
                       </div>
                     </div>
@@ -1789,18 +1852,28 @@ export function ContestClientPage({
                       </h3>
                       <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
                         <p className="text-lg font-semibold text-purple-900 mb-2">
-                          You can submit up to {(contest as any).max_submissions_per_creator} entries for this contest!
+                          You can submit up to{" "}
+                          {(contest as any).max_submissions_per_creator} entries
+                          for this contest!
                         </p>
                         <p className="text-sm text-purple-700 mb-3">
-                          Submit multiple pieces of content to maximize your chances of winning and earning. Min/max view requirements (if any) apply to ALL submissions.
+                          Submit multiple pieces of content to maximize your
+                          chances of winning and earning. Min/max view
+                          requirements (if any) apply to ALL submissions.
                         </p>
                         {(contest as any).max_earnings_per_creator && (
                           <div className="mt-3 pt-3 border-t border-purple-200">
                             <p className="text-sm text-purple-800 font-medium">
-                              💡 Earnings Cap for This Contest: {formatMoney((contest as any).max_earnings_per_creator)}
+                              💡 Earnings Cap for This Contest:{" "}
+                              {formatMoney(
+                                (contest as any).max_earnings_per_creator
+                              )}
                             </p>
                             <p className="text-xs text-purple-600 mt-1">
-                              You can still submit after reaching this cap, but won't earn more from THIS specific contest. This cap doesn't affect your earnings from other contests!
+                              You can still submit after reaching this cap, but
+                              won't earn more from THIS specific contest. This
+                              cap doesn't affect your earnings from other
+                              contests!
                             </p>
                           </div>
                         )}
@@ -1821,10 +1894,15 @@ export function ContestClientPage({
                       <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
                         <div
                           className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
-                          dangerouslySetInnerHTML={{ __html: (contest as any).bonus_details.description_html }}
+                          dangerouslySetInnerHTML={{
+                            __html: (contest as any).bonus_details
+                              .description_html,
+                          }}
                         />
                         <p className="text-xs text-amber-700 mt-3 italic">
-                          ℹ️ These bonuses are handled manually by the contest creator. Read carefully and reach out if you have questions!
+                          ℹ️ These bonuses are handled manually by the contest
+                          creator. Read carefully and reach out if you have
+                          questions!
                         </p>
                       </div>
                     </div>
@@ -1878,7 +1956,6 @@ export function ContestClientPage({
                             className="border border-gray-300 rounded-xl p-5"
                           >
                             <div className="flex flex-col md:flex-row justify-between">
-
                               <div className="flex items-center gap-4 flex-1 min-w-0">
                                 {isInternal && isImage && !isPdf ? (
                                   <img
@@ -1944,7 +2021,6 @@ export function ContestClientPage({
                                 </div>
                               </div>
                               <Button
-
                                 size="sm"
                                 asChild
                                 className="bg-[#6C43D0] hover:bg-[#6C43D0] mt-3 md:mt-0 rounded-xl text-white px-4 py-2 text-md"
@@ -2009,33 +2085,136 @@ export function ContestClientPage({
                             (
                               item: { url: string; description: string },
                               index: number
-                            ) => (
-                              <div
-                                key={index}
-                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
-                              >
-                                <div className="flex items-start gap-4">
-                                  <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
-                                    <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <a
-                                      href={item.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
-                                    >
-                                      {item.url}
-                                    </a>
-                                    {item.description && (
-                                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                        {item.description}
-                                      </p>
-                                    )}
+                            ) => {
+                              // Process URL to replace [creator] with username
+                              const username = userProfile?.username || "";
+                              const processedUrl = processUrlWithCreator(
+                                item.url,
+                                username
+                              );
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
+                                >
+                                  <div className="flex items-start gap-4">
+                                    <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
+                                      <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <a
+                                        href={processedUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
+                                      >
+                                        {processedUrl}
+                                      </a>
+                                      {item.description && (
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                          {item.description}
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )
+                              );
+                            }
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : null;
+                })()}
+
+                {/* Tracking Links Section */}
+                {(() => {
+                  let trackingLinks = Array.isArray(contest.tracking_links)
+                    ? contest.tracking_links
+                    : [];
+                  return trackingLinks.length > 0 ? (
+                    <>
+                      <Separator className="my-8" />
+                      <div className="space-y-6">
+                        <div className="flex flex-col px-2 gap-3">
+                          <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            Tracking Links
+                          </h3>
+                          <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
+                            <span className="font-medium">Note:</span> change the sub1 and sub2 ... according to your submission number if you are doing multiple submissions ..
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4">
+                          {trackingLinks.map(
+                            (
+                              item: { url: string; description: string },
+                              index: number
+                            ) => {
+                              // Process URL to replace [creator] with username
+                              const username = userProfile?.username || "";
+                              const processedUrl = processUrlWithCreator(
+                                item.url,
+                                username
+                              );
+
+                              const handleCopyLink = async () => {
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    processedUrl
+                                  );
+                                  toast({
+                                    title: "Link Copied!",
+                                    description:
+                                      "Tracking link has been copied to clipboard.",
+                                    variant: "default",
+                                  });
+                                } catch (error) {
+                                  console.error("Failed to copy link:", error);
+                                  toast({
+                                    title: "Copy Failed",
+                                    description:
+                                      "Failed to copy link to clipboard.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              };
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5"
+                                >
+                                  <div className="flex items-start gap-4">
+                                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
+                                      <Link2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <p className="text-base font-medium text-gray-900 dark:text-gray-100 break-all flex-1">
+                                          {processedUrl}
+                                        </p>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={handleCopyLink}
+                                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                          title="Copy link"
+                                        >
+                                          <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
+                                        </Button>
+                                      </div>
+                                      {item.description && (
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                          {item.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
                           )}
                         </div>
                       </div>
@@ -2114,7 +2293,10 @@ export function ContestClientPage({
                       <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                         <div className="flex items-center space-x-2">
                           <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
-                            {myLeaderboardEntry.views ? myLeaderboardEntry.views.toLocaleString() : '0'} views
+                            {myLeaderboardEntry.views
+                              ? myLeaderboardEntry.views.toLocaleString()
+                              : "0"}{" "}
+                            views
                           </p>
                           {myLeaderboardEntry.content_link && (
                             <Button
@@ -2200,12 +2382,16 @@ export function ContestClientPage({
                   </div>
 
                   {/* Refresh Metrics Button - Only show for active contests with submissions and not finalized */}
-                  {contest?.status === 'active' &&
+                  {contest?.status === "active" &&
                     totalLeaderboardEntries > 0 &&
-                    contest?.post_contest_status !== 'in_review' &&
-                    contest?.post_contest_status !== 'verification_complete' &&
-                    contest?.post_contest_status !== 'payouts_processed' && (() => {
-                      const cooldownInfo = getMetricsRefreshCooldownInfoOpportunities(contest?.last_metrics_updated);
+                    contest?.post_contest_status !== "in_review" &&
+                    contest?.post_contest_status !== "verification_complete" &&
+                    contest?.post_contest_status !== "payouts_processed" &&
+                    (() => {
+                      const cooldownInfo =
+                        getMetricsRefreshCooldownInfoOpportunities(
+                          contest?.last_metrics_updated
+                        );
 
                       return (
                         <Button
@@ -2216,13 +2402,17 @@ export function ContestClientPage({
                           className="py-2 rounded-lg text-md bg-[#4A00BE] text-white"
                           title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
                         >
-                          <RefreshCw className={`h-4 w-4 ${isRefreshingMetrics ? 'animate-spin' : ''}`} />
+                          <RefreshCw
+                            className={`h-4 w-4 ${isRefreshingMetrics ? "animate-spin" : ""
+                              }`}
+                          />
                           {isRefreshingMetrics
-                            ? 'Updating...'
+                            ? "Updating..."
                             : !cooldownInfo.canRefresh
-                              ? `Wait ${formatRemainingTime(cooldownInfo.remainingMs)}`
-                              : 'Refresh Metrics'
-                          }
+                              ? `Wait ${formatRemainingTime(
+                                cooldownInfo.remainingMs
+                              )}`
+                              : "Refresh Metrics"}
                         </Button>
                       );
                     })()}
@@ -2279,7 +2469,9 @@ export function ContestClientPage({
                       const earningsLabel = isEarned ? "Earned" : "Expected";
 
                       // Check if there's a flat fee bonus
-                      const flatFeeBonus = (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0;
+                      const flatFeeBonus =
+                        (contest.contest_based_details as any)?.cpm_contest
+                          ?.flat_fee_bonus || 0;
 
                       // Calculate total earnings (CPM + Bonus if applicable)
                       const totalEarnings = entry.earnings + flatFeeBonus;
@@ -2359,7 +2551,8 @@ export function ContestClientPage({
                         <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                           <div className="flex items-center space-x-2">
                             <p className="text-base sm:text-lg font-bold text-slate-700 dark:text-slate-200">
-                              {entry.views ? entry.views.toLocaleString() : '0'} views
+                              {entry.views ? entry.views.toLocaleString() : "0"}{" "}
+                              views
                             </p>
                             {entry.content_link && (
                               <Button

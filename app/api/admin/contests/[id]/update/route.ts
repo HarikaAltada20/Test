@@ -9,7 +9,10 @@ export async function POST(
   try {
     const { isAdmin } = await verifyAdminAccess();
     if (!isAdmin) {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      return NextResponse.json(
+        { error: "Admin access required" },
+        { status: 403 }
+      );
     }
 
     const resolvedParams = await params;
@@ -25,6 +28,7 @@ export async function POST(
       "rules_html",
       "rules_json",
       "inspiration_links",
+      "tracking_links",
       "resources",
       "moderation_status",
       "submitted_for_approval_at",
@@ -50,7 +54,10 @@ export async function POST(
     });
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No valid fields to update" },
+        { status: 400 }
+      );
     }
 
     const admin = createAdminClient();
@@ -73,8 +80,9 @@ export async function POST(
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("Admin contest update failed:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
-
-
