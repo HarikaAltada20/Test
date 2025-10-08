@@ -136,9 +136,8 @@ const generateAllDummyLeaderboardData = (
       content_link: "https://www.example.com/watch?v=dQw4w9WgXcQ", // A familiar link for all :)
       platform: platforms[i % platforms.length],
       user_platform_username: username,
-      user_full_name: `${
-        isMyEntry ? "The One And Only" : "Talented"
-      } ${username.replace(/\d+/g, "")}`,
+      user_full_name: `${isMyEntry ? "The One And Only" : "Talented"
+        } ${username.replace(/\d+/g, "")}`,
       creator_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}`,
       user_platform_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}_platform`,
     });
@@ -207,7 +206,7 @@ export function ContestClientPage({
   );
 
   // User profile data for link processing
-  const [userProfile, setUserProfile] = useState<{ full_name: string } | null>(
+  const [userProfile, setUserProfile] = useState<{ full_name: string; username: string } | null>(
     null
   );
 
@@ -219,10 +218,10 @@ export function ContestClientPage({
     return fullName.trim().split(" ")[0];
   };
 
-  // Utility function to replace [creator] placeholder with firstName
-  const processUrlWithCreator = (url: string, firstName: string): string => {
-    if (!url || !firstName) return url;
-    return url.replace(/\[creator\]/gi, firstName);
+  // Utility function to replace [creator] placeholder with username
+  const processUrlWithCreator = (url: string, username: string): string => {
+    if (!url || !username) return url;
+    return url.replace(/\[creator\]/gi, username);
   };
 
   const handleRefreshMetrics = async () => {
@@ -641,7 +640,7 @@ export function ContestClientPage({
       try {
         const { data: userData, error } = await supabase
           .from("users")
-          .select("full_name")
+          .select("full_name, username")
           .eq("id", user.id)
           .single();
 
@@ -794,13 +793,12 @@ export function ContestClientPage({
                   {/* Status and Type Badges */}
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <Badge
-                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${
-                        contest.status === "active"
+                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
                           ? "bg-green-400/90 text-green-900"
                           : contest.status === "upcoming"
-                          ? "bg-blue-400/90 text-blue-900"
-                          : "bg-slate-400/90 text-slate-900"
-                      }`}
+                            ? "bg-blue-400/90 text-blue-900"
+                            : "bg-slate-400/90 text-slate-900"
+                        }`}
                     >
                       <span className="flex items-center gap-1.5">
                         {contest.status === "active" ? (
@@ -861,20 +859,20 @@ export function ContestClientPage({
                     </div>
                     <div className="text-3xl lg:text-4xl font-bold text-white mb-1">
                       {contest.contest_type === "cpm" &&
-                      contest.contest_based_details?.cpm_contest
+                        contest.contest_based_details?.cpm_contest
                         ? formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .total_budget
-                          )
+                          contest.contest_based_details.cpm_contest
+                            .total_budget
+                        )
                         : contest.contest_type === "leaderboard" &&
                           contest.contest_based_details?.leaderboard_contest
-                        ? formatMoney(
+                          ? formatMoney(
                             contest.contest_based_details.leaderboard_contest
                               .total_prize
                           )
-                        : contest.total_prize
-                        ? formatMoney(contest.total_prize || 0)
-                        : "$0.00"}
+                          : contest.total_prize
+                            ? formatMoney(contest.total_prize || 0)
+                            : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
@@ -980,17 +978,15 @@ export function ContestClientPage({
                     size="lg"
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
-                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
-                      contest.status?.toLowerCase() === "active"
+                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
                         ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
                         : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                      }`}
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? `Submit More Videos (${
-                            maxSubmissions - submissionCount
-                          } remaining)`
+                        ? `Submit More Videos (${maxSubmissions - submissionCount
+                        } remaining)`
                         : "Contest Not Active"}
                     </span>
                     {contest.status?.toLowerCase() === "active" && (
@@ -1008,8 +1004,8 @@ export function ContestClientPage({
                       {contest.status === "active"
                         ? "The stage is yours! Submit your content and let your creativity shine."
                         : contest.status === "upcoming"
-                        ? "Get ready! This opportunity hasn't started yet, but you can prepare."
-                        : "This opportunity has ended or is no longer active."}
+                          ? "Get ready! This opportunity hasn't started yet, but you can prepare."
+                          : "This opportunity has ended or is no longer active."}
                     </p>
                   </div>
 
@@ -1017,11 +1013,10 @@ export function ContestClientPage({
                     size="lg"
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
-                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
-                      contest.status?.toLowerCase() === "active"
+                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
                         ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
                         : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                      }`}
                   >
                     {/* Animated shine effect for active button */}
                     {contest.status?.toLowerCase() === "active" && (
@@ -1133,12 +1128,12 @@ export function ContestClientPage({
                   {" "}
                   {contest.start_date && contest.end_date
                     ? `${formatLocalDateTime(contest.start_date, {
-                        month: "short",
-                        day: "numeric",
-                      })} - ${formatLocalDateTime(contest.end_date, {
-                        month: "short",
-                        day: "numeric",
-                      })}`
+                      month: "short",
+                      day: "numeric",
+                    })} - ${formatLocalDateTime(contest.end_date, {
+                      month: "short",
+                      day: "numeric",
+                    })}`
                     : "Dates TBD"}
                 </p>
               </div>
@@ -1188,37 +1183,35 @@ export function ContestClientPage({
                 <p className="text-lg font-medium">Prize Pool</p>
                 <p className="text-xl font-bold">
                   {contest.contest_type === "cpm" &&
-                  contest.contest_based_details?.cpm_contest
+                    contest.contest_based_details?.cpm_contest
                     ? formatMoney(
-                        contest.contest_based_details.cpm_contest.total_budget
-                      )
+                      contest.contest_based_details.cpm_contest.total_budget
+                    )
                     : contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
-                    ? formatMoney(
+                      ? formatMoney(
                         contest.contest_based_details.leaderboard_contest
                           .total_prize
                       )
-                    : contest.total_prize // Fallback to old field if necessary for older data
-                    ? formatMoney(contest.total_prize || 0)
-                    : "$0.00"}
+                      : contest.total_prize // Fallback to old field if necessary for older data
+                        ? formatMoney(contest.total_prize || 0)
+                        : "$0.00"}
                 </p>
                 <p className="text-md">
                   {" "}
                   {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.winner_count
-                    ? `${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count
-                      } winner${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count !== 1
-                          ? "s"
-                          : ""
-                      }`
+                    contest.contest_based_details?.leaderboard_contest
+                      ?.winner_count
+                    ? `${contest.contest_based_details.leaderboard_contest
+                      .winner_count
+                    } winner${contest.contest_based_details.leaderboard_contest
+                      .winner_count !== 1
+                      ? "s"
+                      : ""
+                    }`
                     : contest.contest_type === "cpm"
-                    ? "CPM based"
-                    : "Total prize"}
+                      ? "CPM based"
+                      : "Total prize"}
                 </p>
               </div>
               <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
@@ -1262,7 +1255,7 @@ export function ContestClientPage({
                 <p className="text-lg font-medium">Submissions</p>
                 <p className="text-xl font-bold">
                   {contest.live_submission_count !== null &&
-                  contest.live_submission_count >= 0
+                    contest.live_submission_count >= 0
                     ? contest.live_submission_count
                     : 0}
                 </p>
@@ -1336,10 +1329,10 @@ export function ContestClientPage({
                       <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
                         {contest.end_date
                           ? formatLocalDateTime(contest.end_date, {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
                           : "Date not specified"}
                       </div>
                     </div>
@@ -1536,8 +1529,8 @@ export function ContestClientPage({
                     (Array.isArray(
                       contest.contest_based_details?.leaderboard_contest?.prizes
                     ) &&
-                    contest.contest_based_details.leaderboard_contest.prizes
-                      .length > 0 ? (
+                      contest.contest_based_details.leaderboard_contest.prizes
+                        .length > 0 ? (
                       <div className="space-y-4">
                         {/* Prize Pool Summary */}
 
@@ -1643,26 +1636,26 @@ export function ContestClientPage({
                           </div>
                           {contest.contest_based_details.cpm_contest
                             .min_views != null && (
-                            <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                Minimum Views Required:
-                              </span>
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Minimum Views Required:
+                                </span>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
                           {contest.contest_based_details.cpm_contest
                             .max_views != null && (
-                            <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                              <span className="font-medium text-slate-800 dark:text-slate-200">
-                                Maximum Views Counted:
-                              </span>
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Maximum Views Counted:
+                                </span>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
                         </div>
                         <Separator />
                         <div>
@@ -1799,8 +1792,8 @@ export function ContestClientPage({
                           {(contest as any).content_type === "ugc"
                             ? "User Generated Content"
                             : (contest as any).content_type === "clipping"
-                            ? "Clipping/Editing"
-                            : "Other"}{" "}
+                              ? "Clipping/Editing"
+                              : "Other"}{" "}
                           type submissions.
                         </p>
                       </div>
@@ -1930,20 +1923,20 @@ export function ContestClientPage({
                   </div>
 
                   {contest.resources &&
-                  ((Array.isArray(contest.resources) &&
-                    contest.resources.length > 0) ||
-                    (typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0)) ? (
+                    ((Array.isArray(contest.resources) &&
+                      contest.resources.length > 0) ||
+                      (typeof contest.resources === "object" &&
+                        Object.keys(contest.resources).length > 0)) ? (
                     <div className="grid gap-4">
                       {(Array.isArray(contest.resources)
                         ? contest.resources
                         : Object.entries(contest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            })
-                          )
+                          ([description, url]) => ({
+                            url,
+                            description,
+                            type: "external",
+                          })
+                        )
                       ).map((resource: any, idx: number) => {
                         const isImage =
                           resource.url &&
@@ -2042,10 +2035,10 @@ export function ContestClientPage({
                                   {isPdf
                                     ? "Open PDF"
                                     : isVideo
-                                    ? "Play Video"
-                                    : isImage
-                                    ? "View Image"
-                                    : "View Resource"}
+                                      ? "Play Video"
+                                      : isImage
+                                        ? "View Image"
+                                        : "View Resource"}
                                 </a>
                               </Button>
                             </div>
@@ -2093,13 +2086,11 @@ export function ContestClientPage({
                               item: { url: string; description: string },
                               index: number
                             ) => {
-                              // Process URL to replace [creator] with firstName
-                              const firstName = userProfile
-                                ? getFirstName(userProfile.full_name)
-                                : "";
+                              // Process URL to replace [creator] with username
+                              const username = userProfile?.username || "";
                               const processedUrl = processUrlWithCreator(
                                 item.url,
-                                firstName
+                                username
                               );
 
                               return (
@@ -2161,13 +2152,11 @@ export function ContestClientPage({
                               item: { url: string; description: string },
                               index: number
                             ) => {
-                              // Process URL to replace [creator] with firstName
-                              const firstName = userProfile
-                                ? getFirstName(userProfile.full_name)
-                                : "";
+                              // Process URL to replace [creator] with username
+                              const username = userProfile?.username || "";
                               const processedUrl = processUrlWithCreator(
                                 item.url,
-                                firstName
+                                username
                               );
 
                               const handleCopyLink = async () => {
@@ -2202,7 +2191,7 @@ export function ContestClientPage({
                                       <Link2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex items-center gap-2 mb-2">
                                         <p className="text-base font-medium text-gray-900 dark:text-gray-100 break-all flex-1">
                                           {processedUrl}
                                         </p>
@@ -2414,17 +2403,16 @@ export function ContestClientPage({
                           title={!cooldownInfo.canRefresh ? `Available in ${formatRemainingTime(cooldownInfo.remainingMs)}` : 'Refresh metrics now'}
                         >
                           <RefreshCw
-                            className={`h-4 w-4 ${
-                              isRefreshingMetrics ? "animate-spin" : ""
-                            }`}
+                            className={`h-4 w-4 ${isRefreshingMetrics ? "animate-spin" : ""
+                              }`}
                           />
                           {isRefreshingMetrics
                             ? "Updating..."
                             : !cooldownInfo.canRefresh
-                            ? `Wait ${formatRemainingTime(
+                              ? `Wait ${formatRemainingTime(
                                 cooldownInfo.remainingMs
                               )}`
-                            : "Refresh Metrics"}
+                              : "Refresh Metrics"}
                         </Button>
                       );
                     })()}
