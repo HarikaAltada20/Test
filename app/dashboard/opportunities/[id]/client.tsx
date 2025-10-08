@@ -36,6 +36,7 @@ import {
   Gift,
   Tag,
   Star,
+  Copy,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
@@ -180,7 +181,9 @@ export function ContestClientPage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [maxSubmissions, setMaxSubmissions] = useState(1);
-  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: "details" });
+  const { activeTab, setActiveTab } = useTabState(tabs, {
+    defaultTab: "details",
+  });
 
   // Pagination state for leaderboard
   const [leaderboardCurrentPage, setLeaderboardCurrentPage] = useState(1);
@@ -513,11 +516,11 @@ export function ContestClientPage({
 
   // Clean up URL parameters on component mount
   useEffect(() => {
-    const errorParam = searchParams.get('error');
-    if (errorParam === 'already_submitted') {
+    const errorParam = searchParams.get("error");
+    if (errorParam === "already_submitted") {
       // Clear the error parameter from URL
       const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('error');
+      newUrl.searchParams.delete("error");
       router.replace(newUrl.pathname + newUrl.search, { scroll: false });
     }
   }, [searchParams, router]);
@@ -567,11 +570,19 @@ export function ContestClientPage({
         // This is separate from the main leaderboard logic.
         if (user) {
           try {
-            const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+            const response = await fetch(
+              `/api/leaderboard/${contestId}/my-submission`
+            );
             if (response.ok) {
               const data = await response.json();
-              if (data && data.submissions && data.submissions.length > 0 && isMounted) {
-                const maxSubmissions = contestData.max_submissions_per_creator || 1;
+              if (
+                data &&
+                data.submissions &&
+                data.submissions.length > 0 &&
+                isMounted
+              ) {
+                const maxSubmissions =
+                  contestData.max_submissions_per_creator || 1;
                 setSubmissionCount(data.submissions.length);
                 setMaxSubmissions(maxSubmissions);
 
@@ -956,24 +967,29 @@ export function ContestClientPage({
                     Submitted {formatTimeAgo(existingSubmission.created_at)}
                   </p>
                 </div>
-              ) : submissionCount > 0 && contest?.multiple_submissions_enabled ? (
+              ) : submissionCount > 0 &&
+                contest?.multiple_submissions_enabled ? (
                 <div className="flex flex-col items-center">
                   <div className="relative mb-4">
                     <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center shadow-lg">
                       <CheckCircle className="h-10 w-10 text-white" />
                     </div>
                     <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
-                      <span className="text-white text-xs font-bold">{submissionCount}</span>
+                      <span className="text-white text-xs font-bold">
+                        {submissionCount}
+                      </span>
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">
                     Submissions in Progress
                   </p>
                   <p className="text-base text-slate-600 dark:text-slate-300 mb-1">
-                    You have submitted {submissionCount} out of {maxSubmissions} videos
+                    You have submitted {submissionCount} out of {maxSubmissions}{" "}
+                    videos
                   </p>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                    You can still submit {maxSubmissions - submissionCount} more videos
+                    You can still submit {maxSubmissions - submissionCount} more
+                    videos
                   </p>
 
                   {/* Submit Button for Partial Submissions */}
@@ -981,16 +997,18 @@ export function ContestClientPage({
                     size="lg"
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
-                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
-                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                      }`}
+                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
+                      contest.status?.toLowerCase() === "active"
+                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
+                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                    }`}
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? `Submit More Videos (${maxSubmissions - submissionCount} remaining)`
-                        : "Contest Not Active"
-                      }
+                        ? `Submit More Videos (${
+                            maxSubmissions - submissionCount
+                          } remaining)`
+                        : "Contest Not Active"}
                     </span>
                     {contest.status?.toLowerCase() === "active" && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
@@ -2142,10 +2160,10 @@ export function ContestClientPage({
                             Tracking Links
                           </h3>
                           <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
-                          <span className="font-medium">Note:</span> Copy the
-                          link and change the submission number (for example,
-                          from sub1 to sub2 or sub3) to access other links.
-                        </div>
+                            <span className="font-medium">Note:</span> Copy the
+                            link and change the submission number (for example,
+                            from sub1 to sub2 or sub3) to access other links.
+                          </div>
                         </div>
 
                         <div className="grid gap-4">
@@ -2163,6 +2181,28 @@ export function ContestClientPage({
                                 firstName
                               );
 
+                              const handleCopyLink = async () => {
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    processedUrl
+                                  );
+                                  toast({
+                                    title: "Link Copied!",
+                                    description:
+                                      "Tracking link has been copied to clipboard.",
+                                    variant: "default",
+                                  });
+                                } catch (error) {
+                                  console.error("Failed to copy link:", error);
+                                  toast({
+                                    title: "Copy Failed",
+                                    description:
+                                      "Failed to copy link to clipboard.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              };
+
                               return (
                                 <div
                                   key={index}
@@ -2170,17 +2210,23 @@ export function ContestClientPage({
                                 >
                                   <div className="flex items-start gap-4">
                                     <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
-                                      <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                      <Link2 className="h-5 w-5 text-green-600 dark:text-green-400" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <a
-                                        href={processedUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="block text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline mb-2 break-all"
-                                      >
-                                        {processedUrl}
-                                      </a>
+                                  <div className="flex items-center gap-2 mb-2">
+                                        <p className="text-base font-medium text-gray-900 dark:text-gray-100 break-all flex-1">
+                                          {processedUrl}
+                                        </p>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={handleCopyLink}
+                                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                          title="Copy link"
+                                        >
+                                          <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
+                                        </Button>
+                                      </div>
                                       {item.description && (
                                         <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                                           {item.description}
@@ -2269,7 +2315,10 @@ export function ContestClientPage({
                       <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                         <div className="flex items-center space-x-2">
                           <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
-                            {myLeaderboardEntry.views ? myLeaderboardEntry.views.toLocaleString() : '0'} views
+                            {myLeaderboardEntry.views
+                              ? myLeaderboardEntry.views.toLocaleString()
+                              : "0"}{" "}
+                            views
                           </p>
                           {myLeaderboardEntry.content_link && (
                             <Button
@@ -2420,7 +2469,9 @@ export function ContestClientPage({
                       const earningsLabel = isEarned ? "Earned" : "Expected";
 
                       // Check if there's a flat fee bonus
-                      const flatFeeBonus = (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0;
+                      const flatFeeBonus =
+                        (contest.contest_based_details as any)?.cpm_contest
+                          ?.flat_fee_bonus || 0;
 
                       // Calculate total earnings (CPM + Bonus if applicable)
                       const totalEarnings = entry.earnings + flatFeeBonus;
@@ -2500,7 +2551,8 @@ export function ContestClientPage({
                         <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
                           <div className="flex items-center space-x-2">
                             <p className="text-base sm:text-lg font-bold text-slate-700 dark:text-slate-200">
-                              {entry.views ? entry.views.toLocaleString() : '0'} views
+                              {entry.views ? entry.views.toLocaleString() : "0"}{" "}
+                              views
                             </p>
                             {entry.content_link && (
                               <Button
