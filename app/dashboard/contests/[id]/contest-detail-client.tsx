@@ -3521,7 +3521,16 @@ export default function ContestDetailClient({
                                             ))}
                                           {submission.status !== "paid" &&
                                             isAdminView &&
+<<<<<<<<< Temporary merge branch 1
                                             currentContest.post_contest_status === "verification_complete" && (
+=========
+                                            (currentContest.post_contest_status ===
+                                              "in_review" ||
+                                              currentContest.post_contest_status ===
+                                                "verification_complete" ||
+                                              currentContest.post_contest_status ===
+                                                "payouts_processed") && (
+>>>>>>>>> Temporary merge branch 2
                                               <>
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
