@@ -1456,6 +1456,234 @@ export default function SubmitContentPage({
     }
   };
 
+  // ============================================================================
+  // SUBMISSION HANDLERS - Clean separation of concerns
+  // ============================================================================
+
+  /**
+   * Handle single YouTube video submission
+   */
+  const handleSingleYoutubeSubmission = async () => {
+    if (!youtubeAccount) {
+      throw new Error("YouTube account not connected. Please connect your YouTube account in settings.");
+    }
+
+    const videoToSubmit = selectedVideo || videoPreview;
+    if (!videoToSubmit) {
+      throw new Error("No YouTube video selected or fetched for submission.");
+    }
+
+    setMessage("Preparing YouTube video submission...");
+
+    const youtubeStats = {
+      likes: videoToSubmit?.statistics?.likeCount ? parseInt(videoToSubmit.statistics.likeCount) : 0,
+      comments: videoToSubmit?.statistics?.commentCount ? parseInt(videoToSubmit.statistics.commentCount) : 0,
+    };
+
+    const submissionPayload = {
+      contest_id: contestId,
+      creator_id: user!.id,
+      status: "pending",
+      platform: "youtube",
+      views: videoToSubmit?.statistics?.viewCount ? parseInt(videoToSubmit.statistics.viewCount) : 0,
+      content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
+      video_id: videoToSubmit.id.videoId,
+      video_title: videoToSubmit.snippet.title,
+      video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
+      other_stats: { youtube: youtubeStats },
+    };
+
+    const { error: submissionError } = await supabase
+      .from("submissions")
+      .insert([submissionPayload])
+      .select();
+
+    if (submissionError) {
+      throw submissionError;
+    }
+  };
+
+  /**
+   * Handle single Instagram reel submission
+   */
+  const handleSingleInstagramSubmission = async () => {
+    if (!instagramAccount?.access_token) {
+      throw new Error("Instagram account not connected. Please connect your Instagram account in settings.");
+    }
+
+    if (!selectedReel) {
+      throw new Error("No Instagram reel selected for submission.");
+    }
+
+    setMessage("Fetching Instagram Reel insights...");
+
+    const insightsRes = await fetch(
+      `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+    );
+    const insightsData = await insightsRes.json();
+
+    if (!insightsRes.ok || insightsData.error) {
+      if (insightsData.error?.error_subcode === 2108006) {
+        throw new Error("This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.");
+      }
+      throw new Error(insightsData.error?.message || "Failed to fetch Instagram Reel insights.");
+    }
+
+    let primaryViews = 0;
+    const instagramApiMetrics: any = {};
+
+    if (insightsData?.data && Array.isArray(insightsData.data)) {
+      insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
+        const value = metric.values[0]?.value || 0;
+        instagramApiMetrics[metric.name] = value;
+        if (metric.name === "views") {
+          primaryViews = value;
+        }
+      });
+    }
+
+    // Fallback to reach if views is 0
+    if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
+      primaryViews = instagramApiMetrics.reach;
+    }
+
+    const defaultStats = {
+      reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
+      total_interactions: 0, views: 0,
+    };
+    const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
+
+    const submissionPayload = {
+      contest_id: contestId,
+      creator_id: user!.id,
+      status: "pending",
+      platform: "instagram",
+      views: primaryViews,
+      content_link: selectedReel.permalink,
+      video_id: selectedReel.id,
+      video_title: selectedReel.caption || "Instagram Content",
+      video_thumbnail_url: selectedReel.thumbnail_url,
+      other_stats: { instagram: finalInstagramStats },
+    };
+
+    const { error: submissionError } = await supabase
+      .from("submissions")
+      .insert([submissionPayload])
+      .select();
+
+    if (submissionError) {
+      throw submissionError;
+    }
+  };
+
+  /**
+   * Handle multiple YouTube videos submission
+   */
+  const handleMultipleYoutubeSubmission = async (videos: YouTubeVideo[]) => {
+    if (!youtubeAccount) {
+      throw new Error("YouTube account not connected. Please connect your YouTube account in settings.");
+    }
+
+    const submissionPromises = videos.map(video => {
+      const youtubeStats = {
+        likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
+        comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
+      };
+
+      const submissionPayload = {
+        contest_id: contestId,
+        creator_id: user!.id,
+        status: "pending",
+        platform: "youtube",
+        content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+        video_id: video.id.videoId,
+        video_title: video.snippet.title,
+        video_thumbnail_url: video.snippet.thumbnails.default.url,
+        views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
+        other_stats: { youtube: youtubeStats },
+      };
+
+      return supabase.from("submissions").insert([submissionPayload]).select();
+    });
+
+    return await Promise.all(submissionPromises);
+  };
+
+  /**
+   * Handle multiple Instagram reels submission
+   */
+  const handleMultipleInstagramSubmission = async (reels: InstagramReel[]) => {
+    if (!instagramAccount?.access_token) {
+      throw new Error("Instagram account not connected. Please connect your Instagram account in settings.");
+    }
+
+    const submissionPromises = reels.map(async (reel) => {
+      try {
+        // Fetch insights for each reel
+        const insightsRes = await fetch(
+          `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+        );
+        const insightsData = await insightsRes.json();
+
+        let primaryViews = 0;
+        const instagramApiMetrics: any = {};
+
+        if (insightsRes.ok && !insightsData.error && insightsData?.data && Array.isArray(insightsData.data)) {
+          insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
+            const value = metric.values[0]?.value || 0;
+            instagramApiMetrics[metric.name] = value;
+            if (metric.name === "views") {
+              primaryViews = value;
+            }
+          });
+
+          if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
+            primaryViews = instagramApiMetrics.reach;
+          }
+        }
+
+        const defaultStats = {
+          reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
+          total_interactions: 0, views: 0,
+        };
+        const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
+
+        return await supabase.from("submissions").insert([{
+          contest_id: contestId,
+          creator_id: user!.id,
+          status: "pending",
+          platform: "instagram",
+          content_link: reel.permalink,
+          video_id: reel.id,
+          video_title: reel.caption || "Instagram Reel",
+          video_thumbnail_url: reel.thumbnail_url,
+          views: primaryViews,
+          other_stats: { instagram: finalInstagramStats },
+        }]).select();
+      } catch (error) {
+        console.error(`Error fetching insights for reel ${reel.id}:`, error);
+        // Submit without insights on error
+        return await supabase.from("submissions").insert([{
+          contest_id: contestId,
+          creator_id: user!.id,
+          status: "pending",
+          platform: "instagram",
+          content_link: reel.permalink,
+          video_id: reel.id,
+          video_title: reel.caption || "Instagram Reel",
+          video_thumbnail_url: reel.thumbnail_url,
+          views: 0,
+          other_stats: { instagram: {} },
+        }]).select();
+      }
+    });
+
+    return await Promise.all(submissionPromises);
+  };
+
+  /**
+   * Main submission handler - routes to appropriate function
+   */
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
@@ -1465,50 +1693,63 @@ export default function SubmitContentPage({
         description: submissionTimingError,
         variant: "destructive",
       });
-      setIsLoading(false);
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to submit content",
+        variant: "destructive",
+      });
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setMessage(null); // Clear previous messages
-
-    if (!user) {
-      const errorMessage = "You must be logged in to submit content";
-      setError(errorMessage);
-      toast({
-        title: "Authentication Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return;
-    }
+    setMessage(null);
 
     try {
-      // Check if this is multiple submission mode
-      const isMultipleSubmission = contest?.multiple_submissions_enabled &&
-        (selectedVideosFromTabs.length > 0 || selectedReelsFromTabs.length > 0 || selectedVideos.length > 0 || selectedReels.length > 0);
+      const isMultipleMode = contest?.multiple_submissions_enabled;
+      const allYoutubeVideos = [...selectedVideosFromTabs, ...selectedVideos];
+      const allInstagramReels = [...selectedReelsFromTabs, ...selectedReels];
 
-      if (isMultipleSubmission) {
-        await handleMultipleSubmission();
-        return;
+      // Determine which handler to call
+      if (isMultipleMode && (allYoutubeVideos.length > 0 || allInstagramReels.length > 0)) {
+        await handleMultipleSubmissions(allYoutubeVideos, allInstagramReels);
+      } else if (contestPlatform === "youtube" && (selectedVideo || videoPreview)) {
+        await handleSingleYoutubeSubmission();
+      } else if (contestPlatform === "instagram" && selectedReel) {
+        await handleSingleInstagramSubmission();
+      } else {
+        throw new Error("Please select content to submit.");
       }
 
-      // Single submission logic (existing code)
-      await handleSingleSubmission();
+      // Increment participation
+      try {
+        await fetch("/api/metrics/participation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contestId }),
+        });
+      } catch { }
+
+      // Success
+      toast({
+        title: "🎉 Content Submitted!",
+        description: "Your submission has been received and is pending review",
+        duration: 4000,
+      });
+
+      router.push(`/dashboard/opportunities/${contestId}?success=content_submitted`);
     } catch (err: any) {
       console.error("Error during submission:", err);
-
-      // Show error toast
       toast({
         title: "❌ Submission Failed",
-        description:
-          err.message || "Failed to submit content. Please try again.",
+        description: err.message || "Failed to submit content. Please try again.",
         variant: "destructive",
         duration: 5000,
       });
-
       setError(err.message || "Failed to submit content. Please try again.");
     } finally {
       setIsLoading(false);
@@ -1516,637 +1757,75 @@ export default function SubmitContentPage({
     }
   };
 
-  const handleSingleSubmission = async () => {
-    if (!user) {
-      throw new Error("User not authenticated");
-    }
-
-    // All submissions start as pending for manual verification regardless of contest type
-    const initialStatus = "pending";
-
-    let submissionPayload: any = {
-      contest_id: contestId,
-      creator_id: user.id,
-      status: initialStatus,
-    };
-
-    if (
-      contestPlatform === "instagram" &&
-      selectedReel &&
-      instagramAccount?.access_token &&
-      currentInstagramBusinessAccountID
-    ) {
-      setMessage("Fetching Instagram Reel insights...");
-
-      const insightsRes = await fetch(
-        `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
-      );
-
-      const insightsData = await insightsRes.json();
-
-      if (!insightsRes.ok || insightsData.error) {
-        const specificConversionErrorMessage =
-          "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select and submit a different Reel.";
-        const genericInsightErrorMessage =
-          "Failed to fetch Instagram Reel insights. Submission cannot proceed without metrics.";
-
-        if (insightsData.error) {
-          console.error(
-            "Error fetching Instagram insights:",
-            insightsData.error
-          );
-          if (
-            insightsData.error.error_subcode === 2108006 ||
-            (insightsData.error.message &&
-              insightsData.error.message.includes(
-                "The media was posted before the most recent time that the user's account was converted"
-              ))
-          ) {
-            setError(specificConversionErrorMessage);
-            toast({
-              title: "Instagram Insights Error",
-              description: specificConversionErrorMessage,
-              variant: "destructive",
-            });
-          } else {
-            const errorMessage =
-              insightsData.error.message || genericInsightErrorMessage;
-            setError(errorMessage);
-            toast({
-              title: "Instagram Insights Error",
-              description: errorMessage,
-              variant: "destructive",
-            });
-          }
-        } else {
-          // !insightsRes.ok but no insightsData.error
-          const errorMessage =
-            genericInsightErrorMessage + ` (Status: ${insightsRes.status})`;
-          setError(errorMessage);
-          toast({
-            title: "Instagram Insights Error",
-            description: errorMessage,
-            variant: "destructive",
-          });
-        }
-        setIsLoading(false);
-        setMessage(null);
-        return; // Prevent submission
-      }
-
-      let primaryViews = 0;
-      const instagramApiMetrics: any = {}; // To store all metrics from the API response
-
-      if (insightsData?.data && Array.isArray(insightsData.data)) {
-        insightsData.data.forEach(
-          (metric: { name: string; values: { value: number }[] }) => {
-            const value = metric.values[0]?.value || 0;
-            instagramApiMetrics[metric.name] = value; // Store each metric by its name
-
-            if (metric.name === "views") {
-              // Primary source for views count
-              primaryViews = value;
-            }
-          }
-        );
-      } else {
-        console.warn(
-          "Instagram insights data field is missing, not an array, or empty. Instagram stats will be empty or defaults."
-        );
-      }
-
-      // Fallback logic: If 'views' metric was 0 or not found, and 'reach' is available and greater than 0, use 'reach'.
-      if (
-        primaryViews === 0 &&
-        instagramApiMetrics.reach !== undefined &&
-        instagramApiMetrics.reach > 0
-      ) {
-        console.log(
-          "Primary 'views' metric from Instagram API was 0 or not found. Falling back to 'reach' metric value:",
-          instagramApiMetrics.reach
-        );
-        primaryViews = instagramApiMetrics.reach;
-      } else if (primaryViews === 0) {
-        console.log(
-          "Primary 'views' metric from Instagram API is 0 or not found, and 'reach' is also 0 or not available. Submission views will be 0."
-        );
-      }
-
-      // Ensure all expected other_stats fields are at least defaulted if not present in API response
-      const defaultStats = {
-        reach: 0,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        saved: 0,
-        total_interactions: 0,
-        views: 0,
-      };
-      const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
-
-      submissionPayload = {
-        ...submissionPayload,
-        platform: "instagram",
-        views: primaryViews, // Use the determined primary views count
-        content_link: selectedReel.permalink,
-        video_id: selectedReel.id,
-        video_title: selectedReel.caption || "Instagram Content",
-        video_thumbnail_url: selectedReel.thumbnail_url,
-        other_stats: { instagram: finalInstagramStats }, // Store all fetched/defaulted metrics
-      };
-    } else if (
-      contestPlatform === "youtube" &&
-      (selectedVideo || videoPreview)
-    ) {
-      // YouTube Video Submission
-
-      // Check if YouTube account is connected
-      if (!youtubeAccount) {
-        setError("YouTube account not connected. Please connect your YouTube account in settings.");
-        setIsLoading(false);
-        toast({
-          title: "YouTube Not Connected",
-          description: "Please connect your YouTube account in settings to submit videos.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const videoToSubmit = selectedVideo || videoPreview; // Prioritize actively selected library video
-
-      if (!videoToSubmit) {
-        setError("No YouTube video selected or fetched for submission.");
-        setIsLoading(false);
-        return;
-      }
-
-      setMessage("Fetching YouTube video insights...");
-
-      const youtubeStats = {
-        likes: videoToSubmit?.statistics?.likeCount
-          ? parseInt(videoToSubmit.statistics.likeCount)
-          : 0,
-        comments: videoToSubmit?.statistics?.commentCount
-          ? parseInt(videoToSubmit.statistics.commentCount)
-          : 0,
-        // Add any other YouTube specific stats you want in other_stats.youtube
-      };
-
-      submissionPayload = {
-        ...submissionPayload,
-        platform: "youtube",
-        views: videoToSubmit?.statistics?.viewCount
-          ? parseInt(videoToSubmit.statistics.viewCount)
-          : 0,
-        content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
-        video_id: videoToSubmit.id.videoId,
-        video_title: videoToSubmit.snippet.title,
-        video_thumbnail_url: videoToSubmit.snippet.thumbnails.default.url,
-        other_stats: { youtube: youtubeStats },
-      };
-    } else if (
-      contestPlatform === "youtube" &&
-      contentLink &&
-      !selectedVideo &&
-      !videoPreview
-    ) {
-      setError(
-        "For YouTube, please fetch and verify the link first, or select a video from your library."
-      );
-      setIsLoading(false);
-      return;
-    } else if (
-      contestPlatform === "instagram" &&
-      instagramLink &&
-      !selectedReel &&
-      !instagramMediaPreview
-    ) {
-      setError(
-        "For Instagram, please fetch and verify the link first, or select an item from your library."
-      );
-      setIsLoading(false);
-      return;
-    } else {
-      setError(
-        "Please select a video or Reel to submit, or ensure your linked content is fetched and verified."
-      );
-      setIsLoading(false);
-      return;
-    }
-
-    setMessage("Submitting your content...");
-    const { data: submissionData, error: submissionError } = await supabase
-      .from("submissions")
-      .insert([submissionPayload])
-      .select();
-
-    if (submissionError) {
-      throw submissionError;
-    }
-
-
-    // Idempotent participation increment (application-level)
-    try {
-      await fetch("/api/metrics/participation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contestId }),
-      });
-    } catch { }
-
-    // Show success toast
-    toast({
-      title: "🎉 Content Submitted!",
-      description: "Your submission has been received and is pending review",
-      duration: 4000,
-    });
-
-    setMessage("Content submitted successfully! Redirecting...");
-    router.push(
-      `/dashboard/opportunities/${contestId}?success=content_submitted`
-    );
-  };
-
-  const handleMultipleSubmission = async () => {
-    if (!user) {
-      throw new Error("User not authenticated");
-    }
-
-    // Validate submission limits (include all selected videos)
-    const totalSubmissions = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+  /**
+   * Handle multiple video submissions (both YouTube and Instagram)
+   */
+  const handleMultipleSubmissions = async (youtubeVideos: YouTubeVideo[], instagramReels: InstagramReel[]) => {
+    const totalSubmissions = youtubeVideos.length + instagramReels.length;
     const maxSubmissions = contest?.max_submissions_per_creator || 1;
     const currentSubmitted = submissionProgress.submitted;
 
     if (totalSubmissions === 0) {
-      toast({
-        title: "No Videos Selected",
-        description: "Please select at least one video to submit",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check if platform account is connected
-    const hasYoutubeVideos = selectedVideosFromTabs.length > 0 || selectedVideos.length > 0;
-    const hasInstagramReels = selectedReelsFromTabs.length > 0 || selectedReels.length > 0;
-
-    if (hasYoutubeVideos && !youtubeAccount) {
-      toast({
-        title: "YouTube Not Connected",
-        description: "Please connect your YouTube account in settings to submit YouTube videos.",
-        variant: "destructive",
-      });
-      setError("YouTube account not connected. Please connect your YouTube account in settings.");
-      return;
-    }
-
-    if (hasInstagramReels && !instagramAccount) {
-      toast({
-        title: "Instagram Not Connected",
-        description: "Please connect your Instagram account in settings to submit Instagram videos.",
-        variant: "destructive",
-      });
-      setError("Instagram account not connected. Please connect your Instagram account in settings.");
-      return;
+      throw new Error("Please select at least one video to submit");
     }
 
     if (currentSubmitted + totalSubmissions > maxSubmissions) {
-      toast({
-        title: "Submission Limit Exceeded",
-        description: `You have already submitted ${currentSubmitted} videos. You can only submit up to ${maxSubmissions} total videos for this contest.`,
-        variant: "destructive",
-      });
-      return;
+      throw new Error(`You have already submitted ${currentSubmitted} videos. You can only submit ${maxSubmissions - currentSubmitted} more.`);
     }
 
-    // Check for already submitted videos
-    const alreadySubmittedVideos: string[] = [];
-
-    // Check videos from tabs
-    selectedVideosFromTabs.forEach(video => {
+    // Check for duplicates
+    const duplicates: string[] = [];
+    youtubeVideos.forEach(video => {
       if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
-        alreadySubmittedVideos.push(video.snippet.title);
+        duplicates.push(video.snippet.title);
       }
     });
-
-    selectedReelsFromTabs.forEach(reel => {
+    instagramReels.forEach(reel => {
       if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
-        alreadySubmittedVideos.push(reel.caption || "Instagram Reel");
+        duplicates.push(reel.caption || "Instagram Reel");
       }
     });
 
-    // Check fetched videos
-    selectedVideos.forEach(video => {
-      if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
-        alreadySubmittedVideos.push(video.snippet.title);
-      }
-    });
-
-    selectedReels.forEach(reel => {
-      if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
-        alreadySubmittedVideos.push(reel.caption || "Instagram Reel");
-      }
-    });
-
-    if (alreadySubmittedVideos.length > 0) {
-      toast({
-        title: "Duplicate Submissions Detected",
-        description: `The following videos have already been submitted: ${alreadySubmittedVideos.slice(0, 3).join(", ")}${alreadySubmittedVideos.length > 3 ? "..." : ""}`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check for existing submissions
-    const { data: existingSubmissions, error: existingError } = await supabase
-      .from("submissions")
-      .select("id")
-      .eq("contest_id", contestId)
-      .eq("creator_id", user!.id);
-
-    if (existingError) {
-      throw existingError;
-    }
-
-    const currentSubmissionCount = existingSubmissions?.length || 0;
-    if (currentSubmissionCount + totalSubmissions > maxSubmissions) {
-      setError(`You have already submitted ${currentSubmissionCount} videos. You can only submit ${maxSubmissions - currentSubmissionCount} more.`);
-      return;
-    }
-
-    // Check earnings cap if applicable
-    const earningsCap = contest?.contest_based_details?.cpm_contest?.max_earnings_per_creator;
-    if (earningsCap) {
-      // TODO: Calculate current earnings and show warning if approaching cap
-      // This would require fetching existing submission earnings
+    if (duplicates.length > 0) {
+      throw new Error(`The following videos have already been submitted: ${duplicates.slice(0, 3).join(", ")}${duplicates.length > 3 ? "..." : ""}`);
     }
 
     setMessage(`Submitting ${totalSubmissions} videos...`);
 
-    const submissionPromises = [];
+    const results = [];
 
-    // Process videos selected from tabs first
-    for (let i = 0; i < selectedVideosFromTabs.length; i++) {
-      const video = selectedVideosFromTabs[i];
-      if (video) {
-        const youtubeStats = {
-          likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
-          comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
-        };
-
-        const submissionPayload = {
-          contest_id: contestId,
-          creator_id: user.id,
-          status: "pending",
-          platform: "youtube",
-          content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
-          video_id: video.id.videoId,
-          video_title: video.snippet.title,
-          video_thumbnail_url: video.snippet.thumbnails.default.url,
-          views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
-          other_stats: { youtube: youtubeStats },
-        };
-
-        submissionPromises.push(
-          supabase.from("submissions").insert([submissionPayload]).select()
-        );
-      }
+    // Submit YouTube videos
+    if (youtubeVideos.length > 0) {
+      const youtubeResults = await handleMultipleYoutubeSubmission(youtubeVideos);
+      results.push(...youtubeResults);
     }
 
-    // Process reels selected from tabs
-    for (let i = 0; i < selectedReelsFromTabs.length; i++) {
-      const reel = selectedReelsFromTabs[i];
-      if (reel && instagramAccount?.access_token) {
-        try {
-          // Fetch insights directly from Instagram Graph API
-          const insightsRes = await fetch(
-            `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
-          );
-          const insightsData = await insightsRes.json();
-
-          let primaryViews = 0;
-          const instagramApiMetrics: any = {};
-
-          if (insightsRes.ok && !insightsData.error && insightsData?.data && Array.isArray(insightsData.data)) {
-            insightsData.data.forEach(
-              (metric: { name: string; values: { value: number }[] }) => {
-                const value = metric.values[0]?.value || 0;
-                instagramApiMetrics[metric.name] = value;
-                if (metric.name === "views") {
-                  primaryViews = value;
-                }
-              }
-            );
-
-            // Fallback to reach if views is 0
-            if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
-              primaryViews = instagramApiMetrics.reach;
-            }
-          }
-
-          const defaultStats = {
-            reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
-            total_interactions: 0, views: 0,
-          };
-          const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
-
-          const submissionPayload = {
-            contest_id: contestId,
-            creator_id: user.id,
-            status: "pending",
-            platform: "instagram",
-            content_link: reel.permalink,
-            video_id: reel.id,
-            video_title: reel.caption || "Instagram Reel",
-            video_thumbnail_url: reel.thumbnail_url,
-            views: primaryViews,
-            other_stats: { instagram: finalInstagramStats },
-          };
-
-          submissionPromises.push(
-            supabase.from("submissions").insert([submissionPayload]).select()
-          );
-        } catch (error) {
-          console.error(`Error fetching insights for Instagram reel ${i + 1}:`, error);
-          // Still submit without insights
-          const submissionPayload = {
-            contest_id: contestId,
-            creator_id: user.id,
-            status: "pending",
-            platform: "instagram",
-            content_link: reel.permalink,
-            video_id: reel.id,
-            video_title: reel.caption || "Instagram Reel",
-            video_thumbnail_url: reel.thumbnail_url,
-            views: 0,
-            other_stats: { instagram: {} },
-          };
-
-          submissionPromises.push(
-            supabase.from("submissions").insert([submissionPayload]).select()
-          );
-        }
-      }
+    // Submit Instagram reels
+    if (instagramReels.length > 0) {
+      const instagramResults = await handleMultipleInstagramSubmission(instagramReels);
+      results.push(...instagramResults);
     }
 
-    // Process YouTube videos from multiple submissions (from fetched links)
-    for (let i = 0; i < selectedVideos.length; i++) {
-      const video = selectedVideos[i];
-      if (video) {
-        const youtubeStats = {
-          likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
-          comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
-        };
-
-        const submissionPayload = {
-          contest_id: contestId,
-          creator_id: user!.id,
-          status: "pending",
-          platform: "youtube",
-          views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
-          content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
-          video_id: video.id.videoId,
-          video_title: video.snippet.title,
-          video_thumbnail_url: video.snippet.thumbnails.default.url,
-          other_stats: { youtube: youtubeStats },
-        };
-
-        submissionPromises.push(
-          supabase.from("submissions").insert([submissionPayload]).select()
-        );
-      }
-    }
-
-    // Process Instagram videos
-    for (let i = 0; i < selectedReels.length; i++) {
-      const reel = selectedReels[i];
-      if (reel) {
-        // For Instagram, we need to fetch insights for each reel
-        if (instagramAccount?.access_token && currentInstagramBusinessAccountID) {
-          try {
-            const insightsRes = await fetch(
-              `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
-            );
-
-            const insightsData = await insightsRes.json();
-
-            if (insightsRes.ok && !insightsData.error) {
-              let primaryViews = 0;
-              const instagramApiMetrics: any = {};
-
-              if (insightsData?.data && Array.isArray(insightsData.data)) {
-                insightsData.data.forEach(
-                  (metric: { name: string; values: { value: number }[] }) => {
-                    const value = metric.values[0]?.value || 0;
-                    instagramApiMetrics[metric.name] = value;
-                    if (metric.name === "views") {
-                      primaryViews = value;
-                    }
-                  }
-                );
-              }
-
-              if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
-                primaryViews = instagramApiMetrics.reach;
-              }
-
-              const defaultStats = {
-                reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
-                total_interactions: 0, views: 0,
-              };
-              const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
-
-              const submissionPayload = {
-                contest_id: contestId,
-                creator_id: user!.id,
-                status: "pending",
-                platform: "instagram",
-                views: primaryViews,
-                content_link: reel.permalink,
-                video_id: reel.id,
-                video_title: reel.caption || "Instagram Content",
-                video_thumbnail_url: reel.thumbnail_url,
-                other_stats: { instagram: finalInstagramStats },
-              };
-
-              submissionPromises.push(
-                supabase.from("submissions").insert([submissionPayload]).select()
-              );
-            }
-          } catch (error) {
-            console.error(`Error fetching insights for Instagram video ${i + 1}:`, error);
-            // Still submit without insights
-            const submissionPayload = {
-              contest_id: contestId,
-              creator_id: user!.id,
-              status: "pending",
-              platform: "instagram",
-              views: 0,
-              content_link: reel.permalink,
-              video_id: reel.id,
-              video_title: reel.caption || "Instagram Content",
-              video_thumbnail_url: reel.thumbnail_url,
-              other_stats: { instagram: {} },
-            };
-
-            submissionPromises.push(
-              supabase.from("submissions").insert([submissionPayload]).select()
-            );
-          }
-        }
-      }
-    }
-
-    // Submit all videos
-    const results = await Promise.all(submissionPromises);
-
-    // Check for errors - results should be arrays with data property
-    const errors = results.filter(result => result && result.error);
+    // Check for errors
+    const errors = results.filter(result => result?.error);
     if (errors.length > 0) {
-      console.error("Submission errors:", errors);
       throw new Error(`Failed to submit ${errors.length} videos. Please try again.`);
     }
 
-    // Idempotent participation increment
-    try {
-      await fetch("/api/metrics/participation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contestId }),
-      });
-    } catch { }
-
-    // Update submission progress
+    // Update state
     const newSubmittedCount = currentSubmitted + totalSubmissions;
     setSubmissionProgress(prev => ({ ...prev, submitted: newSubmittedCount }));
 
-    // Add submitted videos to the set
     const newSubmittedVideos = new Set(submittedVideos);
-    selectedVideosFromTabs.forEach(video => {
+    youtubeVideos.forEach(video => {
       newSubmittedVideos.add(video.id.videoId);
       newSubmittedVideos.add(`https://www.youtube.com/watch?v=${video.id.videoId}`);
     });
-    selectedReelsFromTabs.forEach(reel => {
-      newSubmittedVideos.add(reel.id);
-      newSubmittedVideos.add(reel.permalink);
-    });
-    selectedVideos.forEach(video => {
-      newSubmittedVideos.add(video.id.videoId);
-      newSubmittedVideos.add(`https://www.youtube.com/watch?v=${video.id.videoId}`);
-    });
-    selectedReels.forEach(reel => {
+    instagramReels.forEach(reel => {
       newSubmittedVideos.add(reel.id);
       newSubmittedVideos.add(reel.permalink);
     });
     setSubmittedVideos(newSubmittedVideos);
-
-    // Show success toast with progress
-    const remainingSubmissions = maxSubmissions - newSubmittedCount;
-    toast({
-      title: "🎉 Videos Submitted Successfully!",
-      description: `Submitted ${totalSubmissions} videos. You have ${remainingSubmissions} submissions remaining.`,
-      duration: 4000,
-    });
 
     // Clear selections
     setSelectedVideosFromTabs([]);
@@ -2156,20 +1835,22 @@ export default function SubmitContentPage({
     setSelectedVideoIndices([]);
     setSelectedReelIndices([]);
 
-    // Only redirect if max submissions reached
+    const remainingSubmissions = maxSubmissions - newSubmittedCount;
+
     if (newSubmittedCount >= maxSubmissions) {
       toast({
         title: "All Submissions Complete",
         description: `You have reached the maximum of ${maxSubmissions} submissions for this contest.`,
         variant: "default",
       });
-      setMessage("All submissions complete! Redirecting...");
-      router.push(
-        `/dashboard/opportunities/${contestId}?success=content_submitted`
-      );
     } else {
+      toast({
+        title: "🎉 Videos Submitted Successfully!",
+        description: `Submitted ${totalSubmissions} videos. You have ${remainingSubmissions} submissions remaining.`,
+        duration: 4000,
+      });
       setMessage(`${totalSubmissions} videos submitted! You can submit more videos.`);
-      // Don't redirect - let user continue submitting
+      throw new Error("CONTINUE_SUBMISSION"); // Special error to prevent redirect
     }
   };
 
@@ -3480,8 +3161,8 @@ export default function SubmitContentPage({
 
 
 
-          {/* Multiple Submissions UI - Only show if contest allows multiple submissions */}
-          {contest?.multiple_submissions_enabled && (
+          {/* Multiple Submissions UI - Only show if contest allows multiple submissions and account is connected */}
+          {contest?.multiple_submissions_enabled && instagramAccount?.access_token && (
             <div className="mt-8">
               <Card className="border-purple-200 bg-purple-50/50">
                 <CardHeader>
