@@ -1391,6 +1391,16 @@ export default function SubmitContentPage({
       if (isSelected) {
         const video = fetchedVideos[index];
         if (video) {
+          // Check if video is already submitted
+          if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+            toast({
+              title: "Video Already Submitted",
+              description: `"${video.snippet.title}" has already been submitted to this contest`,
+              variant: "destructive",
+            });
+            return;
+          }
+
           // Check if video is already selected elsewhere
           if (isVideoAlreadySelected(video.id.videoId, 'youtube')) {
             toast({
@@ -1424,6 +1434,16 @@ export default function SubmitContentPage({
       if (isSelected) {
         const reel = fetchedReels[index];
         if (reel) {
+          // Check if reel is already submitted
+          if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
+            toast({
+              title: "Video Already Submitted",
+              description: `"${reel.caption || 'Instagram Reel'}" has already been submitted to this contest`,
+              variant: "destructive",
+            });
+            return;
+          }
+
           // Check if reel is already selected elsewhere
           if (isVideoAlreadySelected(reel.id, 'instagram')) {
             toast({
@@ -3162,7 +3182,7 @@ export default function SubmitContentPage({
 
 
           {/* Multiple Submissions UI - Only show if contest allows multiple submissions and account is connected */}
-          {contest?.multiple_submissions_enabled && instagramAccount?.access_token && (
+          {contest?.multiple_submissions_enabled && (contestPlatform === "youtube" ? youtubeAccount : instagramAccount?.access_token) && (
             <div className="mt-8">
               <Card className="border-purple-200 bg-purple-50/50">
                 <CardHeader>
@@ -3311,9 +3331,11 @@ export default function SubmitContentPage({
                             video && (
                               <Card
                                 key={`youtube-${index}`}
-                                className={`cursor-pointer transition-all duration-200 ${selectedVideoIndices.includes(index)
-                                  ? "border-2 border-purple-500 bg-purple-50"
-                                  : "border border-gray-200 hover:border-purple-300"
+                                className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)
+                                    ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                    : selectedVideoIndices.includes(index)
+                                      ? "border-2 border-purple-500 bg-purple-50"
+                                      : "border border-gray-200 hover:border-purple-300"
                                   }`}
                                 onClick={() => handleVideoSelection(index, !selectedVideoIndices.includes(index))}
                               >
@@ -3331,9 +3353,17 @@ export default function SubmitContentPage({
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-start justify-between">
                                         <div className="flex-1">
-                                          <h5 className="font-medium text-sm line-clamp-2 mb-2">
-                                            {video.snippet.title}
-                                          </h5>
+                                          <div className="flex items-start gap-2 mb-2">
+                                            <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                              {video.snippet.title}
+                                            </h5>
+                                            {isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`) && (
+                                              <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Already Submitted
+                                              </div>
+                                            )}
+                                          </div>
                                           <div className="flex items-center gap-4 text-xs text-gray-600">
                                             <span>👁️ {video.statistics?.viewCount || 0} views</span>
                                             <span>👍 {video.statistics?.likeCount || 0} likes</span>
@@ -3362,9 +3392,11 @@ export default function SubmitContentPage({
                             reel && (
                               <Card
                                 key={`instagram-${index}`}
-                                className={`cursor-pointer transition-all duration-200 ${selectedReelIndices.includes(index)
-                                  ? "border-2 border-purple-500 bg-purple-50"
-                                  : "border border-gray-200 hover:border-purple-300"
+                                className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(reel.id, reel.permalink)
+                                    ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                    : selectedReelIndices.includes(index)
+                                      ? "border-2 border-purple-500 bg-purple-50"
+                                      : "border border-gray-200 hover:border-purple-300"
                                   }`}
                                 onClick={() => handleVideoSelection(index, !selectedReelIndices.includes(index))}
                               >
@@ -3382,9 +3414,17 @@ export default function SubmitContentPage({
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-start justify-between">
                                         <div className="flex-1">
-                                          <h5 className="font-medium text-sm line-clamp-2 mb-2">
-                                            {reel.caption || "Instagram Reel"}
-                                          </h5>
+                                          <div className="flex items-start gap-2 mb-2">
+                                            <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                              {reel.caption || "Instagram Reel"}
+                                            </h5>
+                                            {isVideoAlreadySubmitted(reel.id, reel.permalink) && (
+                                              <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                Already Submitted
+                                              </div>
+                                            )}
+                                          </div>
                                           <div className="flex items-center gap-4 text-xs text-gray-600">
                                             <span>📅 {dayjs(reel.timestamp).format("MMM D, YYYY")}</span>
                                             <span>🎬 {reel.media_type}</span>
