@@ -1016,10 +1016,10 @@ export default function SubmitContentPage({
         }),
       });
 
-      const responseData = await response.json(); // Call .json() ONCE
+      const responseData = await response.json();
 
       if (!response.ok) {
-        let errorMessage = "Failed to verify Instagram media"; // Default message
+        let errorMessage = "Failed to verify Instagram media";
         if (responseData && typeof responseData.error === "string") {
           errorMessage = responseData.error;
         } else if (responseData && typeof responseData.message === "string") {
@@ -1028,12 +1028,11 @@ export default function SubmitContentPage({
         throw new Error(errorMessage);
       }
 
-      // response.ok is true here
       if (responseData && responseData.valid && responseData.mediaInfo) {
         const mediaDetails: InstagramReel = responseData.mediaInfo;
         if (mediaDetails?.timestamp) {
           if (isContentTooOld(mediaDetails.timestamp)) {
-            const errorMessage = `You can only submit the content which is posted within 2 hours. This Reel was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            const errorMessage = `You can only submit the content which is posted within ${SUBMISSION_WINDOW_UNIT_DISPLAY}. This Reel was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
             setSubmissionTimingError(errorMessage);
             setInstagramMediaPreview(mediaDetails);
             toast({
@@ -1062,7 +1061,6 @@ export default function SubmitContentPage({
           });
         }
       } else {
-        // Response was OK, but data structure is not as expected for valid media
         let errorMessage =
           "Instagram media verification failed or media info not found.";
         if (responseData && typeof responseData.error === "string") {
@@ -1073,8 +1071,7 @@ export default function SubmitContentPage({
         throw new Error(errorMessage);
       }
     } catch (err: any) {
-      // This will catch errors from fetch itself, SyntaxError from response.json(), or errors thrown above.
-      console.error("Error in handleFetchInstagramByLink:", err); // Keep user's console.error for this one
+      console.error("Error in handleFetchInstagramByLink:", err);
       setError(
         err.message ||
         "An unexpected error occurred while fetching Instagram media."
@@ -1165,16 +1162,23 @@ export default function SubmitContentPage({
       return;
     }
 
+    if (!instagramAccount?.access_token || !instagramAccount?.app_scoped_user_id) {
+      setError("Instagram account not connected properly.");
+      return;
+    }
+
     setIsFetchingVideo(true);
     setError(null);
 
     try {
       const response = await fetch("/api/instagram/verify-media", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ mediaUrl: link }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaUrl: link,
+          userAccessToken: instagramAccount.access_token,
+          userAppScopedId: instagramAccount.app_scoped_user_id,
+        }),
       });
 
       const responseData = await response.json();
@@ -1655,6 +1659,19 @@ export default function SubmitContentPage({
       (selectedVideo || videoPreview)
     ) {
       // YouTube Video Submission
+
+      // Check if YouTube account is connected
+      if (!youtubeAccount) {
+        setError("YouTube account not connected. Please connect your YouTube account in settings.");
+        setIsLoading(false);
+        toast({
+          title: "YouTube Not Connected",
+          description: "Please connect your YouTube account in settings to submit videos.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const videoToSubmit = selectedVideo || videoPreview; // Prioritize actively selected library video
 
       if (!videoToSubmit) {
@@ -1769,6 +1786,30 @@ export default function SubmitContentPage({
       return;
     }
 
+    // Check if platform account is connected
+    const hasYoutubeVideos = selectedVideosFromTabs.length > 0 || selectedVideos.length > 0;
+    const hasInstagramReels = selectedReelsFromTabs.length > 0 || selectedReels.length > 0;
+
+    if (hasYoutubeVideos && !youtubeAccount) {
+      toast({
+        title: "YouTube Not Connected",
+        description: "Please connect your YouTube account in settings to submit YouTube videos.",
+        variant: "destructive",
+      });
+      setError("YouTube account not connected. Please connect your YouTube account in settings.");
+      return;
+    }
+
+    if (hasInstagramReels && !instagramAccount) {
+      toast({
+        title: "Instagram Not Connected",
+        description: "Please connect your Instagram account in settings to submit Instagram videos.",
+        variant: "destructive",
+      });
+      setError("Instagram account not connected. Please connect your Instagram account in settings.");
+      return;
+    }
+
     if (currentSubmitted + totalSubmissions > maxSubmissions) {
       toast({
         title: "Submission Limit Exceeded",
@@ -1856,6 +1897,7 @@ export default function SubmitContentPage({
         const submissionPayload = {
           contest_id: contestId,
           creator_id: user.id,
+          status: "pending",
           platform: "youtube",
           content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
           video_id: video.id.videoId,
@@ -1874,29 +1916,50 @@ export default function SubmitContentPage({
     // Process reels selected from tabs
     for (let i = 0; i < selectedReelsFromTabs.length; i++) {
       const reel = selectedReelsFromTabs[i];
-      if (reel) {
+      if (reel && instagramAccount?.access_token) {
         try {
-          const insightsResponse = await fetch(`/api/instagram/insights?mediaId=${reel.id}`);
-          const insightsData = await insightsResponse.json();
+          // Fetch insights directly from Instagram Graph API
+          const insightsRes = await fetch(
+            `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+          );
+          const insightsData = await insightsRes.json();
 
-          const finalInstagramStats = {
-            reach: insightsData.reach || 0,
-            impressions: insightsData.impressions || 0,
-            likes: insightsData.likes || 0,
-            comments: insightsData.comments || 0,
-            shares: insightsData.shares || 0,
-            saves: insightsData.saves || 0,
+          let primaryViews = 0;
+          const instagramApiMetrics: any = {};
+
+          if (insightsRes.ok && !insightsData.error && insightsData?.data && Array.isArray(insightsData.data)) {
+            insightsData.data.forEach(
+              (metric: { name: string; values: { value: number }[] }) => {
+                const value = metric.values[0]?.value || 0;
+                instagramApiMetrics[metric.name] = value;
+                if (metric.name === "views") {
+                  primaryViews = value;
+                }
+              }
+            );
+
+            // Fallback to reach if views is 0
+            if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
+              primaryViews = instagramApiMetrics.reach;
+            }
+          }
+
+          const defaultStats = {
+            reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
+            total_interactions: 0, views: 0,
           };
+          const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
 
           const submissionPayload = {
             contest_id: contestId,
             creator_id: user.id,
+            status: "pending",
             platform: "instagram",
             content_link: reel.permalink,
             video_id: reel.id,
             video_title: reel.caption || "Instagram Reel",
             video_thumbnail_url: reel.thumbnail_url,
-            views: finalInstagramStats.reach || 0,
+            views: primaryViews,
             other_stats: { instagram: finalInstagramStats },
           };
 
@@ -1909,10 +1972,13 @@ export default function SubmitContentPage({
           const submissionPayload = {
             contest_id: contestId,
             creator_id: user.id,
+            status: "pending",
             platform: "instagram",
             content_link: reel.permalink,
+            video_id: reel.id,
             video_title: reel.caption || "Instagram Reel",
             video_thumbnail_url: reel.thumbnail_url,
+            views: 0,
             other_stats: { instagram: {} },
           };
 
@@ -1923,33 +1989,7 @@ export default function SubmitContentPage({
       }
     }
 
-    // Process single selected video (if any)
-    if (selectedVideo) {
-      if (contestPlatform?.toLowerCase() === 'youtube') {
-        const youtubeStats = {
-          likes: selectedVideo?.statistics?.likeCount ? parseInt(selectedVideo.statistics.likeCount) : 0,
-          comments: selectedVideo?.statistics?.commentCount ? parseInt(selectedVideo.statistics.commentCount) : 0,
-        };
-
-        const submissionPayload = {
-          contest_id: contestId,
-          creator_id: user.id,
-          platform: "youtube",
-          content_link: `https://www.youtube.com/watch?v=${selectedVideo.id}`,
-          video_id: selectedVideo.id.videoId,
-          video_title: selectedVideo.snippet.title,
-          video_thumbnail_url: selectedVideo.snippet.thumbnails.default.url,
-          views: selectedVideo?.statistics?.viewCount ? parseInt(selectedVideo.statistics.viewCount) : 0,
-          other_stats: { youtube: youtubeStats },
-        };
-
-        submissionPromises.push(
-          supabase.from("submissions").insert([submissionPayload]).select()
-        );
-      }
-    }
-
-    // Process YouTube videos from multiple submissions
+    // Process YouTube videos from multiple submissions (from fetched links)
     for (let i = 0; i < selectedVideos.length; i++) {
       const video = selectedVideos[i];
       if (video) {
