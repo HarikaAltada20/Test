@@ -3332,10 +3332,10 @@ export default function SubmitContentPage({
                               <Card
                                 key={`youtube-${index}`}
                                 className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)
-                                    ? "border-2 border-red-300 bg-red-50 opacity-75"
-                                    : selectedVideoIndices.includes(index)
-                                      ? "border-2 border-purple-500 bg-purple-50"
-                                      : "border border-gray-200 hover:border-purple-300"
+                                  ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                  : selectedVideoIndices.includes(index)
+                                    ? "border-2 border-purple-500 bg-purple-50"
+                                    : "border border-gray-200 hover:border-purple-300"
                                   }`}
                                 onClick={() => handleVideoSelection(index, !selectedVideoIndices.includes(index))}
                               >
@@ -3393,10 +3393,10 @@ export default function SubmitContentPage({
                               <Card
                                 key={`instagram-${index}`}
                                 className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(reel.id, reel.permalink)
-                                    ? "border-2 border-red-300 bg-red-50 opacity-75"
-                                    : selectedReelIndices.includes(index)
-                                      ? "border-2 border-purple-500 bg-purple-50"
-                                      : "border border-gray-200 hover:border-purple-300"
+                                  ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                  : selectedReelIndices.includes(index)
+                                    ? "border-2 border-purple-500 bg-purple-50"
+                                    : "border border-gray-200 hover:border-purple-300"
                                   }`}
                                 onClick={() => handleVideoSelection(index, !selectedReelIndices.includes(index))}
                               >
