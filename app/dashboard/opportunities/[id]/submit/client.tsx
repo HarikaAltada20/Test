@@ -1169,7 +1169,7 @@ export default function SubmitContentPage({
     setError(null);
 
     try {
-      const response = await fetch("/api/instagram/verify", {
+      const response = await fetch("/api/instagram/verify-media", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
