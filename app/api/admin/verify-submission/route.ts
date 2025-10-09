@@ -416,9 +416,9 @@ export async function POST(request: Request) {
           }
         }
 
-        // Update creator metrics: contests won (+1)
+        // Update creator metrics: submission wins and contest wins (+1)
         try {
-          await MetricsService.incrementContestsWon(submissionFull.creator_id);
+          await MetricsService.incrementSubmissionWin(submissionFull.creator_id, submissionFull.contest_id, submissionId);
         } catch (e: any) {
           console.error('Metrics update (paid) failed:', e);
         }
@@ -487,9 +487,9 @@ export async function POST(request: Request) {
         if (!debitRes.success) {
           return NextResponse.json({ error: `Failed to reverse creator credit: ${debitRes.error}` }, { status: 500 });
         }
-        // Metrics revert for paid reversal: contests won (-1)
+        // Metrics revert for paid reversal: submission wins and contest wins (-1)
         try {
-          await MetricsService.decrementContestsWon(submissionFull.creator_id);
+          await MetricsService.decrementSubmissionWin(submissionFull.creator_id, submissionFull.contest_id, submissionFull.id);
         } catch (e: any) {
           console.error('Metrics update (revert paid) failed:', e);
         }

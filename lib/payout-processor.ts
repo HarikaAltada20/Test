@@ -144,9 +144,9 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
           }
         }
 
-        // 3) Increment creator metric: contests won
+        // 3) Increment creator metrics: submission win and contest win (if first win for this contest)
         try {
-          await MetricsService.incrementContestsWon(sub.creator_id);
+          await MetricsService.incrementSubmissionWin(sub.creator_id, sub.contest_id, sub.id);
         } catch {}
       }
 
