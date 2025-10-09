@@ -1754,12 +1754,15 @@ export default function SubmitContentPage({
         });
       } catch { }
 
-      // Success
-      toast({
-        title: "🎉 Content Submitted!",
-        description: "Your submission has been received and is pending review",
-        duration: 4000,
-      });
+      // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
+      // For single submissions, show this message
+      if (!isMultipleMode || (allYoutubeVideos.length === 0 && allInstagramReels.length === 0)) {
+        toast({
+          title: "🎉 Content Submitted!",
+          description: "Your submission has been received and is pending review",
+          duration: 4000,
+        });
+      }
 
       router.push(`/dashboard/opportunities/${contestId}?success=content_submitted`);
     } catch (err: any) {
@@ -1857,11 +1860,12 @@ export default function SubmitContentPage({
 
     const remainingSubmissions = maxSubmissions - newSubmittedCount;
 
+    // Always show success message and redirect after submission
     if (newSubmittedCount >= maxSubmissions) {
       toast({
-        title: "All Submissions Complete",
-        description: `You have reached the maximum of ${maxSubmissions} submissions for this contest.`,
-        variant: "default",
+        title: "🎉 All Submissions Complete!",
+        description: `You have successfully submitted all ${maxSubmissions} videos for this contest.`,
+        duration: 4000,
       });
     } else {
       toast({
@@ -1869,8 +1873,6 @@ export default function SubmitContentPage({
         description: `Submitted ${totalSubmissions} videos. You have ${remainingSubmissions} submissions remaining.`,
         duration: 4000,
       });
-      setMessage(`${totalSubmissions} videos submitted! You can submit more videos.`);
-      throw new Error("CONTINUE_SUBMISSION"); // Special error to prevent redirect
     }
   };
 
