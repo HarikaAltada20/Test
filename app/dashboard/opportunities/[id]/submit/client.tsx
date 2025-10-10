@@ -1604,26 +1604,32 @@ export default function SubmitContentPage({
       throw new Error("YouTube account not connected. Please connect your YouTube account in settings.");
     }
 
-    const submissionPromises = videos.map(video => {
-      const youtubeStats = {
-        likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
-        comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
-      };
+    const submissionPromises = videos.map(async (video) => {
+      try {
+        const youtubeStats = {
+          likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
+          comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
+        };
 
-      const submissionPayload = {
-        contest_id: contestId,
-        creator_id: user!.id,
-        status: "pending",
-        platform: "youtube",
-        content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
-        video_id: video.id.videoId,
-        video_title: video.snippet.title,
-        video_thumbnail_url: video.snippet.thumbnails.default.url,
-        views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
-        other_stats: { youtube: youtubeStats },
-      };
+        const submissionPayload = {
+          contest_id: contestId,
+          creator_id: user!.id,
+          status: "pending",
+          platform: "youtube",
+          content_link: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+          video_id: video.id.videoId,
+          video_title: video.snippet.title,
+          video_thumbnail_url: video.snippet.thumbnails.default.url,
+          views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
+          other_stats: { youtube: youtubeStats },
+        };
 
-      return supabase.from("submissions").insert([submissionPayload]).select();
+        return await supabase.from("submissions").insert([submissionPayload]).select();
+      } catch (error) {
+        console.error(`Error submitting YouTube video ${video.id.videoId}:`, error);
+        // Re-throw the error so it can be properly handled by the calling function
+        throw error;
+      }
     });
 
     return await Promise.all(submissionPromises);
@@ -1645,10 +1651,18 @@ export default function SubmitContentPage({
         );
         const insightsData = await insightsRes.json();
 
+        // Check for specific Instagram account conversion error
+        if (!insightsRes.ok || insightsData.error) {
+          if (insightsData.error?.error_subcode === 2108006) {
+            throw new Error(`"${reel.caption || 'Instagram Reel'}" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`);
+          }
+          throw new Error(insightsData.error?.message || "Failed to fetch Instagram Reel insights.");
+        }
+
         let primaryViews = 0;
         const instagramApiMetrics: any = {};
 
-        if (insightsRes.ok && !insightsData.error && insightsData?.data && Array.isArray(insightsData.data)) {
+        if (insightsData?.data && Array.isArray(insightsData.data)) {
           insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
             const value = metric.values[0]?.value || 0;
             instagramApiMetrics[metric.name] = value;
@@ -1682,19 +1696,8 @@ export default function SubmitContentPage({
         }]).select();
       } catch (error) {
         console.error(`Error fetching insights for reel ${reel.id}:`, error);
-        // Submit without insights on error
-        return await supabase.from("submissions").insert([{
-          contest_id: contestId,
-          creator_id: user!.id,
-          status: "pending",
-          platform: "instagram",
-          content_link: reel.permalink,
-          video_id: reel.id,
-          video_title: reel.caption || "Instagram Reel",
-          video_thumbnail_url: reel.thumbnail_url,
-          views: 0,
-          other_stats: { instagram: {} },
-        }]).select();
+        // Re-throw the error so it can be properly handled by the calling function
+        throw error;
       }
     });
 
@@ -1819,14 +1822,24 @@ export default function SubmitContentPage({
 
     // Submit YouTube videos
     if (youtubeVideos.length > 0) {
-      const youtubeResults = await handleMultipleYoutubeSubmission(youtubeVideos);
-      results.push(...youtubeResults);
+      try {
+        const youtubeResults = await handleMultipleYoutubeSubmission(youtubeVideos);
+        results.push(...youtubeResults);
+      } catch (youtubeError: any) {
+        // Handle YouTube-specific errors
+        throw new Error(youtubeError.message || "Failed to submit YouTube content. Please try again.");
+      }
     }
 
     // Submit Instagram reels
     if (instagramReels.length > 0) {
-      const instagramResults = await handleMultipleInstagramSubmission(instagramReels);
-      results.push(...instagramResults);
+      try {
+        const instagramResults = await handleMultipleInstagramSubmission(instagramReels);
+        results.push(...instagramResults);
+      } catch (instagramError: any) {
+        // Handle Instagram-specific errors (like account conversion errors)
+        throw new Error(instagramError.message || "Failed to submit Instagram content. Please try again.");
+      }
     }
 
     // Check for errors
