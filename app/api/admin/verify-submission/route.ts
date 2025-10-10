@@ -115,6 +115,11 @@ export async function POST(request: Request) {
       status: action,
     };
 
+    // Clear views_locked when changing status to pending or rejected
+    if (action === 'pending' || action === 'rejected') {
+      updateData.views_locked = null;
+    }
+
     // Use the metadata column to store structured metadata as JSON
     if (action === 'rejected' && reason) {
       // Parse reason and additional notes if they exist
