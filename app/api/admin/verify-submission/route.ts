@@ -181,6 +181,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to update submission status' }, { status: 500 });
     }
 
+    // Note: budget_spent is updated via scheduled cron jobs and manual "Refresh Metrics" button
+    // This improves scalability by avoiding O(n) recalculation on every submission status change
+    // Budget will be updated on next metrics refresh (typically within 10-15 minutes)
+
     // Snapshot views and credit creator totals when entering verified/paid (idempotent via delta)
     if (action === SUBMISSION_STATUS.verified || action === SUBMISSION_STATUS.paid) {
       const currentViews = submissionFull.views || 0;

@@ -45,7 +45,7 @@ export default async function ContestsPage() {
     .eq("advertiser_id", data.user.id)
     .order("created_at", { ascending: false });
 
-  // For leaderboard contests, calculate actual budget spent from submissions
+  // For leaderboard contests, calculate actual budget spent from submissions (CPM now uses real-time budget_spent field)
   const contestsWithCalculatedBudgets = await Promise.all((contestsData || []).map(async (contest) => {
     if (contest.contest_type === 'leaderboard' &&
       contest.contest_based_details?.leaderboard_contest?.total_budget > 0 &&
