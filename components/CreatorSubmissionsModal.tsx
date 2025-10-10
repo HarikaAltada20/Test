@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -380,6 +380,9 @@ export function CreatorSubmissionsModal({
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-[98vw] max-h-[98vh] p-0 gap-0" hideCloseButton onOpenAutoFocus={(e) => e.preventDefault()}>
+                <DialogTitle className="sr-only">
+                    {creator.username}'s Submissions
+                </DialogTitle>
                 <div className="flex flex-col h-[98vh] overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-purple-50 to-blue-50 dark:from-gray-800 dark:to-gray-900 flex-shrink-0">
