@@ -2354,7 +2354,7 @@ export function ContestClientPage({
                       <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:space-x-4">
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                            #{myLeaderboardEntry?.rank || '?'}
+                            #{bestSubmission ? leaderboard.findIndex(entry => entry.id === bestSubmission.id) + 1 : myLeaderboardEntry?.rank || '?'}
                             {bestSubmission && myLeaderboardEntry && bestSubmission.id !== myLeaderboardEntry.id && (
                               <div className="text-xs text-primary/70 mt-1">Best</div>
                             )}
@@ -2614,8 +2614,8 @@ export function ContestClientPage({
                                     return (
                                       <>
                                         {currentSubmissions.map((submission, index) => {
-                                          // Calculate rank based on sorted order
-                                          const rank = startIndex + index + 1;
+                                          // Get actual rank from leaderboard
+                                          const actualRank = leaderboard.findIndex(entry => entry.id === submission.id) + 1;
 
                                           // Earnings display based on modal view mode
                                           let prizeDisplay = null;
@@ -2657,7 +2657,7 @@ export function ContestClientPage({
                                             <Card key={submission.id} className="border border-slate-200 dark:border-slate-700">
                                               <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
                                                 <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                                                  #{rank}
+                                                  #{actualRank}
                                                 </div>
                                                 <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
                                                   <AvatarImage
@@ -2671,7 +2671,7 @@ export function ContestClientPage({
                                                 <div className="flex-grow min-w-0">
                                                   <div className="flex items-center gap-2 mb-1">
                                                     <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate">
-                                                      {submission.user_platform_username} {rank === myLeaderboardEntry?.rank && "(You)"}
+                                                      {submission.user_platform_username} {actualRank === myLeaderboardEntry?.rank && "(You)"}
                                                     </p>
                                                     {renderVerificationBadges(submission.status)}
                                                   </div>
