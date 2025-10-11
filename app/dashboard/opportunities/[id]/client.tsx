@@ -326,7 +326,8 @@ export function ContestClientPage({
 
   // Helper function to render verification badges
   const renderVerificationBadges = (status: string) => {
-    if (contestType !== "cpm") return null; // Only show for CPM contests
+    // Show badges for both CPM and leaderboard contests
+    if (contestType !== "cpm" && contestType !== "leaderboard") return null;
 
     // Only show badge for pending status - warns viewers content is not verified
     // This prevents false inspiration from unverified content
@@ -794,10 +795,10 @@ export function ContestClientPage({
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                     <Badge
                       className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
-                          ? "bg-green-400/90 text-green-900"
-                          : contest.status === "upcoming"
-                            ? "bg-blue-400/90 text-blue-900"
-                            : "bg-slate-400/90 text-slate-900"
+                        ? "bg-green-400/90 text-green-900"
+                        : contest.status === "upcoming"
+                          ? "bg-blue-400/90 text-blue-900"
+                          : "bg-slate-400/90 text-slate-900"
                         }`}
                     >
                       <span className="flex items-center gap-1.5">
@@ -979,8 +980,8 @@ export function ContestClientPage({
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
                     className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
-                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                       }`}
                   >
                     <span className="relative z-10">
@@ -1014,8 +1015,8 @@ export function ContestClientPage({
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
-                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                       }`}
                   >
                     {/* Animated shine effect for active button */}
