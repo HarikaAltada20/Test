@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Calendar,
   ExternalLink,
+  Eye,
   Info,
   Trophy,
   Youtube,
@@ -49,6 +50,13 @@ import {
 } from "@/components/ui/enhanced-tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import {
   getMetricsRefreshCooldownInfoOpportunities,
@@ -180,6 +188,10 @@ export function ContestClientPage({
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submissionCount, setSubmissionCount] = useState(0);
   const [maxSubmissions, setMaxSubmissions] = useState(1);
+  const [showAllSubmissionsModal, setShowAllSubmissionsModal] = useState(false);
+  const [modalViewMode, setModalViewMode] = useState<'simple' | 'detailed'>('simple');
+  const [modalCurrentPage, setModalCurrentPage] = useState(1);
+  const [modalItemsPerPage] = useState(10); // Show 10 submissions per page
   const { activeTab, setActiveTab } = useTabState(tabs, {
     defaultTab: "details",
   });
@@ -196,6 +208,9 @@ export function ContestClientPage({
   >(null);
   const [loadingMySubmission, setLoadingMySubmission] = useState(false);
   const [contestType, setContestType] = useState<string | null>(null); // Track contest type for verification badges
+
+  // Leaderboard view mode state
+  const [leaderboardViewMode, setLeaderboardViewMode] = useState<'simple' | 'detailed'>('simple');
 
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -222,6 +237,22 @@ export function ContestClientPage({
   const processUrlWithCreator = (url: string, username: string): string => {
     if (!url || !username) return url;
     return url.replace(/\[creator\]/gi, username);
+  };
+
+  // Get user's submissions from existing leaderboard data, sorted by views (best first)
+  const getUserSubmissions = () => {
+    if (!user?.id || !leaderboard.length) return [];
+
+    // Filter leaderboard entries for current user and sort by views (highest first)
+    return leaderboard
+      .filter(entry => entry.creator_id === user.id)
+      .sort((a, b) => b.views - a.views);
+  };
+
+  // Get best submission (highest views)
+  const getBestSubmission = () => {
+    const userSubmissions = getUserSubmissions();
+    return userSubmissions.length > 0 ? userSubmissions[0] : null;
   };
 
   const handleRefreshMetrics = async () => {
@@ -660,6 +691,13 @@ export function ContestClientPage({
 
     fetchUserProfile();
   }, [user?.id, supabase]);
+
+  // Reset modal page when modal opens
+  useEffect(() => {
+    if (showAllSubmissionsModal) {
+      setModalCurrentPage(1);
+    }
+  }, [showAllSubmissionsModal]);
 
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
@@ -2245,131 +2283,502 @@ export function ContestClientPage({
               </div>
             ) : (
               <div className="space-y-3">
+                {/* Earnings View Mode Toggle - Show for both CPM and leaderboard contests with bonus */}
+                {(contest?.contest_type === "leaderboard" || contest?.contest_type === "cpm") &&
+                  (contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus ||
+                    contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                    (contest as any).bonus_details?.description_html) && (
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800/50 dark:to-blue-900/20 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white dark:bg-slate-700 rounded-lg shadow-sm">
+                          <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            Earnings Display
+                          </span>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                            Choose how to view your earnings breakdown
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex bg-white dark:bg-slate-700 rounded-lg p-1 shadow-sm border border-slate-200 dark:border-slate-600 w-full sm:w-auto">
+                        <Button
+                          variant={leaderboardViewMode === 'simple' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setLeaderboardViewMode('simple')}
+                          className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === 'simple'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                            }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <div className="w-2 h-2 rounded-full bg-current opacity-60" />
+                            Simple
+                          </span>
+                        </Button>
+                        <Button
+                          variant={leaderboardViewMode === 'detailed' ? 'default' : 'ghost'}
+                          size="sm"
+                          onClick={() => setLeaderboardViewMode('detailed')}
+                          className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === 'detailed'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                            }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <div className="w-2 h-2 rounded-full bg-current opacity-60" />
+                            Detailed
+                          </span>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                 {/* Logged-in User's Rank Card */}
                 {loadingMySubmission && (
                   <div className="text-center py-3">
                     <p>Loading your rank...</p>
                   </div>
                 )}
-                {myLeaderboardEntry && (
-                  <Card
-                    key={`my-rank-${myLeaderboardEntry.id}`}
-                    className="shadow-lg border-2 border-primary/50 bg-primary/5 dark:bg-primary/10 overflow-hidden mb-6"
-                  >
-                    <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
-                      <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                        #{myLeaderboardEntry.rank}
-                      </div>
-                      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
-                        <AvatarImage
-                          src={
-                            myLeaderboardEntry.creator_pfp_url ??
-                            myLeaderboardEntry.user_platform_pfp_url ??
-                            undefined
-                          }
-                          alt={myLeaderboardEntry.user_platform_username}
-                        />
-                        <AvatarFallback className="bg-primary/20 text-primary">
-                          {myLeaderboardEntry.user_platform_username?.[0]?.toUpperCase() ||
-                            "U"}
-                        </AvatarFallback>
-                      </Avatar>
+                {(() => {
+                  // Show best submission if user has multiple, otherwise show current leaderboard entry
+                  const bestSubmission = getBestSubmission();
+                  const displayEntry = bestSubmission || myLeaderboardEntry;
 
-                      <div className="flex-grow min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <p
-                            className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate"
-                            title={myLeaderboardEntry.user_platform_username}
-                          >
-                            {myLeaderboardEntry.user_platform_username} (You)
-                          </p>
-                          {renderVerificationBadges(myLeaderboardEntry.status)}
+                  return displayEntry && (
+                    <Card
+                      key={`my-rank-${displayEntry.id}`}
+                      className="shadow-lg border-2 border-primary/50 bg-primary/5 dark:bg-primary/10 overflow-hidden mb-6"
+                    >
+                      <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:space-x-4">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                          <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
+                            #{myLeaderboardEntry?.rank || '?'}
+                            {bestSubmission && myLeaderboardEntry && bestSubmission.id !== myLeaderboardEntry.id && (
+                              <div className="text-xs text-primary/70 mt-1">Best</div>
+                            )}
+                          </div>
+                          <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                            <AvatarImage
+                              src={
+                                displayEntry.creator_pfp_url ??
+                                displayEntry.user_platform_pfp_url ??
+                                undefined
+                              }
+                              alt={displayEntry.user_platform_username}
+                            />
+                            <AvatarFallback className="bg-primary/20 text-primary">
+                              {displayEntry.user_platform_username?.[0]?.toUpperCase() ||
+                                "U"}
+                            </AvatarFallback>
+                          </Avatar>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Submitted:{" "}
-                          {formatTimeAgo(myLeaderboardEntry.created_at)}
-                        </p>
-                      </div>
 
-                      <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
-                            {myLeaderboardEntry.views
-                              ? myLeaderboardEntry.views.toLocaleString()
-                              : "0"}{" "}
-                            views
-                          </p>
-                          {myLeaderboardEntry.content_link && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground"
-                              asChild
+                        <div className="flex-grow min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p
+                              className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate"
+                              title={displayEntry.user_platform_username}
                             >
-                              <Link
-                                href={myLeaderboardEntry.content_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="View Your Content"
-                              >
-                                <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                              </Link>
-                            </Button>
-                          )}
+                              {displayEntry.user_platform_username} (You)
+                              {bestSubmission && myLeaderboardEntry && bestSubmission.id !== myLeaderboardEntry.id && (
+                                <span className="text-xs text-primary/70 ml-2">• Best Performance</span>
+                              )}
+                            </p>
+                            {renderVerificationBadges(displayEntry.status)}
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Submitted:{" "}
+                            {formatTimeAgo(displayEntry.created_at)}
+                          </p>
                         </div>
-                        {(() => {
-                          let prizeDisplay = null;
-                          if (myLeaderboardEntry.earnings > 0) {
-                            // Show actual earnings for verified or paid submissions; otherwise show expected
-                            const isEarned =
-                              myLeaderboardEntry.status === "verified" ||
-                              myLeaderboardEntry.status === "paid";
-                            const earningsLabel = isEarned
-                              ? "Earned"
-                              : "Expected";
-                            prizeDisplay = (
-                              <span className="font-semibold text-green-600 dark:text-green-400">
-                                {earningsLabel}:{" "}
-                                {formatMoney(myLeaderboardEntry.earnings)}
-                              </span>
-                            );
-                          } else if (
-                            contest.contest_type === "leaderboard" &&
-                            Array.isArray(
-                              contest.contest_based_details?.leaderboard_contest
-                                ?.prizes
-                            ) &&
-                            myLeaderboardEntry.rank
-                          ) {
-                            const prizeInfo = (
-                              contest.contest_based_details.leaderboard_contest
-                                .prizes as PrizeInfo[]
-                            ).find(
-                              (p) => p.position === myLeaderboardEntry.rank
-                            );
-                            if (prizeInfo) {
-                              const prizeText =
-                                contest.status === "active"
-                                  ? "Winning Zone"
-                                  : "Prize";
-                              prizeDisplay = (
-                                <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                  {prizeText}: {formatMoney(prizeInfo.amount)}
-                                </span>
+
+                        <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
+                          <div className="flex items-center space-x-2">
+                            <p className="text-base sm:text-lg font-bold text-primary dark:text-primary-foreground">
+                              {displayEntry.views
+                                ? displayEntry.views.toLocaleString()
+                                : "0"}{" "}
+                              views
+                            </p>
+                            {displayEntry.content_link && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground"
+                                asChild
+                              >
+                                <Link
+                                  href={displayEntry.content_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View Your Content"
+                                >
+                                  <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                          {(() => {
+                            let prizeDisplay = null;
+                            if (displayEntry.earnings > 0) {
+                              // Show actual earnings for verified or paid submissions; otherwise show expected
+                              const isEarned =
+                                displayEntry.status === "verified" ||
+                                displayEntry.status === "paid";
+                              const earningsLabel = isEarned
+                                ? "Earned"
+                                : "Expected";
+
+                              // Check for flat fee bonus in detailed mode
+                              if (leaderboardViewMode === 'detailed') {
+                                const flatFeeBonus = contestType === "cpm"
+                                  ? (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0
+                                  : (contest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                                if (flatFeeBonus > 0) {
+                                  const totalEarnings = displayEntry.earnings + flatFeeBonus;
+                                  prizeDisplay = (
+                                    <div className="space-y-1">
+                                      <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                        {earningsLabel}: {formatMoney(totalEarnings)}
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                        <span className="whitespace-nowrap">{formatMoney(displayEntry.earnings)} {contestType === "cpm" ? "CPM" : "Prize"}</span>
+                                        <span className="text-green-600 dark:text-green-400">+</span>
+                                        <span className="whitespace-nowrap">{formatMoney(flatFeeBonus)} Bonus</span>
+                                      </div>
+                                    </div>
+                                  );
+                                } else {
+                                  prizeDisplay = (
+                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                      {earningsLabel}: {formatMoney(displayEntry.earnings)}
+                                    </div>
+                                  );
+                                }
+                              } else {
+                                // Simple view - show total earnings if bonus exists
+                                const flatFeeBonus = contestType === "cpm"
+                                  ? (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0
+                                  : (contest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                                const totalEarnings = displayEntry.earnings + flatFeeBonus;
+                                prizeDisplay = (
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    {earningsLabel}: {formatMoney(totalEarnings)}
+                                  </div>
+                                );
+                              }
+                            } else if (
+                              contest.contest_type === "leaderboard" &&
+                              Array.isArray(
+                                contest.contest_based_details?.leaderboard_contest
+                                  ?.prizes
+                              ) &&
+                              myLeaderboardEntry?.rank
+                            ) {
+                              const prizeInfo = (
+                                contest.contest_based_details.leaderboard_contest
+                                  .prizes as PrizeInfo[]
+                              ).find(
+                                (p) => p.position === myLeaderboardEntry?.rank
                               );
+                              if (prizeInfo) {
+                                const prizeText =
+                                  contest.status === "active"
+                                    ? "Winning Zone"
+                                    : "Prize";
+
+                                // Check for flat fee bonus in detailed mode
+                                if (leaderboardViewMode === 'detailed') {
+                                  const flatFeeBonus =
+                                    (contest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                                  if (flatFeeBonus > 0) {
+                                    const totalEarnings = prizeInfo.amount + flatFeeBonus;
+                                    prizeDisplay = (
+                                      <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                        <div>
+                                          <div>{prizeText}: {formatMoney(totalEarnings)}</div>
+                                          <div className="text-xs text-amber-600 dark:text-amber-500">
+                                            ({formatMoney(prizeInfo.amount)} Prize + {formatMoney(flatFeeBonus)} Bonus)
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    prizeDisplay = (
+                                      <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                        {prizeText}: {formatMoney(prizeInfo.amount)}
+                                      </span>
+                                    );
+                                  }
+                                } else {
+                                  // Simple view - show total if bonus exists
+                                  const flatFeeBonus =
+                                    (contest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+                                  const totalEarnings = prizeInfo.amount + flatFeeBonus;
+
+                                  prizeDisplay = (
+                                    <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                      {prizeText}: {formatMoney(totalEarnings)}
+                                    </span>
+                                  );
+                                }
+                              }
                             }
-                          }
-                          return prizeDisplay ? (
-                            <div className="text-xs sm:text-sm">
-                              {prizeDisplay}
-                            </div>
-                          ) : null;
-                        })()}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
+                            return prizeDisplay ? (
+                              <div className="text-xs sm:text-sm">
+                                {prizeDisplay}
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+                      </CardContent>
+
+                      {/* View All Submissions Button - Only show if user has multiple submissions */}
+                      {getUserSubmissions().length > 1 && (
+                        <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+                          <Dialog open={showAllSubmissionsModal} onOpenChange={setShowAllSubmissionsModal}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
+                              >
+                                <ListOrdered className="h-3 w-3 mr-2" />
+                                View All Your Submissions ({getUserSubmissions().length})
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+                              <DialogHeader className="flex-shrink-0">
+                                <DialogTitle className="flex items-center gap-2">
+                                  <ListOrdered className="h-5 w-5" />
+                                  All Your Submissions ({getUserSubmissions().length})
+                                </DialogTitle>
+
+                                {/* View Mode Toggle for Modal */}
+                                {(contest?.contest_type === "leaderboard" || contest?.contest_type === "cpm") &&
+                                  (contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus ||
+                                    contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
+                                    (contest as any).bonus_details?.description_html) && (
+                                    <div className="flex justify-center mt-4">
+                                      <div className="flex bg-white dark:bg-slate-700 rounded-lg p-1 shadow-sm border border-slate-200 dark:border-slate-600">
+                                        <Button
+                                          variant={modalViewMode === 'simple' ? 'default' : 'ghost'}
+                                          size="sm"
+                                          onClick={() => setModalViewMode('simple')}
+                                          className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === 'simple'
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                            }`}
+                                        >
+                                          Simple
+                                        </Button>
+                                        <Button
+                                          variant={modalViewMode === 'detailed' ? 'default' : 'ghost'}
+                                          size="sm"
+                                          onClick={() => setModalViewMode('detailed')}
+                                          className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === 'detailed'
+                                            ? 'bg-blue-600 text-white shadow-sm'
+                                            : 'text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                            }`}
+                                        >
+                                          Detailed
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                              </DialogHeader>
+
+                              {/* Scrollable Content Area */}
+                              <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                                {getUserSubmissions().length === 0 ? (
+                                  <div className="text-center py-8">
+                                    <p className="text-slate-600 dark:text-slate-400">No submissions found</p>
+                                  </div>
+                                ) : (
+                                  (() => {
+                                    const userSubmissions = getUserSubmissions();
+                                    const totalPages = Math.ceil(userSubmissions.length / modalItemsPerPage);
+                                    const startIndex = (modalCurrentPage - 1) * modalItemsPerPage;
+                                    const endIndex = startIndex + modalItemsPerPage;
+                                    const currentSubmissions = userSubmissions.slice(startIndex, endIndex);
+
+                                    return (
+                                      <>
+                                        {currentSubmissions.map((submission, index) => {
+                                          // Calculate rank based on sorted order
+                                          const rank = startIndex + index + 1;
+
+                                          // Earnings display based on modal view mode
+                                          let prizeDisplay = null;
+                                          if (submission.earnings > 0) {
+                                            const isEarned = submission.status === "verified" || submission.status === "paid";
+                                            const earningsLabel = isEarned ? "Earned" : "Expected";
+
+                                            const flatFeeBonus = contestType === "cpm"
+                                              ? (contest.contest_based_details as any)?.cpm_contest?.flat_fee_bonus || 0
+                                              : (contest.contest_based_details as any)?.leaderboard_contest?.flat_fee_bonus || 0;
+                                            const totalEarnings = submission.earnings + flatFeeBonus;
+
+                                            if (modalViewMode === 'detailed' && flatFeeBonus > 0) {
+                                              prizeDisplay = (
+                                                <div className="space-y-1">
+                                                  <div className="font-semibold text-green-600 dark:text-green-400 text-sm">
+                                                    {earningsLabel}: {formatMoney(totalEarnings)}
+                                                  </div>
+                                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-md border border-green-200 dark:border-green-800">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                                    <span className="whitespace-nowrap">{formatMoney(submission.earnings)} {contestType === "cpm" ? "CPM" : "Prize"}</span>
+                                                    <span className="text-green-600 dark:text-green-400">+</span>
+                                                    <span className="whitespace-nowrap">{formatMoney(flatFeeBonus)} Bonus</span>
+                                                  </div>
+                                                </div>
+                                              );
+                                            } else {
+                                              prizeDisplay = (
+                                                <span className="font-semibold text-green-600 dark:text-green-400">
+                                                  {earningsLabel}: {formatMoney(totalEarnings)}
+                                                </span>
+                                              );
+                                            }
+                                          }
+
+                                          // No safety check needed - data comes from existing leaderboard
+
+                                          return (
+                                            <Card key={submission.id} className="border border-slate-200 dark:border-slate-700">
+                                              <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
+                                                <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
+                                                  #{rank}
+                                                </div>
+                                                <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                                                  <AvatarImage
+                                                    src={submission.creator_pfp_url ?? submission.user_platform_pfp_url ?? undefined}
+                                                    alt={submission.user_platform_username}
+                                                  />
+                                                  <AvatarFallback className="bg-primary/20 text-primary">
+                                                    {submission.user_platform_username?.[0]?.toUpperCase() || "U"}
+                                                  </AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex-grow min-w-0">
+                                                  <div className="flex items-center gap-2 mb-1">
+                                                    <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate">
+                                                      {submission.user_platform_username} {rank === myLeaderboardEntry?.rank && "(You)"}
+                                                    </p>
+                                                    {renderVerificationBadges(submission.status)}
+                                                  </div>
+                                                  <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">
+                                                    Submitted: {formatTimeAgo(submission.created_at)}
+                                                  </p>
+                                                  <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+                                                    <div className="flex items-center gap-1">
+                                                      <Eye className="h-3 w-3" />
+                                                      {submission.views.toLocaleString()} views
+                                                    </div>
+                                                    {prizeDisplay}
+                                                  </div>
+                                                </div>
+                                                {submission.content_link && (
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    asChild
+                                                    className="h-8 w-8 p-0"
+                                                  >
+                                                    <Link
+                                                      href={submission.content_link}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      title="View Content"
+                                                    >
+                                                      <PlayCircle className="h-4 w-4" />
+                                                    </Link>
+                                                  </Button>
+                                                )}
+                                              </CardContent>
+                                            </Card>
+                                          );
+                                        })}
+
+                                        {/* Pagination Controls */}
+                                        {(() => {
+                                          const userSubmissions = getUserSubmissions();
+                                          const totalPages = Math.ceil(userSubmissions.length / modalItemsPerPage);
+
+                                          if (totalPages <= 1) return null;
+
+                                          return (
+                                            <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setModalCurrentPage(prev => Math.max(1, prev - 1))}
+                                                disabled={modalCurrentPage === 1}
+                                                className="flex items-center gap-1"
+                                              >
+                                                <ChevronLeft className="h-4 w-4" />
+                                                Previous
+                                              </Button>
+
+                                              <div className="flex items-center gap-1">
+                                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                                  let pageNum;
+                                                  if (totalPages <= 5) {
+                                                    pageNum = i + 1;
+                                                  } else if (modalCurrentPage <= 3) {
+                                                    pageNum = i + 1;
+                                                  } else if (modalCurrentPage >= totalPages - 2) {
+                                                    pageNum = totalPages - 4 + i;
+                                                  } else {
+                                                    pageNum = modalCurrentPage - 2 + i;
+                                                  }
+
+                                                  return (
+                                                    <Button
+                                                      key={pageNum}
+                                                      variant={modalCurrentPage === pageNum ? "default" : "outline"}
+                                                      size="sm"
+                                                      onClick={() => setModalCurrentPage(pageNum)}
+                                                      className="w-8 h-8 p-0"
+                                                    >
+                                                      {pageNum}
+                                                    </Button>
+                                                  );
+                                                })}
+                                              </div>
+
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setModalCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                                disabled={modalCurrentPage === totalPages}
+                                                className="flex items-center gap-1"
+                                              >
+                                                Next
+                                                <ChevronRight className="h-4 w-4" />
+                                              </Button>
+                                            </div>
+                                          );
+                                        })()}
+                                      </>
+                                    );
+                                  })())}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })()}
 
                 {/* Leaderboard Header */}
                 <div className="flex items-center justify-between mb-4">
@@ -2477,18 +2886,66 @@ export function ContestClientPage({
                       // Calculate total earnings (CPM + Bonus if applicable)
                       const totalEarnings = entry.earnings + flatFeeBonus;
 
-                      prizeDisplay = (
-                        <span className="font-semibold text-green-600 dark:text-green-400">
-                          {earningsLabel}: {formatMoney(totalEarnings)}
-                        </span>
-                      );
+                      // Show detailed breakdown if in detailed mode and bonus exists
+                      if (leaderboardViewMode === 'detailed' && flatFeeBonus > 0) {
+                        prizeDisplay = (
+                          <div className="space-y-1">
+                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                              {earningsLabel}: {formatMoney(totalEarnings)}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                              <span className="whitespace-nowrap">{formatMoney(entry.earnings)} CPM</span>
+                              <span className="text-green-600 dark:text-green-400">+</span>
+                              <span className="whitespace-nowrap">{formatMoney(flatFeeBonus)} Bonus</span>
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        prizeDisplay = (
+                          <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                            {earningsLabel}: {formatMoney(totalEarnings)}
+                          </div>
+                        );
+                      }
                     } else {
-                      // Non-CPM contest
-                      prizeDisplay = (
-                        <span className="font-semibold text-green-600 dark:text-green-400">
-                          Earned: {formatMoney(entry.earnings)}
-                        </span>
-                      );
+                      // For leaderboard contests with earnings
+                      if (contestType === "leaderboard" && leaderboardViewMode === 'detailed') {
+                        // Check for flat fee bonus in leaderboard contests
+                        const flatFeeBonus =
+                          (contest.contest_based_details as any)?.leaderboard_contest
+                            ?.flat_fee_bonus || 0;
+
+                        if (flatFeeBonus > 0) {
+                          const totalEarnings = entry.earnings + flatFeeBonus;
+                          prizeDisplay = (
+                            <div className="space-y-1">
+                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                Earned: {formatMoney(totalEarnings)}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                <span className="whitespace-nowrap">{formatMoney(entry.earnings)} Prize</span>
+                                <span className="text-green-600 dark:text-green-400">+</span>
+                                <span className="whitespace-nowrap">{formatMoney(flatFeeBonus)} Bonus</span>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          prizeDisplay = (
+                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                              Earned: {formatMoney(entry.earnings)}
+                            </div>
+                          );
+                        }
+                      } else {
+                        // Simple view for leaderboard or non-CPM contests
+                        prizeDisplay = (
+                          <span className="font-semibold text-green-600 dark:text-green-400">
+                            Earned: {formatMoney(entry.earnings)}
+                          </span>
+                        );
+                      }
                     }
                   } else if (
                     contest.contest_type === "leaderboard" &&
@@ -2503,12 +2960,43 @@ export function ContestClientPage({
                     if (prizeInfo) {
                       const prizeText =
                         contest.status === "active" ? "Winning Zone" : "Prize";
-                      prizeDisplay = (
-                        <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
-                          <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                          {prizeText}: {formatMoney(prizeInfo.amount)}
-                        </span>
-                      );
+
+                      // In detailed mode, show bonus information if available
+                      if (leaderboardViewMode === 'detailed') {
+                        const flatFeeBonus =
+                          (contest.contest_based_details as any)?.leaderboard_contest
+                            ?.flat_fee_bonus || 0;
+
+                        if (flatFeeBonus > 0) {
+                          const totalEarnings = prizeInfo.amount + flatFeeBonus;
+                          prizeDisplay = (
+                            <div className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                              <div>
+                                <div>{prizeText}: {formatMoney(totalEarnings)}</div>
+                                <div className="text-xs text-amber-600 dark:text-amber-500">
+                                  ({formatMoney(prizeInfo.amount)} Prize + {formatMoney(flatFeeBonus)} Bonus)
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          prizeDisplay = (
+                            <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                              <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                              {prizeText}: {formatMoney(prizeInfo.amount)}
+                            </span>
+                          );
+                        }
+                      } else {
+                        // Simple view
+                        prizeDisplay = (
+                          <span className="font-semibold text-amber-500 dark:text-amber-400 flex items-center">
+                            <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                            {prizeText}: {formatMoney(prizeInfo.amount)}
+                          </span>
+                        );
+                      }
                     }
                   }
 
