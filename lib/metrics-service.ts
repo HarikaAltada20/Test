@@ -12,14 +12,16 @@ export const MetricsService = {
   async getContestsParticipated(creatorId: string): Promise<number> {
     const supabase = createAdminClient();
     
-    // Count distinct contests from submissions
-    const { count, error } = await supabase
-      .from('submissions')
-      .select('contest_id', { count: 'exact', head: true })
-      .eq('creator_id', creatorId);
+    // Read directly from the column - it's maintained by database triggers
+    // This is O(1) and scales well even with millions of submissions
+    const { data, error } = await supabase
+      .from('creator_profiles')
+      .select('total_contests_participated')
+      .eq('id', creatorId)
+      .single();
     
-    if (error) throw new Error(`Failed to count contests participated: ${error.message}`);
-    return count || 0;
+    if (error) throw new Error(`Failed to get contests participated: ${error.message}`);
+    return data?.total_contests_participated || 0;
   },
 
   // Legacy method - kept for backward compatibility but now calculates dynamically
