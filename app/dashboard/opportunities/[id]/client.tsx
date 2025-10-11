@@ -239,21 +239,35 @@ export function ContestClientPage({
     return url.replace(/\[creator\]/gi, username);
   };
 
-  // Get user's submissions from existing leaderboard data, sorted by views (best first)
-  const getUserSubmissions = () => {
+  // Memoized user submissions for performance with large datasets
+  const userSubmissions = useMemo(() => {
     if (!user?.id || !leaderboard.length) return [];
 
     // Filter leaderboard entries for current user and sort by views (highest first)
     return leaderboard
       .filter(entry => entry.creator_id === user.id)
       .sort((a, b) => b.views - a.views);
-  };
+  }, [user?.id, leaderboard]);
 
-  // Get best submission (highest views)
-  const getBestSubmission = () => {
-    const userSubmissions = getUserSubmissions();
+  // Memoized best submission (highest views)
+  const bestSubmission = useMemo(() => {
     return userSubmissions.length > 0 ? userSubmissions[0] : null;
-  };
+  }, [userSubmissions]);
+
+  // Memoized rank lookup map for O(1) rank access
+  const rankLookupMap = useMemo(() => {
+    const map = new Map();
+    leaderboard.forEach((entry, index) => {
+      map.set(entry.id, index + 1);
+    });
+    return map;
+  }, [leaderboard]);
+
+  // Get user's submissions (now memoized)
+  const getUserSubmissions = () => userSubmissions;
+
+  // Get best submission (now memoized)
+  const getBestSubmission = () => bestSubmission;
 
   const handleRefreshMetrics = async () => {
     if (!contest?.id) return;
@@ -2354,7 +2368,7 @@ export function ContestClientPage({
                       <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:space-x-4">
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                            #{bestSubmission ? leaderboard.findIndex(entry => entry.id === bestSubmission.id) + 1 : myLeaderboardEntry?.rank || '?'}
+                            #{bestSubmission ? rankLookupMap.get(bestSubmission.id) : myLeaderboardEntry?.rank || '?'}
                             {bestSubmission && myLeaderboardEntry && bestSubmission.id !== myLeaderboardEntry.id && (
                               <div className="text-xs text-primary/70 mt-1">Best</div>
                             )}
@@ -2614,8 +2628,8 @@ export function ContestClientPage({
                                     return (
                                       <>
                                         {currentSubmissions.map((submission, index) => {
-                                          // Get actual rank from leaderboard
-                                          const actualRank = leaderboard.findIndex(entry => entry.id === submission.id) + 1;
+                                          // Get actual rank from leaderboard using O(1) lookup
+                                          const actualRank = rankLookupMap.get(submission.id) || '?';
 
                                           // Earnings display based on modal view mode
                                           let prizeDisplay = null;
