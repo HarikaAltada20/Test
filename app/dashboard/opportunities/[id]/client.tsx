@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Eye,
   Info,
+  AlertCircle,
   Trophy,
   Youtube,
   Instagram,
@@ -42,12 +43,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import {
-  EnhancedTabs as Tabs,
-  EnhancedTabsContent as TabsContent,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
-} from "@/components/ui/enhanced-tabs";
+import { renderStatusBadge } from "@/lib/status-badges";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -371,26 +367,7 @@ export function ContestClientPage({
 
   // Helper function to render verification badges
   const renderVerificationBadges = (status: string) => {
-    // Show badges for both CPM and leaderboard contests
-    if (contestType !== "cpm" && contestType !== "leaderboard") return null;
-
-    // Only show badge for pending status - warns viewers content is not verified
-    // This prevents false inspiration from unverified content
-    if (status === "pending") {
-      return (
-        <Badge
-          variant="secondary"
-          className="bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800 text-xs font-medium"
-        >
-          <Info className="h-3 w-3 mr-1" />
-          Pending
-        </Badge>
-      );
-    }
-
-    // No badges for verified/paid - content is credible
-    // Amount presence clearly indicates paid status
-    return null;
+    return renderStatusBadge(status as any, contestType);
   };
 
   const renderPostContestStatusBadge = (status: string | null) => {
