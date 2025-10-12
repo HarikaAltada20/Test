@@ -416,10 +416,18 @@ export default function EditContestPage({
   };
 
   // Get the current user's subscription from new subscription system
-  const getUserPlan = async () => {
+  const getUserPlan = async (contestSubscriptionInfo?: any) => {
     if (!user) return;
     setIsUserPlanLoading(true);
     try {
+      // If we have contest subscription info, use it (this is the plan at contest creation time)
+      if (contestSubscriptionInfo?.product_id) {
+        setUserPlan(contestSubscriptionInfo.product_id);
+        setIsUserPlanLoading(false);
+        return;
+      }
+
+      // Fallback: fetch current user's subscription info
       const { data: authData, error: authError } =
         await supabase.auth.getUser();
       if (authError || !authData.user) {
@@ -490,14 +498,11 @@ export default function EditContestPage({
         return;
       }
 
-      // Fetch user plan *after* plans are loaded to find default free plan ID if needed
-      await getUserPlan();
-
-      // Now fetch contest data
+      // First fetch contest data to get advertiser_id
       try {
         const { data, error: contestError } = await supabase
           .from("contests")
-          .select("*, advertiser_id") // Ensure advertiser_id is fetched for security if needed in RLS
+          .select("*, advertiser_id, subscription_info_of_user") // Include subscription_info_of_user for plan features
           .eq("id", contestId)
           // .eq("advertiser_id", user.id) // RLS should handle this, but explicit check can be added if RLS is not robust
           .single();
@@ -522,6 +527,8 @@ export default function EditContestPage({
         }
 
         if (data) {
+          // Fetch the correct plan - use the subscription info captured at contest creation time
+          await getUserPlan(data.subscription_info_of_user);
           // Extract commission rate from contest payment details
           if (data.payment_details) {
             try {
@@ -986,28 +993,23 @@ export default function EditContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
-        daysUntilStart !== 1 ? "s" : ""
-      }`;
-      if (hoursUntilStart > 0)
-        startMessage += ` and ${hoursUntilStart} hour${
-          hoursUntilStart !== 1 ? "s" : ""
+      startMessage = `Your contest will be live in ${daysUntilStart} day${daysUntilStart !== 1 ? "s" : ""
         }`;
+      if (hoursUntilStart > 0)
+        startMessage += ` and ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+          }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
-        hoursUntilStart !== 1 ? "s" : ""
-      }`;
+      startMessage = `Your contest will be live in ${hoursUntilStart} hour${hoursUntilStart !== 1 ? "s" : ""
+        }`;
     } else {
       startMessage = "Your contest will be live soon";
     }
 
-    const durationMessage = `and will run for ${durationDays} day${
-      durationDays !== 1 ? "s" : ""
-    }${
-      durationHours > 0
+    const durationMessage = `and will run for ${durationDays} day${durationDays !== 1 ? "s" : ""
+      }${durationHours > 0
         ? ` and ${durationHours} hour${durationHours !== 1 ? "s" : ""}`
         : ""
-    }`;
+      }`;
 
     return `${startMessage} ${durationMessage}`;
   };
@@ -1059,16 +1061,15 @@ export default function EditContestPage({
       disallowed.length === 1
         ? disallowed[0]
         : disallowed.slice(0, -1).join(", ") +
-          " and " +
-          disallowed[disallowed.length - 1];
+        " and " +
+        disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday
     )}, you can create contests starting from ${formatDateWithOrdinal(
       minStartDate
-    )} (00:00 onwards). ${disallowedText} ${
-      disallowed.length > 1 ? "are" : "is"
-    } not allowed.`;
+    )} (00:00 onwards). ${disallowedText} ${disallowed.length > 1 ? "are" : "is"
+      } not allowed.`;
   };
   // Get minimum allowed end date (at least 3 days after the start date)
   const getMinEndDate = () => {
@@ -1258,7 +1259,7 @@ export default function EditContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -1272,9 +1273,8 @@ export default function EditContestPage({
           if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-                MIN_DAYS_UNTIL_START - 1
-              } day gap required).`,
+              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                } day gap required).`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -1385,11 +1385,10 @@ export default function EditContestPage({
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too Low",
-            description: `Prize for Winner ${
-              i + 1
-            } must be at least ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
-            )}`,
+            description: `Prize for Winner ${i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1399,9 +1398,8 @@ export default function EditContestPage({
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
           toast({
             title: "Prize Amount Too High",
-            description: `Prize for Winner ${
-              i + 1
-            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+            description: `Prize for Winner ${i + 1
+              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -1592,9 +1590,9 @@ export default function EditContestPage({
         setBonusJson(json);
         updatePayload.bonus_details = html
           ? {
-              description_html: html,
-              description_json: json,
-            }
+            description_html: html,
+            description_json: json,
+          }
           : null;
       } else {
         updatePayload.bonus_details = null;
@@ -1603,7 +1601,7 @@ export default function EditContestPage({
       // Add max earnings per creator (stored in cents)
       updatePayload.max_earnings_per_creator =
         maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
+          parseFloat(maxEarningsPerCreator.toString()) > 0
           ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
           : null;
     }
@@ -2304,19 +2302,17 @@ export default function EditContestPage({
       // Show detailed refund breakdown if available
       const refundMessage = refundResult.breakdown
         ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
-          )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
-          )} + $${refundResult.breakdown.commissionRefund.toFixed(
-            2
-          )} commission (${
-            refundDetails.commissionPercentage
-          }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
+          2
+        )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
+          2
+        )} + $${refundResult.breakdown.commissionRefund.toFixed(
+          2
+        )} commission (${refundDetails.commissionPercentage
+        }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
         : `$${(refundDetails.totalRefund / 100).toFixed(
-            2
-          )} has been refunded to your wallet (using original ${
-            refundDetails.commissionPercentage
-          }% commission rate)`;
+          2
+        )} has been refunded to your wallet (using original ${refundDetails.commissionPercentage
+        }% commission rate)`;
 
       toast({
         title: "Refund Processed",
@@ -2354,29 +2350,29 @@ export default function EditContestPage({
       const contestBasedDetails =
         contestType === "leaderboard"
           ? {
-              leaderboard_contest: {
-                prizes: winnerAmounts.map((amount, index) => ({
-                  position: index + 1,
-                  amount: amount,
-                })),
-                total_prize: winnerAmounts.reduce(
-                  (sum, amount) => sum + amount,
-                  0
-                ),
-                winner_count: winnerCount,
-              },
-            }
+            leaderboard_contest: {
+              prizes: winnerAmounts.map((amount, index) => ({
+                position: index + 1,
+                amount: amount,
+              })),
+              total_prize: winnerAmounts.reduce(
+                (sum, amount) => sum + amount,
+                0
+              ),
+              winner_count: winnerCount,
+            },
+          }
           : {
-              cpm_contest: {
-                cpm_rate_usd: parseFloat(cpmRate.toString()),
-                min_views: minViews ? parseInt(minViews.toString()) : null,
-                max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                total_budget: Math.round(
-                  parseFloat(totalBudget.toString()) * 100
-                ),
-                terms_conditions: termsConditions,
-              },
-            };
+            cpm_contest: {
+              cpm_rate_usd: parseFloat(cpmRate.toString()),
+              min_views: minViews ? parseInt(minViews.toString()) : null,
+              max_views: maxViews ? parseInt(maxViews.toString()) : null,
+              total_budget: Math.round(
+                parseFloat(totalBudget.toString()) * 100
+              ),
+              terms_conditions: termsConditions,
+            },
+          };
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -2526,9 +2522,8 @@ export default function EditContestPage({
       if (isNewContest) {
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-            MIN_DAYS_UNTIL_START - 1
-          } day gap required).`;
+          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+            } day gap required).`;
         }
       } else if (startDateTime < now) {
         return "Contest start time must be in the future.";
@@ -2573,14 +2568,12 @@ export default function EditContestPage({
 
       for (let i = 0; i < winnerCount; i++) {
         if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${
-            i + 1
-          } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${i + 1
+            } must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`;
         }
         if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
-          return `Prize for Winner ${
-            i + 1
-          } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
+          return `Prize for Winner ${i + 1
+            } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`;
         }
       }
     }
@@ -2642,29 +2635,29 @@ export default function EditContestPage({
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-                leaderboard_contest: {
-                  prizes: winnerAmounts.map((amount, index) => ({
-                    position: index + 1,
-                    amount: amount,
-                  })),
-                  total_prize: winnerAmounts.reduce(
-                    (sum, amount) => sum + amount,
-                    0
-                  ),
-                  winner_count: winnerCount,
-                },
-              }
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
             : {
-                cpm_contest: {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                },
-              };
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
         // Prepare complete contest update with ALL form data
         const contestUpdate = {
@@ -2717,29 +2710,29 @@ export default function EditContestPage({
         const contestBasedDetails =
           contestType === "leaderboard"
             ? {
-                leaderboard_contest: {
-                  prizes: winnerAmounts.map((amount, index) => ({
-                    position: index + 1,
-                    amount: amount,
-                  })),
-                  total_prize: winnerAmounts.reduce(
-                    (sum, amount) => sum + amount,
-                    0
-                  ),
-                  winner_count: winnerCount,
-                },
-              }
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
             : {
-                cpm_contest: {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  min_views: minViews ? parseInt(minViews.toString()) : null,
-                  max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                },
-              };
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
         const contestUpdate = {
           title: title.trim(),
@@ -3295,7 +3288,7 @@ export default function EditContestPage({
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+          (1000 * 60 * 60 * 24)
         );
 
         const originalStartDate = contest?.start_date
@@ -3309,9 +3302,8 @@ export default function EditContestPage({
           if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
-                MIN_DAYS_UNTIL_START - 1
-              } day gap required).`,
+              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                } day gap required).`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -3425,11 +3417,10 @@ export default function EditContestPage({
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too Low",
-              description: `Prize for Winner ${
-                i + 1
-              } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
-              )}`,
+              description: `Prize for Winner ${i + 1
+                } must be at least ${formatCurrencyFromCents(
+                  MIN_PRIZE_PER_WINNER
+                )}`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -3439,9 +3430,8 @@ export default function EditContestPage({
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too High",
-              description: `Prize for Winner ${
-                i + 1
-              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${i + 1
+                } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -3614,9 +3604,9 @@ export default function EditContestPage({
         setBonusJson(json);
         updatePayload.bonus_details = html
           ? {
-              description_html: html,
-              description_json: json,
-            }
+            description_html: html,
+            description_json: json,
+          }
           : null;
       } else {
         updatePayload.bonus_details = null;
@@ -3625,7 +3615,7 @@ export default function EditContestPage({
       // Add max earnings per creator (stored in cents)
       updatePayload.max_earnings_per_creator =
         maxEarningsPerCreator &&
-        parseFloat(maxEarningsPerCreator.toString()) > 0
+          parseFloat(maxEarningsPerCreator.toString()) > 0
           ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
           : null;
     }
@@ -4061,11 +4051,10 @@ export default function EditContestPage({
               <div className="space-y-2">
                 <Label>Thumbnail</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${
-                    isDragActive
-                      ? "border-rose-500 bg-rose-50"
-                      : "border-gray-300 bg-white"
-                  }`}
+                  className={`border-2 border-dashed rounded-lg p-4 transition-colors duration-200 cursor-pointer ${isDragActive
+                    ? "border-rose-500 bg-rose-50"
+                    : "border-gray-300 bg-white"
+                    }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -4086,8 +4075,8 @@ export default function EditContestPage({
                           {thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
-                              )}MB`
+                              2
+                            )}MB`
                             : ""}
                         </p>
                         <Button
@@ -4285,11 +4274,10 @@ export default function EditContestPage({
                 {/* Asset Upload */}
                 <div className="flex flex-col gap-6">
                   <div
-                    className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${
-                      isDragActive
-                        ? "border-rose-500 bg-rose-50"
-                        : "border-gray-300 bg-white"
-                    }`}
+                    className={`border-2 border-dashed rounded-lg p-6 transition-colors duration-200 cursor-pointer ${isDragActive
+                      ? "border-rose-500 bg-rose-50"
+                      : "border-gray-300 bg-white"
+                      }`}
                     onClick={() => resourceFileRef.current?.click()}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -5014,9 +5002,9 @@ export default function EditContestPage({
                               href={
                                 item.url.includes("[creator]")
                                   ? item.url.replace(
-                                      /\[creator\]/gi,
-                                      encodeURIComponent(currentUserFirstName)
-                                    )
+                                    /\[creator\]/gi,
+                                    encodeURIComponent(currentUserFirstName)
+                                  )
                                   : item.url
                               }
                               target="_blank"
@@ -5025,9 +5013,9 @@ export default function EditContestPage({
                             >
                               {item.url.includes("[creator]")
                                 ? item.url.replace(
-                                    /\[creator\]/gi,
-                                    currentUserFirstName
-                                  )
+                                  /\[creator\]/gi,
+                                  currentUserFirstName
+                                )
                                 : item.url}
                             </a>
                             <div className="text-xs text-gray-500 mt-1">
@@ -5248,7 +5236,7 @@ export default function EditContestPage({
                           const position = newCount;
                           newAmounts.push(
                             DEFAULT_PRIZE_ALLOCATIONS[
-                              position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
+                            position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
                             ] || MIN_PRIZE_PER_WINNER
                           );
                           setWinnerAmounts(newAmounts);
@@ -5878,15 +5866,15 @@ export default function EditContestPage({
                   <div className="text-sm mt-1 break-words">
                     {budgetDifference > 0
                       ? `Prize pool increased by ${formatCurrencyFromCents(
-                          budgetDifference
-                        )}. Original: ${formatCurrencyFromCents(
-                          originalBudget
-                        )} → New Total: ${formatCurrencyFromCents(
-                          originalBudget + budgetDifference
-                        )}. Additional payment (including commission) will be required.`
+                        budgetDifference
+                      )}. Original: ${formatCurrencyFromCents(
+                        originalBudget
+                      )} → New Total: ${formatCurrencyFromCents(
+                        originalBudget + budgetDifference
+                      )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
-                          Math.abs(budgetDifference)
-                        )}. You will be refunded this amount plus commission.`}
+                        Math.abs(budgetDifference)
+                      )}. You will be refunded this amount plus commission.`}
                   </div>
                 </div>
               </Alert>
@@ -6169,11 +6157,11 @@ export default function EditContestPage({
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                    ? winnerAmounts.reduce(
+                      ? winnerAmounts.reduce(
                         (sum, amount) => sum + (amount || 0),
                         0
                       ) / 100 // Convert cents to dollars
-                    : parseFloat(totalBudget.toString()) || 0
+                      : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
