@@ -28,6 +28,7 @@ import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { useSearchParams } from "next/navigation";
 import { DiscordOnboardingModal } from "@/components/DiscordOnboardingModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
 
 interface GettingStartedClientProps {
   user: User;
@@ -39,7 +40,38 @@ export default function GettingStartedClient({
   const [userType, setUserType] = useState<string | null>(null);
   const [showDiscordModal, setShowDiscordModal] = useState(false);
   const supabase = createClient();
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const searchParams = useSearchParams();
+
+
+   // Read mode from data attribute
+   useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const fetchUserType = async () => {
@@ -85,15 +117,26 @@ export default function GettingStartedClient({
       </div>
     )
   }
+  const isDark = mode === "dark";
+
 
   return (
     <div className="container mx-auto px-2 py-3 md:px-4 md:py-8 max-w-[1100px]">
       {/* Header Section */}
       <div className="mb-8 text-center">
-        <h1 className="text-2xl md:text-4xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1 
+         className={cn(
+          "text-2xl md:text-4xl font-bold mb-2",
+          isDark ? "text-white" : "text-gray-900"
+        )}
+        >
           Getting Started with Game Of Creators
         </h1>
-        <p className="text-lg text-gray-600 dark:text-gray-300">
+        <p 
+          className={cn(
+            "text-lg",
+            isDark ? "text-white" : "text-gray-900"
+          )}>
           {userType === "advertiser"
             ? "Learn how to create engaging content campaigns"
             : "Learn how to participate and earn from contests"}
@@ -104,7 +147,11 @@ export default function GettingStartedClient({
         // BRAND/ADVERTISER CONTENT
 
         <div>
-          <div className="border-b text-center shadow-xl bg-white px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4 ">
+          <div 
+           className={cn(
+            "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
+            isDark ? "bg-[#170337]" : "bg-white"
+          )}>
             <div className="flex justify-start space-x-3">
               {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -115,16 +162,28 @@ export default function GettingStartedClient({
             </div>
           </div>
 
-          <div className="space-y-8 min-h-screen shadow-xl bg-white px-2 py-6">
+          <div 
+          className={cn(
+            "space-y-8 min-h-screen shadow-xl px-2 py-6",
+            isDark ? "bg-[#170337]" : "bg-white"
+          )}>
             {/* Platform Overview Section */}
             <div>
               <CardContent className="space-y-6">
                 <div className="text-start mb-6">
-                  <p className="text-lg text-black  mb-4">
+                  <p 
+                   className={cn(
+                    "text-lg mb-4",
+                    isDark ? "text-white" : "text-black"
+                  )}>
                     <strong>Game Of Creators</strong> connects brands with
                     talented content creators through engaging video contests.
                   </p>
-                  <p className="text-lg text-black dark:text-gray-400">
+                  <p 
+                   className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-black"
+                  )}>
                     Launch campaigns, get viral content, and reach new
                     audiences. Simple and effective.
                   </p>
@@ -132,38 +191,61 @@ export default function GettingStartedClient({
 
                 {/* Platform Benefits */}
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                  <div
+                   className={cn(
+                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                  )}>
                     <div className="w-12 h-12 bg-[#D8C3FF]  rounded-full flex items-center justify-center mx-auto mb-3">
                       <TrendingUp className="w-6 h-6 text-[#4A00BE]" />
                     </div>
                     <h3 className="font-semibold text-xl mb-2">
                       Viral Content
                     </h3>
-                    <p className="text-md text-gray-600 dark:text-gray-300">
+                    <p 
+                     className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                       Get authentic, engaging videos that resonate with your
                       target audience
                     </p>
                   </div>
-                  <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                  <div
+                   className={cn(
+                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                  )}>
                     <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
                       <Users className="w-6 h-6 text-[#4A00BE]" />
                     </div>
                     <h3 className="font-semibold text-xl mb-2">
                       Reach New Audiences
                     </h3>
-                    <p className="text-md text-gray-600 dark:text-gray-300">
+                    <p 
+                     className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                       Tap into creators' existing audiences and expand your
                       brand reach
                     </p>
                   </div>
-                  <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
+                  <div  className={cn(
+                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                  )}>
                     <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
                       <DollarSign className="w-6 h-6 text-[#4A00BE]" />
                     </div>
                     <h3 className="font-semibold text-xl mb-2">
                       Cost Effective
                     </h3>
-                    <p className="text-md text-gray-600 dark:text-gray-300">
+                    <p 
+                     className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}>
                       Pay only for performance with flexible budget options
                     </p>
                   </div>
@@ -178,7 +260,11 @@ export default function GettingStartedClient({
                   {/* <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
                                     <Play className="w-6 h-6 text-green-600 dark:text-green-400" />
                                 </div> */}
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <h2 
+                   className={cn(
+                    "text-2xl font-bold",
+                    isDark ? "text-white" : "text-gray-900"
+                  )}>
                     How It Works
                   </h2>
                 </div>
@@ -250,7 +336,10 @@ export default function GettingStartedClient({
                   ].map((item, idx) => (
                     <div
                       key={idx}
-                      className="text-center p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]"
+                      className={cn(
+                        "text-center p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                        isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                      )}
                     >
                       <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
                         <span className="text-[#4A00BE] font-bold">
@@ -260,7 +349,11 @@ export default function GettingStartedClient({
                       <h3 className="font-semibold text-lg sm:text-xl mb-2">
                         {item.title}
                       </h3>
-                      <p className="text-md text-gray-600 dark:text-gray-300">
+                      <p 
+                      className={cn(
+                        "text-md",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}>
                         {item.desc}
                       </p>
                     </div>
@@ -281,7 +374,11 @@ export default function GettingStartedClient({
             {/* Contest Types Section */}
             <div>
               <div className="text-center pb-4">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                <h2 
+                 className={cn(
+                  "text-2xl font-bold",
+                  isDark ? "text-white" : "text-gray-900"
+                )}>
                   Choose Your Contest Type
                 </h2>
               </div>
@@ -289,10 +386,14 @@ export default function GettingStartedClient({
               <div className="p-2 md:px-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Leaderboard Contest Section */}
-                  <div className="p-6 border border-[#7F39EC] rounded-lg bg-[#D9C0FF26]">
+                  <div 
+                    className={cn(
+                      "p-6 border border-[#7F39EC] rounded-lg",
+                      isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
+                    )}>
                     <div className="flex flex-wrap items-center gap-3 mb-4">
                       <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                        <Trophy className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                        <Trophy className="w-6 h-6 text-purple-600" />
                       </div>
                       <h3 className="font-bold text-lg">
                         Leaderboard Contests
@@ -306,18 +407,26 @@ export default function GettingStartedClient({
                       </Badge>
                     </div>
 
-                    <p className="text-md text-gray-600 dark:text-gray-300 mb-4">
+                    <p 
+                     className={cn(
+                      "text-md mb-4",
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    )}>
                       Set a fixed prize pool and let creators compete for the
                       top spots.
                     </p>
 
                     {/* Visual Process */}
                     <div className="text-center mb-4">
-                      <div className="inline-block p-4 bg-[#D9C0FF26] rounded-lg border border-[#7F39EC]">
-                        <div className="text-lg font-bold text-black mb-1">
+                      <div 
+                       className={cn(
+                        "inline-block p-4 border rounded-lg bg-[#D9C0FF26]  border-[#7F39EC]",
+                        isDark ? "text-gray-300" : "text-black"
+                      )}>
+                        <div className="text-lg font-bold mb-1">
                           Set Prize Pool → Creators Compete → Winners Get Paid
                         </div>
-                        <div className="text-sm text-black">
+                        <div className="text-sm">
                           Example: $1000 total, 3 winners get $500, $300, $200
                         </div>
                       </div>
@@ -326,26 +435,53 @@ export default function GettingStartedClient({
                     {/* Benefits */}
                     <div className="space-y-4">
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check 
+                         className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )}/>
+                        <span 
+                         className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Fixed budget - know your total cost upfront
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check 
+                         className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )} />
+                        <span  className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           High competition drives quality content
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check  className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )} />
+                        <span className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Own winning videos forever
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )} />
+                        <span className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Perfect for viral marketing & brand awareness
                         </span>
                       </div>
@@ -362,7 +498,10 @@ export default function GettingStartedClient({
                   </div>
 
                   {/* CPM Contest Section */}
-                  <div className="p-6 border border-[#7F39EC] rounded-lg bg-[#D9C0FF26]">
+                  <div  className={cn(
+                      "p-6 border border-[#7F39EC] rounded-lg",
+                      isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
+                    )}>
                   <div className="flex flex-wrap items-center gap-3 mb-4">
                       <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                         <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -387,18 +526,26 @@ export default function GettingStartedClient({
                       </Badge>
                     </div>
 
-                    <p className="text-md text-gray-600 dark:text-gray-300 mb-4">
+                    <p 
+                    className={cn(
+                      "text-md  mb-4",
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    )}>
                       Pay only for actual views. More views = more marketing
                       reach for your brand.
                     </p>
 
                     {/* Visual Process */}
                     <div className="text-center mb-4">
-                      <div className="inline-block p-4 px-8 bg-[#D9C0FF26] rounded-lg border border-[#7F39EC]">
-                        <div className="text-lg font-bold text-black mb-2">
+                      <div 
+                      className={cn(
+                        "inline-block p-4 border rounded-lg bg-[#D9C0FF26]  border-[#7F39EC]",
+                        isDark ? "text-gray-300" : "text-black"
+                      )}>
+                        <div className="text-lg font-bold mb-2">
                           Set CPM Rate → Creators Post → Pay Per Views
                         </div>
-                        <div className="text-md text-black ">
+                        <div className="text-md">
                           Example: $5 per 1K views, 50K views = $250 payment
                         </div>
                       </div>
@@ -407,26 +554,50 @@ export default function GettingStartedClient({
                     {/* Benefits */}
                     <div className="space-y-4">
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )} />
+                        <span  className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Pay only for performance - no wasted budget
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )} />
+                        <span  className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Scalable - more views = more marketing
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )} />
+                        <span  className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Set max budget & CPM rate for control
                         </span>
                       </div>
                       <div className="flex items-start space-x-2">
-                        <Check className="w-5 h-5 text-[#4A00BE] mt-0.5 flex-shrink-0" />
-                        <span className="text-md text-gray-700 dark:text-gray-300">
+                        <Check className={cn(
+                          "w-5 h-5 mt-0.5 flex-shrink-0",
+                          isDark ? "text-purple-400" : "text-[#4A00BE]"
+                        )}/>
+                        <span  className={cn(
+                          "text-md",
+                          isDark ? "text-gray-400" : "text-gray-700"
+                        )}>
                           Perfect for ongoing marketing & paid advertising
                         </span>
                       </div>
@@ -452,7 +623,11 @@ export default function GettingStartedClient({
                   {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Shield className="w-6 h-6 text-orange-600 dark:text-orange-400" />
                                 </div> */}
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <h2 
+                   className={cn(
+                    "text-2xl font-bold",
+                    isDark ? "text-white" : "text-gray-900"
+                  )}>
                     Content Quality & Safety
                   </h2>
                 </div>
@@ -460,18 +635,30 @@ export default function GettingStartedClient({
 
               <CardContent className="space-y-6">
                 <div className="text-center mb-6">
-                  <p className="text-lg text-gray-600 dark:text-gray-300">
+                  <p 
+                   className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}>
                     We ensure all content meets high quality standards and brand
                     safety requirements.
                   </p>
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
-                    <h3 className="font-semibold text-xl mb-3 text-black">
+                  <div 
+                  className={cn(
+                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                  )}>
+                    <h3 className="font-semibold text-xl mb-3">
                       Quality Review:
                     </h3>
-                    <ul className="space-y-3 text-[13px] text-gray-700 dark:text-gray-300">
+                    <ul 
+                     className={cn(
+                      "space-y-3 text-[13px]",
+                      isDark ? "text-white" : "text-gray-700"
+                    )}>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>Content follows your brief and guidelines</span>
@@ -487,11 +674,19 @@ export default function GettingStartedClient({
                     </ul>
                   </div>
 
-                  <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
-                    <h3 className="font-semibold text-xl mb-3 text-black">
+                  <div 
+                  className={cn(
+                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                  )}>
+                    <h3 className="font-semibold text-xl mb-3">
                       What You Get:
                     </h3>
-                    <ul className="space-y-3 text-[14px] text-gray-700 dark:text-gray-300">
+                    <ul 
+                     className={cn(
+                      "space-y-3 text-[14px]",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>Verified, high-quality content</span>
@@ -507,11 +702,17 @@ export default function GettingStartedClient({
                     </ul>
                   </div>
 
-                  <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
-                    <h3 className="font-semibold mb-3 text-xl text-black">
+                  <div className={cn(
+                    "text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]",
+                    isDark ? "bg-[#1F0944] border border-[#D1B7F9] text-white" : "bg-white text-black"
+                  )}>
+                    <h3 className="font-semibold mb-3 text-xl">
                       Platform Support:
                     </h3>
-                    <ul className="space-y-3 text-[14px] text-gray-700 dark:text-gray-300">
+                    <ul className={cn(
+                      "space-y-3 text-[14px]",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>Dedicated campaign management</span>
@@ -528,16 +729,26 @@ export default function GettingStartedClient({
                   </div>
                 </div>
 
-                <div className="bg-[#D9C0FF26] p-4 rounded-lg border border-[#7F39EC]">
+                <div className="bg-[#D9C0FF26] p-4 rounded-lg border border-[#7F39EC]"
+                >
                   <div className="flex items-start space-x-3">
                     {/* <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg flex-shrink-0">
                                         <MessageCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                     </div> */}
                     <div>
-                      <h4 className="font-semibold text-lg text-black mb-2">
+                      <h4 
+                      className={cn(
+                        "font-semibold text-lg mb-2",
+                        isDark ? "text-white" : "text-black"
+                      )}
+                      >
                         Pro Tip:
                       </h4>
-                      <p className="text-md text-black">
+                      <p 
+                      className={cn(
+                        "text-md",
+                        isDark ? "text-white" : "text-black"
+                      )}>
                         <strong>Create clear, detailed briefs</strong> to get
                         the best content. Include your brand guidelines, target
                         audience, and specific requirements for better results.
@@ -780,7 +991,8 @@ export default function GettingStartedClient({
               <div className="p-0 md:px-4 ">
                 <div className="grid md:grid-cols-2 gap-6">
                   {/* Leaderboard for Creators */}
-                  <div className="w-full bg-[#D9C0FF26] rounded-xl border border-[#7F39EC] p-6 flex flex-col justify-between">
+                  <div className="w-full bg-[#D9C0FF26] rounded-xl border border-[#7F39EC] p-6 flex flex-col justify-between"
+                  >
                     <div>
                       <div className="flex items-center space-x-3 mb-4">
                         <div className="p-2.5 bg-[#D8C3FF] rounded-full">
@@ -1127,10 +1339,24 @@ export default function GettingStartedClient({
       {/* Next Steps Section */}
       {userType === "advertiser" ? (
         // BRAND/ADVERTISER READY TO START
-        <div className="space-y-8 rounded-bl-xl rounded-br-xl shadow-lg bg-white px-6 pb-6">
-          <CardContent className="p-6 border border-[#7F39EC] rounded-2xl bg-[#D9C0FF26]">
+        <div
+        className={cn(
+          "space-y-8 rounded-bl-xl rounded-br-xl shadow-lg px-6 pb-6",
+          isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+        )}
+        >
+          <CardContent 
+            className={cn(
+              "p-6 border border-[#7F39EC] rounded-2xl",
+              isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
+            )}
+          >
             <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              <h3 
+              className={cn(
+                "text-2xl font-bold mb-2",
+                isDark ? "text-white" : "text-gray-900"
+              )}>
                 Ready to Start?
               </h3>
               <p className="text-gray-600 dark:text-gray-300">
