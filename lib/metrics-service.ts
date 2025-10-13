@@ -7,36 +7,33 @@ export interface ParticipationKey {
 }
 
 export const MetricsService = {
-  // Idempotent: ensures exactly one participation increment per (creator, contest)
-  async ensureCreatorParticipation({ creatorId, contestId }: ParticipationKey): Promise<void> {
+  // Calculate contests participated dynamically from submissions table
+  // Note: creator_profiles.id = submissions.creator_id
+  async getContestsParticipated(creatorId: string): Promise<number> {
     const supabase = createAdminClient();
-
-    // upsert into helper table; if inserted, increment profile counter
-    const { data: inserted, error: insertErr } = await supabase
-      .from('creator_contest_participations')
-      .insert({ creator_id: creatorId, contest_id: contestId })
-      .select('creator_id, contest_id')
+    
+    // Read directly from the column - it's maintained by database triggers
+    // This is O(1) and scales well even with millions of submissions
+    const { data, error } = await supabase
+      .from('creator_profiles')
+      .select('total_contests_participated')
+      .eq('id', creatorId)
       .single();
+    
+    if (error) throw new Error(`Failed to get contests participated: ${error.message}`);
+    return data?.total_contests_participated || 0;
+  },
 
-    if (insertErr && !insertErr.message?.includes('duplicate key')) {
-      // Ignore conflict errors; only bubble real failures
-      throw new Error(`Failed to record participation: ${insertErr.message}`);
-    }
-
-    if (inserted) {
-      const { error: updErr } = await supabase
-        .from('creator_profiles')
-        .update({
-          total_contests_participated: (await this.getCreatorField(creatorId, 'total_contests_participated')) + 1,
-        })
-        .eq('id', creatorId);
-      if (updErr) throw new Error(`Failed to increment total_contests_participated: ${updErr.message}`);
-    }
+  // Legacy method - kept for backward compatibility but now calculates dynamically
+  async ensureCreatorParticipation({ creatorId, contestId }: ParticipationKey): Promise<void> {
+    // No longer needed - participations are calculated dynamically
+    // This method is kept for backward compatibility but does nothing
+    return;
   },
 
   async getCreatorField(
     creatorId: string,
-    field: 'total_contests_participated' | 'total_contests_won' | 'total_views' | 'total_money_won' | 'withdrawable_balance'
+    field: 'total_contests_participated' | 'total_contests_won' | 'total_views' | 'total_money_won' | 'withdrawable_balance' | 'total_submissions_made' | 'total_submissions_won'
   ): Promise<number> {
     const supabase = createAdminClient();
     type CreatorPick = {
@@ -45,6 +42,8 @@ export const MetricsService = {
       total_views?: number;
       total_money_won?: number;
       withdrawable_balance?: number;
+      total_submissions_made?: number;
+      total_submissions_won?: number;
     };
     const { data, error } = await supabase
       .from('creator_profiles')
@@ -77,32 +76,152 @@ export const MetricsService = {
     return Number(value) || 0;
   },
 
-  // When submission is marked paid: only increment total_contests_won.
-  // Money updates are handled elsewhere (payment-utils credit/debit).
-  async incrementContestsWon(creatorId: string): Promise<void> {
+  // When submission is created: increment total_submissions_made
+  async incrementSubmissionsMade(creatorId: string): Promise<void> {
     const supabase = createAdminClient();
-    const currentWonCount = await this.getCreatorField(creatorId, 'total_contests_won');
+    const currentCount = await this.getCreatorField(creatorId, 'total_submissions_made');
     const { error } = await supabase
       .from('creator_profiles')
       .update({
-        total_contests_won: currentWonCount + 1,
+        total_submissions_made: currentCount + 1,
       })
       .eq('id', creatorId);
-    if (error) throw new Error(`Failed to increment total_contests_won: ${error.message}`);
+    if (error) throw new Error(`Failed to increment total_submissions_made: ${error.message}`);
   },
 
-  // When paid is reversed or status toggled away from paid: decrement total_contests_won only.
-  async decrementContestsWon(creatorId: string): Promise<void> {
+  // When submission is marked paid: increment submission wins and contest wins (idempotent)
+  // Money updates are handled elsewhere (payment-utils credit/debit).
+  async incrementSubmissionWin(creatorId: string, contestId: string, submissionId: string): Promise<void> {
     const supabase = createAdminClient();
-    const currentWonCount = await this.getCreatorField(creatorId, 'total_contests_won');
-    const { error } = await supabase
+
+    // 1. Always increment total_submissions_won
+    const currentSubmissionWins = await this.getCreatorField(creatorId, 'total_submissions_won');
+    const { error: subError } = await supabase
       .from('creator_profiles')
       .update({
-        total_contests_won: Math.max(0, currentWonCount - 1),
+        total_submissions_won: currentSubmissionWins + 1,
       })
       .eq('id', creatorId);
-    if (error) throw new Error(`Failed to decrement total_contests_won: ${error.message}`);
+    if (subError) throw new Error(`Failed to increment total_submissions_won: ${subError.message}`);
+
+    // 2. Check if creator already has a contest win for this contest
+    const { data: existingContestWin, error: checkErr } = await supabase
+      .from('creator_contest_wins')
+      .select('first_win_submission_id')
+      .eq('creator_id', creatorId)
+      .eq('contest_id', contestId)
+      .single();
+
+    if (checkErr && !checkErr.message?.includes('No rows')) {
+      throw new Error(`Failed to check existing contest win: ${checkErr.message}`);
+    }
+
+    // 3. Handle contest win tracking
+    if (!existingContestWin) {
+      // No existing contest win - this is the first win for this contest
+      const { data: contestWinInserted, error: contestWinErr } = await supabase
+        .from('creator_contest_wins')
+        .insert({ 
+          creator_id: creatorId, 
+          contest_id: contestId,
+          first_win_submission_id: submissionId
+        })
+        .select('creator_id, contest_id')
+        .single();
+
+      if (contestWinErr && !contestWinErr.message?.includes('duplicate key')) {
+        throw new Error(`Failed to record contest win: ${contestWinErr.message}`);
+      }
+
+      // Increment total_contests_won only if this was a new contest win
+      if (contestWinInserted) {
+        const currentContestWins = await this.getCreatorField(creatorId, 'total_contests_won');
+        const { error: contestError } = await supabase
+          .from('creator_profiles')
+          .update({
+            total_contests_won: currentContestWins + 1,
+          })
+          .eq('id', creatorId);
+        if (contestError) throw new Error(`Failed to increment total_contests_won: ${contestError.message}`);
+      }
+    } else {
+      // Creator already has a contest win for this contest
+      // This submission win doesn't change the contest win count
+      // But we might want to update the first_win_submission_id if this submission was created earlier
+      const { data: submissionData, error: subDataErr } = await supabase
+        .from('submissions')
+        .select('created_at')
+        .eq('id', submissionId)
+        .single();
+
+      const { data: firstWinSubmissionData, error: firstWinErr } = await supabase
+        .from('submissions')
+        .select('created_at')
+        .eq('id', existingContestWin.first_win_submission_id)
+        .single();
+
+      if (!subDataErr && !firstWinErr && submissionData && firstWinSubmissionData) {
+        // If current submission was created before the first win submission, update the record
+        if (new Date(submissionData.created_at) < new Date(firstWinSubmissionData.created_at)) {
+          await supabase
+            .from('creator_contest_wins')
+            .update({ first_win_submission_id: submissionId })
+            .eq('creator_id', creatorId)
+            .eq('contest_id', contestId);
+        }
+      }
+    }
   },
+
+
+  // When submission win is reversed or status toggled away from paid: decrement submission wins
+  async decrementSubmissionWin(creatorId: string, contestId: string, submissionId: string): Promise<void> {
+    const supabase = createAdminClient();
+
+    // 1. Always decrement total_submissions_won
+    const currentSubmissionWins = await this.getCreatorField(creatorId, 'total_submissions_won');
+    const { error: subError } = await supabase
+      .from('creator_profiles')
+      .update({
+        total_submissions_won: Math.max(0, currentSubmissionWins - 1),
+      })
+      .eq('id', creatorId);
+    if (subError) throw new Error(`Failed to decrement total_submissions_won: ${subError.message}`);
+
+    // 2. Check if this was the first win for this contest
+    const { data: contestWin, error: contestWinErr } = await supabase
+      .from('creator_contest_wins')
+      .select('first_win_submission_id')
+      .eq('creator_id', creatorId)
+      .eq('contest_id', contestId)
+      .single();
+
+    if (contestWinErr && !contestWinErr.message?.includes('No rows')) {
+      throw new Error(`Failed to check contest win: ${contestWinErr.message}`);
+    }
+
+    // 3. If this was the first win submission for this contest, remove contest win and decrement total_contests_won
+    if (contestWin && contestWin.first_win_submission_id === submissionId) {
+      const { error: deleteErr } = await supabase
+        .from('creator_contest_wins')
+        .delete()
+        .eq('creator_id', creatorId)
+        .eq('contest_id', contestId);
+      
+      if (deleteErr) throw new Error(`Failed to remove contest win: ${deleteErr.message}`);
+
+      // Decrement total_contests_won
+      const currentContestWins = await this.getCreatorField(creatorId, 'total_contests_won');
+      const { error: contestError } = await supabase
+        .from('creator_profiles')
+        .update({
+          total_contests_won: Math.max(0, currentContestWins - 1),
+        })
+        .eq('id', creatorId);
+      if (contestError) throw new Error(`Failed to decrement total_contests_won: ${contestError.message}`);
+    }
+  },
+
 
   // Credit views when contest moves into verification or payouts_processed.
   // Uses submission_views_credited to apply only the delta.

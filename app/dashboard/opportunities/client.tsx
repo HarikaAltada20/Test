@@ -9,6 +9,8 @@ import { User, UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
+import { calculateLeaderboardBudgetSpent, Submission } from "@/lib/contest-utils-client";
+import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
@@ -150,7 +152,10 @@ export default function OpportunitiesPage({
 
         const { data: contests, error: contestError } = await supabase
           .from("contests_with_status")
-          .select("*")
+          .select(`
+            *,
+            contest_based_details
+          `)
           .eq("moderation_status", "published")  // Only show published contests
           .not("status", "eq", "incomplete")     // Exclude incomplete published contests
           .order("created_at", { ascending: false });
@@ -159,7 +164,41 @@ export default function OpportunitiesPage({
           console.error("Error fetching contests:", contestError);
           setAvailableContests([]);
         } else {
-          setAvailableContests(contests || []);
+          // For leaderboard contests, calculate actual budget spent from submissions (CPM now uses real-time budget_spent field)
+          const contestsWithCalculatedBudgets = await Promise.all((contests || []).map(async (contest) => {
+            if (contest.contest_type === 'leaderboard' &&
+              contest.contest_based_details?.leaderboard_contest?.total_budget > 0 &&
+              contest.contest_based_details?.leaderboard_contest?.flat_fee_bonus > 0) {
+
+              // Fetch submissions for this contest
+              const { data: submissions } = await supabase
+                .from('submissions')
+                .select('paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views')
+                .eq('contest_id', contest.id)
+                .in('status', ['verified', 'paid']);
+
+              // Calculate actual budget spent
+              const actualBudgetSpent = calculateLeaderboardBudgetSpent(
+                submissions || [],
+                contest.contest_based_details.leaderboard_contest.flat_fee_bonus
+              );
+
+              // Update the contest object with calculated budget spent
+              return {
+                ...contest,
+                contest_based_details: {
+                  ...contest.contest_based_details,
+                  leaderboard_contest: {
+                    ...contest.contest_based_details.leaderboard_contest,
+                    budget_spent: Math.round(actualBudgetSpent * 100) // Convert to cents
+                  }
+                }
+              };
+            }
+            return contest;
+          }));
+
+          setAvailableContests(contestsWithCalculatedBudgets);
         }
       } catch (error) {
         console.error("Unexpected error in fetchData:", error);
@@ -415,7 +454,8 @@ export default function OpportunitiesPage({
           displayedContests.map((contest) => (
             <Card
               key={contest.id}
-              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full"
+              onClick={() => handleViewDetails(contest.id)}
+              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full cursor-pointer"
             >
               <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
                 {contest.thumbnail_url ? (
@@ -484,7 +524,9 @@ export default function OpportunitiesPage({
                   </div>
 
                   <div className="flex items-center">
-                    <Trophy className="h-4 w-4 mr-2 flex-shrink-0 text-gray500" />
+                    <div className="mr-2 flex-shrink-0">
+                      {getPlatformIconWithFallback(contest.platform, 'sm')}
+                    </div>
                     <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
                   </div>
                   {contest.start_date && (
@@ -531,32 +573,87 @@ export default function OpportunitiesPage({
                       </span></span>
                     </div>
                   )}
+                  {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_budget != null && contest.contest_based_details.leaderboard_contest.total_budget > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
+                      <span>Total Bonus Budget: <span className="font-medium text-green-700 dark:text-green-300">
+                        {formatMoney(contest.contest_based_details.leaderboard_contest.total_budget)}
+                      </span></span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Budget Spent Progress Bar for CPM contests */}
-                {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
-                  <div className="mt-3 mb-3">
-                    <div className="flex justify-between text-sm text-slate-500 dark:text-slate-400 mb-1">
-                      <span>Budget Spent: {formatMoney(contest.contest_based_details.cpm_contest.budget_spent || 0)}</span>
-                      <span>{(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100).toFixed(1)}%</span>
-                    </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (() => {
+                  const totalBudget = contest.contest_based_details.cpm_contest.total_budget;
+                  // Use real-time updated budget_spent field
+                  const budgetSpent = contest.contest_based_details.cpm_contest.budget_spent || 0;
+                  const percentage = (budgetSpent / totalBudget) * 100;
+                  const remaining = totalBudget - budgetSpent;
+
+                  return (
+                    <div className="mt-3 mb-3">
+                      <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mb-2">
+                        <span className="font-medium">Budget Tracker</span>
+                        <span className="font-semibold">{formatMoney(budgetSpent)} / {formatMoney(totalBudget)}</span>
+                      </div>
                       <div
-                        className="bg-purple-500 h-2 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(((contest.contest_based_details.cpm_contest.budget_spent || 0) / contest.contest_based_details.cpm_contest.total_budget) * 100, 100)}%` }}
-                      ></div>
+                        className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                        title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                        <span>{percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(remaining)} remaining</span>
+                      </div>
                     </div>
-                    <div className="flex justify-center text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      <span>Remaining: {formatMoney(contest.contest_based_details.cpm_contest.total_budget - (contest.contest_based_details.cpm_contest.budget_spent || 0))}</span>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
+
+                {/* Bonus Budget Tracker for Leaderboard contests */}
+                {contest.contest_type === 'leaderboard' &&
+                  contest.contest_based_details?.leaderboard_contest?.total_budget != null &&
+                  contest.contest_based_details.leaderboard_contest.total_budget > 0 && (() => {
+                    const totalBudget = contest.contest_based_details.leaderboard_contest.total_budget;
+                    const budgetSpent = contest.contest_based_details.leaderboard_contest.budget_spent || 0;
+                    const percentage = (budgetSpent / totalBudget) * 100;
+                    const remaining = totalBudget - budgetSpent;
+
+                    return (
+                      <div className="mt-3 mb-3">
+                        <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mb-2">
+                          <span className="font-medium">Flat Fee Bonus Budget Tracker</span>
+                          <span className="font-semibold">{formatMoney(budgetSpent)} / {formatMoney(totalBudget)}</span>
+                        </div>
+                        <div
+                          className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                          title={`Flat Fee Bonus Budget Spent: ${formatMoney(budgetSpent)}`}
+                        >
+                          <div
+                            className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
+                            style={{ width: `${Math.min(percentage, 100)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                          <span>{percentage.toFixed(1)}% used</span>
+                          <span>{formatMoney(remaining)} remaining</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 <button
-                  onClick={() => handleViewDetails(contest.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleViewDetails(contest.id);
+                  }}
                   // size="sm"
                   // variant="white"
-                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full hover:bg-[#D9C0FF] transition-colors"
                 >
                   View Details
                 </button>

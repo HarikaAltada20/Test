@@ -54,7 +54,7 @@ ADD COLUMN IF NOT EXISTS multiple_submissions_enabled BOOLEAN DEFAULT false,
 ADD COLUMN IF NOT EXISTS max_submissions_per_creator INTEGER DEFAULT 1,
 ADD COLUMN IF NOT EXISTS content_type TEXT CHECK (content_type IN ('ugc', 'clipping', 'other')) DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS bonus_details JSONB DEFAULT NULL,
-ADD COLUMN IF NOT EXISTS max_earnings_per_creator_cents INTEGER DEFAULT NULL;
+ADD COLUMN IF NOT EXISTS max_earnings_per_creator INTEGER DEFAULT NULL;
 
 -- Add comments for documentation
 COMMENT ON COLUMN public.contests.multiple_submissions_enabled IS 'Whether creators can submit multiple entries to this contest';
@@ -64,7 +64,7 @@ COMMENT ON COLUMN public.contests.bonus_details IS 'Additional bonus opportuniti
   "description_html": "<ul><li>Top 3 creators get $100 each</li></ul>",
   "description_json": {...}
 }';
-COMMENT ON COLUMN public.contests.max_earnings_per_creator_cents IS 'Maximum total earnings cap per creator across all submissions in cents. Creator can still submit after reaching cap but won''t earn more.';
+COMMENT ON COLUMN public.contests.max_earnings_per_creator IS 'Maximum total earnings cap per creator across all submissions in cents. Creator can still submit after reaching cap but won''t earn more.';
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_contests_content_type ON public.contests(content_type) WHERE content_type IS NOT NULL;
@@ -123,7 +123,7 @@ WHERE table_name = 'contests'
     'max_submissions_per_creator',
     'content_type',
     'bonus_details',
-    'max_earnings_per_creator_cents'
+    'max_earnings_per_creator'
   )
 ORDER BY column_name;
 ```
@@ -134,7 +134,7 @@ column_name                        | data_type | column_default | is_nullable
 -----------------------------------|-----------|----------------|-------------
 bonus_details                      | jsonb     | NULL           | YES
 content_type                       | text      | NULL           | YES
-max_earnings_per_creator_cents     | integer   | NULL           | YES
+max_earnings_per_creator     | integer   | NULL           | YES
 max_submissions_per_creator        | integer   | 1              | YES
 multiple_submissions_enabled       | boolean   | false          | YES
 ```
@@ -154,7 +154,7 @@ SELECT
   max_submissions_per_creator,
   content_type,
   bonus_details,
-  max_earnings_per_creator_cents
+  max_earnings_per_creator
 FROM contests
 ORDER BY created_at DESC
 LIMIT 10;
@@ -166,7 +166,7 @@ LIMIT 10;
   - `max_submissions_per_creator = 1`
   - `content_type = NULL`
   - `bonus_details = NULL`
-  - `max_earnings_per_creator_cents = NULL`
+  - `max_earnings_per_creator = NULL`
 
 ✅ **This means they work exactly as before!**
 
@@ -328,13 +328,13 @@ WHERE id = 'YOUR_CONTEST_ID';
 3. Save and submit
 
 **Expected:**
-- `max_earnings_per_creator_cents = 50000`
+- `max_earnings_per_creator = 50000`
 
 **Verify:**
 ```sql
 SELECT 
   title,
-  max_earnings_per_creator_cents
+  max_earnings_per_creator
 FROM contests
 WHERE id = 'YOUR_CONTEST_ID';
 ```
@@ -362,7 +362,7 @@ SELECT
   content_type,
   contest_based_details,
   bonus_details,
-  max_earnings_per_creator_cents
+  max_earnings_per_creator
 FROM contests
 WHERE id = 'YOUR_CONTEST_ID';
 ```
@@ -425,7 +425,7 @@ DROP COLUMN IF EXISTS multiple_submissions_enabled,
 DROP COLUMN IF EXISTS max_submissions_per_creator,
 DROP COLUMN IF EXISTS content_type,
 DROP COLUMN IF EXISTS bonus_details,
-DROP COLUMN IF EXISTS max_earnings_per_creator_cents;
+DROP COLUMN IF EXISTS max_earnings_per_creator;
 
 -- Drop indexes
 DROP INDEX IF EXISTS idx_contests_content_type;

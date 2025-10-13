@@ -291,7 +291,16 @@ function DashboardPage() {
             const contests = submissions
               .map((sub) => sub.contests)
               .filter(Boolean);
-            setRecentContests(contests || []);
+
+            // Remove duplicate contests by keeping only unique contest IDs
+            const uniqueContests = contests.reduce((acc: any[], contest: any) => {
+              if (!acc.find(c => c.id === contest.id)) {
+                acc.push(contest);
+              }
+              return acc;
+            }, []);
+
+            setRecentContests(uniqueContests || []);
           }
         } else if (userType === "admin") {
           // Redirect admin users to their dedicated admin dashboard

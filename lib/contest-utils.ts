@@ -1,5 +1,16 @@
 import { createClient } from '@/utils/supabase/server';
 
+export interface Submission {
+    paid: boolean;
+    earnings: number | null;
+    bonus_paid: boolean;
+    bonus_amount?: number;
+    creator_id: string;
+    created_at: string;
+    status?: string;
+    views?: number;
+}
+
 export interface ActiveContestCountResult {
   success: boolean;
   activeCount: number;
@@ -72,10 +83,14 @@ export async function getActiveContestCount(userId: string): Promise<ActiveConte
 
 /**
  * Check if user can create a new contest based on their plan limits
+ * @param userId - The user's ID
+ * @param maxActiveContests - Maximum number of active contests allowed
+ * @param excludeContestId - Optional contest ID to exclude from count (for editing existing contests)
  */
 export async function canCreateNewContest(
   userId: string, 
-  maxActiveContests: number
+  maxActiveContests: number,
+  excludeContestId?: string
 ): Promise<{ canCreate: boolean; currentCount: number; error?: string }> {
   
   const result = await getActiveContestCount(userId);
@@ -88,12 +103,36 @@ export async function canCreateNewContest(
     };
   }
 
-  const canCreate = result.activeCount < maxActiveContests;
+  // If editing an existing contest, we need to check if it's currently counted as active
+  let adjustedCount = result.activeCount;
+  if (excludeContestId) {
+    const supabase = await createClient();
+    const { data: contest } = await supabase
+      .from('contests_with_status')
+      .select('id, moderation_status, status')
+      .eq('id', excludeContestId)
+      .single();
+    
+    // If the contest being edited is currently counted as active, subtract 1
+    if (contest) {
+      const isCurrentlyActive = 
+        contest.moderation_status === 'pending_approval' || 
+        contest.moderation_status === 'approved' ||
+        (contest.moderation_status === 'published' && 
+         (contest.status === 'upcoming' || contest.status === 'active'));
+      
+      if (isCurrentlyActive) {
+        adjustedCount = Math.max(0, adjustedCount - 1);
+      }
+    }
+  }
+
+  const canCreate = adjustedCount < maxActiveContests;
   
   return {
     canCreate,
-    currentCount: result.activeCount,
-    error: canCreate ? undefined : `You have reached your plan limit of ${maxActiveContests} active contests. You currently have ${result.activeCount} active contests.`
+    currentCount: adjustedCount,
+    error: canCreate ? undefined : `You have reached your plan limit of ${maxActiveContests} active contests. You currently have ${adjustedCount} active contests.`
   };
 }
 
@@ -110,4 +149,55 @@ export function calculateCommission(prizePoolInCents: number, commissionPercenta
 export function calculateTotalAmount(prizePoolInCents: number, commissionPercentage: number): number {
   const commission = calculateCommission(prizePoolInCents, commissionPercentage);
   return prizePoolInCents + commission;
+}
+
+/**
+ * Calculate actual budget spent for leaderboard contests based on submissions
+ * This matches the logic used in BudgetProgress component
+ */
+export function calculateLeaderboardBudgetSpent(submissions: Submission[], flatFeeBonus: number): number {
+  if (!submissions?.length || flatFeeBonus <= 0) return 0;
+
+  // Filter to verified or paid submissions
+  const relevantSubmissions = submissions.filter(s => {
+    const status = s.status?.toLowerCase();
+    return status === 'verified' || status === 'paid';
+  });
+
+  // Sort by created_at to respect "first submitted, first paid" logic
+  const sortedSubmissions = [...relevantSubmissions].sort((a, b) => {
+    const dateA = new Date(a.created_at || 0).getTime();
+    const dateB = new Date(b.created_at || 0).getTime();
+    return dateA - dateB;
+  });
+
+  // Group submissions by creator to apply cap correctly
+  const creatorEarnings = new Map<string, { bonusTotal: number }>();
+  const flatFeeBonusInDollars = flatFeeBonus / 100; // Convert cents to dollars
+
+  for (const sub of sortedSubmissions) {
+    const creatorId = sub.creator_id;
+    if (!creatorEarnings.has(creatorId)) {
+      creatorEarnings.set(creatorId, { bonusTotal: 0 });
+    }
+
+    const creatorData = creatorEarnings.get(creatorId)!;
+
+    // Calculate bonus earnings
+    if (sub.bonus_paid && sub.bonus_amount != null) {
+      // Use actual paid bonus from database
+      creatorData.bonusTotal += sub.bonus_amount / 100; // Convert cents to dollars
+    } else {
+      // Calculate expected bonus for verified unpaid
+      creatorData.bonusTotal += flatFeeBonusInDollars;
+    }
+  }
+
+  // Sum up all creator bonus totals
+  let totalBonusSpent = 0;
+  for (const [, creatorData] of creatorEarnings) {
+    totalBonusSpent += creatorData.bonusTotal;
+  }
+
+  return totalBonusSpent;
 } 

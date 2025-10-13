@@ -69,9 +69,7 @@ import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
-import { canCreateNewContest } from "@/lib/contest-utils-client";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
-import { cn } from "@/lib/utils";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -107,6 +105,7 @@ type LeaderboardContestDetails = {
   prizes: { position: number; amount: number }[];
   total_prize: number;
   winner_count: number;
+  total_budget?: number | null; // OPTIONAL - budget for flat fee bonuses and future features (in cents)
   flat_fee_bonus?: number; // OPTIONAL - flat fee per verified submission (in cents)
 };
 
@@ -150,7 +149,7 @@ type ContestData = {
   // New features (2025-10-01)
   multiple_submissions_enabled?: boolean;
   max_submissions_per_creator?: number;
-  content_type?: 'ugc' | 'clipping' | 'other' | null;
+  content_type?: "ugc" | "clipping" | "other" | null;
   bonus_details?: { description_html?: string; description_json?: any } | null;
   max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
 };
@@ -172,10 +171,10 @@ export default function EditContestPage({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
-  const [error, setError] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [contest, setContest] = useState<ContestData | null>(null);
-  const [mode, setMode] = useState<"light" | "dark">("light");
+  const [error, setError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
+  const [contest, setContest] = useState<ContestData | null>(null)
+
   // State for subscription plans and user plan
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
     SubscriptionPlan[]
@@ -208,6 +207,70 @@ export default function EditContestPage({
   const [inspirationLinks, setInspirationLinks] = useState<
     { url: string; description: string }[]
   >([]);
+  const [trackingLinksOpen, setTrackingLinksOpen] = useState(false);
+  const [trackingLinks, setTrackingLinks] = useState<
+    { url: string; description: string }[]
+  >([]);
+  const [newTrackingUrl, setNewTrackingUrl] = useState("");
+  const [newTrackingDescription, setNewTrackingDescription] = useState("");
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const currentUserFirstName = (() => {
+    const metadata: any = (user as any)?.user_metadata || {};
+    const rawFirst =
+      metadata.first_name ||
+      metadata.given_name ||
+      (metadata.full_name ? String(metadata.full_name).split(" ")[0] : null);
+    if (rawFirst && String(rawFirst).trim())
+      return formatName(String(rawFirst));
+    const emailLocal = (user?.email || "").split("@")[0];
+    return emailLocal ? formatName(emailLocal) : "Creator";
+  })();
+  const addTrackingLink = () => {
+    setTrackingError(null);
+    const url = newTrackingUrl.trim();
+    const description = newTrackingDescription.trim();
+    if (!url) {
+      setTrackingError("URL cannot be empty.");
+      return;
+    }
+    // Store the URL with [creator] placeholder intact for dynamic replacement
+    const processedUrl = url;
+    // Validate URL format - create a test URL with placeholder replaced for validation
+    const testUrl = url.includes("[creator]")
+      ? url.replace(/\[creator\]/gi, "testcreator")
+      : url;
+    try {
+      const urlObj = new URL(testUrl);
+      if (urlObj.protocol !== "https:") {
+        setTrackingError("URL must start with https://");
+        return;
+      }
+    } catch {
+      setTrackingError("Invalid URL format.");
+      return;
+    }
+    if (!description) {
+      setTrackingError("Description is required.");
+      return;
+    }
+    if (trackingLinks.some((link) => link.url === processedUrl)) {
+      setTrackingError("This tracking link has already been added.");
+      return;
+    }
+    const updatedTracking = [
+      ...trackingLinks,
+      { url: processedUrl, description },
+    ];
+    setTrackingLinks(updatedTracking);
+    setNewTrackingUrl("");
+    setNewTrackingDescription("");
+    toast({ title: "Success", description: "Tracking link added!" });
+  };
+
+  const removeTrackingLink = (index: number) => {
+    setTrackingLinks(trackingLinks.filter((_, i) => i !== index));
+    toast({ title: "Success", description: "Tracking link removed!" });
+  };
   const [newInspirationUrl, setNewInspirationUrl] = useState("");
   const [newInspirationDescription, setNewInspirationDescription] =
     useState("");
@@ -237,15 +300,21 @@ export default function EditContestPage({
   const [termsConditions, setTermsConditions] = useState<string>("");
 
   // New features state (2025-10-01)
-  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] = useState(false);
-  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] = useState<number>(1);
-  const [contentType, setContentType] = useState<'ugc' | 'clipping' | 'other' | ''>('other');
-  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(''); // In dollars
+  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
+    useState(false);
+  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
+    useState<number>(1);
+  const [contentType, setContentType] = useState<
+    "ugc" | "clipping" | "other" | ""
+  >("other");
+  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
   const [bonusEnabled, setBonusEnabled] = useState(false);
-  const [bonusHtml, setBonusHtml] = useState('');
+  const [bonusHtml, setBonusHtml] = useState("");
   const [bonusJson, setBonusJson] = useState<any>(null);
   const [showBonusPreview, setShowBonusPreview] = useState(false);
-  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<number | string>(''); // In dollars
+  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<
+    number | string
+  >(""); // In dollars
   const bonusRichTextEditorRef = useRef<any>(null);
 
   // Resources State Variables
@@ -370,10 +439,18 @@ export default function EditContestPage({
   };
 
   // Get the current user's subscription from new subscription system
-  const getUserPlan = async () => {
+  const getUserPlan = async (contestSubscriptionInfo?: any) => {
     if (!user) return;
     setIsUserPlanLoading(true);
     try {
+      // If we have contest subscription info, use it (this is the plan at contest creation time)
+      if (contestSubscriptionInfo?.product_id) {
+        setUserPlan(contestSubscriptionInfo.product_id);
+        setIsUserPlanLoading(false);
+        return;
+      }
+
+      // Fallback: fetch current user's subscription info
       const { data: authData, error: authError } =
         await supabase.auth.getUser();
       if (authError || !authData.user) {
@@ -444,14 +521,11 @@ export default function EditContestPage({
         return;
       }
 
-      // Fetch user plan *after* plans are loaded to find default free plan ID if needed
-      await getUserPlan();
-
-      // Now fetch contest data
+      // First fetch contest data to get advertiser_id
       try {
         const { data, error: contestError } = await supabase
           .from("contests")
-          .select("*, advertiser_id") // Ensure advertiser_id is fetched for security if needed in RLS
+          .select("*, advertiser_id, subscription_info_of_user") // Include subscription_info_of_user for plan features
           .eq("id", contestId)
           // .eq("advertiser_id", user.id) // RLS should handle this, but explicit check can be added if RLS is not robust
           .single();
@@ -476,6 +550,8 @@ export default function EditContestPage({
         }
 
         if (data) {
+          // Fetch the correct plan - use the subscription info captured at contest creation time
+          await getUserPlan(data.subscription_info_of_user);
           // Extract commission rate from contest payment details
           if (data.payment_details) {
             try {
@@ -569,10 +645,16 @@ export default function EditContestPage({
               [];
             if (Array.isArray(data.inspiration_links)) {
               parsedInspirationLinks = data.inspiration_links;
-            } else {
-              parsedInspirationLinks = [];
             }
             setInspirationLinks(parsedInspirationLinks);
+
+            // Parse tracking_links
+            let parsedTrackingLinks: { url: string; description: string }[] =
+              [];
+            if (Array.isArray((data as any).tracking_links)) {
+              parsedTrackingLinks = (data as any).tracking_links as any;
+            }
+            setTrackingLinks(parsedTrackingLinks);
 
             setThumbnailPreview(data.thumbnail_url || null);
             setContestType(data.contest_type || "leaderboard"); // Default to leaderboard if null for some reason
@@ -633,15 +715,20 @@ export default function EditContestPage({
             setResources(data.resources || []);
 
             // Load new features (2025-10-01)
-            setMultipleSubmissionsEnabled(data.multiple_submissions_enabled || false);
+            setMultipleSubmissionsEnabled(
+              data.multiple_submissions_enabled || false
+            );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
-            setContentType(data.content_type || 'other');
+            setContentType(data.content_type || "other");
 
             // Load flat fee bonus from contest_based_details
             if (data.contest_type === "leaderboard") {
               const lbDetails = data.contest_based_details?.leaderboard_contest;
               if (lbDetails?.flat_fee_bonus) {
                 setFlatFeeBonus((lbDetails.flat_fee_bonus / 100).toString());
+              }
+              if (lbDetails?.total_budget) {
+                setTotalBudget((lbDetails.total_budget / 100).toString());
               }
             } else if (data.contest_type === "cpm") {
               const cpmDetails = data.contest_based_details?.cpm_contest;
@@ -657,14 +744,18 @@ export default function EditContestPage({
               setBonusJson(data.bonus_details.description_json);
               setTimeout(() => {
                 if (bonusRichTextEditorRef.current) {
-                  bonusRichTextEditorRef.current.setContent(data.bonus_details.description_json);
+                  bonusRichTextEditorRef.current.setContent(
+                    data.bonus_details.description_json
+                  );
                 }
               }, 100);
             }
 
             // Load max earnings per creator
             if (data.max_earnings_per_creator) {
-              setMaxEarningsPerCreator((data.max_earnings_per_creator / 100).toString());
+              setMaxEarningsPerCreator(
+                (data.max_earnings_per_creator / 100).toString()
+              );
             }
           }
         } else {
@@ -866,7 +957,12 @@ export default function EditContestPage({
   const getMinDateTime = () => {
     const now = new Date();
     const minStartDate = new Date(now);
-    minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+
+    // If contest is approved, allow immediate start (no 2-day restriction)
+    // Otherwise, apply the 2-day minimum restriction
+    if (contest?.moderation_status !== "approved") {
+      minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
+    }
 
     const year = minStartDate.getFullYear();
     const month = String(minStartDate.getMonth() + 1).padStart(2, "0");
@@ -1155,6 +1251,7 @@ export default function EditContestPage({
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
+        tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
       };
     }
 
@@ -1200,8 +1297,9 @@ export default function EditContestPage({
         const isNewContest = !originalStartDate || originalStartDate > now;
 
         if (isNewContest) {
-          // CRITICAL: Use exact same logic as getMinDateTime for consistency
-          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+          // For approved contests, only check that start time is in the future
+          // For non-approved contests, apply the 2-day minimum restriction
+          if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
               description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
@@ -1357,7 +1455,19 @@ export default function EditContestPage({
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        leaderboardDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        leaderboardDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
@@ -1475,7 +1585,9 @@ export default function EditContestPage({
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        cpmDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
       }
 
       contestBasedDetails.cpm_contest = cpmDetails;
@@ -1498,7 +1610,9 @@ export default function EditContestPage({
 
       // Add new features (2025-10-01)
       updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
-      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1;
+      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
+        ? maxSubmissionsPerCreator
+        : 1;
       updatePayload.content_type = contentType || null;
 
       // Capture bonus content before saving
@@ -1506,18 +1620,22 @@ export default function EditContestPage({
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
-        updatePayload.bonus_details = html ? {
-          description_html: html,
-          description_json: json
-        } : null;
+        updatePayload.bonus_details = html
+          ? {
+            description_html: html,
+            description_json: json,
+          }
+          : null;
       } else {
         updatePayload.bonus_details = null;
       }
 
       // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
-        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-        : null;
+      updatePayload.max_earnings_per_creator =
+        maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+          : null;
     }
     try {
       // Use the already-uploaded thumbnail URL (from thumbnailPreview)
@@ -2216,19 +2334,17 @@ export default function EditContestPage({
       // Show detailed refund breakdown if available
       const refundMessage = refundResult.breakdown
         ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
-          )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
-          )} + $${refundResult.breakdown.commissionRefund.toFixed(
-            2
-          )} commission (${
-            refundDetails.commissionPercentage
-          }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
+          2
+        )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
+          2
+        )} + $${refundResult.breakdown.commissionRefund.toFixed(
+          2
+        )} commission (${refundDetails.commissionPercentage}%) = $${refundResult.breakdown.totalRefunded.toFixed(
+          2
+        )} total.`
         : `$${(refundDetails.totalRefund / 100).toFixed(
-            2
-          )} has been refunded to your wallet (using original ${
-            refundDetails.commissionPercentage
-          }% commission rate)`;
+          2
+        )} has been refunded to your wallet (using original ${refundDetails.commissionPercentage}% commission rate)`;
 
       toast({
         title: "Refund Processed",
@@ -2263,32 +2379,31 @@ export default function EditContestPage({
     if (!refundDetails) return;
 
     try {
-      const contestBasedDetails =
-        contestType === "leaderboard"
-          ? {
-              leaderboard_contest: {
-                prizes: winnerAmounts.map((amount, index) => ({
-                  position: index + 1,
-                  amount: amount,
-                })),
-                total_prize: winnerAmounts.reduce(
-                  (sum, amount) => sum + amount,
-                  0
-                ),
-                winner_count: winnerCount,
-              },
-            }
-          : {
-              cpm_contest: {
-                cpm_rate_usd: parseFloat(cpmRate.toString()),
-                min_views: minViews ? parseInt(minViews.toString()) : null,
-                max_views: maxViews ? parseInt(maxViews.toString()) : null,
-                total_budget: Math.round(
-                  parseFloat(totalBudget.toString()) * 100
-                ),
-                terms_conditions: termsConditions,
-              },
-            };
+      const contestBasedDetails = contestType === "leaderboard"
+        ? {
+          leaderboard_contest: {
+            prizes: winnerAmounts.map((amount, index) => ({
+              position: index + 1,
+              amount: amount,
+            })),
+            total_prize: winnerAmounts.reduce(
+              (sum, amount) => sum + amount,
+              0
+            ),
+            winner_count: winnerCount,
+          },
+        }
+        : {
+          cpm_contest: {
+            cpm_rate_usd: parseFloat(cpmRate.toString()),
+            min_views: minViews ? parseInt(minViews.toString()) : null,
+            max_views: maxViews ? parseInt(maxViews.toString()) : null,
+            total_budget: Math.round(
+              parseFloat(totalBudget.toString()) * 100
+            ),
+            terms_conditions: termsConditions,
+          },
+        };
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -2829,11 +2944,23 @@ export default function EditContestPage({
     }
     // 3. Active contest limit (only if submitting for approval, not draft)
     try {
-      const activeCheck = await canCreateNewContest(
-        userId,
-        planFeatures.maxActiveContests,
-        contestId
-      );
+      const response = await fetch("/api/contests/validate-limit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          maxActiveContests: planFeatures.maxActiveContests,
+          contestId: contestId, // Exclude current contest from count
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to validate contest limit");
+      }
+
+      const activeCheck = await response.json();
+
       if (!activeCheck.canCreate) {
         setIsSubmitting(false);
         return {
@@ -3145,6 +3272,7 @@ export default function EditContestPage({
         inspiration_links: inspirationLinks.filter(
           (link) => link.url.trim() !== ""
         ),
+        tracking_links: trackingLinks.filter((link) => link.url.trim() !== ""),
       };
     }
 
@@ -3203,8 +3331,9 @@ export default function EditContestPage({
         const isNewContest = !originalStartDate || originalStartDate > now;
 
         if (isNewContest) {
-          // CRITICAL: Use exact same logic as getMinDateTime for consistency
-          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+          // For approved contests, only check that start time is in the future
+          // For non-approved contests, apply the 2-day minimum restriction
+          if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
             toast({
               title: "Invalid Start Date",
               description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
@@ -3289,8 +3418,11 @@ export default function EditContestPage({
     }
 
     // Skip contest type validation for datesOnly mode
-    if (!datesOnly && contestType === 'leaderboard') {
-      const currentTotalPrizePool = winnerAmounts.reduce((sum, amount) => sum + (amount || 0), 0);
+    if (!datesOnly && contestType === "leaderboard") {
+      const currentTotalPrizePool = winnerAmounts.reduce(
+        (sum, amount) => sum + (amount || 0),
+        0
+      );
 
       // Validation only for non-draft mode
       if (!isDraftMode) {
@@ -3300,32 +3432,46 @@ export default function EditContestPage({
             description: `Your current plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
         if (currentTotalPrizePool < planFeatures.minContestBudget) {
           toast({
             title: "Prize Pool Too Low",
-            description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(planFeatures.minContestBudget)}.`,
+            description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(
+              planFeatures.minContestBudget
+            )}.`,
             variant: "destructive",
           });
-          setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
         }
         for (let i = 0; i < winnerCount; i++) {
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too Low",
-              description: `Prize for Winner ${i + 1} must be at least ${formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${i + 1
+                } must be at least ${formatCurrencyFromCents(
+                  MIN_PRIZE_PER_WINNER
+                )}`,
               variant: "destructive",
             });
-            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
           }
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too High",
-              description: `Prize for Winner ${i + 1} cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${i + 1
+                } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
               variant: "destructive",
             });
-            setIsSubmitting(false); if (submitTimeoutId) clearTimeout(submitTimeoutId); return;
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
           }
         }
       }
@@ -3342,7 +3488,19 @@ export default function EditContestPage({
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        leaderboardDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        leaderboardDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
+      }
+
+      // Add total budget if specified (stored in cents)
+      if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
+        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
@@ -3452,6 +3610,13 @@ export default function EditContestPage({
           contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
         terms_conditions: (termsConditions || "").trim(),
       };
+
+      // Add flat fee bonus if specified (stored in cents)
+      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
+        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+      }
+
+      contestBasedDetails.cpm_contest = cpmDetails;
       updatePayload.contest_type = 'cpm';
       updatePayload.contest_based_details = contestBasedDetails;
     }
@@ -3460,7 +3625,9 @@ export default function EditContestPage({
     if (!datesOnly) {
       // Add new features (2025-10-01)
       updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
-      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1;
+      updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
+        ? maxSubmissionsPerCreator
+        : 1;
       updatePayload.content_type = contentType || null;
 
       // Capture bonus content before saving
@@ -3468,73 +3635,22 @@ export default function EditContestPage({
         const { html, json } = bonusRichTextEditorRef.current.getContent();
         setBonusHtml(html);
         setBonusJson(json);
-        updatePayload.bonus_details = html ? {
-          description_html: html,
-          description_json: json
-        } : null;
+        updatePayload.bonus_details = html
+          ? {
+            description_html: html,
+            description_json: json,
+          }
+          : null;
       } else {
         updatePayload.bonus_details = null;
       }
 
       // Add max earnings per creator (stored in cents)
-      updatePayload.max_earnings_per_creator = maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
-        ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-        : null;
-    }
-
-    // Validate active contest limits when submitting for approval
-    if (moderationStatus === "pending_approval") {
-      try {
-        // Import getActiveContestCount for custom validation
-        const { getActiveContestCount } = await import(
-          "@/lib/contest-utils-client"
-        );
-        const countResult = await getActiveContestCount(user.id, contestId);
-
-        if (!countResult.success) {
-          toast({
-            title: "Contest Limit Check Failed",
-            description:
-              countResult.error ||
-              "Unable to validate contest limits. Please try again.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        // Check if current contest would be considered "new" active contest
-        // If it's currently draft or rejected, then changing to pending_approval adds +1 to active count
-        let effectiveActiveCount = countResult.activeCount;
-        if (
-          contest.moderation_status === "draft" ||
-          contest.moderation_status === "rejected"
-        ) {
-          effectiveActiveCount += 1; // This contest will become active
-        }
-
-        if (effectiveActiveCount > planFeatures.maxActiveContests) {
-          toast({
-            title: "Active Contest Limit Exceeded",
-            description: `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. You currently have ${countResult.activeCount} active contests. Please upgrade your plan or wait for existing contests to end.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-      } catch (error: any) {
-        console.error("Error checking active contest limit:", error);
-        toast({
-          title: "Contest Limit Check Failed",
-          description: "Unable to validate contest limits. Please try again.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+      updatePayload.max_earnings_per_creator =
+        maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+          : null;
     }
 
     try {
@@ -4941,43 +5057,30 @@ export default function EditContestPage({
                     {inspirationError}
                   </div>
                 )}
-                <div className="flex flex-col gap-2 space-y-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="inspirationUrlInput">
-                      Inspiration Link <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="inspirationUrlInput"
-                      type="url"
-                      placeholder="https://instagram.com/example"
-                      value={newInspirationUrl}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      onChange={(e) => setNewInspirationUrl(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="inspirationDescriptionInput">
-                      Inspiration Description{" "}
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="inspirationDescriptionInput"
-                      placeholder="Add description here*"
-                      value={newInspirationDescription}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      onChange={(e) =>
-                        setNewInspirationDescription(e.target.value)
-                      }
-                    />
-                  </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="inspirationUrlInput">
+                    Inspiration Link{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="inspirationUrlInput"
+                    type="url"
+                    placeholder="https://instagram.com/example"
+                    value={newInspirationUrl}
+                    onChange={(e) => setNewInspirationUrl(e.target.value)}
+                  />
+                  <Label htmlFor="inspirationDescriptionInput">
+                    Inspiration Description{" "}
+                    <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="inspirationDescriptionInput"
+                    placeholder="Add description here*"
+                    value={newInspirationDescription}
+                    onChange={(e) =>
+                      setNewInspirationDescription(e.target.value)
+                    }
+                  />
                   <Button
                     type="button"
                     onClick={addInspiration}
@@ -4993,12 +5096,9 @@ export default function EditContestPage({
                     {inspirationLinks.map((item, index) => (
                       <li
                         key={index}
-                        className={cn(
-                          "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
-                          isDark
-                            ? "bg-[#180438] border-gray-600"
-                            : "bg-white dark:bg-gray-800 border border-gray-200"
-                        )}
+                        className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-gray-800 
+                        border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+
                       >
                         <div 
                           className={cn(
@@ -5041,6 +5141,110 @@ export default function EditContestPage({
                   </ul>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Tracking Links (Collapsible) */}
+          {!datesOnly && (
+            <div className="mt-6">
+              <div className="my-6 border-t border-gray-300"></div>
+              <Collapsible
+                open={trackingLinksOpen}
+                onOpenChange={setTrackingLinksOpen}
+              >
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition"
+                  >
+                    <span>Tracking Links</span>
+                    <span className="text-sm font-normal opacity-70">
+                      {trackingLinksOpen ? "Hide" : "Show"}
+                    </span>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4 space-y-4">
+                  {trackingError && (
+                    <div className="text-red-500 text-sm">{trackingError}</div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="trackingUrlInput">External Link</Label>
+                    <Input
+                      id="trackingUrlInput"
+                      type="url"
+                      placeholder="https://example.com/tracking-link"
+                      value={newTrackingUrl}
+                      onChange={(e) => setNewTrackingUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="trackingDescriptionInput">
+                      Description
+                    </Label>
+                    <Input
+                      id="trackingDescriptionInput"
+                      placeholder="Describe this link"
+                      value={newTrackingDescription}
+                      onChange={(e) =>
+                        setNewTrackingDescription(e.target.value)
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={addTrackingLink}
+                    disabled={!newTrackingUrl || !newTrackingDescription}
+                    className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                  >
+                    Add Tracking Link
+                  </Button>
+                  {trackingLinks.length > 0 && (
+                    <ul className="space-y-3 mt-2">
+                      {trackingLinks.map((item, index) => (
+                        <li
+                          key={index}
+                          className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                        >
+                          <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
+                            <ExternalLink className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <a
+                              href={
+                                item.url.includes("[creator]")
+                                  ? item.url.replace(
+                                    /\[creator\]/gi,
+                                    encodeURIComponent(currentUserFirstName)
+                                  )
+                                  : item.url
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-blue-600 hover:underline break-all"
+                            >
+                              {item.url.includes("[creator]")
+                                ? item.url.replace(
+                                  /\[creator\]/gi,
+                                  currentUserFirstName
+                                )
+                                : item.url}
+                            </a>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {item.description}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => removeTrackingLink(index)}
+                            className="text-[#4A00BE] bg-[#D8C3FF] p-3 mr-2 rounded-full"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           )}
 
@@ -5149,12 +5353,7 @@ export default function EditContestPage({
                 <AlertDescription>{getContestDuration()}</AlertDescription>
               </Alert>
             )}
-            <p
-              className={cn(
-                "text-[13px] mt-1",
-                isDark ? "text-white" : "text-gray-500"
-              )}
-            >
+            <p className="text-sm text-gray-500 mt-1">
               <strong>Start Date Rule:</strong> Contest must start at least{" "}
               {MIN_DAYS_UNTIL_START} days from today.{" "}
               {getStartDateRuleExample()}
@@ -5660,18 +5859,26 @@ export default function EditContestPage({
               {/* Content Type Selection */}
               <div className="space-y-2">
                 <Label htmlFor="content-type">Content Type (Optional)</Label>
-                <Select value={contentType || undefined} onValueChange={(value) => setContentType(value as 'ugc' | 'clipping' | 'other')}>
+                <Select
+                  value={contentType || undefined}
+                  onValueChange={(value) =>
+                    setContentType(value as "ugc" | "clipping" | "other")
+                  }
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ugc">UGC (User Generated Content)</SelectItem>
+                    <SelectItem value="ugc">
+                      UGC (User Generated Content)
+                    </SelectItem>
                     <SelectItem value="clipping">Clipping</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Helps creators filter opportunities by content type. Leave empty if not applicable.
+                  Helps creators filter opportunities by content type. Leave
+                  empty if not applicable.
                 </p>
               </div>
 
@@ -5679,11 +5886,15 @@ export default function EditContestPage({
               <div className="space-y-3 rounded-lg border border-purple-200 bg-purple-50/30 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label htmlFor="multiple-submissions" className="text-base font-medium">
+                    <Label
+                      htmlFor="multiple-submissions"
+                      className="text-base font-medium"
+                    >
                       Allow Multiple Submissions
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Enable creators to submit multiple entries to this contest.
+                      Enable creators to submit multiple entries to this
+                      contest.
                     </p>
                   </div>
                   <input
@@ -5694,7 +5905,7 @@ export default function EditContestPage({
                       setMultipleSubmissionsEnabled(e.target.checked);
                       if (!e.target.checked) {
                         setMaxSubmissionsPerCreator(1);
-                        setMaxEarningsPerCreator('');
+                        setMaxEarningsPerCreator("");
                       } else {
                         // Set default to minimum (2) when enabling multiple submissions
                         setMaxSubmissionsPerCreator(2);
@@ -5708,7 +5919,8 @@ export default function EditContestPage({
                   <div className="space-y-4 pt-3 border-t border-purple-200">
                     <div className="space-y-2">
                       <Label htmlFor="max-submissions">
-                        Maximum Submissions Per Creator <span className="text-red-500">*</span>
+                        Maximum Submissions Per Creator{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="max-submissions"
@@ -5725,13 +5937,15 @@ export default function EditContestPage({
                         placeholder="e.g., 5"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Range: 2-100 submissions per creator. Min/max views apply to ALL submissions.
+                        Range: 2-100 submissions per creator. Min/max views
+                        apply to ALL submissions.
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="max-earnings">
-                        Maximum Earnings Per Creator - THIS CONTEST ONLY (Optional)
+                        Maximum Earnings Per Creator - THIS CONTEST ONLY
+                        (Optional)
                       </Label>
                       <Input
                         id="max-earnings"
@@ -5739,11 +5953,15 @@ export default function EditContestPage({
                         step="0.01"
                         min="0"
                         value={maxEarningsPerCreator}
-                        onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
+                        onChange={(e) =>
+                          setMaxEarningsPerCreator(e.target.value)
+                        }
                         placeholder="e.g., 500"
                       />
                       <p className="text-xs text-muted-foreground">
-                        💡 Per-contest cap (not platform-wide). Creators can still submit after reaching this cap but won't earn more from THIS specific contest. Leave empty for no cap.
+                        💡 Per-contest cap (not platform-wide). Creators can
+                        still submit after reaching this cap but won't earn more
+                        from THIS specific contest. Leave empty for no cap.
                       </p>
                     </div>
                   </div>
@@ -5765,19 +5983,50 @@ export default function EditContestPage({
                   placeholder="e.g., 10.00"
                 />
                 <p className="text-xs text-muted-foreground">
-                  🎁 Guaranteed payment for EVERY verified submission, regardless of views or ranking. Paid after contest ends. Great motivator for creators!
+                  🎁 Guaranteed payment for EVERY verified submission,
+                  regardless of views or ranking. Paid after contest ends. Great
+                  motivator for creators!
                 </p>
               </div>
+
+              {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+              {contestType === "leaderboard" && flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="total-budget">
+                    Total Budget for Bonuses (Optional)
+                  </Label>
+                  <Input
+                    id="total-budget"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={totalBudget}
+                    onChange={(e) => setTotalBudget(e.target.value)}
+                    placeholder="e.g., 500.00"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    💰 Set a budget limit for flat fee bonuses and future features. Leave empty for no limit.
+                    <br />
+                    <strong>Prize Pool:</strong> {formatCurrencyFromCents(totalPrizePool)} (for rankings)
+                    <br />
+                    <strong>Total Budget:</strong> {totalBudget ? `$${parseFloat(totalBudget.toString()).toFixed(2)}` : 'No limit'} (for bonuses & extras)
+                  </p>
+                </div>
+              )}
 
               {/* Bonus Section Toggle & Editor */}
               <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/30 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <Label htmlFor="bonus-enabled" className="text-base font-medium">
+                    <Label
+                      htmlFor="bonus-enabled"
+                      className="text-base font-medium"
+                    >
                       Additional Bonus Opportunities
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Describe other bonuses (top creator rewards, affiliate links, special bonuses). Handled manually by you.
+                      Describe other bonuses (top creator rewards, affiliate
+                      links, special bonuses). Handled manually by you.
                     </p>
                   </div>
                   <input
@@ -5798,8 +6047,12 @@ export default function EditContestPage({
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          if (!showBonusPreview && bonusRichTextEditorRef.current) {
-                            const { html, json } = bonusRichTextEditorRef.current.getContent();
+                          if (
+                            !showBonusPreview &&
+                            bonusRichTextEditorRef.current
+                          ) {
+                            const { html, json } =
+                              bonusRichTextEditorRef.current.getContent();
                             setBonusHtml(html);
                             setBonusJson(json);
                           }
@@ -5829,7 +6082,9 @@ export default function EditContestPage({
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      ℹ️ These bonuses are visible to creators but handled manually by you. Use formatting and emojis to make it engaging!
+                      ℹ️ These bonuses are visible to creators but handled
+                      manually by you. Use formatting and emojis to make it
+                      engaging!
                     </p>
                   </div>
                 )}
@@ -5897,6 +6152,12 @@ export default function EditContestPage({
                         )} → New Total: ${formatCurrencyFromCents(
                           originalBudget + budgetDifference
                         )}. Additional payment (including commission) will be required.`
+                        budgetDifference
+                      )}. Original: ${formatCurrencyFromCents(
+                        originalBudget
+                      )} → New Total: ${formatCurrencyFromCents(
+                        originalBudget + budgetDifference
+                      )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
                           Math.abs(budgetDifference)
                         )}. You will be refunded this amount plus commission.`}
@@ -5996,6 +6257,15 @@ export default function EditContestPage({
                           <span className="hidden sm:inline md:hidden">
                             Update & Submit
                           </span>
+                          <span className="hidden xl:inline">
+                            Update & Resubmit for Approval
+                          </span>
+                          <span className="hidden md:inline xl:hidden">
+                            Update & Resubmit
+                          </span>
+                          <span className="hidden sm:inline md:hidden">
+                            Update & Submit
+                          </span>
                           <span className="sm:hidden">Update</span>
                         </>
                       ) : contest && isContestPaid() && !budgetChanged ? (
@@ -6086,6 +6356,8 @@ export default function EditContestPage({
                     <strong>Prize Pool Decreased:</strong> Your prize pool
                     decreased by{" "}
                     {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
+                    decreased by{" "}
+                    {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
                     You will receive a refund of this amount plus commission.
                   </AlertDescription>
                 </Alert>
@@ -6115,9 +6387,23 @@ export default function EditContestPage({
                           refundDetails.prizePoolDecrease
                         )}
                       </span>
+                      <span className="font-medium">
+                        {formatCurrencyFromCents(
+                          refundDetails.prizePoolDecrease
+                        )}
+                      </span>
                     </div>
 
                     <div className="flex justify-between text-sm">
+                      <span>
+                        Commission Refund ({refundDetails.commissionPercentage}
+                        %):
+                      </span>
+                      <span className="font-medium">
+                        {formatCurrencyFromCents(
+                          refundDetails.commissionRefund
+                        )}
+                      </span>
                       <span>
                         Commission Refund ({refundDetails.commissionPercentage}
                         %):
@@ -6133,6 +6419,9 @@ export default function EditContestPage({
 
                     <div className="flex justify-between text-lg font-semibold">
                       <span>Total Refund Amount:</span>
+                      <span className="text-green-600">
+                        {formatCurrencyFromCents(refundDetails.totalRefund)}
+                      </span>
                       <span className="text-green-600">
                         {formatCurrencyFromCents(refundDetails.totalRefund)}
                       </span>
@@ -6236,6 +6525,10 @@ export default function EditContestPage({
                       created with a {contestCommissionRate}% commission rate.
                       Your current plan has a {currentPlanCommissionRate}%
                       commission rate.
+                      <strong>Commission Rate Notice:</strong> This contest was
+                      created with a {contestCommissionRate}% commission rate.
+                      Your current plan has a {currentPlanCommissionRate}%
+                      commission rate.
                       <br />
                       <span className="text-sm">
                         If you want to use your new plan's commission rate,
@@ -6283,6 +6576,9 @@ export default function EditContestPage({
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
                 commissionPercentage={
+                  contestCommissionRate !== null
+                    ? contestCommissionRate
+                    : getPlanFeatures(userPlan).commissionPercentage
                   contestCommissionRate !== null
                     ? contestCommissionRate
                     : getPlanFeatures(userPlan).commissionPercentage

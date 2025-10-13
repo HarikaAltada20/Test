@@ -36,8 +36,8 @@ export async function GET(
       throw new Error('Contest not found');
     }
 
-    // 2. Fetch the user's submission for the contest
-    const { data: mySubmission, error: submissionError } = await supabase
+    // 2. Fetch the user's submissions for the contest (multiple submissions support)
+    const { data: mySubmissions, error: submissionError } = await supabase
       .from('submissions')
       .select(`
         id,
@@ -50,21 +50,25 @@ export async function GET(
         created_at,
         content_link,
         platform,
-        other_stats
+        other_stats,
+        video_id
       `)
       .eq('contest_id', contestId)
       .eq('creator_id', user.id)
-      .maybeSingle();
+      .order('created_at', { ascending: false });
 
     if (submissionError) {
-      console.error(`Error fetching user's submission for contest ${contestId} and user ${user.id}:`, submissionError);
-      throw new Error(`Failed to fetch user submission: ${submissionError.message}`);
+      console.error(`Error fetching user's submissions for contest ${contestId} and user ${user.id}:`, submissionError);
+      throw new Error(`Failed to fetch user submissions: ${submissionError.message}`);
     }
 
-    if (!mySubmission) {
+    if (!mySubmissions || mySubmissions.length === 0) {
       // User has not submitted to this contest
-      return NextResponse.json({ mySubmission: null, rank: null });
+      return NextResponse.json({ mySubmission: null, submissions: [], rank: null });
     }
+
+    // For backward compatibility, use the first (most recent) submission as the main submission
+    const mySubmission = mySubmissions[0];
 
     // 3. Calculate the user's rank based on contest type
     // Public rank should exclude rejected submissions for all contest types
@@ -76,16 +80,22 @@ export async function GET(
     // Exclude rejected submissions for both leaderboard and CPM
     rankQuery = rankQuery.neq('status', 'rejected');
 
-    const { count: higherRankedCount, error: rankError } = await rankQuery
-      .or(`views.gt.${mySubmission.views},and(views.eq.${mySubmission.views},created_at.lt.${mySubmission.created_at})`);
+    // Only calculate rank if views data is available
+    let rank = 1; // Default rank
+    if (mySubmission.views !== null && mySubmission.views !== undefined) {
+      const { count: higherRankedCount, error: rankError } = await rankQuery
+        .or(`views.gt.${mySubmission.views},and(views.eq.${mySubmission.views},created_at.lt.${mySubmission.created_at})`);
 
-    if (rankError) {
-      console.error(`Error calculating rank for user ${user.id} in contest ${contestId}:`, rankError);
-      throw new Error(`Failed to calculate rank: ${rankError.message}`);
+      if (rankError) {
+        console.error(`Error calculating rank for user ${user.id} in contest ${contestId}:`, rankError);
+        // Don't throw error, just use default rank
+        console.warn(`Using default rank due to calculation error`);
+      } else {
+        rank = (higherRankedCount ?? 0) + 1;
+      }
     }
 
-    // Now both verified and pending submissions get ranks in CPM contests
-    const rank = (higherRankedCount ?? 0) + 1;
+    // Rank is already calculated above
 
     // 4. Fetch user's general profile info from 'users' table
     const { data: userProfile, error: userProfileError } = await supabase
@@ -126,7 +136,22 @@ export async function GET(
       user_platform_pfp_url: userProfile?.profile_picture_url || null,
     };
 
-    return NextResponse.json({ mySubmission: combinedSubmissionData, rank });
+    // Combine all submissions with user data
+    const combinedSubmissions = mySubmissions.map(submission => ({
+      ...submission,
+      user_platform_username: userProfile?.username || 'N/A',
+      user_full_name: userProfile?.full_name || 'Anonymous User',
+      creator_pfp_url: creator_pfp_url,
+      user_platform_pfp_url: userProfile?.profile_picture_url || null,
+      // Add content_url for backward compatibility
+      content_url: submission.content_link,
+    }));
+
+    return NextResponse.json({ 
+      mySubmission: combinedSubmissionData, 
+      submissions: combinedSubmissions,
+      rank 
+    });
 
   } catch (error: any) {
     console.error(`Error in /my-submission endpoint for contest ${contestId}:`, error);

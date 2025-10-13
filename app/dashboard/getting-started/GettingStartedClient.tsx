@@ -1379,6 +1379,7 @@ export default function GettingStartedClient({
         <div className="space-y-8 rounded-bl-xl rounded-br-xl shadow-lg bg-white px-6 pb-6">
           <CardContent className="p-6 border border-[#7F39EC] rounded-2xl bg-[#D9C0FF26]">
             <div className="text-center mb-6">
+        
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Ready to Start?
               </h3>

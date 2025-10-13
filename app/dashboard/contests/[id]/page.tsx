@@ -55,7 +55,9 @@ export default async function ContestDetailPage({
 
   // Additional security check: if contest doesn't belong to user and user is not admin, deny access
   if (!isAdmin && contestData.advertiser_id !== user.id) {
-    console.log(`Access denied: User ${user.id} attempted to access contest ${contestId} owned by ${contestData.advertiser_id}`);
+    console.log(
+      `Access denied: User ${user.id} attempted to access contest ${contestId} owned by ${contestData.advertiser_id}`
+    );
     redirect("/dashboard/contests");
   }
 
@@ -67,7 +69,8 @@ export default async function ContestDetailPage({
   // Fetch submissions first
   const { data: submissionsData, error: submissionsError } = await supabase
     .from("submissions")
-    .select(`
+    .select(
+      `
       id,
       created_at,
       content_link,
@@ -77,36 +80,55 @@ export default async function ContestDetailPage({
       other_stats,
       platform,
       video_thumbnail_url,
-      creator_id
-    `)
+      video_title,
+      creator_id,
+      paid,
+      paid_at,
+      bonus_paid,
+      bonus_paid_at
+    `
+    )
     .eq("contest_id", contestId)
     .order("created_at", { ascending: false });
 
   if (submissionsError) {
-    console.error(`[page.tsx] Supabase error fetching submissions for contest ${contestId}:`, submissionsError);
+    console.error(
+      `[page.tsx] Supabase error fetching submissions for contest ${contestId}:`,
+      submissionsError
+    );
   }
 
-  console.log(`[page.tsx] Raw submissionsData for contest ${contestId}:`, JSON.stringify(submissionsData, null, 2));
+  console.log(
+    `[page.tsx] Raw submissionsData for contest ${contestId}:`,
+    JSON.stringify(submissionsData, null, 2)
+  );
 
   // Fetch creator profiles and user data for the submissions
   let creatorProfilesData: any[] = [];
   let usersData: any[] = [];
   if (submissionsData && submissionsData.length > 0) {
-    const creatorIds = [...new Set(submissionsData.map(sub => sub.creator_id).filter(Boolean))];
+    const creatorIds = [
+      ...new Set(submissionsData.map((sub) => sub.creator_id).filter(Boolean)),
+    ];
 
     if (creatorIds.length > 0) {
       // Fetch creator profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from("creator_profiles")
-        .select(`
+        .select(
+          `
           id,
           youtube_account,
           instagram_account
-        `)
+        `
+        )
         .in("id", creatorIds);
 
       if (profilesError) {
-        console.error(`[page.tsx] Supabase error fetching creator profiles:`, profilesError);
+        console.error(
+          `[page.tsx] Supabase error fetching creator profiles:`,
+          profilesError
+        );
       } else {
         creatorProfilesData = profilesData || [];
       }
@@ -114,12 +136,14 @@ export default async function ContestDetailPage({
       // Fetch user data for fallbacks
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select(`
+        .select(
+          `
           id,
           full_name,
           username,
           profile_picture_url
-        `)
+        `
+        )
         .in("id", creatorIds);
 
       if (userError) {
@@ -169,6 +193,7 @@ export default async function ContestDetailPage({
     end_date: contestData.end_date,
     rules_html: contestData.rules_html,
     inspiration_links: finalInspirationLinks,
+    tracking_links: contestData.tracking_links,
     resources: contestData.resources,
     contest_type: contestData.contest_type,
     contest_based_details: contestData.contest_based_details,
@@ -189,71 +214,111 @@ export default async function ContestDetailPage({
 
   const submissions = submissionsData
     ? submissionsData.map((sub: any) => {
-      let creatorDisplayName: string | null = null;
-      let creatorUsername: string | null = null;
-      let creatorAvatarUrl: string | null = null;
-      const actualCreatorProfileId: string | null = sub.creator_id;
+        let creatorDisplayName: string | null = null;
+        let creatorUsername: string | null = null;
+        let creatorAvatarUrl: string | null = null;
+        const actualCreatorProfileId: string | null = sub.creator_id;
 
-      // Find the creator profile and user for this submission
-      const creatorProfile = creatorProfilesData.find(profile => profile.id === sub.creator_id);
-      const user = usersData.find(u => u.id === sub.creator_id);
+        // Find the creator profile and user for this submission
+        const creatorProfile = creatorProfilesData.find(
+          (profile) => profile.id === sub.creator_id
+        );
+        const user = usersData.find((u) => u.id === sub.creator_id);
 
-      if (creatorProfile) {
-        const platform = sub.platform?.toLowerCase();
+        if (creatorProfile) {
+          const platform = sub.platform?.toLowerCase();
 
-        try {
-          if (platform?.includes('youtube') && creatorProfile.youtube_account) {
-            const ytAccount = typeof creatorProfile.youtube_account === 'string' ? JSON.parse(creatorProfile.youtube_account) : creatorProfile.youtube_account;
-            creatorDisplayName = ytAccount?.channel_title;
-            creatorUsername = ytAccount?.channel_custom_url || ytAccount?.channel_id;
-            creatorAvatarUrl = ytAccount?.channel_thumbnail;
-          } else if (platform?.includes('instagram') && creatorProfile.instagram_account) {
-            const igAccount = typeof creatorProfile.instagram_account === 'string' ? JSON.parse(creatorProfile.instagram_account) : creatorProfile.instagram_account;
-            creatorDisplayName = igAccount?.name_of_account || igAccount?.full_name || igAccount?.display_name;
-            creatorUsername = igAccount?.username;
-            creatorAvatarUrl = igAccount?.profile_picture_url;
+          try {
+            if (
+              platform?.includes("youtube") &&
+              creatorProfile.youtube_account
+            ) {
+              const ytAccount =
+                typeof creatorProfile.youtube_account === "string"
+                  ? JSON.parse(creatorProfile.youtube_account)
+                  : creatorProfile.youtube_account;
+              creatorDisplayName = ytAccount?.channel_title;
+              creatorUsername =
+                ytAccount?.channel_custom_url || ytAccount?.channel_id;
+              creatorAvatarUrl = ytAccount?.channel_thumbnail;
+            } else if (
+              platform?.includes("instagram") &&
+              creatorProfile.instagram_account
+            ) {
+              const igAccount =
+                typeof creatorProfile.instagram_account === "string"
+                  ? JSON.parse(creatorProfile.instagram_account)
+                  : creatorProfile.instagram_account;
+              creatorDisplayName =
+                igAccount?.name_of_account ||
+                igAccount?.full_name ||
+                igAccount?.display_name;
+              creatorUsername = igAccount?.username;
+              creatorAvatarUrl = igAccount?.profile_picture_url;
+            }
+          } catch (e) {
+            console.error("[page.tsx] Error parsing social account JSON:", e);
+            // Keep username/avatar as null if parsing fails
           }
-        } catch (e) {
-          console.error("[page.tsx] Error parsing social account JSON:", e);
-          // Keep username/avatar as null if parsing fails
+
+          // Fallback if platform-specific data extraction failed or platform is different
+          if (!creatorDisplayName && user?.full_name)
+            creatorDisplayName = user.full_name; // Use user full_name as fallback
+          if (!creatorUsername && user?.username)
+            creatorUsername = user.username; // Use user username as fallback
+          if (!creatorAvatarUrl && user?.profile_picture_url)
+            creatorAvatarUrl = user.profile_picture_url; // Use user profile_picture_url as fallback
+
+          // Final fallbacks using user data if available
+          if (!creatorDisplayName)
+            creatorDisplayName =
+              user?.full_name || user?.username || "Unknown Creator";
+          if (!creatorUsername)
+            creatorUsername = user?.username || "Unknown User";
+          if (!creatorAvatarUrl)
+            creatorAvatarUrl = user?.profile_picture_url || null;
+        } else {
+          // No creator profile found, use user data as fallback
+          creatorDisplayName =
+            user?.full_name || user?.username || "Unknown Creator";
+          creatorUsername = user?.username || "Unknown User";
+          creatorAvatarUrl = user?.profile_picture_url || null;
         }
 
-        // Fallback if platform-specific data extraction failed or platform is different
-        if (!creatorDisplayName && user?.full_name) creatorDisplayName = user.full_name; // Use user full_name as fallback
-        if (!creatorUsername && user?.username) creatorUsername = user.username; // Use user username as fallback
-        if (!creatorAvatarUrl && user?.profile_picture_url) creatorAvatarUrl = user.profile_picture_url; // Use user profile_picture_url as fallback
-
-        // Final fallbacks using user data if available
-        if (!creatorDisplayName) creatorDisplayName = user?.full_name || user?.username || 'Unknown Creator';
-        if (!creatorUsername) creatorUsername = user?.username || 'Unknown User';
-        if (!creatorAvatarUrl) creatorAvatarUrl = user?.profile_picture_url || null;
-
-      } else {
-        // No creator profile found, use user data as fallback
-        creatorDisplayName = user?.full_name || user?.username || 'Unknown Creator';
-        creatorUsername = user?.username || 'Unknown User';
-        creatorAvatarUrl = user?.profile_picture_url || null;
-      }
-
-      return {
-        id: sub.id,
-        created_at: sub.created_at,
-        content_link: sub.content_link,
-        status: sub.status,
-        views: sub.views,
-        earnings: sub.earnings,
-        other_stats: sub.other_stats,
-        platform: sub.platform,
-        video_thumbnail_url: sub.video_thumbnail_url,
-        creator_display_name: creatorDisplayName,
-        creator_username: creatorUsername,
-        creator_avatar_url: creatorAvatarUrl,
-        creator_id: actualCreatorProfileId
-      };
-    })
+        return {
+          id: sub.id,
+          created_at: sub.created_at,
+          content_link: sub.content_link,
+          status: sub.status,
+          views: sub.views,
+          earnings: sub.earnings,
+          other_stats: sub.other_stats,
+          platform: sub.platform,
+          video_thumbnail_url: sub.video_thumbnail_url,
+          video_title: sub.video_title,
+          paid: sub.paid,
+          paid_at: sub.paid_at,
+          bonus_paid: sub.bonus_paid,
+          bonus_paid_at: sub.bonus_paid_at,
+          creator_display_name: creatorDisplayName,
+          creator_username: creatorUsername,
+          creator_avatar_url: creatorAvatarUrl,
+          creator_id: actualCreatorProfileId,
+          // Add nested creator object for creator-wise grouping compatibility
+          creator: {
+            id: actualCreatorProfileId,
+            username: creatorUsername,
+            profile_picture_url: creatorAvatarUrl,
+            full_name: creatorDisplayName,
+          },
+        };
+      })
     : [];
 
-  console.log(`[page.tsx] Mapped submissions for contest ${contestId}:`, JSON.stringify(submissions, null, 2));
+  console.log(
+    `[page.tsx] Mapped submissions for contest ${contestId}:`,
+    JSON.stringify(submissions, null, 2)
+  );
 
   return (
     <ContestDetailClient
@@ -262,6 +327,7 @@ export default async function ContestDetailPage({
       durationDays={durationDays}
       contestId={contestId}
       isAdminView={isAdmin}
+      user={user}
     />
   );
 }
