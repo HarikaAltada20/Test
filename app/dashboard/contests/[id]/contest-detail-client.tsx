@@ -120,20 +120,20 @@ interface Contest {
   title: string;
   // Moderation status (admin workflow)
   moderation_status:
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "published"
-  | "rejected";
+    | "draft"
+    | "pending_approval"
+    | "approved"
+    | "published"
+    | "rejected";
   // Contest lifecycle status (only for published contests)
   status: "upcoming" | "active" | "ended" | "incomplete" | "unknown" | null;
   // Post-contest status for ended contests
   post_contest_status?:
-  | "pending_review"
-  | "in_review"
-  | "verification_complete"
-  | "payouts_processed"
-  | null;
+    | "pending_review"
+    | "in_review"
+    | "verification_complete"
+    | "payouts_processed"
+    | null;
   contest_type?: "leaderboard" | "cpm" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
@@ -255,46 +255,46 @@ export default function ContestDetailClient({
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [statusUpdateReason, setStatusUpdateReason] = useState("");
- // Initialize theme state with proper detection to prevent flash
- const [mode, setMode] = useState<"light" | "dark">(() => {
-  // Check if we're in browser environment
-  if (typeof window !== "undefined") {
-    // Try to get theme from data-theme attribute first
-    const themeElement = document.documentElement;
-    const dataTheme = themeElement.getAttribute("data-theme") as
-      | "light"
-      | "dark";
-    if (dataTheme) return dataTheme;
-
-    // Fallback to data-mode attribute
-    const modeElement = document.querySelector("[data-mode]");
-    if (modeElement) {
-      const dataMode = modeElement.getAttribute("data-mode") as
+  // Initialize theme state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
         | "light"
         | "dark";
-      if (dataMode) return dataMode;
-    }
+      if (dataTheme) return dataTheme;
 
-    // Check localStorage as last resort
-    try {
-      const savedMode = localStorage.getItem("dashboard-mode") as
-        | "light"
-        | "dark";
-      if (savedMode) return savedMode;
-
-      const preset = localStorage.getItem("dashboard-preset");
-      if (preset === "game-of-creators" || preset === "dark-professional") {
-        return "dark";
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
       }
-    } catch (e) {
-      // Ignore localStorage errors
-    }
-  }
-  return "light";
-});
 
-// Derive isDark from mode
-const isDark = mode === "dark";
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
+
+  // Derive isDark from mode
+  const isDark = mode === "dark";
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -483,9 +483,9 @@ const isDark = mode === "dark";
       const flatFeeBonus =
         currentContest?.contest_type === "cpm"
           ? (currentContest?.contest_based_details as any)?.cpm_contest
-            ?.flat_fee_bonus || 0
+              ?.flat_fee_bonus || 0
           : (currentContest?.contest_based_details as any)?.leaderboard_contest
-            ?.flat_fee_bonus || 0;
+              ?.flat_fee_bonus || 0;
 
       if (flatFeeBonus > 0 && (status === "verified" || status === "paid")) {
         group.bonus.expected += flatFeeBonus;
@@ -520,8 +520,8 @@ const isDark = mode === "dark";
     return Object.values(grouped);
   }, [filteredSubmissions, viewMode, currentContest, activeStatusTab]);
 
-   // Read mode from data attribute
-   useEffect(() => {
+  // Read mode from data attribute
+  useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
@@ -707,7 +707,7 @@ const isDark = mode === "dark";
           typeof result === "string" && result.trim().length > 0
             ? result
             : result?.error ||
-            `Failed to update submission status (HTTP ${response.status})`;
+              `Failed to update submission status (HTTP ${response.status})`;
         throw new Error(message);
       }
 
@@ -1008,8 +1008,9 @@ const isDark = mode === "dark";
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${cooldownInfo.remainingMinutes
-          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${
+          cooldownInfo.remainingMinutes
+        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -1094,7 +1095,13 @@ const isDark = mode === "dark";
         <div className="flex items-center justify-center w-6 h-6">
           <svg viewBox="0 0 24 24" className="w-6 h-6">
             <defs>
-              <linearGradient id="instagram-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <linearGradient
+                id="instagram-gradient"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="100%"
+              >
                 <stop offset="0%" stopColor="#833AB4" />
                 <stop offset="50%" stopColor="#FD1D1D" />
                 <stop offset="100%" stopColor="#FCB045" />
@@ -1550,8 +1557,7 @@ const isDark = mode === "dark";
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Platform Card */}
 
-          
-            {/* Platform Card */}
+          {/* Platform Card */}
           <div className="group bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -1559,7 +1565,9 @@ const isDark = mode === "dark";
                   {getPlatformIcon(currentContest.platform)}
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Platform</p>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    Platform
+                  </p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">
                     {currentContest.platform || "N/A"}
                   </p>
@@ -1567,7 +1575,6 @@ const isDark = mode === "dark";
               </div>
               <div className="h-1 w-full bg-gradient-to-r from-purple-200 to-purple-300 rounded-full"></div>
             </div>
-          
           </div>
           {/* <div className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
                         <CardContent className="p-4">
@@ -1583,7 +1590,6 @@ const isDark = mode === "dark";
                         </CardContent>
                     </div> */}
 
-       
           {/* Duration Card */}
           <div className="group bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-blue-100 overflow-hidden">
             <div className="p-6">
@@ -1592,7 +1598,9 @@ const isDark = mode === "dark";
                   <Calendar className="h-6 w-6" />
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Duration</p>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    Duration
+                  </p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">
                     {durationDays !== null
                       ? `${durationDays} ${durationDays === 1 ? "day" : "days"}`
@@ -1637,8 +1645,8 @@ const isDark = mode === "dark";
                         </CardContent>
                     </Card> */}
 
-         {/* Prize Pool Card */}
-         {currentContest.contest_type === "leaderboard" &&
+          {/* Prize Pool Card */}
+          {currentContest.contest_type === "leaderboard" &&
             currentContest.contest_based_details?.leaderboard_contest
               ?.total_prize != null && (
               <div className="group bg-gradient-to-br from-white to-yellow-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-yellow-100 overflow-hidden">
@@ -1648,11 +1656,13 @@ const isDark = mode === "dark";
                       <Trophy className="h-6 w-6" />
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Prize Pool</p>
+                      <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                        Prize Pool
+                      </p>
                       <p className="text-2xl font-bold text-gray-900 mt-1">
                         {formatMoney(
-                          currentContest.contest_based_details.leaderboard_contest
-                            .total_prize
+                          currentContest.contest_based_details
+                            .leaderboard_contest.total_prize
                         )}
                       </p>
                     </div>
@@ -1668,15 +1678,18 @@ const isDark = mode === "dark";
                   </div>
 
                   {/* Total Budget (if set) */}
-                  {currentContest.contest_based_details?.leaderboard_contest?.total_budget && (
+                  {currentContest.contest_based_details?.leaderboard_contest
+                    ?.total_budget && (
                     <div className="border-t border-yellow-200 pt-4 mb-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Budget</p>
+                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                            Total Budget
+                          </p>
                           <p className="text-xl font-bold text-blue-600 mt-1">
                             {formatMoney(
-                              currentContest.contest_based_details.leaderboard_contest
-                                .total_budget
+                              currentContest.contest_based_details
+                                .leaderboard_contest.total_budget
                             )}
                           </p>
                           <p className="text-xs text-gray-600 mt-1">
@@ -1708,7 +1721,6 @@ const isDark = mode === "dark";
               //     </CardContent>
               // </Card>
             )}
-
 
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
@@ -3557,10 +3569,7 @@ const isDark = mode === "dark";
                                 const metrics =
                                   extractPlatformMetrics(submission);
                                 const submissionStatus =
-                                  getSubmissionStatusBadge(
-                                    submission.status,
-                                    isDark
-                                  );
+                                  getSubmissionStatusBadge(submission.status);
                                 const isLoading =
                                   isLoadingSubmission[submission.id] || false;
                                 const rank = index + 1;
@@ -4092,12 +4101,12 @@ const isDark = mode === "dark";
                                           className="bg-white"
                                           align="end"
                                         >
-                                          {currentContest.post_contest_status !==
+                                        {currentContest.post_contest_status !==
                                             "payouts_processed" &&
                                             currentContest.post_contest_status !==
-                                              "verification_complete" &&
+                                            "verification_complete" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" && (
+                                            "payments_processed" && (
                                               <>
                                                 <DropdownMenuLabel className="text-purple-500">
                                                   Change Status
@@ -4107,11 +4116,11 @@ const isDark = mode === "dark";
                                             )}
                                           {submission.status !== "verified" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                            "payouts_processed" &&
                                             currentContest.post_contest_status !==
-                                              "verification_complete" &&
+                                            "verification_complete" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                            "payments_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -4137,13 +4146,13 @@ const isDark = mode === "dark";
                                                 Mark as Verified
                                               </DropdownMenuItem>
                                             ))}
-                                          {submission.status !== "rejected" &&
+                                            {submission.status !== "rejected" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                            "payouts_processed" &&
                                             currentContest.post_contest_status !==
-                                              "verification_complete" &&
+                                            "verification_complete" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                            "payments_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -4171,13 +4180,13 @@ const isDark = mode === "dark";
                                                 Mark as Rejected
                                               </DropdownMenuItem>
                                             ))}
-                                          {submission.status !== "pending" &&
+                                              {submission.status !== "pending" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                            "payouts_processed" &&
                                             currentContest.post_contest_status !==
-                                              "verification_complete" &&
+                                            "verification_complete" &&
                                             currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                            "payments_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}

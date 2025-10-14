@@ -130,43 +130,6 @@ export default function CreateContestPage({
     { url: string; description: string }[]
   >([]);
   const [newTrackingUrl, setNewTrackingUrl] = useState("");
-  const [mode, setMode] = useState<"light" | "dark">(() => {
-    // Check if we're in browser environment
-    if (typeof window !== "undefined") {
-      // Try to get theme from data-theme attribute first
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme") as
-        | "light"
-        | "dark";
-      if (dataTheme) return dataTheme;
-
-      // Fallback to data-mode attribute
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (dataMode) return dataMode;
-      }
-
-      // Check localStorage as last resort
-      try {
-        const savedMode = localStorage.getItem("dashboard-mode") as
-          | "light"
-          | "dark";
-        if (savedMode) return savedMode;
-
-        const preset = localStorage.getItem("dashboard-preset");
-        if (preset === "game-of-creators" || preset === "dark-professional") {
-          return "dark";
-        }
-      } catch (e) {
-        // Ignore localStorage errors
-      }
-    }
-    return "light";
-  });
-
   const [newTrackingDescription, setNewTrackingDescription] = useState("");
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const currentUserFirstName = (() => {
@@ -310,6 +273,45 @@ export default function CreateContestPage({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRefreshWarning, setShowRefreshWarning] = useState(false);
 
+  // Initialize theme state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
+
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
+  const isDark = mode === "dark";
+
   useEffect(() => {
     if (showPayment) {
       // Disable background scroll
@@ -325,35 +327,6 @@ export default function CreateContestPage({
     };
   }, [showPayment]);
 
-  // Read mode from data attribute
-  useEffect(() => {
-    const checkMode = () => {
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) {
-          setMode(currentMode);
-        }
-      }
-    };
-
-    checkMode();
-
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
-    const targetNode = document.querySelector("[data-mode]");
-    if (targetNode) {
-      observer.observe(targetNode, {
-        attributes: true,
-        attributeFilter: ["data-mode"],
-      });
-    }
-
-    return () => observer.disconnect();
-  }, []);
-  const isDark = mode === "dark";
   // Refresh protection - track changes and warn before refresh
   useEffect(() => {
     // Check if there are any unsaved changes
@@ -2318,6 +2291,7 @@ export default function CreateContestPage({
   };
 
   // Keep the original function for backward compatibility
+  // Keep the original function for backward compatibility
 
   const updateTotalPrizePool = (amounts = winnerAmounts) => {
     const total = amounts.reduce((sum, amount) => sum + amount, 0);
@@ -3203,15 +3177,6 @@ export default function CreateContestPage({
                           : "text-[#4A00BE] bg-[#D8C3FF]"
                       )}
                     >
-                      {/* className={`p-3 rounded-full ${
-                        currentPlan && currentPlan.price === 0
-                          ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
-                          : currentPlan &&
-                            currentPlan.price <= PLAN_PRICE_THRESHOLD_STARTER
-                          ? "bg-[#D8C3FF] text-[#4A00BE]" // Bronze plan
-                          : "bg-[#D8C3FF] text-[#4A00BE]" // Higher plans
-                      }`} */}
-
                       <Trophy className="h-8 w-8" />
                     </div>
                     <div>
@@ -3259,8 +3224,7 @@ export default function CreateContestPage({
               </div>
               {currentPlan ? (
                 <div className="space-y-12">
-                  {/* Plan Header Card */}
-
+                  Plan Header Card
                   <div
                     className={cn(
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
@@ -3370,7 +3334,6 @@ export default function CreateContestPage({
                       </div>
                     </div>
                   </div>
-
                   {/* Plan Features with Descriptions */}
                   <div>
                     <div
@@ -3811,11 +3774,11 @@ export default function CreateContestPage({
                                 //     : "border bg-[#F0E7FD] text-center border-purple-500 text-purple-600 rounded-lg px-3 py-2"
                                 // }`}
                               >
-                                {planFeatures.commissionPercentage >= 40
-                                  ? "High commission rate - upgrade to save!"
-                                  : planFeatures.commissionPercentage >= 20
-                                  ? "Upgrade to reduce commission fees!"
-                                  : "Tip: Great rate - you're saving on fees!"}
+                                {planFeatures.maxActiveContests <= 1
+                                  ? "Only 1 contest allowed - upgrade now!"
+                                  : planFeatures.maxActiveContests <= 5
+                                  ? "Upgrade for more simultaneous campaigns!"
+                                  : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -4520,6 +4483,56 @@ export default function CreateContestPage({
                 )}
               </div>
 
+              {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+              {contestType === "leaderboard" &&
+                flatFeeBonus &&
+                parseFloat(flatFeeBonus.toString()) > 0 && (
+                  <div className="space-y-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💰</span>
+                      <Label
+                        htmlFor="totalBudget"
+                        className="text-base font-semibold"
+                      >
+                        Total Budget for Bonuses (Optional)
+                      </Label>
+                    </div>
+                    <Input
+                      id="totalBudget"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={totalBudget}
+                      onChange={(e) => setTotalBudget(e.target.value)}
+                      placeholder="e.g., 500 for $500 total budget"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Optional: Set a budget limit for flat fee bonuses and
+                      future features. Leave empty for no limit.
+                      <br />
+                      <strong>Prize Pool:</strong>{" "}
+                      {formatCurrencyFromCents(totalPrizePool)} (for rankings)
+                      <br />
+                      <strong>Total Budget:</strong>{" "}
+                      {totalBudget
+                        ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
+                        : "No limit"}{" "}
+                      (for bonuses & extras)
+                    </p>
+                    {totalBudget && parseFloat(totalBudget.toString()) > 0 && (
+                      <Alert className="bg-blue-100 border-blue-300">
+                        <AlertDescription className="text-blue-800">
+                          ✓ Budget set to{" "}
+                          <strong>
+                            ${parseFloat(totalBudget.toString()).toFixed(2)}
+                          </strong>{" "}
+                          for bonuses and extras!
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+
               {/* Max Earnings Per Creator */}
               {multipleSubmissionsEnabled && (
                 <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -4639,9 +4652,6 @@ export default function CreateContestPage({
               </div>
             </div>
 
-               
-
-
             <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
               {/* Modern Error Display for Prize step */}
               {formFeedback && formFeedbackType === "error" && (
@@ -4760,6 +4770,7 @@ export default function CreateContestPage({
       </>
     );
   };
+
   // Modify the clearResources function
 
   // Create a utility function to clean up all contest assets
@@ -5495,16 +5506,10 @@ export default function CreateContestPage({
                         <p
                           className={`text-[12px] mt-1 transition-colors duration-300 ${
                             isActive
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
+                              ? "text-black text-[12px]"
                               : isCompleted
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isDark
-                              ? "text-slate-400"
-                              : "text-slate-400"
+                              ? "text-black text-[12px]"
+                              : "text-slate-400 dark:text-slate-500"
                           }`}
                         >
                           {stepItem.description}
@@ -5558,19 +5563,15 @@ export default function CreateContestPage({
 
               {/* Mobile Progress Bar */}
               <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[#7F39EC] transition-all duration-500 ease-out"
-                  style={{
-                    width:
-                      step === "basics"
-                        ? "25%"
-                        : step === "brief"
-                        ? "50%"
-                        : step === "resources"
-                        ? "75%"
-                        : "100%",
-                  }}
-                ></div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#7F39EC] text-white font-bold">
+                  {step === "basics"
+                    ? "1"
+                    : step === "brief"
+                    ? "2"
+                    : step === "resources"
+                    ? "3"
+                    : "4"}
+                </div>
               </div>
             </div>
           </div>
@@ -6994,6 +6995,7 @@ export default function CreateContestPage({
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
                         Inspiration Link <span className="text-red-500">*</span>
+                        Inspiration Link <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         id="inspirationUrlInput"
@@ -7102,7 +7104,7 @@ export default function CreateContestPage({
                     )}
                   </CardContent>
                   {/* Tracking Links (Collapsible) */}
-               <div className="px-6">
+                  <div className="px-6">
                     <div className="my-6 border-t border-gray-300"></div>
                     <Collapsible
                       open={trackingLinksOpen}
@@ -7208,6 +7210,7 @@ export default function CreateContestPage({
                       </CollapsibleContent>
                     </Collapsible>
                   </div>
+
                   <CardFooter className="py-6 px-6">
                     <button
                       className={cn(
