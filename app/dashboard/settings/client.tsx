@@ -1055,12 +1055,17 @@ export default function SettingsPage({
       {/* Connected Accounts - Only for Creators */}
       {userType === "creator" && (
         <div>
-          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-            <CardTitle className="text-2xl text-[#7F39EC]">
+          <div 
+           className={cn("rounded-t-2xl border-b px-6 py-4 shadow-lg",
+           isDark ? "bg-[#180438]" : "bg-white")}>
+            <CardTitle className={cn("text-2xl",
+           isDark ? "text-white" : "text-[#7F39EC]")}>
               Manage Your Account
             </CardTitle>
           </div>
-          <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg">
+          <div 
+           className={cn("rounded-b-2xl pb-4 shadow-lg",
+           isDark ? "bg-[#180438]" : "bg-white")}>
             <CardHeader>
               <CardTitle className="text-lg">Social Accounts</CardTitle>
               <CardDescription>

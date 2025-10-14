@@ -60,6 +60,36 @@ export default function OpportunitiesPage({
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>('all');
   const [sortOption, setSortOption] = useState<SortOptionType>('start_date_desc');
   const [displayedContests, setDisplayedContests] = useState<any[]>([]);
+  const [mode, setMode] = useState<"light" | "dark">("light");
+
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Cache invalidation on user change
   useEffect(() => {
@@ -350,7 +380,7 @@ export default function OpportunitiesPage({
       </>
     );
   }
-
+  const isDark = mode === "dark";
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -369,8 +399,13 @@ export default function OpportunitiesPage({
               {tab.count !== undefined && (
                 <Badge
                   variant="secondary"
-                  className="ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm bg-gray-200 text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
+                  className={cn(
+                    "ml-1 sm:ml-2 px-2 py-0.5 text-xs sm:text-sm text-gray-700 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground",
+                    isDark ? "text-gray-300" : "text-gray-600 bg-gray-200"
+                  )}
+                
+                  
+               >
                   {tab.count}
                 </Badge>
               )}
@@ -378,6 +413,8 @@ export default function OpportunitiesPage({
           ),
         }))}
         activeTab={statusFilter}
+         isDark={isDark}
+        light={!isDark}
         onTabChange={(value) => setStatusFilter(value as StatusFilterType)}
         className="mt-10 mb-8 w-full overflow-x-auto scrollbar-hide"
       />
@@ -405,46 +442,59 @@ export default function OpportunitiesPage({
       {/* Enhanced Filter and Sort Select Dropdowns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
         {/* Platform Filter */}
-        <Select value={platformFilter} onValueChange={(value) => setPlatformFilter(value as PlatformFilterType)}>
-          <SelectTrigger className="font-medium">
+        <Select value={platformFilter} onValueChange={(value) => setPlatformFilter(value as PlatformFilterType)}
+         >
+          <SelectTrigger 
+           className={cn(
+            "border font-medium",
+               isDark ? "border-gray-600" : "border-gray-400"
+             )}>
             <SelectValue placeholder="Filter by Platform" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Platforms</SelectItem>
-            <SelectItem value="youtube">YouTube</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
+          <SelectContent isDark={isDark} >
+            <SelectItem value="all" isDark={isDark}>All Platforms</SelectItem>
+            <SelectItem value="youtube"isDark={isDark}>YouTube</SelectItem>
+            <SelectItem value="instagram"isDark={isDark}>Instagram</SelectItem>
             {/* Add more platforms as needed */}
           </SelectContent>
         </Select>
 
         {/* Contest Type Filter */}
         <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as ContestTypeFilterType)}>
-          <SelectTrigger className="font-medium">
+          <SelectTrigger 
+           className={cn(
+            "border font-medium",
+               isDark ? "border-gray-600" : "border-gray-400"
+             )}>
             <SelectValue placeholder="Filter by Type" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Contest Types</SelectItem>
-            <SelectItem value="leaderboard">Leaderboard</SelectItem>
-            <SelectItem value="cpm">CPM</SelectItem>
+          <SelectContent isDark={isDark}>
+            <SelectItem value="all" isDark={isDark}>All Contest Types</SelectItem>
+            <SelectItem value="leaderboard" isDark={isDark}>Leaderboard</SelectItem>
+            <SelectItem value="cpm" isDark={isDark}>CPM</SelectItem>
           </SelectContent>
         </Select>
 
         {/* Sort By */}
         <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOptionType)}>
-          <SelectTrigger className="font-medium">
+          <SelectTrigger 
+           className={cn(
+            "border font-medium",
+               isDark ? "border-gray-600" : "border-gray-400"
+             )}>
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="start_date_asc">Start Date: Soonest First</SelectItem>
-            <SelectItem value="start_date_desc">Start Date: Furthest First</SelectItem>
-            <SelectItem value="end_date_asc">End Date: Soonest First</SelectItem>
-            <SelectItem value="end_date_desc">End Date: Furthest First</SelectItem>
-            <SelectItem value="value_desc">Prize/Budget: High to Low</SelectItem>
-            <SelectItem value="value_asc">Prize/Budget: Low to High</SelectItem>
-            <SelectItem value="cpm_rate_desc">CPM Rate: High to Low</SelectItem>
-            <SelectItem value="cpm_rate_asc">CPM Rate: Low to High</SelectItem>
-            <SelectItem value="submissions_desc">Submissions: High to Low</SelectItem>
-            <SelectItem value="submissions_asc">Submissions: Low to High</SelectItem>
+          <SelectContent isDark={isDark}>
+            <SelectItem value="start_date_asc" isDark={isDark}>Start Date: Soonest First</SelectItem>
+            <SelectItem value="start_date_desc" isDark={isDark}>Start Date: Furthest First</SelectItem>
+            <SelectItem value="end_date_asc" isDark={isDark}>End Date: Soonest First</SelectItem>
+            <SelectItem value="end_date_desc" isDark={isDark}>End Date: Furthest First</SelectItem>
+            <SelectItem value="value_desc" isDark={isDark}>Prize/Budget: High to Low</SelectItem>
+            <SelectItem value="value_asc" isDark={isDark}>Prize/Budget: Low to High</SelectItem>
+            <SelectItem value="cpm_rate_desc" isDark={isDark}>CPM Rate: High to Low</SelectItem>
+            <SelectItem value="cpm_rate_asc" isDark={isDark}>CPM Rate: Low to High</SelectItem>
+            <SelectItem value="submissions_desc" isDark={isDark}>Submissions: High to Low</SelectItem>
+            <SelectItem value="submissions_asc" isDark={isDark}>Submissions: Low to High</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -455,9 +505,16 @@ export default function OpportunitiesPage({
             <Card
               key={contest.id}
               onClick={() => handleViewDetails(contest.id)}
-              className="overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border border-slate-200 dark:border-slate-700 flex flex-col group bg-white w-full cursor-pointer"
+              
+              className={cn(
+                "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+                isDark
+                  ? "bg-[#06021D] border-slate-700"
+                  : "bg-white border-slate-200"
+              )}
             >
-              <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
+              <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative"
+              >
                 {contest.thumbnail_url ? (
                   <img
                     src={contest.thumbnail_url || "/placeholder.svg"}
@@ -487,12 +544,18 @@ export default function OpportunitiesPage({
                 </div>
               </div>
               <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-lg font-bold text-slate-800 transition-colors duration-300 mr-2 leading-tight">
+                <CardTitle className={cn(
+                  "text-lg font-bold text-slate-800 transition-colors duration-300 mr-2 leading-tight",
+                  isDark ? "text-white" : "text-slate-800"
+                )}>
                   {contest.title}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
-                <div className="space-y-2 text-md mb-3 text-slate-600 dark:text-slate-400">
+                <div className={cn(
+                  "space-y-2.5 text-md mb-3",
+                  isDark ? "text-white" : "text-slate-600"
+                )}>
                   {/* New Features Indicators */}
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     {contest.multiple_submissions_enabled && (
@@ -527,48 +590,72 @@ export default function OpportunitiesPage({
                     <div className="mr-2 flex-shrink-0">
                       {getPlatformIconWithFallback(contest.platform, 'sm')}
                     </div>
-                    <span>Platform: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.platform || "N/A"}</span></span>
+                    <span>Platform: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>{contest.platform || "N/A"}</span></span>
                   </div>
                   {contest.start_date && (
                     <div className="flex items-center">
                       <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>Starts: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
+                      <span>Starts: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>{formatLocalDateTime(contest.start_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                     </div>
                   )}
                   {contest.end_date && (
                     <div className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>Ends: <span className="font-medium text-slate-700 dark:text-slate-300">{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
+                      <span>Ends: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>{formatLocalDateTime(contest.end_date, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></span>
                     </div>
                   )}
                   {contest.live_submission_count !== null && contest.live_submission_count !== undefined && (
                     <div className="flex items-center">
                       <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>Submissions: <span className="font-medium text-slate-700 dark:text-slate-300">{contest.live_submission_count}</span></span>
+                      <span>Submissions: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>{contest.live_submission_count}</span></span>
                     </div>
                   )}
                   <div className="flex items-center">
                     <Info className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span>Contest Type: <span className="font-medium text-slate-700 dark:text-slate-300">
+                    <span>Contest Type: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>
                       {contest.contest_type === 'cpm' ? 'CPM Based' : contest.contest_type === 'leaderboard' ? 'Leaderboard' : contest.contest_type ? contest.contest_type.charAt(0).toUpperCase() + contest.contest_type.slice(1) : 'N/A'}
                     </span></span>
                   </div>
                   {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.cpm_rate_usd != null && (
                     <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                      <span>CPM Rate: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>CPM Rate: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>{formatMoney(contest.contest_based_details.cpm_contest.cpm_rate_usd * 100)} / 1k views</span></span>
                     </div>
                   )}
                   {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (
                     <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                      <span>Total Budget: <span className="font-medium text-slate-700 dark:text-slate-300">{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>Total Budget: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>{formatMoney(contest.contest_based_details.cpm_contest.total_budget)}</span></span>
                     </div>
                   )}
                   {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_prize != null && contest.contest_based_details.leaderboard_contest.total_prize > 0 && (
                     <div className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-gray-500" />
-                      <span>Total Prize Pool: <span className="font-medium text-slate-700 dark:text-slate-300">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span>Total Prize Pool: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-slate-700"
+                    )}>
                         {formatMoney(contest.contest_based_details.leaderboard_contest.total_prize)}
                       </span></span>
                     </div>
@@ -576,7 +663,10 @@ export default function OpportunitiesPage({
                   {contest.contest_type === 'leaderboard' && contest.contest_based_details?.leaderboard_contest?.total_budget != null && contest.contest_based_details.leaderboard_contest.total_budget > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
-                      <span>Total Bonus Budget: <span className="font-medium text-green-700 dark:text-green-300">
+                      <span>Total Bonus Budget: <span className={cn(
+                      "font-medium",
+                      isDark ? "text-white" : "text-green-600"
+                    )}>
                         {formatMoney(contest.contest_based_details.leaderboard_contest.total_budget)}
                       </span></span>
                     </div>
@@ -593,12 +683,19 @@ export default function OpportunitiesPage({
 
                   return (
                     <div className="mt-3 mb-3">
-                      <div className="flex justify-between text-sm text-slate-600 dark:text-slate-300 mb-2">
+                      <div className={cn(
+                        "flex justify-between text-sm mb-2",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}>
                         <span className="font-medium">Budget Tracker</span>
                         <span className="font-semibold">{formatMoney(budgetSpent)} / {formatMoney(totalBudget)}</span>
                       </div>
                       <div
-                        className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                        
+                        className={cn(
+                          "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200"
+                        )} 
                         title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
                       >
                         <div
@@ -606,7 +703,11 @@ export default function OpportunitiesPage({
                           style={{ width: `${Math.min(percentage, 100)}%` }}
                         ></div>
                       </div>
-                      <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                      <div 
+                       className={cn(
+                        "flex justify-between text-xs mt-1.5",
+                        isDark ? "text-gray-300" : "text-slate-500"
+                      )}>
                         <span>{percentage.toFixed(1)}% used</span>
                         <span>{formatMoney(remaining)} remaining</span>
                       </div>
@@ -653,8 +754,15 @@ export default function OpportunitiesPage({
                   }}
                   // size="sm"
                   // variant="white"
-                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full hover:bg-[#D9C0FF] transition-colors"
-                >
+                  
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full transition-colors",
+                    isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#D9C0FF61] text-[#7F39EC]"
+                  )}
+               
+               >
                   View Details
                 </button>
               </CardContent>
