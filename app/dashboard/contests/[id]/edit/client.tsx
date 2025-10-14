@@ -39,6 +39,7 @@ import {
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import {
+  cn,
   toLocalDateTimeStrings,
   toUTCISOString,
   validateImageFile,
@@ -70,6 +71,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { formatName } from "@/lib/name-utils";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -280,7 +283,7 @@ export default function EditContestPage({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const richTextEditorRef = useRef<any>(null);
   const rulesRichTextEditorRef = useRef<any>(null);
-
+  const [mode, setMode] = useState<"light" | "dark">("light");
   // Contest Type and Specific Details
   const [contestType, setContestType] = useState<"leaderboard" | "cpm" | null>(
     null
@@ -6129,8 +6132,8 @@ export default function EditContestPage({
             </div>
           )}
 
-          {/* Prize Pool Change Warning - Moved above all buttons for better responsive layout */}
-          {budgetChanged && isContestPaid() && (
+        {/* Prize Pool Change Warning - Moved above all buttons for better responsive layout */}
+        {budgetChanged && isContestPaid() && (
             <div className="w-full">
               <Alert
                 variant={budgetDifference > 0 ? "destructive" : "default"}
@@ -6146,12 +6149,6 @@ export default function EditContestPage({
                   <div className="text-sm mt-1 break-words">
                     {budgetDifference > 0
                       ? `Prize pool increased by ${formatCurrencyFromCents(
-                          budgetDifference
-                        )}. Original: ${formatCurrencyFromCents(
-                          originalBudget
-                        )} → New Total: ${formatCurrencyFromCents(
-                          originalBudget + budgetDifference
-                        )}. Additional payment (including commission) will be required.`
                         budgetDifference
                       )}. Original: ${formatCurrencyFromCents(
                         originalBudget
@@ -6159,13 +6156,14 @@ export default function EditContestPage({
                         originalBudget + budgetDifference
                       )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
-                          Math.abs(budgetDifference)
-                        )}. You will be refunded this amount plus commission.`}
+                        Math.abs(budgetDifference)
+                      )}. You will be refunded this amount plus commission.`}
                   </div>
                 </div>
               </Alert>
             </div>
           )}
+
 
           {/* Button Row - Cancel on left, Save/Submit on right */}
           <div className="flex px-4 flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2 w-full">
@@ -6562,16 +6560,16 @@ export default function EditContestPage({
                 </Alert>
               )}
 
-              <ContestPaymentSelection
+<ContestPaymentSelection
                 contestAmount={
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                    ? winnerAmounts.reduce(
+                      ? winnerAmounts.reduce(
                         (sum, amount) => sum + (amount || 0),
                         0
                       ) / 100 // Convert cents to dollars
-                    : parseFloat(totalBudget.toString()) || 0
+                      : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
@@ -6579,14 +6577,10 @@ export default function EditContestPage({
                   contestCommissionRate !== null
                     ? contestCommissionRate
                     : getPlanFeatures(userPlan).commissionPercentage
-                  contestCommissionRate !== null
-                    ? contestCommissionRate
-                    : getPlanFeatures(userPlan).commissionPercentage
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
                 disabled={isSubmitting}
-              
                 isIncrease={budgetChanged && budgetDifference > 0}
                 isDecrease={false} // Budget decreases are now handled directly, not through payment modal
               />

@@ -79,6 +79,12 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { formatName } from "@/lib/name-utils";
 
 // Define types for subscription plan features
 type PlanFeatures = {
@@ -119,42 +125,11 @@ export default function CreateContestPage({
   console.log("User:", user?.id);
 
   const [step, setStep] = useState<Step>("basics");
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentCompleted, setPaymentCompleted] = useState(false);
-
-  // Contest Type and CPM-specific state
-  const [contestType, setContestType] = useState<"leaderboard" | "cpm">(
-    "leaderboard"
-  );
-  const [cpmRate, setCpmRate] = useState<number | string>("");
-  const [minViews, setMinViews] = useState<number | string>("");
-  const [maxViews, setMaxViews] = useState<number | string>("");
-  const [totalBudget, setTotalBudget] = useState<number | string>("");
-  const [termsConditions, setTermsConditions] = useState<string>("");
-  // End Contest Type and CPM-specific state
-
-  // New features state (2025-10-01)
-  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] = useState(false);
-  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] = useState<number>(1);
-  const [contentType, setContentType] = useState<'ugc' | 'clipping' | 'other' | ''>('');
-  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(''); // In dollars
-  const [bonusEnabled, setBonusEnabled] = useState(false);
-  const [bonusHtml, setBonusHtml] = useState('');
-  const [bonusJson, setBonusJson] = useState<any>(null);
-  const [showBonusPreview, setShowBonusPreview] = useState(false);
-  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<number | string>(''); // In dollars
-
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<string>("technology");
-  const [thumbnail, setThumbnail] = useState<File | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [brief, setBrief] = useState("");
-  const [briefHtml, setBriefHtml] = useState("");
-  const [briefJson, setBriefJson] = useState<any>(null);
-  const [showBriefPreview, setShowBriefPreview] = useState(false); // Default to editor mode for better UX
-  const [rulesHtml, setRulesHtml] = useState("");
-  const [rulesJson, setRulesJson] = useState<any>(null);
-  // Initialize theme state with proper detection to prevent flash
+  const [trackingLinksOpen, setTrackingLinksOpen] = useState(false);
+  const [trackingLinks, setTrackingLinks] = useState<
+    { url: string; description: string }[]
+  >([]);
+  const [newTrackingUrl, setNewTrackingUrl] = useState("");
   const [mode, setMode] = useState<"light" | "dark">(() => {
     // Check if we're in browser environment
     if (typeof window !== "undefined") {
@@ -191,8 +166,104 @@ export default function CreateContestPage({
     }
     return "light";
   });
+
+  const [newTrackingDescription, setNewTrackingDescription] = useState("");
+  const [trackingError, setTrackingError] = useState<string | null>(null);
+  const currentUserFirstName = (() => {
+    const metadata: any = (user as any)?.user_metadata || {};
+    const rawFirst =
+      metadata.first_name ||
+      metadata.given_name ||
+      (metadata.full_name ? String(metadata.full_name).split(" ")[0] : null);
+    if (rawFirst && String(rawFirst).trim())
+      return formatName(String(rawFirst));
+    const emailLocal = (user?.email || "").split("@")[0];
+    return emailLocal ? formatName(emailLocal) : "Creator";
+  })();
+  const addTrackingLink = () => {
+    setTrackingError(null);
+    const url = newTrackingUrl.trim();
+    const description = newTrackingDescription.trim();
+    if (!url) {
+      setTrackingError("URL cannot be empty.");
+      return;
+    }
+    // Store the URL with [creator] placeholder intact for dynamic replacement
+    const processedUrl = url;
+    // Validate URL format - create a test URL with placeholder replaced for validation
+    const testUrl = url.includes("[creator]")
+      ? url.replace(/\[creator\]/gi, "testcreator")
+      : url;
+    try {
+      const urlObj = new URL(testUrl);
+      if (urlObj.protocol !== "https:") {
+        setTrackingError("URL must start with https://");
+        return;
+      }
+    } catch {
+      setTrackingError("Invalid URL format.");
+      return;
+    }
+    if (!description) {
+      setTrackingError("Description is required.");
+      return;
+    }
+    if (trackingLinks.some((link) => link.url === processedUrl)) {
+      setTrackingError("This tracking link has already been added.");
+      return;
+    }
+    setTrackingLinks([...trackingLinks, { url: processedUrl, description }]);
+    setNewTrackingUrl("");
+    setNewTrackingDescription("");
+    toast({ title: "Success", description: "Tracking link added!" });
+  };
+
+  const removeTrackingLink = (index: number) => {
+    setTrackingLinks(trackingLinks.filter((_, i) => i !== index));
+    toast({ title: "Success", description: "Tracking link removed!" });
+  };
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentCompleted, setPaymentCompleted] = useState(false);
+
+  // Contest Type and CPM-specific state
+  const [contestType, setContestType] = useState<"leaderboard" | "cpm">(
+    "leaderboard"
+  );
+  const [cpmRate, setCpmRate] = useState<number | string>("");
+  const [minViews, setMinViews] = useState<number | string>("");
+  const [maxViews, setMaxViews] = useState<number | string>("");
+  const [totalBudget, setTotalBudget] = useState<number | string>("");
+  const [termsConditions, setTermsConditions] = useState<string>("");
+  // End Contest Type and CPM-specific state
+
+  // New features state (2025-10-01)
+  const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
+    useState(false);
+  const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
+    useState<number>(1);
+  const [contentType, setContentType] = useState<
+    "ugc" | "clipping" | "other" | ""
+  >("");
+  const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
+  const [bonusEnabled, setBonusEnabled] = useState(false);
+  const [bonusHtml, setBonusHtml] = useState("");
+  const [bonusJson, setBonusJson] = useState<any>(null);
+  const [showBonusPreview, setShowBonusPreview] = useState(false);
+  const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<
+    number | string
+  >(""); // In dollars
+
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<string>("technology");
+  const [thumbnail, setThumbnail] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [brief, setBrief] = useState("");
+  const [briefHtml, setBriefHtml] = useState("");
+  const [briefJson, setBriefJson] = useState<any>(null);
+  const [showBriefPreview, setShowBriefPreview] = useState(false); // Default to editor mode for better UX
+  const [rulesHtml, setRulesHtml] = useState("");
+  const [rulesJson, setRulesJson] = useState<any>(null);
   const [showRulesPreview, setShowRulesPreview] = useState(false);
-  const isDark = mode === "dark";
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [newResourceUrl, setNewResourceUrl] = useState("");
   const [resourceFile, setResourceFile] = useState<File | null>(null);
@@ -282,7 +353,7 @@ export default function CreateContestPage({
 
     return () => observer.disconnect();
   }, []);
-
+  const isDark = mode === "dark";
   // Refresh protection - track changes and warn before refresh
   useEffect(() => {
     // Check if there are any unsaved changes
@@ -543,9 +614,6 @@ export default function CreateContestPage({
     }
   };
 
-
-
-  
   // Helper function to create a draft contest in DB
   const createDraftContest = async (): Promise<string | null> => {
     if (!user?.id) return null;
@@ -585,7 +653,13 @@ export default function CreateContestPage({
                     terms_conditions: "",
                   },
                 }
-                : null,
+              : null,
+          // New features (2025-10-01)
+          multiple_submissions_enabled: false,
+          max_submissions_per_creator: 1,
+          content_type: null,
+          bonus_details: null,
+          max_earnings_per_creator: null,
         })
         .select()
         .single();
@@ -1243,13 +1317,22 @@ export default function CreateContestPage({
 
       // 7. Active contest limit validation
       try {
-        const { canCreateNewContest } = await import(
-          "@/lib/contest-utils-client"
-        );
-        const activeCheck = await canCreateNewContest(
-          userId,
-          planFeatures.maxActiveContests
-        );
+        const response = await fetch("/api/contests/validate-limit", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            maxActiveContests: planFeatures.maxActiveContests,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to validate contest limit");
+        }
+
+        const activeCheck = await response.json();
+
         if (!activeCheck.canCreate) {
           return {
             isValid: false,
@@ -1352,9 +1435,15 @@ export default function CreateContestPage({
           position: i + 1,
           amount: winnerAmounts[i] || 0, // Stored in cents
         }));
-        const flatFeeBonusCents = flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
-          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
-          : undefined;
+        const flatFeeBonusCents =
+          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+            ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+            : undefined;
+
+        const totalBudgetCents =
+          totalBudget && parseFloat(totalBudget.toString()) > 0
+            ? Math.round(parseFloat(totalBudget.toString()) * 100)
+            : undefined;
 
         contestBasedDetails = {
           leaderboard_contest: {
@@ -1362,6 +1451,7 @@ export default function CreateContestPage({
             total_prize: totalPrizePool, // Already in cents
             winner_count: winnerCount,
             ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
+            ...(totalBudgetCents && { total_budget: totalBudgetCents }), // Only include if set
           },
         };
       } else if (contestType === "cpm") {
@@ -1436,9 +1526,10 @@ export default function CreateContestPage({
             return;
           }
         }
-        const flatFeeBonusCents = flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
-          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
-          : undefined;
+        const flatFeeBonusCents =
+          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+            ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+            : undefined;
 
         contestBasedDetails = {
           cpm_contest: {
@@ -1521,38 +1612,6 @@ export default function CreateContestPage({
               `The minimum contest budget for your plan is ${formatCurrencyFromCents(
                 planFeatures.minContestBudget
               )}. Please increase your total budget.`
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-        }
-
-        // Validate active contest limits before submission
-        if (userId) {
-          try {
-            const { canCreateNewContest } = await import(
-              "@/lib/contest-utils-client"
-            );
-            const activeCheck = await canCreateNewContest(
-              userId,
-              planFeatures.maxActiveContests
-            );
-            if (!activeCheck.canCreate) {
-              setFormFeedback(
-                activeCheck.error ||
-                  `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.`
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
-            }
-          } catch (error: any) {
-            console.error("Error checking active contest limit:", error);
-            setFormFeedback(
-              "Unable to validate contest limits. Please try again."
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -1813,6 +1872,7 @@ export default function CreateContestPage({
         rules_json: rulesJson,
         resources,
         inspiration_links: inspirationLinks,
+        tracking_links: trackingLinks,
         subscription_info_of_user: await (async () => {
           try {
             // Get user's subscription info using new system
@@ -1857,17 +1917,22 @@ export default function CreateContestPage({
         contest_based_details: contestBasedDetails,
         // New features (2025-10-01)
         multiple_submissions_enabled: multipleSubmissionsEnabled,
-        max_submissions_per_creator: multipleSubmissionsEnabled ? maxSubmissionsPerCreator : 1,
+        max_submissions_per_creator: multipleSubmissionsEnabled
+          ? maxSubmissionsPerCreator
+          : 1,
         content_type: contentType || null,
-        bonus_details: bonusEnabled && bonusHtml
-          ? {
-            description_html: bonusHtml,
-            description_json: bonusJson
-          }
-          : null,
-        max_earnings_per_creator: maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0
-          ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
-          : null,
+        bonus_details:
+          bonusEnabled && bonusHtml
+            ? {
+                description_html: bonusHtml,
+                description_json: bonusJson,
+              }
+            : null,
+        max_earnings_per_creator:
+          maxEarningsPerCreator &&
+          parseFloat(maxEarningsPerCreator.toString()) > 0
+            ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
+            : null,
         // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
       };
 
@@ -2711,6 +2776,13 @@ export default function CreateContestPage({
       setInspirationLinks([]);
     }
 
+    // Set tracking links if available
+    if (Array.isArray(draft.tracking_links)) {
+      setTrackingLinks(draft.tracking_links);
+    } else {
+      setTrackingLinks([]);
+    }
+
     // Set winner count and amounts if available
     if (draft.winner_count) {
       setWinnerCount(draft.winner_count);
@@ -3124,9 +3196,13 @@ export default function CreateContestPage({
                 <div className="flex items-start justify-between ">
                   <div className="flex items-center gap-3">
                     <div
-                    className={cn(
-                      "rounded-full p-3.5",
-                      isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}>
+                      className={cn(
+                        "rounded-full p-3.5",
+                        isDark
+                          ? "bg-[#FFFFFF36] text-white"
+                          : "text-[#4A00BE] bg-[#D8C3FF]"
+                      )}
+                    >
                       {/* className={`p-3 rounded-full ${
                         currentPlan && currentPlan.price === 0
                           ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
@@ -3135,7 +3211,7 @@ export default function CreateContestPage({
                           ? "bg-[#D8C3FF] text-[#4A00BE]" // Bronze plan
                           : "bg-[#D8C3FF] text-[#4A00BE]" // Higher plans
                       }`} */}
-                    
+
                       <Trophy className="h-8 w-8" />
                     </div>
                     <div>
@@ -3206,9 +3282,12 @@ export default function CreateContestPage({
                     >
                       <div className="flex items-center gap-4 sm:gap-6">
                         <div
-                           className={cn(
+                          className={cn(
                             "rounded-full p-3",
-                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
+                            isDark
+                              ? "bg-[#FFFFFF36] text-white"
+                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                          )}
                           // className={`w-16 h-16 rounded-full flex items-center justify-center ${
                           //   userPlan === subscriptionPlans[0].id
                           //     ? "bg-[#D8C3FF] text-[#4A00BE]" // Free plan
@@ -3767,10 +3846,14 @@ export default function CreateContestPage({
                     <div className="relative z-10">
                       {/* Header */}
                       <div className="flex items-center gap-4 mb-6">
-                        <div 
+                        <div
                           className={cn(
                             "rounded-full p-3.5",
-                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}>
+                            isDark
+                              ? "bg-[#FFFFFF36] text-white"
+                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                          )}
+                        >
                           <Trophy className="h-6 w-6" />
                         </div>
                         <div>
@@ -3959,7 +4042,7 @@ export default function CreateContestPage({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                   className="w-full"
+                  className="w-full"
                 />
               </div>
               <div className="space-y-2">
@@ -4154,13 +4237,15 @@ export default function CreateContestPage({
                   </div>
                 </div>
                 {totalPrizePool < planFeatures.minContestBudget && (
-                  <Alert  className={cn("mt-2",
-                    isDark
-                      ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                      : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
-                      
-                  )}>
-                    <AlertDescription >
+                  <Alert
+                    className={cn(
+                      "mt-2",
+                      isDark
+                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                        : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
+                    )}
+                  >
+                    <AlertDescription>
                       The minimum prize pool for your{" "}
                       {currentPlan?.name || "current"} plan is{" "}
                       {formatCurrencyFromCents(planFeatures.minContestBudget)}.
@@ -4388,9 +4473,12 @@ export default function CreateContestPage({
             {/* New Bonus Features - Apply to both contest types */}
             <div className="space-y-6 p-6 border-t-2 border-dashed mt-6">
               <div>
-                <h3 className="text-xl font-semibold mb-4 text-purple-600">💰 Creator Earning Opportunities</h3>
+                <h3 className="text-xl font-semibold mb-4 text-purple-600">
+                  💰 Creator Earning Opportunities
+                </h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Motivate creators with additional earning opportunities beyond the main prize pool or CPM rate.
+                  Motivate creators with additional earning opportunities beyond
+                  the main prize pool or CPM rate.
                 </p>
               </div>
 
@@ -4398,7 +4486,10 @@ export default function CreateContestPage({
               <div className="space-y-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">🎁</span>
-                  <Label htmlFor="flatFeeBonus" className="text-base font-semibold">
+                  <Label
+                    htmlFor="flatFeeBonus"
+                    className="text-base font-semibold"
+                  >
                     Flat Fee Bonus (Per Verified Submission)
                   </Label>
                 </div>
@@ -4412,12 +4503,18 @@ export default function CreateContestPage({
                   placeholder="e.g., 10 for $10 per submission"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Optional: Give creators a guaranteed payment for each verified submission, regardless of views or ranking. This bonus is paid after the contest ends. Great for encouraging participation!
+                  Optional: Give creators a guaranteed payment for each verified
+                  submission, regardless of views or ranking. This bonus is paid
+                  after the contest ends. Great for encouraging participation!
                 </p>
                 {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
                   <Alert className="bg-green-100 border-green-300">
                     <AlertDescription className="text-green-800">
-                      ✓ Creators will earn <strong>${parseFloat(flatFeeBonus.toString()).toFixed(2)}</strong> for each verified submission!
+                      ✓ Creators will earn{" "}
+                      <strong>
+                        ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
+                      </strong>{" "}
+                      for each verified submission!
                     </AlertDescription>
                   </Alert>
                 )}
@@ -4428,7 +4525,10 @@ export default function CreateContestPage({
                 <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🎯</span>
-                    <Label htmlFor="maxEarnings" className="text-base font-semibold">
+                    <Label
+                      htmlFor="maxEarnings"
+                      className="text-base font-semibold"
+                    >
                       Maximum Earnings Per Creator (Optional)
                     </Label>
                   </div>
@@ -4442,15 +4542,28 @@ export default function CreateContestPage({
                     placeholder="e.g., 500 for $500 max per creator"
                   />
                   <p className="text-sm text-muted-foreground">
-                    Set a maximum earning cap per creator for <strong>THIS CONTEST ONLY</strong>. Once reached, they can still submit but won't earn more from this campaign. This does NOT affect their earnings from other contests on the platform. Helps ensure fair reward distribution within this campaign.
+                    Set a maximum earning cap per creator for{" "}
+                    <strong>THIS CONTEST ONLY</strong>. Once reached, they can
+                    still submit but won't earn more from this campaign. This
+                    does NOT affect their earnings from other contests on the
+                    platform. Helps ensure fair reward distribution within this
+                    campaign.
                   </p>
-                  {maxEarningsPerCreator && parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                    <Alert className="bg-blue-100 border-blue-300">
-                      <AlertDescription className="text-blue-800">
-                        ℹ️ Each creator can earn up to <strong>${parseFloat(maxEarningsPerCreator.toString()).toFixed(2)}</strong> from this contest.
-                      </AlertDescription>
-                    </Alert>
-                  )}
+                  {maxEarningsPerCreator &&
+                    parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                      <Alert className="bg-blue-100 border-blue-300">
+                        <AlertDescription className="text-blue-800">
+                          ℹ️ Each creator can earn up to{" "}
+                          <strong>
+                            $
+                            {parseFloat(
+                              maxEarningsPerCreator.toString()
+                            ).toFixed(2)}
+                          </strong>{" "}
+                          from this contest.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                 </div>
               )}
 
@@ -4459,7 +4572,10 @@ export default function CreateContestPage({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🏆</span>
-                    <Label htmlFor="bonusToggle" className="text-base font-semibold">
+                    <Label
+                      htmlFor="bonusToggle"
+                      className="text-base font-semibold"
+                    >
                       Additional Bonus Opportunities
                     </Label>
                   </div>
@@ -4472,7 +4588,8 @@ export default function CreateContestPage({
                   />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Offer additional bonuses that you'll handle manually (e.g., top creators bonus, affiliate commissions, special rewards).
+                  Offer additional bonuses that you'll handle manually (e.g.,
+                  top creators bonus, affiliate commissions, special rewards).
                 </p>
 
                 {bonusEnabled && (
@@ -4513,12 +4630,17 @@ export default function CreateContestPage({
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      Describe all additional bonus opportunities. These will be visible to creators and handled manually by you. Use formatting, links, and bullet points to make it clear!
+                      Describe all additional bonus opportunities. These will be
+                      visible to creators and handled manually by you. Use
+                      formatting, links, and bullet points to make it clear!
                     </p>
                   </div>
                 )}
               </div>
             </div>
+
+               
+
 
             <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
               {/* Modern Error Display for Prize step */}
@@ -5040,13 +5162,14 @@ export default function CreateContestPage({
         )}
       >
         <div className="flex items-center gap-3 mb-4">
-          <div 
-          className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center",
-            isDark
-              ? "bg-[#FFFFFF36] text-white"
-              : "bg-purple-200 text-purple-600"
-          )}>
+          <div
+            className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center",
+              isDark
+                ? "bg-[#FFFFFF36] text-white"
+                : "bg-purple-200 text-purple-600"
+            )}
+          >
             <Trophy className="h-5 w-5" />
           </div>
           <h2 className="text-xl font-bold">Upgrade Your Plan</h2>
@@ -5073,7 +5196,7 @@ export default function CreateContestPage({
             className={cn(
               "w-full border text-md py-3 rounded-full",
               isDark
-                ? "border-gray-400 text-gray-300" 
+                ? "border-gray-400 text-gray-300"
                 : "border-[#7F39EC] text-[#7F39EC]"
             )}
           >
@@ -5085,7 +5208,7 @@ export default function CreateContestPage({
             className={cn(
               "w-full rounded-full text-md",
               isDark
-                ? "border-[#FF5353] text-[#FF5353]" 
+                ? "border-[#FF5353] text-[#FF5353]"
                 : "border-[#FF323224] bg-[#FF323224] text-[#E50000]"
             )}
           >
@@ -5140,7 +5263,7 @@ export default function CreateContestPage({
             className={cn(
               "w-full border text-md py-3 rounded-full",
               isDark
-                ? "border-gray-400 text-gray-300" 
+                ? "border-gray-400 text-gray-300"
                 : "border-[#7F39EC] text-[#7F39EC]"
             )}
           >
@@ -5152,7 +5275,7 @@ export default function CreateContestPage({
             className={cn(
               "w-full rounded-full text-md",
               isDark
-                ? "border-[#FF5353] text-[#FF5353]" 
+                ? "border-[#FF5353] text-[#FF5353]"
                 : "border-[#FF323224] bg-[#FF323224] text-[#E50000]"
             )}
           >
@@ -5662,18 +5785,28 @@ export default function CreateContestPage({
               {/* Content Type Selection */}
               <div className="space-y-2">
                 <Label htmlFor="contentType">Content Type</Label>
-                <Select value={contentType} onValueChange={(value: any) => setContentType(value)}>
+                <Select
+                  value={contentType}
+                  onValueChange={(value: any) => setContentType(value)}
+                >
                   <SelectTrigger id="contentType">
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ugc">📹 UGC (User Generated Content)</SelectItem>
-                    <SelectItem value="clipping">✂️ Clipping (Short clips/repurposed content)</SelectItem>
-                    <SelectItem value="other">📋 Other (Check Rules for details)</SelectItem>
+                    <SelectItem value="ugc">
+                      📹 UGC (User Generated Content)
+                    </SelectItem>
+                    <SelectItem value="clipping">
+                      ✂️ Clipping (Short clips/repurposed content)
+                    </SelectItem>
+                    <SelectItem value="other">
+                      📋 Other (Check Rules for details)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Specify the type of content you need from creators. This helps creators filter opportunities.
+                  Specify the type of content you need from creators. This helps
+                  creators filter opportunities.
                 </p>
               </div>
 
@@ -5681,7 +5814,10 @@ export default function CreateContestPage({
               <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label htmlFor="multipleSubmissions" className="text-base font-semibold">
+                    <Label
+                      htmlFor="multipleSubmissions"
+                      className="text-base font-semibold"
+                    >
                       Multiple Submissions
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1">
@@ -5708,7 +5844,9 @@ export default function CreateContestPage({
 
                 {multipleSubmissionsEnabled && (
                   <div className="space-y-2 pt-2 border-t">
-                    <Label htmlFor="maxSubmissions">Maximum Submissions Per Creator</Label>
+                    <Label htmlFor="maxSubmissions">
+                      Maximum Submissions Per Creator
+                    </Label>
                     <Input
                       id="maxSubmissions"
                       type="number"
@@ -5724,7 +5862,9 @@ export default function CreateContestPage({
                       placeholder="Enter number between 2-100"
                     />
                     <p className="text-sm text-muted-foreground">
-                      Each creator can submit up to {maxSubmissionsPerCreator} entries. Min/max view limits will apply to all submissions.
+                      Each creator can submit up to {maxSubmissionsPerCreator}{" "}
+                      entries. Min/max view limits will apply to all
+                      submissions.
                     </p>
                   </div>
                 )}
@@ -5805,12 +5945,11 @@ export default function CreateContestPage({
                     <div className="relative">
                       {thumbnailPreview === "uploading" ? (
                         <div
-                        className={cn(
-                          "flex flex-col items-center justify-center h-64 rounded",
-                          isDark
-                            ? "bg-[#180438]"
-                            : "bg-gray-50"
-                        )}>
+                          className={cn(
+                            "flex flex-col items-center justify-center h-64 rounded",
+                            isDark ? "bg-[#180438]" : "bg-gray-50"
+                          )}
+                        >
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-2"></div>
                           <p className="text-sm text-gray-600">
                             Uploading thumbnail...
@@ -5997,16 +6136,18 @@ export default function CreateContestPage({
                 </p>
 
                 {showBriefPreview ? (
-                  <div 
-                  className={cn(
-                    "border rounded-lg p-4 min-h-[300px]",
-                    isDark ? "border-gray-600" : "border-gray-400"
-                  )}>
-                    <h4 
+                  <div
                     className={cn(
-                      "text-sm font-medium mb-2",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}>
+                      "border rounded-lg p-4 min-h-[300px]",
+                      isDark ? "border-gray-600" : "border-gray-400"
+                    )}
+                  >
+                    <h4
+                      className={cn(
+                        "text-sm font-medium mb-2",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}
+                    >
                       Preview:
                     </h4>
                     <div
@@ -6081,16 +6222,18 @@ export default function CreateContestPage({
                 </p>
 
                 {showRulesPreview ? (
-                  <div 
-                  className={cn(
-                    "border rounded-lg p-4 min-h-[300px]",
-                    isDark ? "border-gray-600" : "border-gray-400"
-                  )}>
-                    <h4 
+                  <div
                     className={cn(
-                      "text-sm font-medium mb-2",
-                      isDark ? "text-white" : "text-gray-600"
-                    )}>
+                      "border rounded-lg p-4 min-h-[300px]",
+                      isDark ? "border-gray-600" : "border-gray-400"
+                    )}
+                  >
+                    <h4
+                      className={cn(
+                        "text-sm font-medium mb-2",
+                        isDark ? "text-white" : "text-gray-600"
+                      )}
+                    >
                       Preview:
                     </h4>
                     <div
@@ -6748,11 +6891,14 @@ export default function CreateContestPage({
                               </span>
                             )}
                             {resource.type === "external" && (
-                              <div 
-                              className={cn(
-                                "rounded-full flex items-center justify-center w-12 h-12",
-                                isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]"
-                              )}>
+                              <div
+                                className={cn(
+                                  "rounded-full flex items-center justify-center w-12 h-12",
+                                  isDark
+                                    ? "bg-[#FFFFFF36] text-white"
+                                    : "text-[#4A00BE] bg-[#D8C3FF]"
+                                )}
+                              >
                                 <ExternalLink className="w-6 h-6" />
                               </div>
                             )}
@@ -6818,7 +6964,10 @@ export default function CreateContestPage({
                               onClick={() => removeResource(idx)}
                               className={cn(
                                 "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
-                                 isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
+                                isDark
+                                  ? "bg-[#FFFFFF36] text-white"
+                                  : "text-[#4A00BE] bg-[#D8C3FF]"
+                              )}
                             >
                               <Trash className="h-4 w-4" />
                             </button>
@@ -6909,9 +7058,14 @@ export default function CreateContestPage({
                                 : " bg-white border-gray-300"
                             )}
                           >
-                            <div className={cn(
-                              "rounded-full flex items-center justify-center w-12 h-12",
-                              isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}>
+                            <div
+                              className={cn(
+                                "rounded-full flex items-center justify-center w-12 h-12",
+                                isDark
+                                  ? "bg-[#FFFFFF36] text-white"
+                                  : "text-[#4A00BE] bg-[#D8C3FF]"
+                              )}
+                            >
                               <ExternalLink className="w-6= h-6" />
                             </div>
 
@@ -6935,7 +7089,10 @@ export default function CreateContestPage({
                               onClick={() => removeInspirationLink(index)}
                               className={cn(
                                 "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
-                                 isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
+                                isDark
+                                  ? "bg-[#FFFFFF36] text-white"
+                                  : "text-[#4A00BE] bg-[#D8C3FF]"
+                              )}
                             >
                               <Trash className="h-4 w-4" />
                             </button>
@@ -6944,6 +7101,113 @@ export default function CreateContestPage({
                       </ul>
                     )}
                   </CardContent>
+                  {/* Tracking Links (Collapsible) */}
+               <div className="px-6">
+                    <div className="my-6 border-t border-gray-300"></div>
+                    <Collapsible
+                      open={trackingLinksOpen}
+                      onOpenChange={setTrackingLinksOpen}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition"
+                        >
+                          <span>Tracking Links</span>
+                          <span className="text-sm font-normal opacity-70">
+                            {trackingLinksOpen ? "Hide" : "Show"}
+                          </span>
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-4 space-y-4">
+                        {trackingError && (
+                          <div className="text-red-500 text-sm">
+                            {trackingError}
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <Label htmlFor="trackingUrlInput">
+                            External Link
+                          </Label>
+                          <Input
+                            id="trackingUrlInput"
+                            type="url"
+                            placeholder="https://example.com/tracking-link"
+                            value={newTrackingUrl}
+                            onChange={(e) => setNewTrackingUrl(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="trackingDescriptionInput">
+                            Description
+                          </Label>
+                          <Input
+                            id="trackingDescriptionInput"
+                            placeholder="Describe this link"
+                            value={newTrackingDescription}
+                            onChange={(e) =>
+                              setNewTrackingDescription(e.target.value)
+                            }
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={addTrackingLink}
+                          disabled={!newTrackingUrl || !newTrackingDescription}
+                          className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                        >
+                          Add Tracking Link
+                        </Button>
+                        {trackingLinks.length > 0 && (
+                          <ul className="space-y-3 mt-2">
+                            {trackingLinks.map((item, index) => (
+                              <li
+                                key={index}
+                                className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                              >
+                                <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
+                                  <ExternalLink className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1">
+                                  <a
+                                    href={
+                                      item.url.includes("[creator]")
+                                        ? item.url.replace(
+                                            /\[creator\]/gi,
+                                            encodeURIComponent(
+                                              currentUserFirstName
+                                            )
+                                          )
+                                        : item.url
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-medium text-blue-600 hover:underline break-all"
+                                  >
+                                    {item.url.includes("[creator]")
+                                      ? item.url.replace(
+                                          /\[creator\]/gi,
+                                          currentUserFirstName
+                                        )
+                                      : item.url}
+                                  </a>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {item.description}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => removeTrackingLink(index)}
+                                  className="text-[#4A00BE] bg-[#D8C3FF] p-3 mr-2 rounded-full"
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
                   <CardFooter className="py-6 px-6">
                     <button
                       className={cn(
