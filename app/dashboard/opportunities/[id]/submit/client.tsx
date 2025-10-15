@@ -40,6 +40,7 @@ import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
 
 // --- Submission Window Constants ---
 // CONFIGURATION: Change these values to modify the submission time window
@@ -60,8 +61,9 @@ const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "day";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
-const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${IS_SUBMISSION_WINDOW_SINGULAR ? "" : "s"
-  }`;
+const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${
+  IS_SUBMISSION_WINDOW_SINGULAR ? "" : "s"
+}`;
 // -----------------------------------
 
 interface YouTubeVideo {
@@ -136,20 +138,35 @@ export default function SubmitContentPage({
   // Fetched videos for multiple submissions
   const [fetchedVideos, setFetchedVideos] = useState<YouTubeVideo[]>([]);
   const [fetchedReels, setFetchedReels] = useState<InstagramReel[]>([]);
-  const [selectedVideoIndices, setSelectedVideoIndices] = useState<number[]>([]);
+  const [selectedVideoIndices, setSelectedVideoIndices] = useState<number[]>(
+    []
+  );
   const [selectedReelIndices, setSelectedReelIndices] = useState<number[]>([]);
 
   // Track which links have been fetched
-  const [fetchedLinkIndices, setFetchedLinkIndices] = useState<Set<number>>(new Set());
-  const [linkFetchStatus, setLinkFetchStatus] = useState<{ [key: number]: 'idle' | 'fetching' | 'success' | 'error' }>({});
+  const [fetchedLinkIndices, setFetchedLinkIndices] = useState<Set<number>>(
+    new Set()
+  );
+  const [linkFetchStatus, setLinkFetchStatus] = useState<{
+    [key: number]: "idle" | "fetching" | "success" | "error";
+  }>({});
 
   // Track submitted videos and progress
-  const [submittedVideos, setSubmittedVideos] = useState<Set<string>>(new Set());
-  const [submissionProgress, setSubmissionProgress] = useState<{ submitted: number; maxAllowed: number }>({ submitted: 0, maxAllowed: 0 });
+  const [submittedVideos, setSubmittedVideos] = useState<Set<string>>(
+    new Set()
+  );
+  const [submissionProgress, setSubmissionProgress] = useState<{
+    submitted: number;
+    maxAllowed: number;
+  }>({ submitted: 0, maxAllowed: 0 });
 
   // Multiple selection from tabs
-  const [selectedVideosFromTabs, setSelectedVideosFromTabs] = useState<YouTubeVideo[]>([]);
-  const [selectedReelsFromTabs, setSelectedReelsFromTabs] = useState<InstagramReel[]>([]);
+  const [selectedVideosFromTabs, setSelectedVideosFromTabs] = useState<
+    YouTubeVideo[]
+  >([]);
+  const [selectedReelsFromTabs, setSelectedReelsFromTabs] = useState<
+    InstagramReel[]
+  >([]);
   const [youtubeAccount, setYoutubeAccount] = useState<any>(null);
   const [userVideos, setUserVideos] = useState<YouTubeVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
@@ -179,7 +196,7 @@ export default function SubmitContentPage({
   const [isRefreshingToken, setIsRefreshingToken] = useState(false);
   const [isRefreshingInstagramToken, setIsRefreshingInstagramToken] =
     useState(false);
-
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const router = useRouter();
   const supabase = createClient();
   const [isFetchingVideo, setIsFetchingVideo] = useState(false);
@@ -225,6 +242,37 @@ export default function SubmitContentPage({
     );
     return dayjs(publishedAt).isBefore(windowAgo);
   };
+
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  const isDark = mode === "dark";
 
   useEffect(() => {
     if (selectedVideo) {
@@ -404,7 +452,7 @@ export default function SubmitContentPage({
       console.log(
         "Is token expired?",
         instagramAccount.token_expiry &&
-        dayjs().isAfter(dayjs(instagramAccount.token_expiry))
+          dayjs().isAfter(dayjs(instagramAccount.token_expiry))
       );
 
       if (instagramAccount?.access_token) {
@@ -461,7 +509,7 @@ export default function SubmitContentPage({
           } else {
             setError(
               "Instagram account must be a Business or Creator account to fetch reels. Current type: " +
-              (instagramAccount.account_type || "Unknown")
+                (instagramAccount.account_type || "Unknown")
             );
             setIsLoadingReels(false);
           }
@@ -573,7 +621,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing YouTube token:", err);
       setError(
         err.message ||
-        "Failed to refresh YouTube token. Please try reconnecting your account."
+          "Failed to refresh YouTube token. Please try reconnecting your account."
       );
       setIsTokenExpired(true);
       toast({
@@ -662,7 +710,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing Instagram token:", err);
       setError(
         err.message ||
-        "Failed to refresh Instagram token. Please try reconnecting your account."
+          "Failed to refresh Instagram token. Please try reconnecting your account."
       );
       setIsInstagramTokenExpired(true);
       toast({
@@ -749,10 +797,11 @@ export default function SubmitContentPage({
   const handleReconnectYouTube = () => {
     router.push(
       "/api/youtube/auth?returnTo=" +
-      encodeURIComponent(
-        `/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ""
-        }`
-      ) // pass platform back
+        encodeURIComponent(
+          `/dashboard/opportunities/${contestId}/submit?platform=${
+            contestPlatform || ""
+          }`
+        ) // pass platform back
     );
   };
 
@@ -787,7 +836,9 @@ export default function SubmitContentPage({
       // Get contest details first to check multiple submissions setting
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
-        .select("id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details") // Include new feature fields
+        .select(
+          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details"
+        ) // Include new feature fields
         .eq("id", contestId)
         .single();
 
@@ -816,11 +867,13 @@ export default function SubmitContentPage({
 
       if (existingSubmissions && existingSubmissions.length > 0) {
         // Track submitted videos and progress
-        const videoIds = existingSubmissions.map((sub: any) => sub.video_id || sub.content_link);
+        const videoIds = existingSubmissions.map(
+          (sub: any) => sub.video_id || sub.content_link
+        );
         setSubmittedVideos(new Set(videoIds));
         setSubmissionProgress({
           submitted: existingSubmissions.length,
-          maxAllowed: contestData.max_submissions_per_creator || 1
+          maxAllowed: contestData.max_submissions_per_creator || 1,
         });
 
         // Check if user has reached max submissions
@@ -951,7 +1004,7 @@ export default function SubmitContentPage({
       // This will catch errors from fetch itself (network error) or SyntaxError from response.json() if body is not valid JSON, or errors thrown above.
       setError(
         err.message ||
-        "An unexpected error occurred while fetching YouTube video."
+          "An unexpected error occurred while fetching YouTube video."
       );
       setVideoPreview(null);
       setSelectedVideo(null);
@@ -1074,7 +1127,7 @@ export default function SubmitContentPage({
       console.error("Error in handleFetchInstagramByLink:", err);
       setError(
         err.message ||
-        "An unexpected error occurred while fetching Instagram media."
+          "An unexpected error occurred while fetching Instagram media."
       );
       setInstagramMediaPreview(null);
       setSelectedReel(null);
@@ -1118,7 +1171,9 @@ export default function SubmitContentPage({
         const videoData: YouTubeVideo = responseData.videoInfo;
         if (videoData?.snippet?.publishedAt) {
           if (isContentTooOld(videoData.snippet.publishedAt)) {
-            const errorMessage = `Video ${index + 1} was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            const errorMessage = `Video ${
+              index + 1
+            } was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
             setError(errorMessage);
             toast({
               title: "Content Too Old",
@@ -1132,7 +1187,9 @@ export default function SubmitContentPage({
             setError(null);
           }
         } else {
-          const errorMessage = `Could not determine publication date for video ${index + 1}.`;
+          const errorMessage = `Could not determine publication date for video ${
+            index + 1
+          }.`;
           setError(errorMessage);
           toast({
             title: "Missing Publication Date",
@@ -1141,7 +1198,9 @@ export default function SubmitContentPage({
           });
         }
       } else {
-        let errorMessage = `YouTube video verification failed for video ${index + 1}.`;
+        let errorMessage = `YouTube video verification failed for video ${
+          index + 1
+        }.`;
         if (responseData && typeof responseData.error === "string") {
           errorMessage = responseData.error;
         } else if (responseData && typeof responseData.message === "string") {
@@ -1150,19 +1209,28 @@ export default function SubmitContentPage({
         throw new Error(errorMessage);
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred while fetching YouTube video.");
+      setError(
+        err.message ||
+          "An unexpected error occurred while fetching YouTube video."
+      );
     } finally {
       setIsFetchingVideo(false);
     }
   };
 
-  const handleFetchInstagramVideoMultiple = async (link: string, index: number) => {
+  const handleFetchInstagramVideoMultiple = async (
+    link: string,
+    index: number
+  ) => {
     if (!link.trim()) {
       setError("Please enter an Instagram video URL");
       return;
     }
 
-    if (!instagramAccount?.access_token || !instagramAccount?.app_scoped_user_id) {
+    if (
+      !instagramAccount?.access_token ||
+      !instagramAccount?.app_scoped_user_id
+    ) {
       setError("Instagram account not connected properly.");
       return;
     }
@@ -1197,7 +1265,9 @@ export default function SubmitContentPage({
         const mediaDetails: InstagramReel = responseData.mediaInfo;
         if (mediaDetails?.timestamp) {
           if (isContentTooOld(mediaDetails.timestamp)) {
-            const errorMessage = `Video ${index + 1} was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            const errorMessage = `Video ${
+              index + 1
+            } was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
             setError(errorMessage);
             toast({
               title: "Content Too Old",
@@ -1211,7 +1281,9 @@ export default function SubmitContentPage({
             setError(null);
           }
         } else {
-          const errorMessage = `Could not determine publication date for video ${index + 1}.`;
+          const errorMessage = `Could not determine publication date for video ${
+            index + 1
+          }.`;
           setError(errorMessage);
           toast({
             title: "Missing Publication Date",
@@ -1220,7 +1292,9 @@ export default function SubmitContentPage({
           });
         }
       } else {
-        let errorMessage = `Instagram video verification failed for video ${index + 1}.`;
+        let errorMessage = `Instagram video verification failed for video ${
+          index + 1
+        }.`;
         if (responseData && typeof responseData.error === "string") {
           errorMessage = responseData.error;
         } else if (responseData && typeof responseData.message === "string") {
@@ -1229,7 +1303,10 @@ export default function SubmitContentPage({
         throw new Error(errorMessage);
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred while fetching Instagram video.");
+      setError(
+        err.message ||
+          "An unexpected error occurred while fetching Instagram video."
+      );
     } finally {
       setIsFetchingVideo(false);
     }
@@ -1238,7 +1315,9 @@ export default function SubmitContentPage({
   const handleFetchAllVideos = async () => {
     const unfetchedLinks = submissionLinks
       .map((link, index) => ({ link, index }))
-      .filter(({ link, index }) => link.trim() && !fetchedLinkIndices.has(index));
+      .filter(
+        ({ link, index }) => link.trim() && !fetchedLinkIndices.has(index)
+      );
 
     if (unfetchedLinks.length === 0) {
       toast({
@@ -1254,7 +1333,7 @@ export default function SubmitContentPage({
 
     try {
       const promises = unfetchedLinks.map(({ link, index }) => {
-        if (contestPlatform?.toLowerCase() === 'youtube') {
+        if (contestPlatform?.toLowerCase() === "youtube") {
           return handleFetchVideoMultiple(link, index);
         } else {
           return handleFetchInstagramVideoMultiple(link, index);
@@ -1264,7 +1343,7 @@ export default function SubmitContentPage({
       await Promise.all(promises);
 
       // Mark all as fetched
-      setFetchedLinkIndices(prev => {
+      setFetchedLinkIndices((prev) => {
         const newSet = new Set(prev);
         unfetchedLinks.forEach(({ index }) => newSet.add(index));
         return newSet;
@@ -1292,15 +1371,19 @@ export default function SubmitContentPage({
     if (!user || !contestId) return;
 
     try {
-      const response = await fetch(`/api/leaderboard/${contestId}/my-submission`);
+      const response = await fetch(
+        `/api/leaderboard/${contestId}/my-submission`
+      );
       if (response.ok) {
         const data = await response.json();
         if (data && data.submissions) {
-          const videoIds = data.submissions.map((sub: any) => sub.video_id || sub.content_link);
+          const videoIds = data.submissions.map(
+            (sub: any) => sub.video_id || sub.content_link
+          );
           setSubmittedVideos(new Set(videoIds));
           setSubmissionProgress({
             submitted: data.submissions.length,
-            maxAllowed: contest?.max_submissions_per_creator || 1
+            maxAllowed: contest?.max_submissions_per_creator || 1,
           });
         }
       }
@@ -1310,13 +1393,20 @@ export default function SubmitContentPage({
   };
 
   // Helper function to check if a video is already selected
-  const isVideoAlreadySelected = (videoId: string, platform: 'youtube' | 'instagram') => {
-    if (platform === 'youtube') {
-      return selectedVideosFromTabs.some(v => v.id.videoId === videoId) ||
-        selectedVideos.some(v => v.id.videoId === videoId);
+  const isVideoAlreadySelected = (
+    videoId: string,
+    platform: "youtube" | "instagram"
+  ) => {
+    if (platform === "youtube") {
+      return (
+        selectedVideosFromTabs.some((v) => v.id.videoId === videoId) ||
+        selectedVideos.some((v) => v.id.videoId === videoId)
+      );
     } else {
-      return selectedReelsFromTabs.some(r => r.id === videoId) ||
-        selectedReels.some(r => r.id === videoId);
+      return (
+        selectedReelsFromTabs.some((r) => r.id === videoId) ||
+        selectedReels.some((r) => r.id === videoId)
+      );
     }
   };
 
@@ -1336,19 +1426,19 @@ export default function SubmitContentPage({
       return;
     }
 
-    setLinkFetchStatus(prev => ({ ...prev, [index]: 'fetching' }));
+    setLinkFetchStatus((prev) => ({ ...prev, [index]: "fetching" }));
 
     try {
-      if (contestPlatform?.toLowerCase() === 'youtube') {
+      if (contestPlatform?.toLowerCase() === "youtube") {
         await handleFetchVideoMultiple(link, index);
       } else {
         await handleFetchInstagramVideoMultiple(link, index);
       }
 
-      setFetchedLinkIndices(prev => new Set([...prev, index]));
-      setLinkFetchStatus(prev => ({ ...prev, [index]: 'success' }));
+      setFetchedLinkIndices((prev) => new Set([...prev, index]));
+      setLinkFetchStatus((prev) => ({ ...prev, [index]: "success" }));
     } catch (error) {
-      setLinkFetchStatus(prev => ({ ...prev, [index]: 'error' }));
+      setLinkFetchStatus((prev) => ({ ...prev, [index]: "error" }));
       toast({
         title: "Fetch Failed",
         description: `Failed to fetch video from link ${index + 1}`,
@@ -1364,21 +1454,21 @@ export default function SubmitContentPage({
     setSubmissionLinks(newLinks);
 
     // Remove from fetched indices if it was fetched
-    setFetchedLinkIndices(prev => {
+    setFetchedLinkIndices((prev) => {
       const newSet = new Set(prev);
       newSet.delete(index);
       return newSet;
     });
 
     // Remove from fetched videos/reels if it was fetched
-    if (contestPlatform?.toLowerCase() === 'youtube') {
-      setFetchedVideos(prev => prev.filter((_, i) => i !== index));
+    if (contestPlatform?.toLowerCase() === "youtube") {
+      setFetchedVideos((prev) => prev.filter((_, i) => i !== index));
     } else {
-      setFetchedReels(prev => prev.filter((_, i) => i !== index));
+      setFetchedReels((prev) => prev.filter((_, i) => i !== index));
     }
 
     // Clear fetch status
-    setLinkFetchStatus(prev => {
+    setLinkFetchStatus((prev) => {
       const newStatus = { ...prev };
       delete newStatus[index];
       return newStatus;
@@ -1387,12 +1477,17 @@ export default function SubmitContentPage({
 
   // Handle video selection for multiple submissions
   const handleVideoSelection = (index: number, isSelected: boolean) => {
-    if (contestPlatform?.toLowerCase() === 'youtube') {
+    if (contestPlatform?.toLowerCase() === "youtube") {
       if (isSelected) {
         const video = fetchedVideos[index];
         if (video) {
           // Check if video is already submitted
-          if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+          if (
+            isVideoAlreadySubmitted(
+              video.id.videoId,
+              `https://www.youtube.com/watch?v=${video.id.videoId}`
+            )
+          ) {
             toast({
               title: "Video Already Submitted",
               description: `"${video.snippet.title}" has already been submitted to this contest`,
@@ -1402,7 +1497,7 @@ export default function SubmitContentPage({
           }
 
           // Check if video is already selected elsewhere
-          if (isVideoAlreadySelected(video.id.videoId, 'youtube')) {
+          if (isVideoAlreadySelected(video.id.videoId, "youtube")) {
             toast({
               title: "Video Already Selected",
               description: "This video is already selected from another source",
@@ -1413,7 +1508,11 @@ export default function SubmitContentPage({
 
           // Check limit
           const maxSubmissions = contest?.max_submissions_per_creator || 1;
-          const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+          const totalSelected =
+            selectedVideosFromTabs.length +
+            selectedReelsFromTabs.length +
+            selectedVideos.length +
+            selectedReels.length;
           if (totalSelected >= maxSubmissions) {
             toast({
               title: "Selection Limit Reached",
@@ -1427,8 +1526,12 @@ export default function SubmitContentPage({
           setSelectedVideos([...selectedVideos, video]);
         }
       } else {
-        setSelectedVideoIndices(selectedVideoIndices.filter(i => i !== index));
-        setSelectedVideos(selectedVideos.filter((_, i) => selectedVideoIndices[i] !== index));
+        setSelectedVideoIndices(
+          selectedVideoIndices.filter((i) => i !== index)
+        );
+        setSelectedVideos(
+          selectedVideos.filter((_, i) => selectedVideoIndices[i] !== index)
+        );
       }
     } else {
       if (isSelected) {
@@ -1438,14 +1541,16 @@ export default function SubmitContentPage({
           if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
             toast({
               title: "Video Already Submitted",
-              description: `"${reel.caption || 'Instagram Reel'}" has already been submitted to this contest`,
+              description: `"${
+                reel.caption || "Instagram Reel"
+              }" has already been submitted to this contest`,
               variant: "destructive",
             });
             return;
           }
 
           // Check if reel is already selected elsewhere
-          if (isVideoAlreadySelected(reel.id, 'instagram')) {
+          if (isVideoAlreadySelected(reel.id, "instagram")) {
             toast({
               title: "Video Already Selected",
               description: "This video is already selected from another source",
@@ -1456,7 +1561,11 @@ export default function SubmitContentPage({
 
           // Check limit
           const maxSubmissions = contest?.max_submissions_per_creator || 1;
-          const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+          const totalSelected =
+            selectedVideosFromTabs.length +
+            selectedReelsFromTabs.length +
+            selectedVideos.length +
+            selectedReels.length;
           if (totalSelected >= maxSubmissions) {
             toast({
               title: "Selection Limit Reached",
@@ -1470,8 +1579,10 @@ export default function SubmitContentPage({
           setSelectedReels([...selectedReels, reel]);
         }
       } else {
-        setSelectedReelIndices(selectedReelIndices.filter(i => i !== index));
-        setSelectedReels(selectedReels.filter((_, i) => selectedReelIndices[i] !== index));
+        setSelectedReelIndices(selectedReelIndices.filter((i) => i !== index));
+        setSelectedReels(
+          selectedReels.filter((_, i) => selectedReelIndices[i] !== index)
+        );
       }
     }
   };
@@ -1485,7 +1596,9 @@ export default function SubmitContentPage({
    */
   const handleSingleYoutubeSubmission = async () => {
     if (!youtubeAccount) {
-      throw new Error("YouTube account not connected. Please connect your YouTube account in settings.");
+      throw new Error(
+        "YouTube account not connected. Please connect your YouTube account in settings."
+      );
     }
 
     const videoToSubmit = selectedVideo || videoPreview;
@@ -1496,8 +1609,12 @@ export default function SubmitContentPage({
     setMessage("Preparing YouTube video submission...");
 
     const youtubeStats = {
-      likes: videoToSubmit?.statistics?.likeCount ? parseInt(videoToSubmit.statistics.likeCount) : 0,
-      comments: videoToSubmit?.statistics?.commentCount ? parseInt(videoToSubmit.statistics.commentCount) : 0,
+      likes: videoToSubmit?.statistics?.likeCount
+        ? parseInt(videoToSubmit.statistics.likeCount)
+        : 0,
+      comments: videoToSubmit?.statistics?.commentCount
+        ? parseInt(videoToSubmit.statistics.commentCount)
+        : 0,
     };
 
     const submissionPayload = {
@@ -1505,7 +1622,9 @@ export default function SubmitContentPage({
       creator_id: user!.id,
       status: "pending",
       platform: "youtube",
-      views: videoToSubmit?.statistics?.viewCount ? parseInt(videoToSubmit.statistics.viewCount) : 0,
+      views: videoToSubmit?.statistics?.viewCount
+        ? parseInt(videoToSubmit.statistics.viewCount)
+        : 0,
       content_link: `https://www.youtube.com/watch?v=${videoToSubmit.id.videoId}`,
       video_id: videoToSubmit.id.videoId,
       video_title: videoToSubmit.snippet.title,
@@ -1528,7 +1647,9 @@ export default function SubmitContentPage({
    */
   const handleSingleInstagramSubmission = async () => {
     if (!instagramAccount?.access_token) {
-      throw new Error("Instagram account not connected. Please connect your Instagram account in settings.");
+      throw new Error(
+        "Instagram account not connected. Please connect your Instagram account in settings."
+      );
     }
 
     if (!selectedReel) {
@@ -1544,22 +1665,29 @@ export default function SubmitContentPage({
 
     if (!insightsRes.ok || insightsData.error) {
       if (insightsData.error?.error_subcode === 2108006) {
-        throw new Error("This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.");
+        throw new Error(
+          "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel."
+        );
       }
-      throw new Error(insightsData.error?.message || "Failed to fetch Instagram Reel insights.");
+      throw new Error(
+        insightsData.error?.message ||
+          "Failed to fetch Instagram Reel insights."
+      );
     }
 
     let primaryViews = 0;
     const instagramApiMetrics: any = {};
 
     if (insightsData?.data && Array.isArray(insightsData.data)) {
-      insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
-        const value = metric.values[0]?.value || 0;
-        instagramApiMetrics[metric.name] = value;
-        if (metric.name === "views") {
-          primaryViews = value;
+      insightsData.data.forEach(
+        (metric: { name: string; values: { value: number }[] }) => {
+          const value = metric.values[0]?.value || 0;
+          instagramApiMetrics[metric.name] = value;
+          if (metric.name === "views") {
+            primaryViews = value;
+          }
         }
-      });
+      );
     }
 
     // Fallback to reach if views is 0
@@ -1568,8 +1696,13 @@ export default function SubmitContentPage({
     }
 
     const defaultStats = {
-      reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
-      total_interactions: 0, views: 0,
+      reach: 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      saved: 0,
+      total_interactions: 0,
+      views: 0,
     };
     const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
 
@@ -1601,14 +1734,20 @@ export default function SubmitContentPage({
    */
   const handleMultipleYoutubeSubmission = async (videos: YouTubeVideo[]) => {
     if (!youtubeAccount) {
-      throw new Error("YouTube account not connected. Please connect your YouTube account in settings.");
+      throw new Error(
+        "YouTube account not connected. Please connect your YouTube account in settings."
+      );
     }
 
     const submissionPromises = videos.map(async (video) => {
       try {
         const youtubeStats = {
-          likes: video?.statistics?.likeCount ? parseInt(video.statistics.likeCount) : 0,
-          comments: video?.statistics?.commentCount ? parseInt(video.statistics.commentCount) : 0,
+          likes: video?.statistics?.likeCount
+            ? parseInt(video.statistics.likeCount)
+            : 0,
+          comments: video?.statistics?.commentCount
+            ? parseInt(video.statistics.commentCount)
+            : 0,
         };
 
         const submissionPayload = {
@@ -1620,13 +1759,21 @@ export default function SubmitContentPage({
           video_id: video.id.videoId,
           video_title: video.snippet.title,
           video_thumbnail_url: video.snippet.thumbnails.default.url,
-          views: video?.statistics?.viewCount ? parseInt(video.statistics.viewCount) : 0,
+          views: video?.statistics?.viewCount
+            ? parseInt(video.statistics.viewCount)
+            : 0,
           other_stats: { youtube: youtubeStats },
         };
 
-        return await supabase.from("submissions").insert([submissionPayload]).select();
+        return await supabase
+          .from("submissions")
+          .insert([submissionPayload])
+          .select();
       } catch (error) {
-        console.error(`Error submitting YouTube video ${video.id.videoId}:`, error);
+        console.error(
+          `Error submitting YouTube video ${video.id.videoId}:`,
+          error
+        );
         // Re-throw the error so it can be properly handled by the calling function
         throw error;
       }
@@ -1640,7 +1787,9 @@ export default function SubmitContentPage({
    */
   const handleMultipleInstagramSubmission = async (reels: InstagramReel[]) => {
     if (!instagramAccount?.access_token) {
-      throw new Error("Instagram account not connected. Please connect your Instagram account in settings.");
+      throw new Error(
+        "Instagram account not connected. Please connect your Instagram account in settings."
+      );
     }
 
     const submissionPromises = reels.map(async (reel) => {
@@ -1654,22 +1803,31 @@ export default function SubmitContentPage({
         // Check for specific Instagram account conversion error
         if (!insightsRes.ok || insightsData.error) {
           if (insightsData.error?.error_subcode === 2108006) {
-            throw new Error(`"${reel.caption || 'Instagram Reel'}" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`);
+            throw new Error(
+              `"${
+                reel.caption || "Instagram Reel"
+              }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`
+            );
           }
-          throw new Error(insightsData.error?.message || "Failed to fetch Instagram Reel insights.");
+          throw new Error(
+            insightsData.error?.message ||
+              "Failed to fetch Instagram Reel insights."
+          );
         }
 
         let primaryViews = 0;
         const instagramApiMetrics: any = {};
 
         if (insightsData?.data && Array.isArray(insightsData.data)) {
-          insightsData.data.forEach((metric: { name: string; values: { value: number }[] }) => {
-            const value = metric.values[0]?.value || 0;
-            instagramApiMetrics[metric.name] = value;
-            if (metric.name === "views") {
-              primaryViews = value;
+          insightsData.data.forEach(
+            (metric: { name: string; values: { value: number }[] }) => {
+              const value = metric.values[0]?.value || 0;
+              instagramApiMetrics[metric.name] = value;
+              if (metric.name === "views") {
+                primaryViews = value;
+              }
             }
-          });
+          );
 
           if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
             primaryViews = instagramApiMetrics.reach;
@@ -1677,23 +1835,33 @@ export default function SubmitContentPage({
         }
 
         const defaultStats = {
-          reach: 0, likes: 0, comments: 0, shares: 0, saved: 0,
-          total_interactions: 0, views: 0,
+          reach: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          saved: 0,
+          total_interactions: 0,
+          views: 0,
         };
         const finalInstagramStats = { ...defaultStats, ...instagramApiMetrics };
 
-        return await supabase.from("submissions").insert([{
-          contest_id: contestId,
-          creator_id: user!.id,
-          status: "pending",
-          platform: "instagram",
-          content_link: reel.permalink,
-          video_id: reel.id,
-          video_title: reel.caption || "Instagram Reel",
-          video_thumbnail_url: reel.thumbnail_url,
-          views: primaryViews,
-          other_stats: { instagram: finalInstagramStats },
-        }]).select();
+        return await supabase
+          .from("submissions")
+          .insert([
+            {
+              contest_id: contestId,
+              creator_id: user!.id,
+              status: "pending",
+              platform: "instagram",
+              content_link: reel.permalink,
+              video_id: reel.id,
+              video_title: reel.caption || "Instagram Reel",
+              video_thumbnail_url: reel.thumbnail_url,
+              views: primaryViews,
+              other_stats: { instagram: finalInstagramStats },
+            },
+          ])
+          .select();
       } catch (error) {
         console.error(`Error fetching insights for reel ${reel.id}:`, error);
         // Re-throw the error so it can be properly handled by the calling function
@@ -1738,9 +1906,15 @@ export default function SubmitContentPage({
       const allInstagramReels = [...selectedReelsFromTabs, ...selectedReels];
 
       // Determine which handler to call
-      if (isMultipleMode && (allYoutubeVideos.length > 0 || allInstagramReels.length > 0)) {
+      if (
+        isMultipleMode &&
+        (allYoutubeVideos.length > 0 || allInstagramReels.length > 0)
+      ) {
         await handleMultipleSubmissions(allYoutubeVideos, allInstagramReels);
-      } else if (contestPlatform === "youtube" && (selectedVideo || videoPreview)) {
+      } else if (
+        contestPlatform === "youtube" &&
+        (selectedVideo || videoPreview)
+      ) {
         await handleSingleYoutubeSubmission();
       } else if (contestPlatform === "instagram" && selectedReel) {
         await handleSingleInstagramSubmission();
@@ -1755,24 +1929,31 @@ export default function SubmitContentPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contestId }),
         });
-      } catch { }
+      } catch {}
 
       // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
       // For single submissions, show this message
-      if (!isMultipleMode || (allYoutubeVideos.length === 0 && allInstagramReels.length === 0)) {
+      if (
+        !isMultipleMode ||
+        (allYoutubeVideos.length === 0 && allInstagramReels.length === 0)
+      ) {
         toast({
           title: "🎉 Content Submitted!",
-          description: "Your submission has been received and is pending review",
+          description:
+            "Your submission has been received and is pending review",
           duration: 4000,
         });
       }
 
-      router.push(`/dashboard/opportunities/${contestId}?success=content_submitted`);
+      router.push(
+        `/dashboard/opportunities/${contestId}?success=content_submitted`
+      );
     } catch (err: any) {
       console.error("Error during submission:", err);
       toast({
         title: "❌ Submission Failed",
-        description: err.message || "Failed to submit content. Please try again.",
+        description:
+          err.message || "Failed to submit content. Please try again.",
         variant: "destructive",
         duration: 5000,
       });
@@ -1786,7 +1967,10 @@ export default function SubmitContentPage({
   /**
    * Handle multiple video submissions (both YouTube and Instagram)
    */
-  const handleMultipleSubmissions = async (youtubeVideos: YouTubeVideo[], instagramReels: InstagramReel[]) => {
+  const handleMultipleSubmissions = async (
+    youtubeVideos: YouTubeVideo[],
+    instagramReels: InstagramReel[]
+  ) => {
     const totalSubmissions = youtubeVideos.length + instagramReels.length;
     const maxSubmissions = contest?.max_submissions_per_creator || 1;
     const currentSubmitted = submissionProgress.submitted;
@@ -1796,24 +1980,37 @@ export default function SubmitContentPage({
     }
 
     if (currentSubmitted + totalSubmissions > maxSubmissions) {
-      throw new Error(`You have already submitted ${currentSubmitted} videos. You can only submit ${maxSubmissions - currentSubmitted} more.`);
+      throw new Error(
+        `You have already submitted ${currentSubmitted} videos. You can only submit ${
+          maxSubmissions - currentSubmitted
+        } more.`
+      );
     }
 
     // Check for duplicates
     const duplicates: string[] = [];
-    youtubeVideos.forEach(video => {
-      if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+    youtubeVideos.forEach((video) => {
+      if (
+        isVideoAlreadySubmitted(
+          video.id.videoId,
+          `https://www.youtube.com/watch?v=${video.id.videoId}`
+        )
+      ) {
         duplicates.push(video.snippet.title);
       }
     });
-    instagramReels.forEach(reel => {
+    instagramReels.forEach((reel) => {
       if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
         duplicates.push(reel.caption || "Instagram Reel");
       }
     });
 
     if (duplicates.length > 0) {
-      throw new Error(`The following videos have already been submitted: ${duplicates.slice(0, 3).join(", ")}${duplicates.length > 3 ? "..." : ""}`);
+      throw new Error(
+        `The following videos have already been submitted: ${duplicates
+          .slice(0, 3)
+          .join(", ")}${duplicates.length > 3 ? "..." : ""}`
+      );
     }
 
     setMessage(`Submitting ${totalSubmissions} videos...`);
@@ -1823,41 +2020,58 @@ export default function SubmitContentPage({
     // Submit YouTube videos
     if (youtubeVideos.length > 0) {
       try {
-        const youtubeResults = await handleMultipleYoutubeSubmission(youtubeVideos);
+        const youtubeResults = await handleMultipleYoutubeSubmission(
+          youtubeVideos
+        );
         results.push(...youtubeResults);
       } catch (youtubeError: any) {
         // Handle YouTube-specific errors
-        throw new Error(youtubeError.message || "Failed to submit YouTube content. Please try again.");
+        throw new Error(
+          youtubeError.message ||
+            "Failed to submit YouTube content. Please try again."
+        );
       }
     }
 
     // Submit Instagram reels
     if (instagramReels.length > 0) {
       try {
-        const instagramResults = await handleMultipleInstagramSubmission(instagramReels);
+        const instagramResults = await handleMultipleInstagramSubmission(
+          instagramReels
+        );
         results.push(...instagramResults);
       } catch (instagramError: any) {
         // Handle Instagram-specific errors (like account conversion errors)
-        throw new Error(instagramError.message || "Failed to submit Instagram content. Please try again.");
+        throw new Error(
+          instagramError.message ||
+            "Failed to submit Instagram content. Please try again."
+        );
       }
     }
 
     // Check for errors
-    const errors = results.filter(result => result?.error);
+    const errors = results.filter((result) => result?.error);
     if (errors.length > 0) {
-      throw new Error(`Failed to submit ${errors.length} videos. Please try again.`);
+      throw new Error(
+        `Failed to submit ${errors.length} videos. Please try again.`
+      );
     }
 
     // Update state
     const newSubmittedCount = currentSubmitted + totalSubmissions;
-    setSubmissionProgress(prev => ({ ...prev, submitted: newSubmittedCount }));
+    setSubmissionProgress((prev) => ({
+      ...prev,
+      submitted: newSubmittedCount,
+    }));
 
     const newSubmittedVideos = new Set(submittedVideos);
-    youtubeVideos.forEach(video => {
+    youtubeVideos.forEach((video) => {
       newSubmittedVideos.add(video.id.videoId);
-      newSubmittedVideos.add(`https://www.youtube.com/watch?v=${video.id.videoId}`);
+      newSubmittedVideos.add(
+        `https://www.youtube.com/watch?v=${video.id.videoId}`
+      );
     });
-    instagramReels.forEach(reel => {
+    instagramReels.forEach((reel) => {
       newSubmittedVideos.add(reel.id);
       newSubmittedVideos.add(reel.permalink);
     });
@@ -1963,7 +2177,7 @@ export default function SubmitContentPage({
 
           throw new Error(
             mediaData.error?.message ||
-            "Failed to fetch Instagram media IDs using Business Account ID"
+              "Failed to fetch Instagram media IDs using Business Account ID"
           );
         }
 
@@ -1973,7 +2187,6 @@ export default function SubmitContentPage({
           // setIsLoadingReels(false); // Done in finally
           return;
         }
-
 
         const allFetchedReels: InstagramReel[] = [];
         // The /media endpoint returns a mix. We need to filter for Reels.
@@ -2089,7 +2302,12 @@ export default function SubmitContentPage({
         </h1>
       </div>
 
-      <div className="max-w-[1200px] bg-white rounded-xl shadow-lg mx-auto p-2 md:p-4 overflow-hidden">
+      <div
+        className={cn(
+          "max-w-[1200px] rounded-xl shadow-lg mx-auto p-2 md:p-4 overflow-hidden",
+          isDark ? "bg-[#180438]" : "bg-white"
+        )}
+      >
         <CardContent className="overflow-x-hidden">
           {error && (
             <Alert variant="destructive" className="mb-4">
@@ -2105,7 +2323,7 @@ export default function SubmitContentPage({
           {/* Submit and Cancel Buttons - Moved to top */}
           <div className="flex flex-col gap-4 sm:flex-row items-center justify-between py-6 mb-6">
             <div>
-              <CardTitle className="mb-1">Content Submission</CardTitle>
+              <CardTitle>Content Submission</CardTitle>
               <CardDescription>
                 Submit your{" "}
                 {contestPlatform === "youtube"
@@ -2130,10 +2348,16 @@ export default function SubmitContentPage({
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
                   (contest?.multiple_submissions_enabled
-                    ? (selectedVideosFromTabs.length === 0 && selectedReelsFromTabs.length === 0 && selectedVideos.length === 0 && selectedReels.length === 0)
-                    : ((contestPlatform === "youtube" && !selectedVideo && !videoPreview) ||
-                      (contestPlatform === "instagram" && !selectedReel && !instagramMediaPreview))
-                  )
+                    ? selectedVideosFromTabs.length === 0 &&
+                      selectedReelsFromTabs.length === 0 &&
+                      selectedVideos.length === 0 &&
+                      selectedReels.length === 0
+                    : (contestPlatform === "youtube" &&
+                        !selectedVideo &&
+                        !videoPreview) ||
+                      (contestPlatform === "instagram" &&
+                        !selectedReel &&
+                        !instagramMediaPreview))
                 }
                 className="w-full sm:w-auto"
               >
@@ -2226,7 +2450,11 @@ export default function SubmitContentPage({
                 // </TabsList>
 
                 <Tabs defaultValue="youtube-library" className="w-full">
-                  <TabsList className="flex w-full p-1.5 bg-[#E4E4E4] rounded-full shadow-sm">
+                  <TabsList
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${
+                      isDark ? "bg-gray-700" : "bg-[#E4E4E4]"
+                    }`}
+                  >
                     {["youtube-library", "youtube-link"].map(
                       (tab, index, arr) => {
                         const isFirst = index === 0;
@@ -2241,13 +2469,18 @@ export default function SubmitContentPage({
                           transition-all duration-200
                           data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
                           data-[state=active]:shadow-sm
-                          text-gray-700 hover:text-gray-800 hover:bg-gray-200
+                          ${
+                            isDark
+                              ? "text-gray-300 hover:text-white hover:bg-gray-600"
+                              : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
+                          }
                           ${isFirst ? "data-[state=active]:rounded-l-full" : ""}
                           ${isLast ? "data-[state=active]:rounded-r-full" : ""}
-                          ${arr.length === 1
-                                ? "data-[state=active]:rounded-full"
-                                : ""
-                              }
+                          ${
+                            arr.length === 1
+                              ? "data-[state=active]:rounded-full"
+                              : ""
+                          }
                         `}
                           >
                             {tab === "youtube-library" ? (
@@ -2271,7 +2504,11 @@ export default function SubmitContentPage({
 
                   {/* Informational text for creators */}
                   <div className="mt-8 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
-                    <p className="text-md text-[#7F39EC] text-center">
+                    <p 
+                     className={cn(
+                      "text-md text-center",
+                      isDark ? "text-white" : "text-[#7F39EC]"
+                    )}>
                       💡 <strong>Tip for creators:</strong> You can fetch videos
                       from your YouTube account by entering their URL in the
                       "Link" tab.
@@ -2286,7 +2523,13 @@ export default function SubmitContentPage({
                       </div>
                     ) : userVideos.length === 0 ? (
                       libraryMessage ? (
-                        <Alert variant="default" className="text-center border border-[#7F39EC] bg-[#D9C0FF26]">
+                        <Alert
+                          variant="default"
+                          
+                          className={cn(
+                            "text-center border border-[#7F39EC] bg-[#D9C0FF26]",
+                            isDark ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white" : "bg-[#D9C0FF26] border-[#7F39EC] texxt-black"
+                          )}>
                           <AlertDescription>{libraryMessage}</AlertDescription>
                         </Alert>
                       ) : (
@@ -2299,8 +2542,9 @@ export default function SubmitContentPage({
                             disabled={isLoadingVideos}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 ${isLoadingVideos ? "animate-spin" : ""
-                                }`}
+                              className={`h-4 w-4 ${
+                                isLoadingVideos ? "animate-spin" : ""
+                              }`}
                             />{" "}
                             Reload Videos
                           </Button>
@@ -2351,74 +2595,141 @@ export default function SubmitContentPage({
                         )}
 
                         {/* Multiple Submissions Counter - YouTube */}
-                        {contest?.multiple_submissions_enabled && contestPlatform === "youtube" && (
-                          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <CheckCheck className="h-4 w-4 text-purple-600" />
-                                <span className="text-sm font-medium text-purple-800">
-                                  Multiple Submissions Enabled
-                                </span>
+                        {contest?.multiple_submissions_enabled &&
+                          contestPlatform === "youtube" && (
+                            <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <CheckCheck 
+                                    className={cn(
+                                      "h-4 w-4",
+                                      isDark ? "text-purple-400" : "text-purple-600"
+                                    )}
+                                  />
+                                  <span 
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-purple-800"
+                                    )}>
+                                    Multiple Submissions Enabled
+                                  </span>
+                                </div>
+                                <div 
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark ? "text-gray-300" : "text-purple-800"
+                                  )}>
+                                  Selected:{" "}
+                                  {selectedVideosFromTabs.length +
+                                    selectedReelsFromTabs.length +
+                                    selectedVideos.length +
+                                    selectedReels.length}{" "}
+                                  /{" "}
+                                  {Math.max(
+                                    0,
+                                    (contest.max_submissions_per_creator || 1) -
+                                      submissionProgress.submitted
+                                  )}{" "}
+                                  remaining videos
+                                </div>
                               </div>
-                              <div className="text-sm font-semibold text-purple-800">
-                                Selected: {selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length} / {Math.max(0, (contest.max_submissions_per_creator || 1) - submissionProgress.submitted)} remaining videos
-                              </div>
+                              <p 
+                                className={cn(
+                                  "text-xs mt-1",
+                                  isDark ? "text-gray-300" : "text-purple-600"
+                                )}>
+                                Click on videos below to select them. You can
+                                mix videos from your channel and custom links.
+                              </p>
                             </div>
-                            <p className="text-xs text-purple-600 mt-1">
-                              Click on videos below to select them. You can mix videos from your channel and custom links.
-                            </p>
-                          </div>
-                        )}
+                          )}
 
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
                           {paginatedUserVideos.map((video, index) => (
                             <div
                               key={video.id.videoId}
-                              className={`cursor-pointer max-w-[1200px] mx-auto ${index === 0 ? "mt-4" : ""
-                                } ${index === paginatedUserVideos.length - 1
+                              className={`cursor-pointer max-w-[1200px] mx-auto ${
+                                index === 0 ? "mt-4" : ""
+                              } ${
+                                index === paginatedUserVideos.length - 1
                                   ? "mb-4"
                                   : ""
-                                } ${(contest?.multiple_submissions_enabled
-                                  ? selectedVideosFromTabs.some(v => v.id.videoId === video.id.videoId)
-                                  : selectedVideo?.id.videoId === video.id.videoId)
+                              } ${
+                                (
+                                  contest?.multiple_submissions_enabled
+                                    ? selectedVideosFromTabs.some(
+                                        (v) => v.id.videoId === video.id.videoId
+                                      )
+                                    : selectedVideo?.id.videoId ===
+                                      video.id.videoId
+                                )
                                   ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                   : "border-2 border-[#7F39EC] rounded-lg"
-                                }`}
+                              }`}
                               onClick={() => {
                                 if (contest?.multiple_submissions_enabled) {
                                   // Multiple selection mode
-                                  const isAlreadySelected = selectedVideosFromTabs.some(v => v.id.videoId === video.id.videoId);
+                                  const isAlreadySelected =
+                                    selectedVideosFromTabs.some(
+                                      (v) => v.id.videoId === video.id.videoId
+                                    );
                                   if (isAlreadySelected) {
                                     // Remove from selection
-                                    setSelectedVideosFromTabs(selectedVideosFromTabs.filter(v => v.id.videoId !== video.id.videoId));
+                                    setSelectedVideosFromTabs(
+                                      selectedVideosFromTabs.filter(
+                                        (v) => v.id.videoId !== video.id.videoId
+                                      )
+                                    );
                                   } else {
                                     // Check if video is already selected elsewhere
-                                    if (isVideoAlreadySelected(video.id.videoId, 'youtube')) {
+                                    if (
+                                      isVideoAlreadySelected(
+                                        video.id.videoId,
+                                        "youtube"
+                                      )
+                                    ) {
                                       toast({
                                         title: "Video Already Selected",
-                                        description: "This video is already selected from another source",
+                                        description:
+                                          "This video is already selected from another source",
                                         variant: "destructive",
                                       });
                                       return;
                                     }
 
                                     // Check if video is already submitted
-                                    if (isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)) {
+                                    if (
+                                      isVideoAlreadySubmitted(
+                                        video.id.videoId,
+                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                      )
+                                    ) {
                                       toast({
                                         title: "Video Already Submitted",
-                                        description: "This video has already been submitted for this contest",
+                                        description:
+                                          "This video has already been submitted for this contest",
                                         variant: "destructive",
                                       });
                                       return;
                                     }
 
                                     // Add to selection (check limit against remaining submissions)
-                                    const maxSubmissions = contest?.max_submissions_per_creator || 1;
-                                    const remainingSubmissions = maxSubmissions - submissionProgress.submitted;
-                                    const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+                                    const maxSubmissions =
+                                      contest?.max_submissions_per_creator || 1;
+                                    const remainingSubmissions =
+                                      maxSubmissions -
+                                      submissionProgress.submitted;
+                                    const totalSelected =
+                                      selectedVideosFromTabs.length +
+                                      selectedReelsFromTabs.length +
+                                      selectedVideos.length +
+                                      selectedReels.length;
 
                                     if (totalSelected < remainingSubmissions) {
-                                      setSelectedVideosFromTabs([...selectedVideosFromTabs, video]);
+                                      setSelectedVideosFromTabs([
+                                        ...selectedVideosFromTabs,
+                                        video,
+                                      ]);
                                     } else {
                                       toast({
                                         title: "Selection Limit Reached",
@@ -2442,13 +2753,16 @@ export default function SubmitContentPage({
                               }}
                             >
                               <CardContent className="p-4 sm:p-6 relative">
-                                {((contest?.multiple_submissions_enabled
-                                  ? selectedVideosFromTabs.some(v => v.id.videoId === video.id.videoId)
-                                  : selectedVideo?.id.videoId === video.id.videoId)) && (
-                                    <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
-                                      <Check className="h-4 w-4" />
-                                    </div>
-                                  )}
+                                {(contest?.multiple_submissions_enabled
+                                  ? selectedVideosFromTabs.some(
+                                      (v) => v.id.videoId === video.id.videoId
+                                    )
+                                  : selectedVideo?.id.videoId ===
+                                    video.id.videoId) && (
+                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
+                                    <Check className="h-4 w-4" />
+                                  </div>
+                                )}
                                 <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                                   {/* Thumbnail */}
                                   <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -2571,10 +2885,11 @@ export default function SubmitContentPage({
                     )}
                     {videoPreview && (
                       <Card
-                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${selectedVideo?.id.videoId === videoPreview.id.videoId
-                          ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                          : "border-2 border-[#7F39EC] rounded-lg "
-                          }`}
+                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
+                          selectedVideo?.id.videoId === videoPreview.id.videoId
+                            ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                            : "border-2 border-[#7F39EC] rounded-lg "
+                        }`}
                         onClick={() => {
                           setSelectedVideo(videoPreview);
                           setSelectedReel(null);
@@ -2595,10 +2910,10 @@ export default function SubmitContentPage({
                         <CardContent className="p-3 sm:p-4 relative">
                           {selectedVideo?.id.videoId ===
                             videoPreview.id.videoId && (
-                              <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
-                                <Check className="h-4 w-4" />
-                              </div>
-                            )}
+                            <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1">
+                              <Check className="h-4 w-4" />
+                            </div>
+                          )}
                           <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                             {/* Thumbnail */}
                             <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -2770,7 +3085,7 @@ export default function SubmitContentPage({
                 //     </TabsTrigger>
                 //   </TabsList>
                 <Tabs defaultValue="instagram-library" className="w-full">
-                  <TabsList className="flex w-full p-1.5 bg-[#E4E4E4] rounded-full shadow-sm">
+                  <TabsList className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"}`}>
                     {["instagram-library", "instagram-link"].map(
                       (tab, index, arr) => {
                         const isFirst = index === 0;
@@ -2783,10 +3098,26 @@ export default function SubmitContentPage({
                             className={`
                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium transition-all duration-200 
                             data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
-                            data-[state=active]:shadow-sm text-gray-700 hover:text-gray-800 hover:bg-gray-200
-                              ${isFirst ? "data-[state=active]:rounded-l-full" : ""}
-                               ${isLast ? "data-[state=active]:rounded-r-full" : ""}
-                             ${arr.length === 1 ? "data-[state=active]:rounded-full" : ""}
+                            data-[state=active]:shadow-sm ${
+                              isDark
+                                ? "text-gray-300 hover:text-white"
+                                : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
+                            }
+                              ${
+                                isFirst
+                                  ? "data-[state=active]:rounded-l-full"
+                                  : ""
+                              }
+                               ${
+                                 isLast
+                                   ? "data-[state=active]:rounded-r-full"
+                                   : ""
+                               }
+                             ${
+                               arr.length === 1
+                                 ? "data-[state=active]:rounded-full"
+                                 : ""
+                             }
                              `}
                           >
                             {tab === "instagram-library" ? (
@@ -2810,7 +3141,12 @@ export default function SubmitContentPage({
 
                   {/* Informational text for creators */}
                   <div className="mt-6 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
-                    <p className="text-md text-[#7F39EC] text-center">
+                    <p 
+                     className={cn(
+                      "text-md text-center",
+                      isDark ? "text-white" : "text-[#7F39EC]"
+                    )}
+                    >
                       💡 <strong>Tip for creators:</strong> You can fetch reels
                       and videos from your Instagram account by entering their
                       URL in the "Link" tab.
@@ -2842,12 +3178,12 @@ export default function SubmitContentPage({
                                 currentInstagramBusinessAccountID || ""
                               )
                             }
-
                             disabled={isLoadingReels}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 mr-2 ${isLoadingReels ? "animate-spin" : ""
-                                }`}
+                              className={`h-4 w-4 mr-2 ${
+                                isLoadingReels ? "animate-spin" : ""
+                              }`}
                             />{" "}
                             Reload Reels
                           </Button>
@@ -2900,74 +3236,141 @@ export default function SubmitContentPage({
                         )}
 
                         {/* Multiple Submissions Counter - Instagram */}
-                        {contest?.multiple_submissions_enabled && contestPlatform === "instagram" && (
-                          <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <CheckCheck className="h-4 w-4 text-purple-600" />
-                                <span className="text-sm font-medium text-purple-800">
-                                  Multiple Submissions Enabled
-                                </span>
+                        {contest?.multiple_submissions_enabled &&
+                          contestPlatform === "instagram" && (
+                            <div 
+                            className={cn(
+                              "mt-4 p-3 border rounded-lg",
+                              isDark ? "bg-[#C9A7FF26] border-[#C9A7FF]" : "bg-purple-50 border-purple-200"
+                            )}
+                           
+                          >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <CheckCheck className="h-4 w-4 text-purple-600" />
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-purple-800"
+                                    )}>
+                                    Multiple Submissions Enabled
+                                  </span>
+                                </div>
+                                <div 
+                                className={cn(
+                                  "text-sm font-semibold",
+                                  isDark ? "text-white" : "text-purple-800"
+                                )}>
+                                  Selected:{" "}
+                                  {selectedVideosFromTabs.length +
+                                    selectedReelsFromTabs.length +
+                                    selectedVideos.length +
+                                    selectedReels.length}{" "}
+                                  /{" "}
+                                  {Math.max(
+                                    0,
+                                    (contest.max_submissions_per_creator || 1) -
+                                      submissionProgress.submitted
+                                  )}{" "}
+                                  remaining videos
+                                </div>
                               </div>
-                              <div className="text-sm font-semibold text-purple-800">
-                                Selected: {selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length} / {Math.max(0, (contest.max_submissions_per_creator || 1) - submissionProgress.submitted)} remaining videos
-                              </div>
+                              <p 
+                                className={cn(
+                                  "text-xs mt-1",
+                                  isDark ? "text-gray-300" : "text-purple-600"
+                                )}>
+                                Click on videos below to select them. You can
+                                mix videos from your channel and custom links.
+                              </p>
                             </div>
-                            <p className="text-xs text-purple-600 mt-1">
-                              Click on videos below to select them. You can mix videos from your channel and custom links.
-                            </p>
-                          </div>
-                        )}
+                          )}
 
                         <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
                           {paginatedUserReels.map((reel, index) => (
                             <div
                               key={reel.id}
-                              className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${index === 0 ? "mt-4" : ""
-                                } ${index === paginatedUserReels.length - 1
+                              className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${
+                                index === 0 ? "mt-4" : ""
+                              } ${
+                                index === paginatedUserReels.length - 1
                                   ? "mb-4"
                                   : ""
-                                } ${(contest?.multiple_submissions_enabled
-                                  ? selectedReelsFromTabs.some(r => r.id === reel.id)
-                                  : selectedReel?.id === reel.id)
+                              } ${
+                                (
+                                  contest?.multiple_submissions_enabled
+                                    ? selectedReelsFromTabs.some(
+                                        (r) => r.id === reel.id
+                                      )
+                                    : selectedReel?.id === reel.id
+                                )
                                   ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                   : "border-2 border-[#7F39EC] rounded-lg "
-                                }`}
+                              }`}
                               onClick={() => {
                                 if (contest?.multiple_submissions_enabled) {
                                   // Multiple selection mode
-                                  const isAlreadySelected = selectedReelsFromTabs.some(r => r.id === reel.id);
+                                  const isAlreadySelected =
+                                    selectedReelsFromTabs.some(
+                                      (r) => r.id === reel.id
+                                    );
                                   if (isAlreadySelected) {
                                     // Remove from selection
-                                    setSelectedReelsFromTabs(selectedReelsFromTabs.filter(r => r.id !== reel.id));
+                                    setSelectedReelsFromTabs(
+                                      selectedReelsFromTabs.filter(
+                                        (r) => r.id !== reel.id
+                                      )
+                                    );
                                   } else {
                                     // Check if reel is already selected elsewhere
-                                    if (isVideoAlreadySelected(reel.id, 'instagram')) {
+                                    if (
+                                      isVideoAlreadySelected(
+                                        reel.id,
+                                        "instagram"
+                                      )
+                                    ) {
                                       toast({
                                         title: "Video Already Selected",
-                                        description: "This video is already selected from another source",
+                                        description:
+                                          "This video is already selected from another source",
                                         variant: "destructive",
                                       });
                                       return;
                                     }
 
                                     // Check if reel is already submitted
-                                    if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
+                                    if (
+                                      isVideoAlreadySubmitted(
+                                        reel.id,
+                                        reel.permalink
+                                      )
+                                    ) {
                                       toast({
                                         title: "Reel Already Submitted",
-                                        description: "This reel has already been submitted for this contest",
+                                        description:
+                                          "This reel has already been submitted for this contest",
                                         variant: "destructive",
                                       });
                                       return;
                                     }
 
                                     // Add to selection (check limit against remaining submissions)
-                                    const maxSubmissions = contest?.max_submissions_per_creator || 1;
-                                    const remainingSubmissions = maxSubmissions - submissionProgress.submitted;
-                                    const totalSelected = selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length;
+                                    const maxSubmissions =
+                                      contest?.max_submissions_per_creator || 1;
+                                    const remainingSubmissions =
+                                      maxSubmissions -
+                                      submissionProgress.submitted;
+                                    const totalSelected =
+                                      selectedVideosFromTabs.length +
+                                      selectedReelsFromTabs.length +
+                                      selectedVideos.length +
+                                      selectedReels.length;
 
                                     if (totalSelected < remainingSubmissions) {
-                                      setSelectedReelsFromTabs([...selectedReelsFromTabs, reel]);
+                                      setSelectedReelsFromTabs([
+                                        ...selectedReelsFromTabs,
+                                        reel,
+                                      ]);
                                     } else {
                                       toast({
                                         title: "Selection Limit Reached",
@@ -2989,13 +3392,15 @@ export default function SubmitContentPage({
                               }}
                             >
                               <CardContent className="p-4 sm:p-6 relative">
-                                {((contest?.multiple_submissions_enabled
-                                  ? selectedReelsFromTabs.some(r => r.id === reel.id)
-                                  : selectedReel?.id === reel.id)) && (
-                                    <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
-                                      <Check className="h-4 w-4" />
-                                    </div>
-                                  )}
+                                {(contest?.multiple_submissions_enabled
+                                  ? selectedReelsFromTabs.some(
+                                      (r) => r.id === reel.id
+                                    )
+                                  : selectedReel?.id === reel.id) && (
+                                  <div className="absolute top-2 right-2 z-10 bg-green-600 text-white rounded-full p-1 shadow-lg animate-in zoom-in-95 duration-200">
+                                    <Check className="h-4 w-4" />
+                                  </div>
+                                )}
                                 <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
                                   {/* Thumbnail */}
                                   <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -3091,10 +3496,11 @@ export default function SubmitContentPage({
                     )}
                     {instagramMediaPreview && (
                       <div
-                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${selectedReel?.id === instagramMediaPreview.id
-                          ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                          : "border-2 border-[#7F39EC] rounded-lg "
-                          }`}
+                        className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
+                          selectedReel?.id === instagramMediaPreview.id
+                            ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                            : "border-2 border-[#7F39EC] rounded-lg "
+                        }`}
                         onClick={() => {
                           setSelectedReel(instagramMediaPreview);
                           setSelectedVideo(null);
@@ -3190,295 +3596,440 @@ export default function SubmitContentPage({
                   </TabsContent>
                 </Tabs>
               )}
-
             </>
           )}
 
-
-
           {/* Multiple Submissions UI - Only show if contest allows multiple submissions and account is connected */}
-          {contest?.multiple_submissions_enabled && (contestPlatform === "youtube" ? youtubeAccount : instagramAccount?.access_token) && (
-            <div className="mt-8">
-              <Card className="border-purple-200 bg-purple-50/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-purple-800">
-                    <CheckCheck className="h-5 w-5" />
-                    Multiple Submissions Allowed
-                  </CardTitle>
-                  <CardDescription className="text-purple-700">
-                    You can submit up to {contest.max_submissions_per_creator || 1} videos for this contest.
-                    Choose from your recent videos above or add custom links below.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {/* Submission Counter */}
-                    <div className="flex items-center justify-between p-3 bg-purple-100 rounded-lg">
-                      <div>
-                        <span className="text-sm font-medium text-purple-800">
-                          Selected: {selectedVideosFromTabs.length + selectedReelsFromTabs.length + selectedVideos.length + selectedReels.length} / {Math.max(0, (contest.max_submissions_per_creator || 1) - submissionProgress.submitted)} remaining submissions
-                        </span>
-                        {submissionProgress.submitted > 0 && (
-                          <div className="text-xs text-purple-600 mt-1">
-                            Already submitted: {submissionProgress.submitted} / {submissionProgress.maxAllowed} videos
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            if (submissionLinks.length < (contest.max_submissions_per_creator || 1)) {
-                              setSubmissionLinks([...submissionLinks, ""]);
-                            }
-                          }}
-                          disabled={submissionLinks.length >= (contest.max_submissions_per_creator || 1)}
-                          className="text-purple-700 border-purple-300 hover:bg-purple-100"
-                        >
-                          <Plus className="h-4 w-4 mr-1" />
-                          Add Link
-                        </Button>
-                        {submissionLinks.length > 1 && (
+          {contest?.multiple_submissions_enabled &&
+            (contestPlatform === "youtube"
+              ? youtubeAccount
+              : instagramAccount?.access_token) && (
+              <div className="mt-8">
+                <Card 
+                 className={cn(
+                  "border",
+                  isDark ? "bg-[#C9A7FF26] border-[#C9A7FF]" : "border-purple-200 bg-purple-50/50"
+                )}>
+                  <CardHeader>
+                    <CardTitle className={cn(
+                      "flex items-center gap-2",
+                      isDark ? "text-white" : "text-purple-800"
+                    )}>
+                      <CheckCheck className="h-5 w-5" />
+                      Multiple Submissions Allowed
+                    </CardTitle>
+                    <CardDescription className={cn(
+                      "text-purple-700",
+                      isDark ? "text-gray-300" : "text-purple-700"
+                    )}>
+                      You can submit up to{" "}
+                      {contest.max_submissions_per_creator || 1} videos for this
+                      contest. Choose from your recent videos above or add
+                      custom links below.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {/* Submission Counter */}
+                      <div 
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-lg",
+                        isDark ? "bg-[#C9A7FF26]" : "bg-purple-100"
+                      )}>
+                        <div>
+                          <span className={cn(
+                            "text-sm font-medium",
+                            isDark ? "text-white" : "text-purple-800"
+                          )}>
+                            Selected:{" "}
+                            {selectedVideosFromTabs.length +
+                              selectedReelsFromTabs.length +
+                              selectedVideos.length +
+                              selectedReels.length}{" "}
+                            /{" "}
+                            {Math.max(
+                              0,
+                              (contest.max_submissions_per_creator || 1) -
+                                submissionProgress.submitted
+                            )}{" "}
+                            remaining submissions
+                          </span>
+                          {submissionProgress.submitted > 0 && (
+                            <div 
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-300" : "text-purple-600"
+                            )}>
+                              Already submitted: {submissionProgress.submitted}{" "}
+                              / {submissionProgress.maxAllowed} videos
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              const newLinks = [...submissionLinks];
-                              newLinks.pop();
-                              setSubmissionLinks(newLinks);
-                            }}
-                            className="text-purple-700 border-purple-300 hover:bg-purple-100"
-                          >
-                            <Minus className="h-4 w-4 mr-1" />
-                            Remove
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Multiple Link Inputs */}
-                    <div className="space-y-3">
-                      {submissionLinks.map((link, index) => (
-                        <div key={index} className="flex items-center gap-3">
-                          <div className="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm font-medium">
-                            {index + 1}
-                          </div>
-                          <Input
-                            type="text"
-                            placeholder={`Enter ${contestPlatform?.toLowerCase() === 'youtube' ? 'YouTube' : 'Instagram'} video URL ${index + 1}`}
-                            value={link}
-                            onChange={(e) => {
-                              const newLinks = [...submissionLinks];
-                              newLinks[index] = e.target.value;
-                              setSubmissionLinks(newLinks);
-
-                              // Mark as not fetched if link is changed
-                              if (fetchedLinkIndices.has(index)) {
-                                setFetchedLinkIndices(prev => {
-                                  const newSet = new Set(prev);
-                                  newSet.delete(index);
-                                  return newSet;
-                                });
-                                setLinkFetchStatus(prev => ({ ...prev, [index]: 'idle' }));
+                              if (
+                                submissionLinks.length <
+                                (contest.max_submissions_per_creator || 1)
+                              ) {
+                                setSubmissionLinks([...submissionLinks, ""]);
                               }
                             }}
-                            className="flex-1"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => handleIndividualFetch(link, index)}
-                            disabled={!link.trim() || linkFetchStatus[index] === 'fetching'}
-                            className="bg-purple-600 hover:bg-purple-700 text-white"
+                            disabled={
+                              submissionLinks.length >=
+                              (contest.max_submissions_per_creator || 1)
+                            }
+                            className={cn(
+                              isDark ? "bg-[#7F39EC] border-[#7F39EC] text-white" : "border text-purple-700 border-purple-300 hover:bg-purple-100"
+                            )}
                           >
-                            {linkFetchStatus[index] === 'fetching' ? (
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                            ) : fetchedLinkIndices.has(index) ? (
-                              <Check className="h-4 w-4" />
+                            <Plus className="h-4 w-4 mr-1" />
+                            Add Link
+                          </Button>
+                          {submissionLinks.length > 1 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const newLinks = [...submissionLinks];
+                                newLinks.pop();
+                                setSubmissionLinks(newLinks);
+                              }}
+                              className={cn(
+                                
+                                isDark ? "bg-[#7F39EC] border-[#7F39EC] text-white" : "border text-purple-700 border-purple-300 hover:bg-purple-100"
+                              )}
+                            >
+                              <Minus className="h-4 w-4 mr-1" />
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Multiple Link Inputs */}
+                      <div className="space-y-3">
+                        {submissionLinks.map((link, index) => (
+                          <div key={index} className="flex items-center gap-3">
+                            <div className="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center text-sm font-medium">
+                              {index + 1}
+                            </div>
+                            <Input
+                              type="text"
+                              className={cn("flex-1",
+                                isDark
+                                  ? "bg-[#180438] border border-gray-700 text-white"
+                                  : "bg-white text-black"
+                              )}
+                              placeholder={`Enter ${
+                                contestPlatform?.toLowerCase() === "youtube"
+                                  ? "YouTube"
+                                  : "Instagram"
+                              } video URL ${index + 1}`}
+                              value={link}
+                              onChange={(e) => {
+                                const newLinks = [...submissionLinks];
+                                newLinks[index] = e.target.value;
+                                setSubmissionLinks(newLinks);
+
+                                // Mark as not fetched if link is changed
+                                if (fetchedLinkIndices.has(index)) {
+                                  setFetchedLinkIndices((prev) => {
+                                    const newSet = new Set(prev);
+                                    newSet.delete(index);
+                                    return newSet;
+                                  });
+                                  setLinkFetchStatus((prev) => ({
+                                    ...prev,
+                                    [index]: "idle",
+                                  }));
+                                }
+                              }}
+                              
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => handleIndividualFetch(link, index)}
+                              disabled={
+                                !link.trim() ||
+                                linkFetchStatus[index] === "fetching"
+                              }
+                              className="bg-purple-600 hover:bg-purple-700 text-white"
+                            >
+                              {linkFetchStatus[index] === "fetching" ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : fetchedLinkIndices.has(index) ? (
+                                <Check className="h-4 w-4" />
+                              ) : (
+                                "Fetch"
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleIndividualRemove(index)}
+                              className={cn(
+                                
+                                isDark ? "text-red-400 border-red-500 hover:bg-red-900" : "text-red-600 border-red-300 hover:bg-red-50"
+                              )}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Fetch All Button */}
+                      {submissionLinks.some((link) => link.trim()) && (
+                        <div className="flex justify-center">
+                          <Button
+                            onClick={handleFetchAllVideos}
+                            disabled={
+                              isFetchingVideo ||
+                              submissionLinks.every((link) => !link.trim())
+                            }
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-8"
+                          >
+                            {isFetchingVideo ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Fetching New Videos...
+                              </>
                             ) : (
-                              "Fetch"
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Fetch New Videos (
+                                {
+                                  submissionLinks.filter(
+                                    (link, index) =>
+                                      link.trim() &&
+                                      !fetchedLinkIndices.has(index)
+                                  ).length
+                                }
+                                )
+                              </>
                             )}
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleIndividualRemove(index)}
-                            className="text-red-600 border-red-300 hover:bg-red-50"
-                          >
-                            <Minus className="h-4 w-4" />
-                          </Button>
                         </div>
-                      ))}
+                      )}
+
+                      {/* Fetched Videos Display */}
+                      {(fetchedVideos.length > 0 ||
+                        fetchedReels.length > 0) && (
+                        <div className="mt-6">
+                          <h4 className="text-lg font-semibold text-purple-800 mb-4">
+                            Fetched Videos - Select the ones you want to submit:
+                          </h4>
+                          <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {/* YouTube Videos */}
+                            {fetchedVideos.map(
+                              (video, index) =>
+                                video && (
+                                  <Card
+                                    key={`youtube-${index}`}
+                                    className={`cursor-pointer transition-all duration-200 ${
+                                      isVideoAlreadySubmitted(
+                                        video.id.videoId,
+                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                      )
+                                        ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                        : selectedVideoIndices.includes(index)
+                                        ? "border-2 border-purple-500 bg-purple-50"
+                                        : "border border-gray-200 hover:border-purple-300"
+                                    }`}
+                                    onClick={() =>
+                                      handleVideoSelection(
+                                        index,
+                                        !selectedVideoIndices.includes(index)
+                                      )
+                                    }
+                                  >
+                                    <CardContent className="p-4">
+                                      <div className="flex items-start gap-4">
+                                        <div className="flex-shrink-0">
+                                          <Image
+                                            src={
+                                              video.snippet.thumbnails.medium
+                                                ?.url ||
+                                              video.snippet.thumbnails.default
+                                                .url
+                                            }
+                                            alt={video.snippet.title}
+                                            width={120}
+                                            height={68}
+                                            className="rounded-lg object-cover aspect-video"
+                                          />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <div className="flex items-start gap-2 mb-2">
+                                                <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                                  {video.snippet.title}
+                                                </h5>
+                                                {isVideoAlreadySubmitted(
+                                                  video.id.videoId,
+                                                  `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                                ) && (
+                                                  <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    Already Submitted
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-4 text-xs text-gray-600">
+                                                <span>
+                                                  👁️{" "}
+                                                  {video.statistics
+                                                    ?.viewCount || 0}{" "}
+                                                  views
+                                                </span>
+                                                <span>
+                                                  👍{" "}
+                                                  {video.statistics
+                                                    ?.likeCount || 0}{" "}
+                                                  likes
+                                                </span>
+                                                <span>
+                                                  💬{" "}
+                                                  {video.statistics
+                                                    ?.commentCount || 0}{" "}
+                                                  comments
+                                                </span>
+                                              </div>
+                                            </div>
+                                            <div className="flex-shrink-0 ml-2">
+                                              {selectedVideoIndices.includes(
+                                                index
+                                              ) ? (
+                                                <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
+                                                  <Check className="h-4 w-4" />
+                                                </div>
+                                              ) : (
+                                                <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                )
+                            )}
+
+                            {/* Instagram Reels */}
+                            {fetchedReels.map(
+                              (reel, index) =>
+                                reel && (
+                                  <Card
+                                    key={`instagram-${index}`}
+                                    className={`cursor-pointer transition-all duration-200 ${
+                                      isVideoAlreadySubmitted(
+                                        reel.id,
+                                        reel.permalink
+                                      )
+                                        ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                        : selectedReelIndices.includes(index)
+                                        ? "border-2 border-purple-500 bg-purple-50"
+                                        : "border border-gray-200 hover:border-purple-300"
+                                    }`}
+                                    onClick={() =>
+                                      handleVideoSelection(
+                                        index,
+                                        !selectedReelIndices.includes(index)
+                                      )
+                                    }
+                                  >
+                                    <CardContent className="p-4">
+                                      <div className="flex items-start gap-4">
+                                        <div className="flex-shrink-0">
+                                          <Image
+                                            src={
+                                              reel.thumbnail_url ||
+                                              "/placeholder-reel.jpg"
+                                            }
+                                            alt={
+                                              reel.caption || "Instagram Reel"
+                                            }
+                                            width={120}
+                                            height={120}
+                                            className="rounded-lg object-cover aspect-square"
+                                          />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <div className="flex items-start gap-2 mb-2">
+                                                <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                                  {reel.caption ||
+                                                    "Instagram Reel"}
+                                                </h5>
+                                                {isVideoAlreadySubmitted(
+                                                  reel.id,
+                                                  reel.permalink
+                                                ) && (
+                                                  <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    Already Submitted
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="flex items-center gap-4 text-xs text-gray-600">
+                                                <span>
+                                                  📅{" "}
+                                                  {dayjs(reel.timestamp).format(
+                                                    "MMM D, YYYY"
+                                                  )}
+                                                </span>
+                                                <span>
+                                                  🎬 {reel.media_type}
+                                                </span>
+                                              </div>
+                                            </div>
+                                            <div className="flex-shrink-0 ml-2">
+                                              {selectedReelIndices.includes(
+                                                index
+                                              ) ? (
+                                                <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
+                                                  <Check className="h-4 w-4" />
+                                                </div>
+                                              ) : (
+                                                <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                )
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Earnings Cap Warning */}
+                      {contest.contest_based_details?.cpm_contest
+                        ?.max_earnings_per_creator && (
+                        <Alert className="border-amber-200 bg-amber-50">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                          <AlertDescription className="text-amber-800">
+                            <strong>Earnings Cap:</strong> You can earn up to $
+                            {(
+                              contest.contest_based_details.cpm_contest
+                                .max_earnings_per_creator / 100
+                            ).toFixed(2)}{" "}
+                            total from this contest.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
-
-                    {/* Fetch All Button */}
-                    {submissionLinks.some(link => link.trim()) && (
-                      <div className="flex justify-center">
-                        <Button
-                          onClick={handleFetchAllVideos}
-                          disabled={isFetchingVideo || submissionLinks.every(link => !link.trim())}
-                          className="bg-purple-600 hover:bg-purple-700 text-white px-8"
-                        >
-                          {isFetchingVideo ? (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                              Fetching New Videos...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Fetch New Videos ({submissionLinks.filter((link, index) => link.trim() && !fetchedLinkIndices.has(index)).length})
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Fetched Videos Display */}
-                    {(fetchedVideos.length > 0 || fetchedReels.length > 0) && (
-                      <div className="mt-6">
-                        <h4 className="text-lg font-semibold text-purple-800 mb-4">
-                          Fetched Videos - Select the ones you want to submit:
-                        </h4>
-                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                          {/* YouTube Videos */}
-                          {fetchedVideos.map((video, index) => (
-                            video && (
-                              <Card
-                                key={`youtube-${index}`}
-                                className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`)
-                                  ? "border-2 border-red-300 bg-red-50 opacity-75"
-                                  : selectedVideoIndices.includes(index)
-                                    ? "border-2 border-purple-500 bg-purple-50"
-                                    : "border border-gray-200 hover:border-purple-300"
-                                  }`}
-                                onClick={() => handleVideoSelection(index, !selectedVideoIndices.includes(index))}
-                              >
-                                <CardContent className="p-4">
-                                  <div className="flex items-start gap-4">
-                                    <div className="flex-shrink-0">
-                                      <Image
-                                        src={video.snippet.thumbnails.medium?.url || video.snippet.thumbnails.default.url}
-                                        alt={video.snippet.title}
-                                        width={120}
-                                        height={68}
-                                        className="rounded-lg object-cover aspect-video"
-                                      />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                          <div className="flex items-start gap-2 mb-2">
-                                            <h5 className="font-medium text-sm line-clamp-2 flex-1">
-                                              {video.snippet.title}
-                                            </h5>
-                                            {isVideoAlreadySubmitted(video.id.videoId, `https://www.youtube.com/watch?v=${video.id.videoId}`) && (
-                                              <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
-                                                <AlertTriangle className="h-3 w-3" />
-                                                Already Submitted
-                                              </div>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-4 text-xs text-gray-600">
-                                            <span>👁️ {video.statistics?.viewCount || 0} views</span>
-                                            <span>👍 {video.statistics?.likeCount || 0} likes</span>
-                                            <span>💬 {video.statistics?.commentCount || 0} comments</span>
-                                          </div>
-                                        </div>
-                                        <div className="flex-shrink-0 ml-2">
-                                          {selectedVideoIndices.includes(index) ? (
-                                            <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
-                                              <Check className="h-4 w-4" />
-                                            </div>
-                                          ) : (
-                                            <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            )
-                          ))}
-
-                          {/* Instagram Reels */}
-                          {fetchedReels.map((reel, index) => (
-                            reel && (
-                              <Card
-                                key={`instagram-${index}`}
-                                className={`cursor-pointer transition-all duration-200 ${isVideoAlreadySubmitted(reel.id, reel.permalink)
-                                  ? "border-2 border-red-300 bg-red-50 opacity-75"
-                                  : selectedReelIndices.includes(index)
-                                    ? "border-2 border-purple-500 bg-purple-50"
-                                    : "border border-gray-200 hover:border-purple-300"
-                                  }`}
-                                onClick={() => handleVideoSelection(index, !selectedReelIndices.includes(index))}
-                              >
-                                <CardContent className="p-4">
-                                  <div className="flex items-start gap-4">
-                                    <div className="flex-shrink-0">
-                                      <Image
-                                        src={reel.thumbnail_url || "/placeholder-reel.jpg"}
-                                        alt={reel.caption || "Instagram Reel"}
-                                        width={120}
-                                        height={120}
-                                        className="rounded-lg object-cover aspect-square"
-                                      />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                          <div className="flex items-start gap-2 mb-2">
-                                            <h5 className="font-medium text-sm line-clamp-2 flex-1">
-                                              {reel.caption || "Instagram Reel"}
-                                            </h5>
-                                            {isVideoAlreadySubmitted(reel.id, reel.permalink) && (
-                                              <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
-                                                <AlertTriangle className="h-3 w-3" />
-                                                Already Submitted
-                                              </div>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-4 text-xs text-gray-600">
-                                            <span>📅 {dayjs(reel.timestamp).format("MMM D, YYYY")}</span>
-                                            <span>🎬 {reel.media_type}</span>
-                                          </div>
-                                        </div>
-                                        <div className="flex-shrink-0 ml-2">
-                                          {selectedReelIndices.includes(index) ? (
-                                            <div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center">
-                                              <Check className="h-4 w-4" />
-                                            </div>
-                                          ) : (
-                                            <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            )
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Earnings Cap Warning */}
-                    {contest.contest_based_details?.cpm_contest?.max_earnings_per_creator && (
-                      <Alert className="border-amber-200 bg-amber-50">
-                        <AlertTriangle className="h-4 w-4 text-amber-600" />
-                        <AlertDescription className="text-amber-800">
-                          <strong>Earnings Cap:</strong> You can earn up to ${(contest.contest_based_details.cpm_contest.max_earnings_per_creator / 100).toFixed(2)} total from this contest.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
         </CardContent>
       </div>
     </div>
