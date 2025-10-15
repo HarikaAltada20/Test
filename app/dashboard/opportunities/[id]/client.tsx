@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,8 @@ import {
   Tag,
   Star,
   Copy,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn, formatLocalDateTime, formatTimeAgo } from "@/lib/utils";
@@ -78,6 +80,16 @@ type PrizeInfo = {
 const tabs = [
   { id: "details", label: "Contest Details" },
   { id: "leaderboard", label: "Leaderboard" },
+];
+
+// Section navigation configuration
+const sections = [
+  { id: "earning-opportunities", label: "Earning Opportunities" },
+  { id: "prize-structure", label: "Prize Structure", conditional: "leaderboard" }, // Only for leaderboard contests
+  { id: "contest-details", label: "Contest Details" },
+  { id: "content-requirements", label: "Content Requirements" },
+  { id: "participation-guidelines", label: "Participation Guidelines" },
+  { id: "resources-tools", label: "Resources & Tools" },
 ];
 // LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
@@ -229,35 +241,7 @@ export function ContestClientPage({
   } | null>(null);
 
   const { toast } = useToast();
-  // Read mode from data attribute
-  useEffect(() => {
-    const checkMode = () => {
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) {
-          setMode(currentMode);
-        }
-      }
-    };
 
-    checkMode();
-
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
-    const targetNode = document.querySelector("[data-mode]");
-    if (targetNode) {
-      observer.observe(targetNode, {
-        attributes: true,
-        attributeFilter: ["data-mode"],
-      });
-    }
-
-    return () => observer.disconnect();
-  }, []);
-  const isDark = mode === "dark";
   // Utility function to extract firstName from full_name
   const getFirstName = (fullName: string): string => {
     if (!fullName) return "";
@@ -565,6 +549,41 @@ export function ContestClientPage({
     }
   }, [searchParams, router]);
 
+  // Scroll spy effect
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Find the entry that is most visible
+        const visibleEntries = entries.filter(entry => entry.isIntersecting);
+        if (visibleEntries.length > 0) {
+          // Sort by intersection ratio to find the most visible section
+          const mostVisible = visibleEntries.sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+          setActiveSection(mostVisible.target.id);
+        }
+      },
+      {
+        threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5],
+        rootMargin: "-180px 0px -40% 0px", // Adjusted to account for page header + sticky nav height
+      }
+    );
+
+    sections.forEach((section) => {
+      const element = sectionRefs.current[section.id];
+      if (element) {
+        observer.observe(element);
+      }
+    });
+
+    return () => {
+      sections.forEach((section) => {
+        const element = sectionRefs.current[section.id];
+        if (element) {
+          observer.unobserve(element);
+        }
+      });
+    };
+  }, []);
+
   useEffect(() => {
     isMounted = true;
 
@@ -840,47 +859,47 @@ export function ContestClientPage({
             </Button>
           </div>
 
-          {/* Enhanced Contest Header Section */}
-          <div className="relative overflow-hidden rounded-xl bg-[#7F39EC] shadow-lg">
-            {/* Decorative background pattern */}
-            {/* <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full transform translate-x-16 -translate-y-16"></div>
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-black/5 rounded-full transform -translate-x-24 translate-y-24"></div> */}
+          {/* Modern Hero Section with Enhanced Design */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#7F39EC] via-[#6C43D0] to-[#5A2D91] shadow-2xl">
+            {/* Animated background elements */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full transform translate-x-32 -translate-y-32 animate-pulse"></div>
+            <div className="absolute bottom-0 left-0 w-80 h-80 bg-white/5 rounded-full transform -translate-x-40 translate-y-40 animate-pulse delay-1000"></div>
+            <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-white/5 rounded-full transform -translate-x-16 -translate-y-16 animate-pulse delay-500"></div>
 
-            <div className="relative p-8">
+            <div className="relative p-8 lg:p-12">
               <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
                 <div className="flex-1 min-w-0">
-                  {/* Contest Title */}
-                  <h1 className="text-2xl lg:text-3xl font-bold tracking-tight mb-6 text-white drop-shadow-sm leading-tight">
+                  {/* Contest Title with enhanced typography */}
+                  <h1 className="text-3xl lg:text-5xl font-black tracking-tight mb-6 text-white drop-shadow-2xl leading-tight bg-gradient-to-r from-white to-white/90 bg-clip-text">
                     {contest.title}
                   </h1>
 
-                  {/* Status and Type Badges */}
-                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                  {/* Enhanced Status and Type Badges */}
+                  <div className="flex flex-wrap items-center gap-4 mb-6">
                     <Badge
-                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${
-                        contest.status === "active"
-                          ? "bg-green-400/90 text-green-900"
-                          : contest.status === "upcoming"
+                      className={`text-sm px-4 py-2 font-semibold rounded-full shadow-lg border-2 border-white/30 backdrop-blur-sm ${contest.status === "active"
+                        ? "bg-green-400/90 text-green-900"
+                        : contest.status === "upcoming"
                           ? "bg-blue-400/90 text-blue-900"
                           : "bg-slate-400/90 text-slate-900"
-                      }`}
+                        }`}
                     >
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-2">
                         {contest.status === "active" ? (
-                          <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></div>
+                          <div className="w-3 h-3 bg-green-600 rounded-full animate-pulse shadow-lg"></div>
                         ) : contest.status === "upcoming" ? (
-                          <Clock className="w-3 h-3" />
+                          <Clock className="w-4 h-4" />
                         ) : (
-                          <Calendar className="w-3 h-3" />
+                          <Calendar className="w-4 h-4" />
                         )}
                         {contest.status === "active"
-                          ? "LIVE"
+                          ? "LIVE NOW"
                           : contest.status.toUpperCase()}
                       </span>
                     </Badge>
                     {contest.contest_type && (
-                      <Badge className="capitalize text-sm px-4 py-2 font-semibold rounded-full shadow-lg bg-white/20 backdrop-blur-sm border-2 border-white/30 text-white">
+                      <Badge className="capitalize text-sm px-6 py-3 font-bold rounded-full shadow-xl bg-white/25 backdrop-blur-md border-2 border-white/40 text-white hover:scale-105 transition-all duration-300">
                         {contest.contest_type === "cpm"
                           ? "Performance Based"
                           : "Competition Based"}
@@ -892,11 +911,11 @@ export function ContestClientPage({
                       renderPostContestStatusBadge(postContestStatus)}
                   </div>
 
-                  {/* Contest Duration */}
+                  {/* Enhanced Contest Duration */}
                   {contest.start_date && contest.end_date && (
-                    <div className="bg-white/15 backdrop-blur-sm rounded-lg px-4 py-3 inline-block">
-                      <p className="text-white/95 text-sm font-medium flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
+                    <div className="bg-white/20 backdrop-blur-md rounded-xl px-6 py-4 inline-block border border-white/30 shadow-lg">
+                      <p className="text-white/95 text-base font-semibold flex items-center gap-3">
+                        <Calendar className="w-5 h-5" />
                         <span>
                           {formatLocalDateTime(contest.start_date, {
                             month: "short",
@@ -915,15 +934,15 @@ export function ContestClientPage({
                   )}
                 </div>
 
-                {/* Right side - Enhanced Prize Pool */}
+                {/* Enhanced Prize Pool Card */}
                 <div className="flex-shrink-0 lg:text-right">
-                  <div className="bg-white/15 backdrop-blur-md rounded-2xl p-6 border border-white/25 shadow-xl">
-                    <div className="text-white/80 text-sm font-medium mb-2 uppercase tracking-wide">
+                  <div className="bg-white/20 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105">
+                    <div className="text-white/90 text-sm font-bold mb-3 uppercase tracking-wider">
                       {contest.contest_type === "cpm"
                         ? "Total Budget"
                         : "Prize Pool"}
                     </div>
-                    <div className="text-3xl lg:text-4xl font-bold text-white mb-1">
+                    <div className="text-4xl lg:text-6xl font-black text-white mb-2 drop-shadow-lg">
                       {contest.contest_type === "cpm" &&
                       contest.contest_based_details?.cpm_contest
                         ? formatMoney(
@@ -943,7 +962,7 @@ export function ContestClientPage({
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
                         ?.winner_count && (
-                        <div className="text-white/70 text-xs font-medium">
+                        <div className="text-white/80 text-sm font-semibold">
                           {
                             contest.contest_based_details.leaderboard_contest
                               .winner_count
@@ -958,7 +977,7 @@ export function ContestClientPage({
                     {contest.contest_type === "cpm" &&
                       contest.contest_based_details?.cpm_contest
                         ?.cpm_rate_usd && (
-                        <div className="text-white/70 text-xs font-medium">
+                        <div className="text-white/80 text-sm font-semibold">
                           {formatMoney(
                             contest.contest_based_details.cpm_contest
                               .cpm_rate_usd * 100
@@ -1143,38 +1162,21 @@ export function ContestClientPage({
         {/* Colorful Contest Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {/* Platform Card */}
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}
-          >
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
             <CardContent className="p-4 flex justify-between">
-              <div
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}
-              >
+              <div className="flex-1 text-black space-y-3">
                 <p className="text-lg font-medium">Platform</p>
                 <p className="text-xl font-bold">
                   {contest.platform || "Not specified"}
                 </p>
               </div>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
                 {contest.platform?.toLowerCase() === "youtube" ? (
-                  <Youtube className="h-5 w-5" />
+                  <Youtube className="h-5 w-5 text-[#4A00BE] " />
                 ) : contest.platform?.toLowerCase() === "instagram" ? (
-                  <Instagram className="h-5 w-5" />
+                  <Instagram className="h-5 w-5 text-[#4A00BE]" />
                 ) : (
-                  <Share2 className="h-5 w-5" />
+                  <Share2 className="h-5 w-5 text-[#4A00BE]" />
                 )}
               </div>
             </CardContent>
@@ -1203,19 +1205,9 @@ export function ContestClientPage({
   </CardContent>
 </Card> */}
           {/* Duration Card */}
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}
-          >
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
             <CardContent className="p-4 flex justify-between">
-              <div
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}
-              >
+              <div className="flex-1 text-black space-y-3">
                 <p className="text-lg font-medium">Duration</p>
                 <p className="text-xl font-bold">
                   {(() => {
@@ -1230,8 +1222,7 @@ export function ContestClientPage({
                     return `${diffDays} day${diffDays !== 1 ? "s" : ""}`;
                   })()}
                 </p>
-                <p className="text-md">
-                  {" "}
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   {contest.start_date && contest.end_date
                     ? `${formatLocalDateTime(contest.start_date, {
                         month: "short",
@@ -1243,14 +1234,7 @@ export function ContestClientPage({
                     : "Dates TBD"}
                 </p>
               </div>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
                 <Calendar className="h-5 w-5" />
               </div>
             </CardContent>
@@ -1290,19 +1274,9 @@ export function ContestClientPage({
           </Card> */}
 
           {/* Prize Pool Card */}
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}
-          >
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
             <CardContent className="p-4 flex justify-between">
-              <div
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}
-              >
+              <div className="flex-1 text-black space-y-3">
                 <p className="text-lg font-medium">Prize Pool</p>
                 <p className="text-xl font-bold">
                   {contest.contest_type === "cpm" &&
@@ -1320,8 +1294,7 @@ export function ContestClientPage({
                     ? formatMoney(contest.total_prize || 0)
                     : "$0.00"}
                 </p>
-                <p className="text-md">
-                  {" "}
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   {contest.contest_type === "leaderboard" &&
                   contest.contest_based_details?.leaderboard_contest
                     ?.winner_count
@@ -1339,14 +1312,7 @@ export function ContestClientPage({
                     : "Total prize"}
                 </p>
               </div>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
                 <Trophy className="h-5 w-5" />
               </div>
             </CardContent>
@@ -1381,19 +1347,9 @@ export function ContestClientPage({
           </Card> */}
 
           {/* Submissions Card */}
-          <div
-            className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}
-          >
+          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
             <CardContent className="p-4 flex justify-between">
-              <div
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}
-              >
+              <div className="flex-1 text-black space-y-3">
                 <p className="text-lg font-medium">Submissions</p>
                 <p className="text-xl font-bold">
                   {contest.live_submission_count !== null &&
@@ -1401,16 +1357,9 @@ export function ContestClientPage({
                     ? contest.live_submission_count
                     : 0}
                 </p>
-                <p className="text-md">Total entries</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Total entries</p>
               </div>
-              <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}
-              >
+              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
                 <Users className="h-5 w-5" />
               </div>
             </CardContent>
@@ -1538,12 +1487,7 @@ export function ContestClientPage({
 
         <TabContent activeTab={activeTab}>
           <TabPanel value="details" activeTab={activeTab}>
-            <div
-              className={cn(
-                "rounded-xl shadow-xl",
-                isDark ? "bg-[#180438]" : "bg-white"
-              )}
-            >
+            <div className="bg-white rounded-xl shadow-xl">
               <CardHeader className="border-b">
                 <CardTitle
                   className={cn(
@@ -1557,22 +1501,12 @@ export function ContestClientPage({
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="pt-4">
-                  <h3
-                    className={cn(
-                      "font-semibold text-lg mb-4",
-                      isDark ? "text-white" : "text-slate-900"
-                    )}
-                  >
+                  <h3 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
                     Brief
                   </h3>
                   {contest.brief_html ? (
                     <div
-                      className={cn(
-                        "prose prose-sm max-w-none",
-                        isDark
-                          ? "text-white prose-headings:text-white prose-p:text-white prose-li:text-white prose-strong:text-white prose-em:text-white"
-                          : "text-slate-700"
-                      )}
+                      className="prose prose-sm max-w-none text-slate-700 dark:text-slate-300"
                       dangerouslySetInnerHTML={{ __html: contest.brief_html }}
                     />
                   ) : (
@@ -1594,31 +1528,14 @@ export function ContestClientPage({
                     <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-3 rounded-full shadow-sm",
-                              isDark
-                                ? "bg-[#FFFFFF36] text-white"
-                                : "bg-[#D8C3FF] text-[#4A00BE]"
-                            )}
-                          >
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
                             <Play className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
                               Start Date & Time
                             </p>
-                            <p
-                              className={cn(
-                                "text-lg font-bold",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-lg font-bold text-black">
                               {contest.start_date
                                 ? formatLocalDateTime(contest.start_date)
                                 : "Not specified"}
@@ -1632,31 +1549,14 @@ export function ContestClientPage({
                     <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-3 rounded-full shadow-sm",
-                              isDark
-                                ? "bg-[#FFFFFF36] text-white"
-                                : "bg-[#D8C3FF] text-[#4A00BE]"
-                            )}
-                          >
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
                             <Clock className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
                               End Date & Time
                             </p>
-                            <p
-                              className={cn(
-                                "text-lg font-bold",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-lg font-bold text-black">
                               {contest.end_date
                                 ? formatLocalDateTime(contest.end_date)
                                 : "Not specified"}
@@ -1670,31 +1570,14 @@ export function ContestClientPage({
                     <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-3 rounded-full shadow-sm",
-                              isDark
-                                ? "bg-[#FFFFFF36] text-white"
-                                : "bg-[#D8C3FF] text-[#4A00BE]"
-                            )}
-                          >
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
                             <Monitor className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
                               Platform
                             </p>
-                            <p
-                              className={cn(
-                                "text-lg font-bold capitalize",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-lg font-bold text-black capitalize">
                               {contest.platform || "Not specified"}
                             </p>
                           </div>
@@ -1706,31 +1589,14 @@ export function ContestClientPage({
                     <div className="border border-gray-300 rounded-xl">
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-3 rounded-full shadow-sm",
-                              isDark
-                                ? "bg-[#FFFFFF36] text-white"
-                                : "bg-[#D8C3FF] text-[#4A00BE]"
-                            )}
-                          >
+                          <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full shadow-sm">
                             <Info className="h-6 w-6 " />
                           </div>
                           <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-xs font-medium text-black uppercase tracking-wide">
                               Status
                             </p>
-                            <p
-                              className={cn(
-                                "text-lg font-bold capitalize",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                            >
+                            <p className="text-lg font-bold text-black capitalize">
                               {contest.status || "Not specified"}
                             </p>
                           </div>
@@ -1757,14 +1623,9 @@ export function ContestClientPage({
                     </Card> */}
                   </div>
                 </div>
-                {/* <Separator /> */}
+                <Separator />
                 <div>
-                  <h3
-                    className={cn(
-                      "px-1 font-semibold text-lg mb-3",
-                      isDark ? "text-white" : "text-slate-900"
-                    )}
-                  >
+                  <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100">
                     {contest.contest_type === "cpm"
                       ? "Earnings & Budget"
                       : "Prize Structure"}
@@ -1773,38 +1634,21 @@ export function ContestClientPage({
                     (Array.isArray(
                       contest.contest_based_details?.leaderboard_contest?.prizes
                     ) &&
-                    contest.contest_based_details.leaderboard_contest.prizes
-                      .length > 0 ? (
+                      contest.contest_based_details.leaderboard_contest.prizes
+                        .length > 0 ? (
                       <div className="space-y-4">
                         {/* Prize Pool Summary */}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "p-3 rounded-full",
-                                isDark
-                                  ? "bg-[#FFFFFF36] text-white"
-                                  : "bg-[#D8C3FF] text-[#4A00BE]"
-                              )}
-                            >
+                            <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
                               <Trophy className="h-5 w-5" />
                             </div>
                             <div>
-                              <p
-                                className={cn(
-                                  "text-sm font-medium uppercase tracking-wide",
-                                  isDark ? "text-white" : "text-black"
-                                )}
-                              >
+                              <p className="text-sm font-medium text-black uppercase tracking-wide">
                                 Total Prize Pool
                               </p>
-                              <p
-                                className={cn(
-                                  "text-xl font-bold",
-                                  isDark ? "text-white" : "text-black"
-                                )}
-                              >
+                              <p className="text-xl font-bold text-black">
                                 {formatMoney(
                                   contest.contest_based_details
                                     .leaderboard_contest.total_prize
@@ -1813,28 +1657,14 @@ export function ContestClientPage({
                             </div>
                           </div>
                           <div className="border border-gray-300 rounded-xl p-4 flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "p-3 rounded-full",
-                                isDark
-                                  ? "bg-[#FFFFFF36] text-white"
-                                  : "bg-[#D8C3FF] text-[#4A00BE]"
-                              )}
-                            >
+                            <div className="p-3 bg-[#D8C3FF] text-[#4A00BE] rounded-full">
                               <Users className="h-5 w-5" />
                             </div>
                             <div>
-                              <p className={cn(
-                                "text-sm font-medium uppercase tracking-wide",
-                                isDark ? "text-white" : "text-black"
-                              )}
-                               >
+                              <p className="text-sm font-medium text-black uppercase tracking-wide">
                                 Total Winners
                               </p>
-                              <p className={cn(
-                                "text-xl font-bold",
-                                isDark ? "text-white" : "text-black"
-                              )}>
+                              <p className="text-xl font-bold text-black">
                                 {
                                   contest.contest_based_details
                                     .leaderboard_contest.winner_count
@@ -1846,10 +1676,7 @@ export function ContestClientPage({
 
                         {/* Prize Distribution */}
                         <div className="py-4">
-                          <h4 className={cn(
-                            "font-medium px-1 text-lg font-semibold mb-3 flex items-center gap-2",
-                            isDark ? "text-white" : "text-slate-800"
-                          )}>
+                          <h4 className="font-medium text-md text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
                             {/* <ListOrdered className="h-4 w-4" /> */}
                             Prize Distribution
                           </h4>
@@ -1890,20 +1717,10 @@ export function ContestClientPage({
                       <div className="py-4 space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-800"
-                              )}
-                            >
+                            <span className="font-medium text-slate-800 dark:text-slate-200">
                               Pay Rate:
                             </span>
-                            <span
-                              className={cn(
-                                "font-semibold",
-                                isDark ? "text-white" : "text-slate-800"
-                              )}
-                            >
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
                               {formatMoney(
                                 contest.contest_based_details.cpm_contest
                                   .cpm_rate_usd * 100
@@ -1912,12 +1729,7 @@ export function ContestClientPage({
                             </span>
                           </div>
                           <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                            <span
-                              className={cn(
-                                "font-medium",
-                                isDark ? "text-white" : "text-slate-800"
-                              )}
-                            >
+                            <span className="font-medium text-slate-800 dark:text-slate-200">
                               Total Budget:
                             </span>
                             <span className="font-bold text-green-600 dark:text-green-400">
@@ -1929,69 +1741,34 @@ export function ContestClientPage({
                           </div>
                           {contest.contest_based_details.cpm_contest
                             .min_views != null && (
-                            <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-800"
-                                )}
-                              >
-                                Minimum Views Required:
-                              </span>
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-900"
-                                )}
-                              >
-                                {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Minimum Views Required:
+                                </span>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                                </span>
+                              </div>
+                            )}
                           {contest.contest_based_details.cpm_contest
                             .max_views != null && (
-                            <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-800"
-                                )}
-                              >
-                                Maximum Views Counted:
-                              </span>
-                              <span
-                                className={cn(
-                                  "font-semibold",
-                                  isDark ? "text-white" : "text-slate-900"
-                                )}
-                              >
-                                {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {/* <Separator /> */}
-                        <div>
-                          <h4
-                            className={cn(
-                              "font-semibold mb-2",
-                              isDark ? "text-white" : "text-slate-900"
+                              <div className="flex justify-between items-center border border-gray-300 rounded-xl p-4">
+                                <span className="font-medium text-slate-800 dark:text-slate-200">
+                                  Maximum Views Counted:
+                                </span>
+                                <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                </span>
+                              </div>
                             )}
-                          >
+                        </div>
+                        <Separator />
+                        <div>
+                          <h4 className="font-semibold mb-2 text-slate-900 dark:text-slate-100">
                             Terms & Conditions:
                           </h4>
-                          <div
-                            className={cn(
-                              "rounded-md p-3 border border-slate-400",
-                              isDark ? "bg-[#180438]" : "bg-white"
-                            )}
-                          >
-                            <pre
-                              className={cn(
-                                "whitespace-pre-wrap break-words font-sans text-sm",
-                                isDark ? "text-white" : "text-gray-700"
-                              )}
-                            >
+                          <div className="bg-white dark:bg-slate-900 rounded-md p-3 border border-slate-200 dark:border-slate-700">
+                            <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
                               {contest.contest_based_details.cpm_contest
                                 .terms_conditions ||
                                 "No specific terms provided."}
@@ -2008,20 +1785,18 @@ export function ContestClientPage({
                     )}
                 </div>
 
-                {/* <Separator /> */}
-
-                {/* Rules Section - Always Show */}
-                <div>
-                  <h3
-                    className={cn(
-                      "font-semibold text-lg mb-3 flex items-center gap-2",
-                      isDark ? "text-white" : "text-slate-900"
-                    )}
-                  >
-                    {/* <ScrollText className="h-5 w-5" />  */}
-                    Rules & Guidelines
+                {/* 4. PARTICIPATION GUIDELINES - Rules and Terms */}
+                <div id="participation-guidelines" ref={(el) => { sectionRefs.current["participation-guidelines"] = el; }} className="space-y-6">
+                  <h3 className="font-semibold text-xl text-foreground flex items-center gap-2">
+                    <ScrollText className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                    Participation Guidelines
                   </h3>
-                  <div className="border border-gray-300 rounded-xl p-4">
+                  {/* Rules & Guidelines Section */}
+                  <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-orange-200 dark:border-orange-700/30">
+                    <h4 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <ScrollText className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                      Rules & Guidelines
+                    </h4>
                     {/* Check multiple possible rule fields */}
                     {(contest as any).rules_html ? (
                       <div
@@ -2109,347 +1884,28 @@ export function ContestClientPage({
                       </div>
                     )}
                   </div>
+
+                  {/* Terms & Conditions for CPM contests */}
+                  {contest.contest_type === "cpm" && contest.contest_based_details?.cpm_contest?.terms_conditions && (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-orange-200 dark:border-orange-700/30 mt-6">
+                      <h4 className="font-semibold text-lg mb-4 text-slate-900 dark:text-slate-100">
+                        📋 Terms & Conditions
+                      </h4>
+                      <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
+                        <pre className="whitespace-pre-wrap break-words font-sans text-sm text-slate-700 dark:text-slate-300">
+                          {contest.contest_based_details.cpm_contest.terms_conditions}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* New Features Sections (2025-10-01) */}
-                {/* Content Type Section */}
-                {(contest as any).content_type && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 
-                       className={cn(
-                        "font-semibold text-lg mb-3 flex items-center gap-2",
-                        isDark ? "text-white" : "text-slate-900"
-                      )}>
-
-                        <Tag className="h-5 w-5 text-blue-600" />
-                        Content Type
-                      </h3>
-                      <div className="border border-blue-300 bg-blue-50/50 rounded-xl p-4">
-                        <p className="text-lg font-semibold text-blue-900 uppercase tracking-wide">
-                          {(contest as any).content_type.toUpperCase()}
-                        </p>
-                        <p className="text-sm text-blue-700 mt-1">
-                          This contest is looking for{" "}
-                          {(contest as any).content_type === "ugc"
-                            ? "User Generated Content"
-                            : (contest as any).content_type === "clipping"
-                            ? "Clipping/Editing"
-                            : "Other"}{" "}
-                          type submissions.
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Flat Fee Bonus Section */}
-                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <Gift className="h-5 w-5 text-green-600" />
-                        Guaranteed Flat Fee Bonus
-                      </h3>
-                      <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
-                        <p className="text-2xl font-bold text-green-900 mb-2">
-                          {formatMoney(
-                            contest.contest_based_details?.cpm_contest
-                              ?.flat_fee_bonus ||
-                              contest.contest_based_details?.leaderboard_contest
-                                ?.flat_fee_bonus ||
-                              0
-                          )}{" "}
-                          per verified submission
-                        </p>
-                        <p className="text-sm text-green-700 mb-3">
-                          🎁 Earn this guaranteed amount for EVERY verified
-                          submission, regardless of views or ranking! Paid after
-                          the contest ends along with other earnings.
-                        </p>
-
-                        {/* Show Total Bonus Budget for leaderboard contests */}
-                        {contest.contest_type === "leaderboard" &&
-                          contest.contest_based_details?.leaderboard_contest
-                            ?.total_budget && (
-                            <div className="mt-3 p-3 bg-white rounded-lg border border-green-200">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-lg">💰</span>
-                                <span className="font-semibold text-green-900">
-                                  Total Bonus Budget
-                                </span>
-                              </div>
-                              <p className="text-xl font-bold text-green-900 mb-1">
-                                {formatMoney(
-                                  contest.contest_based_details
-                                    .leaderboard_contest.total_budget
-                                )}
-                              </p>
-                              <p className="text-xs text-green-700">
-                                This is the total budget allocated for flat fee
-                                bonuses. Once this budget is reached, no more
-                                bonus payments will be made for this contest.
-                              </p>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Multiple Submissions Section */}
-                {(contest as any).multiple_submissions_enabled && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <CheckCheck className="h-5 w-5 text-purple-600" />
-                        Multiple Submissions Allowed
-                      </h3>
-                      <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
-                        <p className="text-lg font-semibold text-purple-900 mb-2">
-                          You can submit up to{" "}
-                          {(contest as any).max_submissions_per_creator} entries
-                          for this contest!
-                        </p>
-                        <p className="text-sm text-purple-700 mb-3">
-                          Submit multiple pieces of content to maximize your
-                          chances of winning and earning. Min/max view
-                          requirements (if any) apply to ALL submissions.
-                        </p>
-                        {(contest as any).max_earnings_per_creator && (
-                          <div className="mt-3 pt-3 border-t border-purple-200">
-                            <p className="text-sm text-purple-800 font-medium">
-                              💡 Earnings Cap for This Contest:{" "}
-                              {formatMoney(
-                                (contest as any).max_earnings_per_creator
-                              )}
-                            </p>
-                            <p className="text-xs text-purple-600 mt-1">
-                              You can still submit after reaching this cap, but
-                              won't earn more from THIS specific contest. This
-                              cap doesn't affect your earnings from other
-                              contests!
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Additional Bonus Opportunities Section */}
-                {(contest as any).bonus_details?.description_html && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <Star className="h-5 w-5 text-amber-600" />
-                        Additional Bonus Opportunities
-                      </h3>
-                      <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
-                        <div
-                          className={cn(
-                            "prose prose-sm max-w-none",
-                            isDark
-                              ? "text-white prose-headings:text-white prose-p:text-white prose-li:text-white prose-strong:text-white prose-em:text-white"
-                              : "text-slate-700"
-                          )}
-                          dangerouslySetInnerHTML={{
-                            __html: (contest as any).bonus_details
-                              .description_html,
-                          }}
-                        />
-                        <p className="text-xs text-amber-700 mt-3 italic">
-                          ℹ️ These bonuses are handled manually by the contest
-                          creator. Read carefully and reach out if you have
-                          questions!
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* New Features Sections (2025-10-01) */}
-                {/* Content Type Section */}
-                {(contest as any).content_type && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <Tag className="h-5 w-5 text-blue-600" />
-                        Content Type
-                      </h3>
-                      <div className="border border-blue-300 bg-blue-50/50 rounded-xl p-4">
-                        <p className="text-lg font-semibold text-blue-900 uppercase tracking-wide">
-                          {(contest as any).content_type.toUpperCase()}
-                        </p>
-                        <p className="text-sm text-blue-700 mt-1">
-                          This contest is looking for{" "}
-                          {(contest as any).content_type === "ugc"
-                            ? "User Generated Content"
-                            : (contest as any).content_type === "clipping"
-                            ? "Clipping/Editing"
-                            : "Other"}{" "}
-                          type submissions.
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Flat Fee Bonus Section */}
-                {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <Gift className="h-5 w-5 text-green-600" />
-                        Guaranteed Flat Fee Bonus
-                      </h3>
-                      <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
-                        <p className="text-2xl font-bold text-green-900 mb-2">
-                          {formatMoney(
-                            contest.contest_based_details?.cpm_contest
-                              ?.flat_fee_bonus ||
-                              contest.contest_based_details?.leaderboard_contest
-                                ?.flat_fee_bonus ||
-                              0
-                          )}{" "}
-                          per verified submission
-                        </p>
-                        <p className="text-sm text-green-700 mb-3">
-                          🎁 Earn this guaranteed amount for EVERY verified
-                          submission, regardless of views or ranking! Paid after
-                          the contest ends along with other earnings.
-                        </p>
-
-                        {/* Show Total Bonus Budget for leaderboard contests */}
-                        {contest.contest_type === "leaderboard" &&
-                          contest.contest_based_details?.leaderboard_contest
-                            ?.total_budget && (
-                            <div className="mt-3 p-3 bg-white rounded-lg border border-green-200">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-lg">💰</span>
-                                <span className="font-semibold text-green-900">
-                                  Total Bonus Budget
-                                </span>
-                              </div>
-                              <p className="text-xl font-bold text-green-900 mb-1">
-                                {formatMoney(
-                                  contest.contest_based_details
-                                    .leaderboard_contest.total_budget
-                                )}
-                              </p>
-                              <p className="text-xs text-green-700">
-                                This is the total budget allocated for flat fee
-                                bonuses. Once this budget is reached, no more
-                                bonus payments will be made for this contest.
-                              </p>
-                            </div>
-                          )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Multiple Submissions Section */}
-                {(contest as any).multiple_submissions_enabled && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <CheckCheck className="h-5 w-5 text-purple-600" />
-                        Multiple Submissions Allowed
-                      </h3>
-                      <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
-                        <p className="text-lg font-semibold text-purple-900 mb-2">
-                          You can submit up to{" "}
-                          {(contest as any).max_submissions_per_creator} entries
-                          for this contest!
-                        </p>
-                        <p className="text-sm text-purple-700 mb-3">
-                          Submit multiple pieces of content to maximize your
-                          chances of winning and earning. Min/max view
-                          requirements (if any) apply to ALL submissions.
-                        </p>
-                        {(contest as any).max_earnings_per_creator && (
-                          <div className="mt-3 pt-3 border-t border-purple-200">
-                            <p className="text-sm text-purple-800 font-medium">
-                              💡 Earnings Cap for This Contest:{" "}
-                              {formatMoney(
-                                (contest as any).max_earnings_per_creator
-                              )}
-                            </p>
-                            <p className="text-xs text-purple-600 mt-1">
-                              You can still submit after reaching this cap, but
-                              won't earn more from THIS specific contest. This
-                              cap doesn't affect your earnings from other
-                              contests!
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Additional Bonus Opportunities Section */}
-                {(contest as any).bonus_details?.description_html && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h3 className="font-semibold text-lg mb-3 text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                        <Star className="h-5 w-5 text-amber-600" />
-                        Additional Bonus Opportunities
-                      </h3>
-                      <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
-                        <div
-                          className={cn(
-                            "prose prose-sm max-w-none",
-                            isDark
-                              ? "text-white prose-headings:text-white prose-p:text-white prose-li:text-white prose-strong:text-white prose-em:text-white"
-                              : "text-slate-700"
-                          )}
-                          dangerouslySetInnerHTML={{
-                            __html: (contest as any).bonus_details
-                              .description_html,
-                          }}
-                        />
-                        <p className="text-xs text-amber-700 mt-3 italic">
-                          ℹ️ These bonuses are handled manually by the contest
-                          creator. Read carefully and reach out if you have
-                          questions!
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* <Separator /> */}
-
-                {/* Resources Section - Always Show */}
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3">
-                    {/* <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                      <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div> */}
-                    <h3
-                     className={cn(
-                      "px-2 text-xl font-semibold",
-                      isDark
-                        ? "text-white"
-                        : "text-gray-900"
-                    )}>
-                      Resources
-                    </h3>
-                  </div>
+                {/* 5. RESOURCES & TOOLS - Essential for Participation */}
+                <div id="resources-tools" ref={(el) => { sectionRefs.current["resources-tools"] = el; }} className="space-y-6">
+                  <h3 className="font-semibold text-xl text-foreground flex items-center gap-2">
+                    <Lightbulb className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                    Resources & Tools
+                  </h3>
 
                   {contest.resources &&
                   ((Array.isArray(contest.resources) &&
@@ -2693,124 +2149,95 @@ export function ContestClientPage({
                     ? contest.tracking_links
                     : [];
                   return trackingLinks.length > 0 ? (
-                    <>
-                      <Separator className="my-8" />
-                      <div className="space-y-6">
-                        <div className="flex flex-col px-2 gap-3">
-                          <h3 
-                           className={cn(
-                            "text-xl font-semibold",
-                            isDark
-                              ? "text-white"
-                              : "text-gray-900"
-                          )}>
-                            Tracking Links
-                          </h3>
-                          <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
-                            <span className="font-medium">Note:</span> change
-                            the sub1 and sub2 ... according to your submission
-                            number if you are doing multiple submissions ..
-                          </div>
+                    <div className="space-y-4">
+                      <h4 className="text-xl font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <Copy className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        Tracking Links
+                      </h4>
+                      {contest.multiple_submissions_enabled && (
+                        <div className="rounded-lg border border-yellow-300 dark:border-yellow-600/50 bg-yellow-50 dark:bg-yellow-900/20 p-4">
+                          <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-start gap-2">
+                            <span className="text-base flex-shrink-0">📝</span>
+                            <span><span className="font-semibold">Note:</span> Change the sub1 and sub2 parameters according to your submission number if you are doing multiple submissions.</span>
+                          </p>
                         </div>
+                      )}
 
-                        <div className="grid gap-4">
-                          {trackingLinks.map(
-                            (
-                              item: { url: string; description: string },
-                              index: number
-                            ) => {
-                              // Process URL to replace [creator] with username
-                              const username = userProfile?.username || "";
-                              const processedUrl = processUrlWithCreator(
-                                item.url,
-                                username
-                              );
+                      <div className="grid gap-4">
+                        {trackingLinks.map(
+                          (
+                            item: { url: string; description: string },
+                            index: number
+                          ) => {
+                            // Process URL to replace [creator] with username
+                            const username = userProfile?.username || "";
+                            const processedUrl = processUrlWithCreator(
+                              item.url,
+                              username
+                            );
 
-                              const handleCopyLink = async () => {
-                                try {
-                                  await navigator.clipboard.writeText(
-                                    processedUrl
-                                  );
-                                  toast({
-                                    title: "Link Copied!",
-                                    description:
-                                      "Tracking link has been copied to clipboard.",
-                                    variant: "default",
-                                  });
-                                } catch (error) {
-                                  console.error("Failed to copy link:", error);
-                                  toast({
-                                    title: "Copy Failed",
-                                    description:
-                                      "Failed to copy link to clipboard.",
-                                    variant: "destructive",
-                                  });
-                                }
-                              };
+                            const handleCopyLink = async () => {
+                              try {
+                                await navigator.clipboard.writeText(
+                                  processedUrl
+                                );
+                                toast({
+                                  title: "Link Copied!",
+                                  description:
+                                    "Tracking link has been copied to clipboard.",
+                                  variant: "default",
+                                });
+                              } catch (error) {
+                                console.error("Failed to copy link:", error);
+                                toast({
+                                  title: "Copy Failed",
+                                  description:
+                                    "Failed to copy link to clipboard.",
+                                  variant: "destructive",
+                                });
+                              }
+                            };
 
-                              return (
-                                <div
-                                  key={index}
-                                 
-                                  className={cn(
-                                    "border border-gray-300 rounded-xl p-5",
-                                    isDark
-                                      ? "text-white"
-                                      : "text-gray-900"
-                                  )}
-                                >
-                                  <div className="flex items-start gap-4">
-                                    <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
-                                      <Link2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                            return (
+                              <div
+                                key={index}
+                                className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 hover:shadow-md transition-shadow duration-200"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="mt-0.5 p-2.5 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
+                                    <Link2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                  </div>
+                                  <div className="flex-1 min-w-0 space-y-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-medium text-blue-600 dark:text-blue-400 break-all hover:text-blue-700 dark:hover:text-blue-300 transition-colors">
+                                        {processedUrl}
+                                      </p>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleCopyLink}
+                                        className="p-2 h-auto hover:bg-slate-100 dark:hover:bg-slate-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                        title="Copy link"
+                                      >
+                                        <Copy className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                                      </Button>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <p 
-                                         className={cn(
-                                          "text-base font-medium break-all flex-1",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-900"
-                                        )}>
-                                          {processedUrl}
-                                        </p>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={handleCopyLink}
-                                          className={cn(
-                                            "p-1.5 rounded-md transition-colors duration-200 flex-shrink-0",
-                                            isDark
-                                              ? "text-white"
-                                              : "hover:bg-gray-100 text-gray-600"
-                                          )}
-                                          title="Copy link"
-                                        >
-                                          <Copy className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                      {item.description && (
-                                        <p 
-                                         className={cn(
-                                          "text-sm leading-relaxed",
-                                          isDark
-                                            ? "text-gray-300"
-                                            : "text-gray-700"
-                                        )}>
-                                          {item.description}
-                                        </p>
-                                      )}
-                                    </div>
+                                    {item.description && (
+                                      <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                                        {item.description}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
-                              );
-                            }
-                          )}
-                        </div>
+                              </div>
+                            );
+                          }
+                        )}
                       </div>
-                    </>
+                    </div>
                   ) : null;
                 })()}
+
               </CardContent>
             </div>
           </TabPanel>
