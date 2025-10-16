@@ -547,31 +547,42 @@ export default function EditContestPage({
           // Note: Current plan commission rate will be set in a separate useEffect
           // after both userPlan and contest data are loaded
 
-          // Simplified logic: Only check dates if contest is published
+          // Simplified logic: Check if contest has ended (no one can edit ended contests)
           let canEdit = true;
+          const now = new Date();
+          const contestEndDate = data.end_date
+            ? new Date(data.end_date)
+            : null;
+          const isEnded = contestEndDate && contestEndDate <= now;
 
-          if (data.moderation_status === "published") {
-            const now = new Date();
+          // Block editing for ended contests (even for admins)
+          if (isEnded || data.status === "ended") {
+            canEdit = false;
+          } else if (data.moderation_status === "published" && !isAdmin) {
+            // For non-admin users, also block editing for live published contests
             const contestStartDate = data.start_date
               ? new Date(data.start_date)
-              : null;
-            const contestEndDate = data.end_date
-              ? new Date(data.end_date)
               : null;
             const isLive =
               contestStartDate &&
               contestStartDate <= now &&
               (!contestEndDate || contestEndDate > now);
-            const isEnded = contestEndDate && contestEndDate <= now;
 
-            canEdit = !isLive && !isEnded;
+            canEdit = !isLive;
           }
           // If moderation_status is not 'published', always allow editing regardless of dates
+          // Admins can edit live contests but NOT ended contests
 
           if (!canEdit) {
-            setError(
-              "This contest is already live or has ended and cannot be edited."
-            );
+            if (isEnded || data.status === "ended") {
+              setError(
+                "This contest has ended and cannot be edited. Contest integrity must be maintained after completion."
+              );
+            } else {
+              setError(
+                "This contest is already live and cannot be edited."
+              );
+            }
             setContest(data as ContestData); // Still set contest to allow viewing some info if needed
           } else {
             setContest(data as ContestData);
@@ -935,11 +946,28 @@ export default function EditContestPage({
     const now = new Date();
     const minStartDate = new Date(now);
 
-    // If contest is approved, allow immediate start (no 2-day restriction)
-    // Otherwise, apply the 2-day minimum restriction
-    if (contest?.moderation_status !== "approved") {
+    // If admin is editing any existing contest, allow more flexibility
+    const originalStartDate = contest?.start_date
+      ? new Date(contest.start_date)
+      : null;
+    const isLiveContest = originalStartDate && originalStartDate <= now;
+
+    if (isAdmin) {
+      if (isLiveContest) {
+        // For live contests, allow selecting past dates (from contest's start date)
+        if (originalStartDate) {
+          minStartDate.setTime(originalStartDate.getTime());
+        } else {
+          minStartDate.setDate(minStartDate.getDate() - 30);
+        }
+      }
+      // For upcoming contests or new contests, admins can start immediately (no 2-day restriction)
+      // minStartDate remains as 'now' which allows immediate start
+    } else if (contest?.moderation_status !== "approved") {
+      // If contest is not approved and not admin, apply the 2-day minimum restriction
       minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
     }
+    // If contest is approved (but not admin), allow immediate start (no restriction)
 
     const year = minStartDate.getFullYear();
     const month = String(minStartDate.getMonth() + 1).padStart(2, "0");
@@ -1266,30 +1294,34 @@ export default function EditContestPage({
           ? new Date(contest.start_date)
           : null;
         const isNewContest = !originalStartDate || originalStartDate > now;
+        const isLiveContest = originalStartDate && originalStartDate <= now;
 
-        if (isNewContest) {
-          // For approved contests, only check that start time is in the future
-          // For non-approved contests, apply the 2-day minimum restriction
-          if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
+        // Allow admins to edit contests without date restrictions (for both live and upcoming)
+        if (!isAdmin) {
+          if (isNewContest) {
+            // For approved contests, only check that start time is in the future
+            // For non-approved contests, apply the 2-day minimum restriction
+            if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
+              toast({
+                title: "Invalid Start Date",
+                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                  } day gap required).`,
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+          } else if (startDateTime < now) {
             toast({
-              title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-                } day gap required).`,
+              title: "Invalid Start Time",
+              description: "Contest start time must be in the future.",
               variant: "destructive",
             });
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
           }
-        } else if (startDateTime < now) {
-          toast({
-            title: "Invalid Start Time",
-            description: "Contest start time must be in the future.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
         }
 
         if (endDateTime <= startDateTime) {
@@ -2518,15 +2550,19 @@ export default function EditContestPage({
         ? new Date(contest.start_date)
         : null;
       const isNewContest = !originalStartDate || originalStartDate > now;
+      const isLiveContest = originalStartDate && originalStartDate <= now;
 
-      if (isNewContest) {
-        // CRITICAL: Use exact same logic as getMinDateTime for consistency
-        if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-            } day gap required).`;
+      // Allow admins to edit contests without date restrictions (for both live and upcoming)
+      if (!isAdmin) {
+        if (isNewContest) {
+          // CRITICAL: Use exact same logic as getMinDateTime for consistency
+          if (daysUntilStart < MIN_DAYS_UNTIL_START) {
+            return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+              } day gap required).`;
+          }
+        } else if (startDateTime < now) {
+          return "Contest start time must be in the future.";
         }
-      } else if (startDateTime < now) {
-        return "Contest start time must be in the future.";
       }
 
       if (endDateTime <= startDateTime) {
@@ -3295,30 +3331,34 @@ export default function EditContestPage({
           ? new Date(contest.start_date)
           : null;
         const isNewContest = !originalStartDate || originalStartDate > now;
+        const isLiveContest = originalStartDate && originalStartDate <= now;
 
-        if (isNewContest) {
-          // For approved contests, only check that start time is in the future
-          // For non-approved contests, apply the 2-day minimum restriction
-          if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
+        // Allow admins to edit contests without date restrictions (for both live and upcoming)
+        if (!isAdmin) {
+          if (isNewContest) {
+            // For approved contests, only check that start time is in the future
+            // For non-approved contests, apply the 2-day minimum restriction
+            if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
+              toast({
+                title: "Invalid Start Date",
+                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
+                  } day gap required).`,
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+          } else if (startDateTime < now) {
             toast({
-              title: "Invalid Start Date",
-              description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-                } day gap required).`,
+              title: "Invalid Start Time",
+              description: "Contest start time must be in the future.",
               variant: "destructive",
             });
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
           }
-        } else if (startDateTime < now) {
-          toast({
-            title: "Invalid Start Time",
-            description: "Contest start time must be in the future.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
         }
 
         if (endDateTime <= startDateTime) {
@@ -3923,14 +3963,29 @@ export default function EditContestPage({
     <div className="container max-w-[1200px] mx-auto py-8">
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={`/dashboard/contests/${contestId}`}>
+          <Link href={isAdmin ? `/dashboard/admin/contests/${contestId}` : `/dashboard/contests/${contestId}`}>
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
         <h1 className="text-2xl font-bold">
           {datesOnly ? "Edit Contest Dates" : "Edit Contest"}
         </h1>
+        {isAdmin && (
+          <span className="ml-3 px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+            ADMIN MODE
+          </span>
+        )}
       </div>
+
+      {/* Admin Warning for Published Contests */}
+      {isAdmin && contest?.moderation_status === "published" && contest?.status !== "ended" && (
+        <Alert className="mb-6 border-amber-300 bg-amber-50 text-amber-900">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Admin Edit Warning:</strong> You are editing a published/live contest. Changes will be immediately visible to all users and creators. Please exercise caution when making edits to avoid disrupting ongoing contests. Note: Contests cannot be edited once they have ended.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Dates Only Warning */}
       {datesOnly && (

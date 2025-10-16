@@ -1167,11 +1167,13 @@ export default function ContestDetailClient({
   };
 
   const isContestEditable =
-    currentContest.moderation_status === "draft" ||
-    currentContest.moderation_status === "rejected" ||
-    currentContest.moderation_status === "pending_approval" ||
-    (currentContest.moderation_status === "approved" &&
-      currentContest.status === "upcoming");
+    currentContest.status !== "ended" && // Never allow editing ended contests
+    (isAdminView || // Admins can edit non-ended contests
+      currentContest.moderation_status === "draft" ||
+      currentContest.moderation_status === "rejected" ||
+      currentContest.moderation_status === "pending_approval" ||
+      (currentContest.moderation_status === "approved" &&
+        currentContest.status === "upcoming"));
   const isContestDeletable =
     currentContest.moderation_status === "draft" ||
     currentContest.moderation_status === "rejected" ||
@@ -1368,7 +1370,7 @@ export default function ContestDetailClient({
               asChild
             >
               <Link
-                href={`/dashboard/contests/${contestId}/edit`}
+                href={isAdminView ? `/dashboard/admin/contests/${contestId}/edit` : `/dashboard/contests/${contestId}/edit`}
                 className="flex items-center gap-2"
               >
                 <Edit className="h-4 w-4" />
