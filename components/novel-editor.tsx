@@ -111,7 +111,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
 
     // Create a function that returns fresh extensions for each editor instance
     // This prevents the "Duplicate use of selection JSON ID gapcursor" error
-    // by ensuring each editor gets completely new extension instances
+    // Disable gapcursor and dropcursor to prevent plugin ID collisions in production
     const getExtensions = () => [
         StarterKit.configure({
             bulletList: {
@@ -122,6 +122,8 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
                 keepMarks: true,
                 keepAttributes: false,
             },
+            gapcursor: false, // Disable to prevent duplicate ID errors in production
+            dropcursor: false, // Disable to prevent duplicate ID errors in production
         }),
         Placeholder.configure({
             placeholder: placeholder,
