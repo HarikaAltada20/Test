@@ -1176,7 +1176,11 @@ export default function GettingStartedClient({
 
                     {/* Visual Rate Display */}
                     <div className="text-center mb-4">
-                      <div className="inline-block px-4 py-2 bg-[#4A00BE] rounded-xl">
+                      <div 
+                      className={cn(
+                        "inline-block px-4 py-2 rounded-xl",
+                        isDark ? "border border-[#7F39EC] bg-[#D9C0FF26]" : "bg-[#4A00BE]"
+                      )}>
                         <div className="text-xl font-bold text-white">
                           $5.00
                         </div>

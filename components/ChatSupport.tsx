@@ -154,12 +154,30 @@ const ChatSupport: React.FC<ChatProps> = ({ onClose, email, userType }) => {
         ></textarea>
 
         {userType === "creator" && (
-          <div className="mb-4 p-3 rounded-md border bg-purple-50">
+          <div 
+          className={cn(
+            "mb-4 p-3 rounded-md border bg-purple-50",
+            isDark ? "bg-[#C9A7FF26] border border-[#C9A7FF]" : "bg-purple-50 border-purple-500"
+          )}>
+         
+        
             <div className="flex items-start gap-2">
-              <div className="p-1.5 rounded bg-white border">
-                <MessageCircle className="h-4 w-4 text-purple-600" />
+              <div 
+              className={cn(
+                "p-1.5 rounded-full bg-white border",
+                isDark ? "bg-[#06021D] border border-gray-500" : "bg-white border-gray-300"
+              )}>
+                <MessageCircle
+                className={cn(
+                  "h-4 w-4",
+                  isDark ? "text-[#C9A7FF]" : "text-purple-600"
+                )} />
               </div>
-              <div className="flex-1 text-sm text-gray-700">
+              <div 
+               className={cn(
+                "flex-1 text-sm text-gray-700",
+                isDark ? "text-white" : "text-gray-700"
+              )} >
                 For quicker responses, join our active Game of creators discord community.
                 <div className="mt-2">
                   <a
