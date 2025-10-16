@@ -193,8 +193,7 @@ export default function EarningsClientPage({
     initialLimit: 25,
   });
 
-
-      // Read mode/compact flags from data attributes
+  // Read mode/compact flags from data attributes
   useEffect(() => {
     const checkFlags = () => {
       const container = document.querySelector("[data-mode][data-compact]");
@@ -230,7 +229,7 @@ export default function EarningsClientPage({
     return () => observer.disconnect();
   }, []);
 
-    const isDark = mode === "dark";
+  const isDark = mode === "dark";
 
   const getPayoutMethodSummary = (method: PayoutMethod): string => {
     switch (method.method_type) {
@@ -829,15 +828,18 @@ export default function EarningsClientPage({
         <TabPanel value="cash" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
             <div
-             className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}>
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Total Cash Won</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.total_money_won)}
@@ -845,12 +847,13 @@ export default function EarningsClientPage({
                   <p className="text-md">Lifetime cash earnings</p>
                 </div>
                 <div
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}>
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <DollarSign className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -865,17 +868,19 @@ export default function EarningsClientPage({
                                 <p className="text-xs text-muted-foreground">Lifetime cash earnings</p>
                             </CardContent>
                         </Card> */}
-            <div 
-             className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div 
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}>
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">
                     Available for Withdrawal
                   </p>
@@ -887,13 +892,14 @@ export default function EarningsClientPage({
                     {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}
                   </p>
                 </div>
-                <div 
-                className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}>
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <ArrowDownToLine className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -908,29 +914,33 @@ export default function EarningsClientPage({
                                 <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}</p>
                             </CardContent>
                         </Card> */}
-            <div 
-             className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div 
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}>
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Cash Contests Won</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_won}
                   </p>
                   <p className="text-md">Total cash contest victories</p>
                 </div>
-                <div className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}>
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Trophy className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -948,11 +958,12 @@ export default function EarningsClientPage({
           </div>
 
           {/* Code Redemption */}
-          <div 
-           className={cn(
-            "mb-6 p-4 rounded-md",
-            isDark ? "bg-[#170337]" : "border bg-white"
-          )}>
+          <div
+            className={cn(
+              "mb-6 p-4 rounded-md",
+              isDark ? "bg-[#170337]" : "border bg-white"
+            )}
+          >
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
               <div className="flex-1 space-y-1">
                 <Label className="text-md" htmlFor="redeemCode">
@@ -1122,11 +1133,12 @@ export default function EarningsClientPage({
               </p>
             )}
 
-          <div 
-           className={cn(
+          <div
+            className={cn(
               "rounded-xl shadow",
               isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Transaction History</CardTitle>
             </CardHeader>
@@ -1138,11 +1150,14 @@ export default function EarningsClientPage({
               )}
 
               <Table>
-                <TableHeader 
+                <TableHeader
                   className={cn(
                     "text-left border-b text-md",
-                    isDark ? "bg-[#391A6A] text-white" : "bg-[#F9FAFB] text-gray-500"
-                  )}>
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1248,17 +1263,21 @@ export default function EarningsClientPage({
             className={cn(
               "mt-8 rounded-xl shadow",
               isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Withdrawal Request History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader 
+                <TableHeader
                   className={cn(
                     "text-left border-b",
-                    isDark ? "bg-[#391A6A] text-white" : "bg-[#F9FAFB] text-gray-500"
-                  )}>
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1341,28 +1360,32 @@ export default function EarningsClientPage({
         <TabPanel value="coins" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
             <div
-             className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div 
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}>
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Total Coins Earned</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.total_lifetime_coins_earned)}
                   </p>
                   <p className="text-md">Lifetime coin earnings</p>
                 </div>
-                <div className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}>
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Coins className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1383,29 +1406,33 @@ export default function EarningsClientPage({
                 </p>
               </CardContent>
             </Card> */}
-            <div 
-             className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div 
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}>
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Coins Available</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.coins)}
                   </p>
                   <p className="text-md">Your current coin balance</p>
                 </div>
-                <div className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}>
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <CryptoWalletIcon className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1427,27 +1454,31 @@ export default function EarningsClientPage({
                 </p>
               </CardContent>
             </Card> */}
-            <div 
-             className={cn(
-              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-              isDark ? "bg-[#170337]" : "bg-white"
-            )}>
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
                 <div
-                className={cn(
-                  "flex-1 space-y-3",
-                  isDark ? "text-white" : "text-black"
-                )}>
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Total Referrals</p>
                   <p className="text-xl font-bold">{totalReferrals}</p>
                   <p className="text-md">Successful referrals</p>
                 </div>
-                <div className={cn(
-                  "w-10 h-10 flex items-center justify-center rounded-full",
-                  isDark
-                    ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
-                )}>
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Users className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1477,23 +1508,25 @@ export default function EarningsClientPage({
             </Button>
           </div>
 
-          <div 
-           className={cn(
-            "rounded-xl shadow",
-            isDark ? "bg-[#170337]" : "bg-white"
-          )}>
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Transaction History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader
-                className={cn(
-                  "text-left border-b",
-                  isDark
-                    ? "bg-[#391A6A] text-white"
-                    : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
-                )}>
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1558,23 +1591,25 @@ export default function EarningsClientPage({
           </div>
 
           {/* Coin Redemption Requests Section - Stays inside coin tab */}
-          <div 
-           className={cn(
-            "mt-8 rounded-xl shadow",
-            isDark ? "bg-[#170337]" : "bg-white"
-          )}>
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Redemption History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader 
-                className={cn(
-                  "text-left border-b",
-                  isDark
-                    ? "bg-[#391A6A] text-white"
-                    : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
-                )}>
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Coins</TableHead>
@@ -1665,18 +1700,22 @@ export default function EarningsClientPage({
         onOpenChange={(isOpen) => {
           if (isLoading && isOpen) return;
           setIsPayoutModalOpen(isOpen);
-          if (!isOpen) resetPayoutForm();        
+          if (!isOpen) resetPayoutForm();
         }}
         isdark={isDark}
       >
         <DialogContent className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle  className={cn(isDark ? "text-white" : "text-gray-800")}>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
             </DialogTitle>
-            <DialogDescription  className={cn(isDark ? "text-white" : "text-gray-800")}>
+            <DialogDescription
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Manage your payout methods. Your default method will be
               pre-selected for withdrawals.
             </DialogDescription>
@@ -1698,8 +1737,12 @@ export default function EarningsClientPage({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value="IN">India</SelectItem>
-                  <SelectItem isDark={isDark}value="OTHER">Other</SelectItem>
+                  <SelectItem isDark={isDark} value="IN">
+                    India
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="OTHER">
+                    Other
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1717,7 +1760,7 @@ export default function EarningsClientPage({
                 }
                 className="w-full mb-4"
                 isDark={isDark}
-        light={!isDark}
+                light={!isDark}
               />
             ) : (
               <EnhancedTabs
@@ -1728,16 +1771,18 @@ export default function EarningsClientPage({
                 }
                 className="w-full mb-4"
                 isDark={isDark}
-        light={!isDark}
+                light={!isDark}
               />
             )}
             {/* Content for each payout type */}
             {selectedPayoutType === "crypto" && (
               <div className="space-y-2">
-                <div className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameCrypto">
                     Friendly Name
                   </Label>
@@ -1754,10 +1799,12 @@ export default function EarningsClientPage({
                     disabled={isLoading}
                   />
                 </div>
-                <div className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="cryptoNetwork">Network</Label>
                   <Select
                     value={cryptoNetwork}
@@ -1783,11 +1830,12 @@ export default function EarningsClientPage({
                   method, you accept responsibility for declaring and paying
                   taxes as per your country’s laws.
                 </p>
-                <div 
-                 className={cn(
-                  "space-y-1",
-                  isDark ? "text-white" : "text-gray-800"
-                )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
                   <Input
                     id="cryptoAddress"
@@ -1807,11 +1855,12 @@ export default function EarningsClientPage({
             {/* Bank Transfer Form (India) */}
             {selectedPayoutType === "bank_transfer" && (
               <div className="pt-4 space-y-2">
-                <div 
-                 className={cn(
-                  "space-y-1",
-                  isDark ? "text-white" : "text-gray-800"
-                )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameBank"
@@ -1828,10 +1877,11 @@ export default function EarningsClientPage({
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div
-                   className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1847,11 +1897,12 @@ export default function EarningsClientPage({
                       disabled={isLoading}
                     />
                   </div>
-                  <div 
-                   className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
@@ -1865,11 +1916,12 @@ export default function EarningsClientPage({
                       disabled={isLoading}
                     />
                   </div>
-                  <div 
-                   className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
@@ -1883,11 +1935,12 @@ export default function EarningsClientPage({
                       disabled={isLoading}
                     />
                   </div>
-                  <div 
-                   className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
@@ -1912,13 +1965,13 @@ export default function EarningsClientPage({
 
             {/* UPI Form (India, default) */}
             {selectedPayoutType === "upi" && (
-              
-                <div 
-                 className={cn(
+              <div
+                className={cn(
                   "pt-2 space-y-2",
                   isDark ? "text-white" : "text-gray-800"
-                )}>
-                  <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
+                )}
+              >
+                <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
                 <Input
                   id="payoutFriendlyNameUpi"
                   value={payoutFriendlyName}
@@ -1932,11 +1985,12 @@ export default function EarningsClientPage({
                   )}
                 />
 
-                <div 
-                 className={cn(
-                  "space-y-1",
-                  isDark ? "text-white" : "text-gray-800"
-                )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiHolder">Account Holder Name</Label>
                   <Input
                     id="upiHolder"
@@ -1951,11 +2005,12 @@ export default function EarningsClientPage({
                     )}
                   />
                 </div>
-                <div 
-                 className={cn(
-                  "space-y-1",
-                  isDark ? "text-white" : "text-gray-800"
-                )}>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiId">UPI ID</Label>
                   <Input
                     id="upiId"
@@ -1979,7 +2034,6 @@ export default function EarningsClientPage({
             )}
           </div>
           <DialogFooter className="sm:justify-between">
-           
             <button
               onClick={handleSavePayoutMethod}
               disabled={isLoading}
@@ -2012,17 +2066,18 @@ export default function EarningsClientPage({
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
-            <div 
-            className={cn(
-              "mt-6 pt-4 border-t",
-              isDark ? "text-white" : "text-gray-800"
-            )}>
+            <div
+              className={cn(
+                "mt-6 pt-4 border-t",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {payoutMethods.map((method) => (
                   <div
                     key={method.id}
-                     className="flex items-center justify-between p-3 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg"
+                    className="flex items-center justify-between p-3 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg"
                   >
                     <div className="flex items-center">
                       <PayoutMethodIcon type={method.method_type} />
@@ -2045,7 +2100,7 @@ export default function EarningsClientPage({
                           onClick={() =>
                             handleSetDefaultPayoutMethod(method.id)
                           }
-                           className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
+                          className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
                           disabled={isLoading}
                         >
                           Set Default
@@ -2084,13 +2139,18 @@ export default function EarningsClientPage({
           if (isSubmittingWithdrawal && isOpen) return;
           setIsWithdrawModalOpen(isOpen);
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
             </DialogDescription>
@@ -2098,16 +2158,16 @@ export default function EarningsClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className="text-lg">
+                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
                   Available:{" "}
-                  <span className="font-semibold">
+                  <span className={cn("font-semibold", isDark ? "text-white" : "text-gray-800")}>
                     {profile
                       ? formatCurrencyFromCents(profile.withdrawable_balance)
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
                 <div>
-                  <Label htmlFor="withdrawAmountDollars">
+                  <Label htmlFor="withdrawAmountDollars" className={cn(isDark ? "text-white" : "text-gray-800")}>
                     Amount to Withdraw (USD)
                   </Label>
                   <Input
@@ -2123,13 +2183,18 @@ export default function EarningsClientPage({
                     step="0.01"
                     placeholder="e.g., 50.00"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className="text-lg">
+                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
@@ -2146,22 +2211,32 @@ export default function EarningsClientPage({
                     }
                     placeholder="e.g., 1000"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             <div>
-              <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
+              <Label htmlFor="withdrawalUserNotes" className={cn(isDark ? "text-white" : "text-gray-800")}>Notes (Optional)</Label>
               <Input
                 id="withdrawalUserNotes"
                 value={withdrawalUserNotes}
                 onChange={(e) => setWithdrawalUserNotes(e.target.value)}
                 placeholder="Optional notes for your withdrawal request"
                 disabled={isLoading}
+                className={cn(
+                  isDark
+                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    : "bg-white text-black"
+                )}
               />
             </div>
             <div>
-              <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
+              <Label htmlFor="payoutMethodSelect" className={cn(isDark ? "text-white" : "text-gray-800")}>Select Payout Method</Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
                 onValueChange={setSelectedWithdrawMethodId}
@@ -2170,18 +2245,18 @@ export default function EarningsClientPage({
                 <SelectTrigger id="payoutMethodSelect">
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent isDark={isDark}>
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
@@ -2196,9 +2271,7 @@ export default function EarningsClientPage({
           </div>
           <DialogFooter>
             <DialogClose asChild>
-              <Button variant="outline" disabled={isLoading}>
-                Cancel
-              </Button>
+             
             </DialogClose>
             <Button
               onClick={handleWithdraw}
@@ -2219,10 +2292,25 @@ export default function EarningsClientPage({
                 // For coins, payoutMethod is optional, so don't disable if it's not selected and tab is coins
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
                 (activeTabModal === "cash" && payoutMethods.length === 0)
+                
               }
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "bg-[#7F39EC] py-3 text-white"
+                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+              )}
             >
               Request Withdrawal
             </Button>
+            <button disabled={isLoading} className={cn(
+                  "w-full text-md rounded-full",
+                  isDark
+                    ? "py-2 border border-[#FF5353] text-[#FF5353]"
+                    : "bg-[#FF323224] text-[#E50000] py-2"
+                )}>
+                Cancel
+              </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogPortal,
@@ -20,6 +20,7 @@ import {
   FileText,
   ShoppingCart,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const steps = [
   // Intro step (index 0)
@@ -102,7 +103,36 @@ export default function CreatorGuidelinesModal({
   const isCardsStep = step > 0;
   const isLastStep = step === steps.length - 1;
   const progress = (step / (steps.length - 1)) * 100;
+  const [mode, setMode] = useState<"light" | "dark">("light");
 
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
   // Dynamic width based on step
   const getModalWidth = () => {
     if (isIntro) {
@@ -118,8 +148,10 @@ export default function CreatorGuidelinesModal({
     return "max-w-3xl";
   };
 
+  const isDark = mode === "dark";
+
   return (
-    <Dialog open={open}>
+    <Dialog open={open} isdark={isDark}>
       <DialogPortal>
         <DialogOverlay />
         <div
@@ -154,7 +186,10 @@ export default function CreatorGuidelinesModal({
                     className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold text-md transition-all duration-300 ${
                       step >= 2
                         ? "bg-[#7F39EC] text-white"
-                        : "bg-muted text-gray-800"
+                        : cn(
+                            "bg-muted",
+                            isDark ? "text-gray-300" : "text-gray-800"
+                          )
                     }`}
                   >
                     {step >= 2 ? <CheckCircle className="w-5 h-5" /> : "2"}
@@ -197,20 +232,45 @@ export default function CreatorGuidelinesModal({
               {isIntro ? (
                 <>
                   {steps[0].illustration}
-                  <h1 className="text-3xl font-bold text-center mb-2 text-gray-800">
+                  <h1
+                    className={cn(
+                      "text-3xl font-bold text-center mb-2",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     {steps[0].title}
                   </h1>
-                  <p className="text-gray-600 text-center mb-2 text-lg">
+                  <p
+                    className={cn(
+                      "text-center mb-2 text-lg",
+                      isDark ? "text-gray-400" : "text-gray-600"
+                    )}
+                  >
                     {steps[0].description}
                   </p>
                   <div className="flex items-center justify-center gap-2 mb-6">
-                    <Clock className="w-4 h-4 text-gray-600" />
-                    <span className="text-base text-gray-600">
+                    <Clock
+                      className={cn(
+                        "w-4 h-4",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "text-base",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}
+                    >
                       {steps[0].readTime}
                     </span>
                   </div>
                   <button
-                    className="w-full text-md rounded-full bg-[#D9C0FF61] py-4 font-semibold text-[#7F39EC] "
+                    className={cn(
+                      "w-full text-md rounded-full py-4 font-semibold",
+                      isDark
+                        ? "bg-[#7F39EC] text-white"
+                        : "bg-[#D9C0FF61] text-[#7F39EC]"
+                    )}
                     onClick={() => setStep(1)}
                   >
                     <span className="flex items-center justify-center text-lg gap-2">
@@ -248,7 +308,10 @@ export default function CreatorGuidelinesModal({
                             return (
                               <div
                                 key={idx}
-                                className="bg-white rounded-2xl p-5 shadow-lg flex-1"
+                                className={cn(
+                                  "bg-white rounded-2xl p-5 shadow-lg flex-1",
+                                  isDark ? "bg-[#170337]" : "bg-white"
+                                )}
                               >
                                 <div
                                   className={`flex flex-col items-center text-center ${
@@ -265,16 +328,24 @@ export default function CreatorGuidelinesModal({
                                   </div> */}
                                   <div>
                                     <h3
-                                      className={`font-bold mb-2 text-foreground ${
-                                        isThreeCards ? "text-base" : "text-lg"
-                                      }`}
+                                      className={cn(
+                                        "font-bold mb-2",
+                                        isThreeCards ? "text-base" : "text-lg",
+                                        isDark ? "text-white" : "text-gray-800"
+                                      )}
                                     >
                                       {card.title}
                                     </h3>
                                     <p
-                                      className={`text-gray-700 leading-relaxed ${
-                                        isThreeCards ? "text-[14px]" : "text-md"
-                                      }`}
+                                      className={cn(
+                                        "leading-relaxed",
+                                        isThreeCards
+                                          ? "text-[14px]"
+                                          : "text-md",
+                                        isDark
+                                          ? "text-gray-300"
+                                          : "text-gray-700"
+                                      )}
                                     >
                                       {card.description}
                                     </p>
@@ -292,7 +363,12 @@ export default function CreatorGuidelinesModal({
             {isIntro ? null : (
               <div className="w-full px-4 pb-2 pt-4">
                 <button
-                  className="w-full text-lg rounded-full bg-[#D9C0FF61] py-3.5 font-semibold text-[#7F39EC] "
+                  className={cn(
+                    "w-full text-lg rounded-full py-3.5 font-semibold",
+                    isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#D9C0FF61] text-[#7F39EC]"
+                  )}
                   onClick={
                     isLastStep ? onComplete : () => setStep((s) => s + 1)
                   }

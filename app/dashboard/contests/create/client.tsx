@@ -3224,7 +3224,7 @@ export default function CreateContestPage({
               </div>
               {currentPlan ? (
                 <div className="space-y-12">
-                  Plan Header Card
+                
                   <div
                     className={cn(
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
@@ -6995,7 +6995,7 @@ export default function CreateContestPage({
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
                         Inspiration Link <span className="text-red-500">*</span>
-                        Inspiration Link <span className="text-red-500">*</span>
+                      
                       </Label>
                       <Input
                         id="inspirationUrlInput"

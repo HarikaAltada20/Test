@@ -906,23 +906,20 @@ export function ContestClientPage({
                   ? "border-gray-500"
                   : "hover:bg-slate-100 border-slate-300 "
               )}
-             
               onClick={() => router.push("/dashboard/opportunities")}
             >
-              <ArrowLeft 
-               className={cn(
-                "h-4 w-4",
-                isDark
-                  ? "text-slate-300"
-                  : "text-slate-600"
-              )} />
-              <span 
-               className={cn(
-                "hidden sm:inline font-medium",
-                isDark
-                  ? "text-slate-300"
-                  : "text-slate-600"
-              )}>
+              <ArrowLeft
+                className={cn(
+                  "h-4 w-4",
+                  isDark ? "text-slate-300" : "text-slate-600"
+                )}
+              />
+              <span
+                className={cn(
+                  "hidden sm:inline font-medium",
+                  isDark ? "text-slate-300" : "text-slate-600"
+                )}
+              >
                 Back to Opportunities
               </span>
             </Button>
@@ -1109,31 +1106,28 @@ export function ContestClientPage({
                       <span className="text-white text-xs font-bold">✓</span>
                     </div>
                   </div>
-                  <p 
-                   className={cn(
-                    "text-2xl font-bold mb-2",
-                    isDark
-                      ? "text-slate-200"
-                      : "text-slate-700"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-2xl font-bold mb-2",
+                      isDark ? "text-slate-200" : "text-slate-700"
+                    )}
+                  >
                     Submission Complete!
                   </p>
-                  <p 
-                   className={cn(
-                    "text-base mb-1",
-                    isDark
-                      ? "text-slate-300"
-                      : "text-slate-600"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-base mb-1",
+                      isDark ? "text-slate-300" : "text-slate-600"
+                    )}
+                  >
                     You have successfully submitted for this opportunity
                   </p>
-                  <p 
-                   className={cn(
-                    "text-sm",
-                    isDark
-                      ? "text-slate-300"
-                      : "text-slate-500"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isDark ? "text-slate-300" : "text-slate-500"
+                    )}
+                  >
                     Submitted {formatTimeAgo(existingSubmission.created_at)}
                   </p>
                 </div>
@@ -1150,31 +1144,29 @@ export function ContestClientPage({
                       </span>
                     </div>
                   </div>
-                  <p 
-                   className={cn(
-                    "text-2xl font-bold mb-2",
-                    isDark
-                      ? "text-slate-200"
-                      : "text-slate-700"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-2xl font-bold mb-2",
+                      isDark ? "text-slate-200" : "text-slate-700"
+                    )}
+                  >
                     Submissions in Progress
                   </p>
-                  <p 
-                   className={cn(
-                    "text-base mb-1",
-                    isDark
-                      ? "text-slate-300"
-                      : "text-slate-600"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-base mb-1",
+                      isDark ? "text-slate-300" : "text-slate-600"
+                    )}
+                  >
                     You have submitted {submissionCount} out of {maxSubmissions}{" "}
                     videos
                   </p>
-                  <p className={cn(
-                    "text-sm mb-6",
-                    isDark
-                      ? "text-slate-300"
-                      : "text-slate-500"
-                  )}>
+                  <p
+                    className={cn(
+                      "text-sm mb-6",
+                      isDark ? "text-slate-300" : "text-slate-500"
+                    )}
+                  >
                     You can still submit {maxSubmissions - submissionCount} more
                     videos
                   </p>
@@ -2377,7 +2369,7 @@ export function ContestClientPage({
                               className={cn(
                                 "prose prose-sm max-w-none",
                                 isDark
-                                  ? "prose-invert text-slate-300 [&_*]:text-slate-300 [&_p]:text-slate-300 [&_span]:text-slate-300 [&_div]:text-slate-300 [&_strong]:text-slate-200 [&_b]:text-slate-200 [&_em]:text-slate-300 [&_i]:text-slate-300"
+                                  ? "prose-invert text-white [&_*]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_b]:!text-white [&_em]:!text-white [&_i]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_li]:!text-white [&_ul]:!text-white [&_ol]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_a]:!text-white"
                                   : "text-slate-700 [&_*]:text-slate-700 [&_p]:text-slate-700 [&_span]:text-slate-700 [&_div]:text-slate-700"
                               )}
                               dangerouslySetInnerHTML={{
