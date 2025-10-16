@@ -11,7 +11,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Link } from '@tiptap/extension-link';
-import { useState, useImperativeHandle, forwardRef, useEffect } from 'react';
+import React, { useState, useImperativeHandle, forwardRef, useEffect } from 'react';
 
 interface NovelEditorProps {
     value: string;
@@ -107,7 +107,9 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
         }
     }), [editorInstance]);
 
-    const extensions = [
+    // Create extensions array inside useMemo to ensure each editor instance gets its own set of extensions
+    // This prevents the "Duplicate use of selection JSON ID gapcursor" error
+    const extensions = React.useMemo(() => [
         StarterKit.configure({
             bulletList: {
                 keepMarks: true,
@@ -132,7 +134,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
                 class: 'text-blue-500 hover:text-blue-700 underline cursor-pointer',
             },
         }),
-    ];
+    ], [placeholder]); // Re-create extensions if placeholder changes
 
     return (
         <div className="w-full">
