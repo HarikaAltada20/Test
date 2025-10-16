@@ -32,6 +32,8 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
     height = '300px',
     onChange,
 }, ref) => {
+    // Generate unique ID for this editor instance to prevent plugin ID collisions
+    const editorId = React.useId();
     const [content, setContent] = useState<JSONContent | undefined>(undefined);
     const [editorInstance, setEditorInstance] = useState<any>(null);
 
@@ -107,9 +109,10 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
         }
     }), [editorInstance]);
 
-    // Create extensions array inside useMemo to ensure each editor instance gets its own set of extensions
+    // Create a function that returns fresh extensions for each editor instance
     // This prevents the "Duplicate use of selection JSON ID gapcursor" error
-    const extensions = React.useMemo(() => [
+    // by ensuring each editor gets completely new extension instances
+    const getExtensions = () => [
         StarterKit.configure({
             bulletList: {
                 keepMarks: true,
@@ -134,7 +137,7 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
                 class: 'text-blue-500 hover:text-blue-700 underline cursor-pointer',
             },
         }),
-    ], [placeholder]); // Re-create extensions if placeholder changes
+    ];
 
     return (
         <div className="w-full">
@@ -227,10 +230,10 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
 
             {/* Editor Content */}
             <div className="border border-t-0 rounded-b-lg overflow-hidden" style={{ minHeight: height }}>
-                <EditorRoot>
+                <EditorRoot key={editorId}>
                     <EditorContent
                         initialContent={getInitialContent()}
-                        extensions={extensions}
+                        extensions={getExtensions()}
                         onUpdate={({ editor }) => {
                             setEditorInstance(editor);
                             handleEditorChange(editor);
