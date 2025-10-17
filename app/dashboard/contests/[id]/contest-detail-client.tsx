@@ -1167,11 +1167,13 @@ export default function ContestDetailClient({
   };
 
   const isContestEditable =
-    currentContest.moderation_status === "draft" ||
-    currentContest.moderation_status === "rejected" ||
-    currentContest.moderation_status === "pending_approval" ||
-    (currentContest.moderation_status === "approved" &&
-      currentContest.status === "upcoming");
+    currentContest.status !== "ended" && // Never allow editing ended contests
+    (isAdminView || // Admins can edit non-ended contests
+      currentContest.moderation_status === "draft" ||
+      currentContest.moderation_status === "rejected" ||
+      currentContest.moderation_status === "pending_approval" ||
+      (currentContest.moderation_status === "approved" &&
+        currentContest.status === "upcoming"));
   const isContestDeletable =
     currentContest.moderation_status === "draft" ||
     currentContest.moderation_status === "rejected" ||
@@ -1368,7 +1370,7 @@ export default function ContestDetailClient({
               asChild
             >
               <Link
-                href={`/dashboard/contests/${contestId}/edit`}
+                href={isAdminView ? `/dashboard/admin/contests/${contestId}/edit` : `/dashboard/contests/${contestId}/edit`}
                 className="flex items-center gap-2"
               >
                 <Edit className="h-4 w-4" />
@@ -3402,7 +3404,11 @@ export default function ContestDetailClient({
                                           align="end"
                                         >
                                           {currentContest.post_contest_status !==
-                                            "payouts_processed" && (
+                                            "payouts_processed" &&
+                                            currentContest.post_contest_status !==
+                                            "verification_complete" &&
+                                            currentContest.post_contest_status !==
+                                            "payments_processed" && (
                                               <>
                                                 <DropdownMenuLabel className="text-purple-500">
                                                   Change Status
@@ -3413,6 +3419,10 @@ export default function ContestDetailClient({
                                           {submission.status !== "verified" &&
                                             currentContest.post_contest_status !==
                                             "payouts_processed" &&
+                                            currentContest.post_contest_status !==
+                                            "verification_complete" &&
+                                            currentContest.post_contest_status !==
+                                            "payments_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -3441,6 +3451,10 @@ export default function ContestDetailClient({
                                           {submission.status !== "rejected" &&
                                             currentContest.post_contest_status !==
                                             "payouts_processed" &&
+                                            currentContest.post_contest_status !==
+                                            "verification_complete" &&
+                                            currentContest.post_contest_status !==
+                                            "payments_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -3471,6 +3485,10 @@ export default function ContestDetailClient({
                                           {submission.status !== "pending" &&
                                             currentContest.post_contest_status !==
                                             "payouts_processed" &&
+                                            currentContest.post_contest_status !==
+                                            "verification_complete" &&
+                                            currentContest.post_contest_status !==
+                                            "payments_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -4387,6 +4405,7 @@ export default function ContestDetailClient({
             setPendingPaymentSubmission(submissionId);
             setPaymentModalOpen(true);
           }}
+          isAdminView={isAdminView}
         />
       )}
     </div>

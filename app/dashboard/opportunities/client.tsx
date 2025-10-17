@@ -164,7 +164,7 @@ export default function OpportunitiesPage({
           console.error("Error fetching contests:", contestError);
           setAvailableContests([]);
         } else {
-          // For leaderboard contests, calculate actual budget spent from submissions
+          // For leaderboard contests, calculate actual budget spent from submissions (CPM now uses real-time budget_spent field)
           const contestsWithCalculatedBudgets = await Promise.all((contests || []).map(async (contest) => {
             if (contest.contest_type === 'leaderboard' &&
               contest.contest_based_details?.leaderboard_contest?.total_budget > 0 &&
@@ -586,6 +586,7 @@ export default function OpportunitiesPage({
                 {/* Budget Spent Progress Bar for CPM contests */}
                 {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (() => {
                   const totalBudget = contest.contest_based_details.cpm_contest.total_budget;
+                  // Use real-time updated budget_spent field
                   const budgetSpent = contest.contest_based_details.cpm_contest.budget_spent || 0;
                   const percentage = (budgetSpent / totalBudget) * 100;
                   const remaining = totalBudget - budgetSpent;

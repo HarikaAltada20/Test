@@ -115,6 +115,11 @@ export async function POST(request: Request) {
       status: action,
     };
 
+    // Clear views_locked when changing status to pending or rejected
+    if (action === 'pending' || action === 'rejected') {
+      updateData.views_locked = null;
+    }
+
     // Use the metadata column to store structured metadata as JSON
     if (action === 'rejected' && reason) {
       // Parse reason and additional notes if they exist
@@ -175,6 +180,10 @@ export async function POST(request: Request) {
       console.error('Error updating submission status:', updateError);
       return NextResponse.json({ error: 'Failed to update submission status' }, { status: 500 });
     }
+
+    // Note: budget_spent is updated via scheduled cron jobs and manual "Refresh Metrics" button
+    // This improves scalability by avoiding O(n) recalculation on every submission status change
+    // Budget will be updated on next metrics refresh (typically within 10-15 minutes)
 
     // Snapshot views and credit creator totals when entering verified/paid (idempotent via delta)
     if (action === SUBMISSION_STATUS.verified || action === SUBMISSION_STATUS.paid) {

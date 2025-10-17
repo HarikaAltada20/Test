@@ -144,10 +144,9 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
           }
         }
 
-        // 3) Increment creator metrics: submission win and contest win (if first win for this contest)
-        try {
-          await MetricsService.incrementSubmissionWin(sub.creator_id, sub.contest_id, sub.id);
-        } catch {}
+        // 3) Metrics are now updated automatically by database triggers when status changes to 'paid'
+        // No need to manually call MetricsService.incrementSubmissionWin() here
+        // The trigger on submissions.status will handle it when we update status to 'paid' above
       }
 
       await supabaseAdmin

@@ -454,6 +454,7 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         {/* Budget Spent Progress Bar for CPM contests */}
                         {contest.contest_type === 'cpm' && contest.contest_based_details?.cpm_contest?.total_budget != null && contest.contest_based_details.cpm_contest.total_budget > 0 && (() => {
                             const totalBudget = contest.contest_based_details.cpm_contest.total_budget;
+                            // Use real-time updated budget_spent field
                             const budgetSpent = contest.contest_based_details.cpm_contest.budget_spent || 0;
                             const percentage = (budgetSpent / totalBudget) * 100;
                             const remaining = totalBudget - budgetSpent;

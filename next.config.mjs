@@ -42,7 +42,7 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     // The 'net', 'http', and other Node.js modules are needed by googleapis
     // but are not available in the browser, so we need to provide empty equivalents
     config.resolve.fallback = {
@@ -60,6 +60,27 @@ const nextConfig = {
       tls: false,
       crypto: false
     };
+
+    // Optimize TipTap/ProseMirror packages to prevent duplication in production
+    // This prevents "Duplicate use of selection JSON ID gapcursor" errors
+    if (!isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization.splitChunks,
+          cacheGroups: {
+            ...config.optimization.splitChunks?.cacheGroups,
+            // Bundle all TipTap and ProseMirror packages together
+            tiptap: {
+              test: /[\\/]node_modules[\\/](@tiptap|prosemirror-|novel)[\\/]/,
+              name: 'tiptap',
+              priority: 20,
+              reuseExistingChunk: true,
+            },
+          },
+        },
+      };
+    }
 
     return config;
   },
