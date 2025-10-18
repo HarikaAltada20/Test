@@ -1,13 +1,17 @@
 "use client";
 
-import { EditorRoot, EditorContent, type JSONContent } from "novel";
-import StarterKit from "@tiptap/starter-kit";
-import { Placeholder } from "@tiptap/extension-placeholder";
-import { TextStyle } from "@tiptap/extension-text-style";
-import { Color } from "@tiptap/extension-color";
-import { Highlight } from "@tiptap/extension-highlight";
-import { Link } from "@tiptap/extension-link";
-import { useState, useImperativeHandle, forwardRef, useEffect } from "react";
+import {
+    EditorRoot,
+    EditorContent,
+    type JSONContent
+} from 'novel';
+import StarterKit from '@tiptap/starter-kit';
+import { Placeholder } from '@tiptap/extension-placeholder';
+import { TextStyle } from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import { Highlight } from '@tiptap/extension-highlight';
+import { Link } from '@tiptap/extension-link';
+import React, { useState, useImperativeHandle, forwardRef, useEffect } from 'react';
 
 interface NovelEditorProps {
   value: string;
@@ -23,17 +27,14 @@ export interface NovelEditorRef {
   focus: () => void;
 }
 
-const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
-  (
-    {
-      value,
-      placeholder = "Write something amazing...",
-      height = "300px",
-      isDark = false,
-      onChange,
-    },
-    ref
-  ) => {
+const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
+    value,
+    placeholder = 'Write something amazing...',
+    height = '300px',
+    onChange,
+}, ref) => {
+    // Generate unique ID for this editor instance to prevent plugin ID collisions
+    const editorId = React.useId();
     const [content, setContent] = useState<JSONContent | undefined>(undefined);
     const [editorInstance, setEditorInstance] = useState<any>(null);
 
@@ -113,31 +114,36 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
       [editorInstance]
     );
 
-    const extensions = [
-      StarterKit.configure({
-        bulletList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-        orderedList: {
-          keepMarks: true,
-          keepAttributes: false,
-        },
-      }),
-      Placeholder.configure({
-        placeholder: placeholder,
-      }),
-      TextStyle,
-      Color,
-      Highlight.configure({
-        multicolor: true,
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: "text-blue-500 hover:text-blue-700 underline cursor-pointer",
-        },
-      }),
+    // Create a function that returns fresh extensions for each editor instance
+    // This prevents the "Duplicate use of selection JSON ID gapcursor" error
+    // Disable gapcursor and dropcursor to prevent plugin ID collisions in production
+    const getExtensions = () => [
+        StarterKit.configure({
+            bulletList: {
+                keepMarks: true,
+                keepAttributes: false,
+            },
+            orderedList: {
+                keepMarks: true,
+                keepAttributes: false,
+            },
+            gapcursor: false, // Disable to prevent duplicate ID errors in production
+            dropcursor: false, // Disable to prevent duplicate ID errors in production
+        }),
+        Placeholder.configure({
+            placeholder: placeholder,
+        }),
+        TextStyle,
+        Color,
+        Highlight.configure({
+            multicolor: true,
+        }),
+        Link.configure({
+            openOnClick: false,
+            HTMLAttributes: {
+                class: 'text-blue-500 hover:text-blue-700 underline cursor-pointer',
+            },
+        }),
     ];
 
     return (
@@ -345,10 +351,10 @@ const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(
           }`}
           style={{ minHeight: height }}
         >
-          <EditorRoot>
+          <EditorRoot key={editorId}>
             <EditorContent
               initialContent={getInitialContent()}
-              extensions={extensions}
+              extensions={getExtensions()}
               onUpdate={({ editor }) => {
                 setEditorInstance(editor);
                 handleEditorChange(editor);
