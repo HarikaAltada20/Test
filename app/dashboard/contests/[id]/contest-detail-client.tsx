@@ -1533,7 +1533,11 @@ export default function ContestDetailClient({
               asChild
             >
               <Link
-                href={isAdminView ? `/dashboard/admin/contests/${contestId}/edit` : `/dashboard/contests/${contestId}/edit`}
+                href={
+                  isAdminView
+                    ? `/dashboard/admin/contests/${contestId}/edit`
+                    : `/dashboard/contests/${contestId}/edit`
+                }
                 className="flex items-center gap-2"
               >
                 <Edit className="h-4 w-4" />
@@ -1986,9 +1990,10 @@ export default function ContestDetailClient({
                       className={cn(
                         "prose prose-md max-w-none p-4 rounded-lg border",
                         isDark
-                          ? "bg-[#170337] text-white prose-invert border-gray-600"
+                          ? "bg-[#170337] text-white border-gray-600 [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
                           : "bg-white text-foreground"
                       )}
+                      style={isDark ? { color: "white" } : undefined}
                       dangerouslySetInnerHTML={{
                         __html: currentContest.brief_html,
                       }}
@@ -2372,8 +2377,18 @@ export default function ContestDetailClient({
                         </div>
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
-                          <div className="flex justify-between items-center p-3 rounded border">
-                            <span className="text-md font-medium text-black">
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded border rounded-md",
+                              isDark ? "border-gray-600" : "border-gray-400"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black"
+                              )}
+                            >
                               Min Views:
                             </span>
                             <span className="font-semibold text-md text-foreground">
@@ -2383,8 +2398,18 @@ export default function ContestDetailClient({
                         )}
                         {currentContest.contest_based_details.cpm_contest
                           .max_views != null && (
-                          <div className="flex justify-between items-center p-3 rounded border">
-                            <span className="text-md font-medium text-black">
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded border rounded-md",
+                              isDark ? "border-gray-600" : "border-gray-400"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black"
+                              )}
+                            >
                               Max Views (Cap):
                             </span>
                             <span className="font-semibold text-md text-foreground">
@@ -2695,11 +2720,28 @@ export default function ContestDetailClient({
                       <Tag className="h-5 w-5 text-blue-600" />
                       Content Type
                     </h3>
-                    <div className="border border-blue-300 bg-blue-50/50 rounded-xl p-4">
-                      <p className="text-lg font-semibold text-blue-900 uppercase tracking-wide">
+                    <div
+                      className={cn(
+                        "border rounded-xl p-4",
+                        isDark
+                          ? "border-blue-600 bg-blue-950/50"
+                          : "border-blue-300 bg-blue-50/50"
+                      )}
+                    >
+                      <p
+                        className={cn(
+                          "text-lg font-semibold uppercase tracking-wide",
+                          isDark ? "text-blue-300" : "text-blue-900"
+                        )}
+                      >
                         {(currentContest as any).content_type.toUpperCase()}
                       </p>
-                      <p className="text-sm text-blue-700 mt-1">
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-blue-400" : "text-blue-700"
+                        )}
+                      >
                         This contest is looking for{" "}
                         {(currentContest as any).content_type === "ugc"
                           ? "User Generated Content"
@@ -2753,29 +2795,68 @@ export default function ContestDetailClient({
                 {(currentContest as any).multiple_submissions_enabled && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                      <CheckCheck className="h-5 w-5 text-purple-600" />
+                      <CheckCheck
+                        className={cn(
+                          "h-5 w-5",
+                          isDark ? "text-purple-400" : "text-purple-600"
+                        )}
+                      />
                       Multiple Submissions Allowed
                     </h3>
-                    <div className="border border-purple-300 bg-purple-50/50 rounded-xl p-4">
-                      <p className="text-lg font-semibold text-purple-900 mb-2">
+                    <div
+                      className={cn(
+                        "border rounded-xl p-4",
+                        isDark
+                          ? "border-purple-600/50 bg-purple-900/20"
+                          : "border-purple-300 bg-purple-50/50"
+                      )}
+                    >
+                      <p
+                        className={cn(
+                          "text-lg font-semibold mb-2",
+                          isDark ? "text-purple-200" : "text-purple-900"
+                        )}
+                      >
                         Creators can submit up to{" "}
                         {(currentContest as any).max_submissions_per_creator}{" "}
                         entries for this contest!
                       </p>
-                      <p className="text-sm text-purple-700 mb-3">
+                      <p
+                        className={cn(
+                          "text-sm mb-3",
+                          isDark ? "text-purple-300" : "text-purple-700"
+                        )}
+                      >
                         Allow multiple submissions to maximize creator
                         engagement. Min/max view requirements (if any) apply to
                         ALL submissions.
                       </p>
                       {(currentContest as any).max_earnings_per_creator && (
-                        <div className="mt-3 pt-3 border-t border-purple-200">
-                          <p className="text-sm text-purple-800 font-medium">
+                        <div
+                          className={cn(
+                            "mt-3 pt-3 border-t",
+                            isDark
+                              ? "border-purple-700/50"
+                              : "border-purple-200"
+                          )}
+                        >
+                          <p
+                            className={cn(
+                              "text-sm font-medium",
+                              isDark ? "text-purple-200" : "text-purple-800"
+                            )}
+                          >
                             💡 Earnings Cap for This Contest:{" "}
                             {formatMoney(
                               (currentContest as any).max_earnings_per_creator
                             )}
                           </p>
-                          <p className="text-xs text-purple-600 mt-1">
+                          <p
+                            className={cn(
+                              "text-xs mt-1",
+                              isDark ? "text-purple-400" : "text-purple-600"
+                            )}
+                          >
                             Creators can still submit after reaching this cap,
                             but won't earn more from THIS specific contest. This
                             cap doesn't affect their earnings from other
@@ -2790,19 +2871,42 @@ export default function ContestDetailClient({
                 {/* Additional Bonus Opportunities Section */}
                 {(currentContest as any).bonus_details?.description_html && (
                   <div className="space-y-3">
-                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                    <h3
+                      className={cn(
+                        "font-semibold text-lg flex items-center gap-2",
+                        isDark ? "text-white" : "text-foreground"
+                      )}
+                    >
                       <Star className="h-5 w-5 text-amber-600" />
                       Additional Bonus Opportunities
                     </h3>
-                    <div className="border border-amber-300 bg-amber-50/50 rounded-xl p-4">
+                    <div
+                      className={cn(
+                        "border rounded-xl p-4",
+                        isDark
+                          ? "border-amber-500"
+                          : "border-amber-300 bg-amber-50/50"
+                      )}
+                    >
                       <div
-                        className="prose prose-md max-w-none text-foreground"
+                        className={cn(
+                          "prose prose-md max-w-none",
+                          isDark
+                            ? "text-white [&_*]:!text-white [&_h1]:!text-white [&_h2]:!text-white [&_h3]:!text-white [&_h4]:!text-white [&_h5]:!text-white [&_h6]:!text-white [&_p]:!text-white [&_span]:!text-white [&_div]:!text-white [&_strong]:!text-white [&_em]:!text-white [&_a]:!text-blue-300 [&_ul]:!text-white [&_ol]:!text-white [&_li]:!text-white [&_blockquote]:!text-white [&_code]:!text-white [&_pre]:!text-white [&_table]:!text-white [&_th]:!text-white [&_td]:!text-white"
+                            : "text-foreground"
+                        )}
+                        style={isDark ? { color: "white" } : undefined}
                         dangerouslySetInnerHTML={{
                           __html: (currentContest as any).bonus_details
                             .description_html,
                         }}
                       />
-                      <p className="text-xs text-amber-700 mt-3 italic">
+                      <p
+                        className={cn(
+                          "text-xs mt-3 italic",
+                          isDark ? "text-amber-300" : "text-amber-700"
+                        )}
+                      >
                         ℹ️ These bonuses are handled manually by you. Make sure
                         to follow through on these commitments to maintain
                         creator trust!
@@ -2886,7 +2990,13 @@ export default function ContestDetailClient({
                   currentContest.tracking_links.length > 0 && (
                     <div className="space-y-6">
                       <div className="flex flex-col gap-3">
-                        <h3 className="px-2 text-xl font-semibold text-gray-900 dark:text-gray-100">
+                        <h3 className={cn(
+                          "px-2 text-xl font-semibold",
+                          isDark
+                            ? "text-white"
+                            : "text-gray-900"
+                        )}
+                         >
                           Tracking Links
                         </h3>
                         <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
@@ -2908,7 +3018,13 @@ export default function ContestDetailClient({
                           return (
                             <div
                               key={idx}
-                              className="bg-white border border-gray-300 rounded-xl p-6 transition-all duration-200"
+                              className={cn(
+                                "border rounded-xl p-6 transition-all duration-200",
+                                isDark
+                                  ? "border-gray-600"
+                                  : "border-gray-300 bg-white"
+                              )}
+                            
                             >
                               <div className="flex items-start gap-4">
                                 <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
@@ -2920,7 +3036,14 @@ export default function ContestDetailClient({
                                       href={processedUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="text-base font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline break-all flex-1"
+                                    
+                                      className={cn(
+                                        "text-base font-medium hover:underline break-all flex-1",
+                                        isDark
+                                          ? "text-purple-300"
+                                          : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                                      )}
+                                    
                                     >
                                       {processedUrl}
                                     </a>
@@ -2928,13 +3051,26 @@ export default function ContestDetailClient({
                                       onClick={() =>
                                         handleCopyTrackingLink(processedUrl)
                                       }
-                                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 flex-shrink-0"
+                                      className={cn(
+                                        "p-1.5 rounded-md transition-colors duration-200 flex-shrink-0",
+                                        isDark
+                                          ? "text-gray-300"
+                                          : "hover:bg-gray-100 text-gray-600"
+                                      )}
                                       title="Copy link"
                                     >
-                                      <Copy className="h-4 w-4 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200" />
+                                      <Copy className=
+                                        "h-4 w-4"
+                                        />
                                     </button>
                                   </div>
-                                  <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                  <div 
+                                   className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-white"
+                                      : "text-gray-700 dark:text-gray-300"
+                                  )}>
                                     {item.description}
                                   </div>
                                 </div>
@@ -4103,26 +4239,18 @@ export default function ContestDetailClient({
                                           className="bg-white"
                                           align="end"
                                         >
-                                        {currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                            currentContest.post_contest_status !==
-                                            "verification_complete" &&
-                                            currentContest.post_contest_status !==
-                                            "payments_processed" && (
-                                              <>
-                                                <DropdownMenuLabel className="text-purple-500">
-                                                  Change Status
-                                                </DropdownMenuLabel>
-                                                <DropdownMenuSeparator />
-                                              </>
-                                            )}
+                                          {currentContest.post_contest_status !==
+                                            "payouts_processed" && (
+                                            <>
+                                              <DropdownMenuLabel className="text-purple-500">
+                                                Change Status
+                                              </DropdownMenuLabel>
+                                              <DropdownMenuSeparator />
+                                            </>
+                                          )}
                                           {submission.status !== "verified" &&
                                             currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                            currentContest.post_contest_status !==
-                                            "verification_complete" &&
-                                            currentContest.post_contest_status !==
-                                            "payments_processed" &&
+                                              "payouts_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -4148,13 +4276,9 @@ export default function ContestDetailClient({
                                                 Mark as Verified
                                               </DropdownMenuItem>
                                             ))}
-                                            {submission.status !== "rejected" &&
+                                          {submission.status !== "rejected" &&
                                             currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                            currentContest.post_contest_status !==
-                                            "verification_complete" &&
-                                            currentContest.post_contest_status !==
-                                            "payments_processed" &&
+                                              "payouts_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -4182,13 +4306,9 @@ export default function ContestDetailClient({
                                                 Mark as Rejected
                                               </DropdownMenuItem>
                                             ))}
-                                              {submission.status !== "pending" &&
+                                          {submission.status !== "pending" &&
                                             currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                            currentContest.post_contest_status !==
-                                            "verification_complete" &&
-                                            currentContest.post_contest_status !==
-                                            "payments_processed" &&
+                                              "payouts_processed" &&
                                             (submission.status === "paid" ? (
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -4216,8 +4336,12 @@ export default function ContestDetailClient({
                                             ))}
                                           {submission.status !== "paid" &&
                                             isAdminView &&
-                                            currentContest.post_contest_status ===
-                                              "verification_complete" && (
+                                            (currentContest.post_contest_status ===
+                                              "in_review" ||
+                                              currentContest.post_contest_status ===
+                                                "verification_complete" ||
+                                              currentContest.post_contest_status ===
+                                                "payouts_processed") && (
                                               <>
                                                 <DropdownMenuItem
                                                   disabled={isLoading}

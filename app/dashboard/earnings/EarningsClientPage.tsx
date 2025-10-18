@@ -173,7 +173,28 @@ export default function EarningsClientPage({
   const [cryptoNetwork, setCryptoNetwork] = useState<string>("BNB_BEP20"); // Added for crypto network
   const [payoutFriendlyName, setPayoutFriendlyName] = useState<string>(""); // Added for friendly name
   const [payoutCountry, setPayoutCountry] = useState<"IN" | "OTHER">("IN");
-  const [mode, setMode] = useState<"light" | "dark">("light");
+  const getInitialMode = (): "light" | "dark" => {
+    if (typeof document === "undefined") return "light";
+    const dataMode = document
+      .querySelector("[data-mode]")
+      ?.getAttribute("data-mode");
+    if (dataMode === "dark" || dataMode === "light") {
+      return dataMode;
+    }
+    if (document.documentElement.classList.contains("dark")) {
+      return "dark";
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    ) {
+      return "dark";
+    }
+    return "light";
+  };
+
+  const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
   const [isCompact, setIsCompact] = useState<boolean>(false);
   // Coupon/code redemption
   const [redeemCode, setRedeemCode] = useState<string>("");
@@ -193,38 +214,42 @@ export default function EarningsClientPage({
     initialLimit: 25,
   });
 
-  // Read mode/compact flags from data attributes
+  // Read mode from data attribute and html class, respond to changes
   useEffect(() => {
-    const checkFlags = () => {
-      const container = document.querySelector("[data-mode][data-compact]");
-      const modeElement = container || document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) setMode(currentMode);
-      }
-      const compactElement =
-        container || document.querySelector("[data-compact]");
-      if (compactElement) {
-        setIsCompact(compactElement.getAttribute("data-compact") === "true");
-      }
+    const readMode = (): "light" | "dark" => {
+      const el = document.querySelector("[data-mode]");
+      const attr = el?.getAttribute("data-mode");
+      if (attr === "dark" || attr === "light") return attr;
+      return document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light";
     };
 
-    checkFlags();
+    const readCompact = (): boolean => {
+      const compactElement = document.querySelector("[data-compact]");
+      return compactElement?.getAttribute("data-compact") === "true";
+    };
 
-    // Watch for changes in the data attributes
-    const observer = new MutationObserver(checkFlags);
-    const targetNode =
-      document.querySelector("[data-mode][data-compact]") ||
-      document.querySelector("[data-mode]") ||
-      document.querySelector("[data-compact]");
-    if (targetNode) {
-      observer.observe(targetNode, {
+    // Set immediately on mount to avoid any flicker
+    setMode(readMode());
+    setIsCompact(readCompact());
+
+    // Watch for changes on either data-mode or html class
+    const observer = new MutationObserver(() => {
+      setMode(readMode());
+      setIsCompact(readCompact());
+    });
+    const dataModeTarget = document.querySelector("[data-mode]");
+    if (dataModeTarget) {
+      observer.observe(dataModeTarget, {
         attributes: true,
-        attributeFilter: ["data-mode", "data-compact"],
+        attributeFilter: ["data-mode"],
       });
     }
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
 
     return () => observer.disconnect();
   }, []);
@@ -2158,16 +2183,29 @@ export default function EarningsClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available:{" "}
-                  <span className={cn("font-semibold", isDark ? "text-white" : "text-gray-800")}>
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     {profile
                       ? formatCurrencyFromCents(profile.withdrawable_balance)
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
                 <div>
-                  <Label htmlFor="withdrawAmountDollars" className={cn(isDark ? "text-white" : "text-gray-800")}>
+                  <Label
+                    htmlFor="withdrawAmountDollars"
+                    className={cn(isDark ? "text-white" : "text-gray-800")}
+                  >
                     Amount to Withdraw (USD)
                   </Label>
                   <Input
@@ -2194,7 +2232,12 @@ export default function EarningsClientPage({
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
@@ -2221,7 +2264,12 @@ export default function EarningsClientPage({
               </>
             )}
             <div>
-              <Label htmlFor="withdrawalUserNotes" className={cn(isDark ? "text-white" : "text-gray-800")}>Notes (Optional)</Label>
+              <Label
+                htmlFor="withdrawalUserNotes"
+                className={cn(isDark ? "text-white" : "text-gray-800")}
+              >
+                Notes (Optional)
+              </Label>
               <Input
                 id="withdrawalUserNotes"
                 value={withdrawalUserNotes}
@@ -2236,7 +2284,12 @@ export default function EarningsClientPage({
               />
             </div>
             <div>
-              <Label htmlFor="payoutMethodSelect" className={cn(isDark ? "text-white" : "text-gray-800")}>Select Payout Method</Label>
+              <Label
+                htmlFor="payoutMethodSelect"
+                className={cn(isDark ? "text-white" : "text-gray-800")}
+              >
+                Select Payout Method
+              </Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
                 onValueChange={setSelectedWithdrawMethodId}
@@ -2249,14 +2302,22 @@ export default function EarningsClientPage({
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
@@ -2270,9 +2331,7 @@ export default function EarningsClientPage({
             )}
           </div>
           <DialogFooter>
-            <DialogClose asChild>
-             
-            </DialogClose>
+            <DialogClose asChild></DialogClose>
             <Button
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
@@ -2292,7 +2351,6 @@ export default function EarningsClientPage({
                 // For coins, payoutMethod is optional, so don't disable if it's not selected and tab is coins
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
                 (activeTabModal === "cash" && payoutMethods.length === 0)
-                
               }
               className={cn(
                 "w-full text-md rounded-full",
@@ -2303,14 +2361,17 @@ export default function EarningsClientPage({
             >
               Request Withdrawal
             </Button>
-            <button disabled={isLoading} className={cn(
-                  "w-full text-md rounded-full",
-                  isDark
-                    ? "py-2 border border-[#FF5353] text-[#FF5353]"
-                    : "bg-[#FF323224] text-[#E50000] py-2"
-                )}>
-                Cancel
-              </button>
+            <button
+              disabled={isLoading}
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "py-2 border border-[#FF5353] text-[#FF5353]"
+                  : "bg-[#FF323224] text-[#E50000] py-2"
+              )}
+            >
+              Cancel
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

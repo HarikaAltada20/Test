@@ -215,7 +215,44 @@ export default function CreateContestPage({
   const [maxEarningsPerCreator, setMaxEarningsPerCreator] = useState<
     number | string
   >(""); // In dollars
+  // Initialize theme state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
 
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
+  const isDark = mode === "dark";
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>("technology");
   const [thumbnail, setThumbnail] = useState<File | null>(null);
@@ -273,45 +310,36 @@ export default function CreateContestPage({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRefreshWarning, setShowRefreshWarning] = useState(false);
 
-  // Initialize theme state with proper detection to prevent flash
-  const [mode, setMode] = useState<"light" | "dark">(() => {
-    // Check if we're in browser environment
-    if (typeof window !== "undefined") {
-      // Try to get theme from data-theme attribute first
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme") as
-        | "light"
-        | "dark";
-      if (dataTheme) return dataTheme;
 
-      // Fallback to data-mode attribute
+
+   // Read mode from data attribute
+   useEffect(() => {
+    const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode") as
+        const currentMode = modeElement.getAttribute("data-mode") as
           | "light"
           | "dark";
-        if (dataMode) return dataMode;
-      }
-
-      // Check localStorage as last resort
-      try {
-        const savedMode = localStorage.getItem("dashboard-mode") as
-          | "light"
-          | "dark";
-        if (savedMode) return savedMode;
-
-        const preset = localStorage.getItem("dashboard-preset");
-        if (preset === "game-of-creators" || preset === "dark-professional") {
-          return "dark";
+        if (currentMode) {
+          setMode(currentMode);
         }
-      } catch (e) {
-        // Ignore localStorage errors
       }
-    }
-    return "light";
-  });
-  const isDark = mode === "dark";
+    };
 
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (showPayment) {
       // Disable background scroll
