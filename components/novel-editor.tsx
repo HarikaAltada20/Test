@@ -16,6 +16,7 @@ import React, { useState, useImperativeHandle, forwardRef, useEffect } from 'rea
 interface NovelEditorProps {
   value: string;
   placeholder?: string;
+  
   height?: string;
   isDark?: boolean;
   onChange?: (html: string, json: any) => void;
@@ -29,6 +30,7 @@ export interface NovelEditorRef {
 
 const NovelEditor = forwardRef<NovelEditorRef, NovelEditorProps>(({
     value,
+    isDark = false,
     placeholder = 'Write something amazing...',
     height = '300px',
     onChange,
