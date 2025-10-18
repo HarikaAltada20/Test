@@ -731,7 +731,12 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             {contest.moderation_status === 'approved' ? (
                                 <>
                                     <button
-                                        className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                                          className={cn(
+                                            "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                                            isDark
+                                              ? "bg-[#7F39EC] text-white"
+                                              : "bg-[#D9C0FF61] text-[#7F39EC]"
+                                          )}
                                      
                                         onClick={async (e) => {
                                             e.stopPropagation();
@@ -756,7 +761,12 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                                     <Button
                                         variant="outline"
                                           size="md"
-                                          className="text-purple-500 text-[13px]"
+                                          className={cn(
+                                            "text-[13px]",
+                                            isDark
+                                              ? "text-purple-400 border-gray-700"
+                                              : "text-purple-500"
+                                          )}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             router.push(`/dashboard/contests/${contest.id}/edit?dates=true`);
@@ -769,9 +779,13 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                             ) : contest.moderation_status !== 'published' ? (
                                 // Non-published contests: Show Edit Contest button
                                 <button
-                                
-                                   
-                                      className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
+                                className={cn(
+                                  "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
+                                  isDark
+                                    ? "bg-[#7F39EC] text-white"
+                                    : "bg-[#D9C0FF61] text-[#7F39EC]"
+                                )}
+                                                              
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         const href = isAdminView

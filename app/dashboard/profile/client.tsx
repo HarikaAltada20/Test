@@ -970,11 +970,10 @@ export default function ProfilePage({
                   )}
                 >
                   <p
-                    className={`inline-flex items-center px-3 py-1 rounded-full font-medium capitalize ${
-                      userData.user_type === "creator"
-                        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                        : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                    }`}
+                     className={cn(
+                      "text-base text-[15px] capitalize truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
                   >
                     {userData.user_type}
                   </p>

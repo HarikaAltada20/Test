@@ -148,15 +148,15 @@ export function DeleteContestButton({
     }
   };
   const isDark = mode === "dark";
-  
+
   return (
     <>
       <Button
         onClick={() => setIsOpen(true)}
         variant={variant}
         size="md"
-        className={`${
-          isdark ? "border border-purple-400 text-purple-300" : "text-purple-500"
+        className={`border ${
+          isDark ? "text-purple-400 border-gray-600" : "text-purple-500"
         } text-[14px] ${className}`}
       >
         <Trash2 className="h-4 w-4 mb-[2px]" />

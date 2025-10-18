@@ -959,12 +959,12 @@ export default function SettingsPage({
         <Alert
           variant="destructive"
           className={cn(
-            "border-red-500",
-            isDark ? "bg-red-900/20" : "bg-red-50"
+            "border",
+            isDark ? "border-[#FF5353] bg-red-900/20" : "bg-red-50 border-red-500"
           )}
         >
           <AlertDescription
-            className={cn(isDark ? "text-red-300" : "text-red-800")}
+            className={cn(isDark ? "text-[#FF5353]" : "text-red-800")}
           >
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
@@ -982,7 +982,11 @@ export default function SettingsPage({
                     variant="outline"
                     size="sm"
                     onClick={clearConnectionError}
-                    className="text-red-700 border-red-300 hover:bg-red-100"
+                    className={cn(
+                      "border",
+                      isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                    )}
+                    
                   >
                     Dismiss
                   </Button>
@@ -1003,7 +1007,10 @@ export default function SettingsPage({
                                 "_blank"
                               )
                             }
-                            className="text-red-700 border-red-300 hover:bg-red-100"
+                            className={cn(
+                              "border",
+                              isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                            )}
                           >
                             Create YouTube Channel
                           </Button>
@@ -1016,17 +1023,26 @@ export default function SettingsPage({
                                 "_blank"
                               )
                             }
-                            className="text-red-700 border-red-300 hover:bg-red-100"
+                            className={cn(
+                              "border",
+                              isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                            )}
                           >
                             Learn How
                           </Button>
                         </div>
-                        <p className="text-xs text-red-600 mt-2">
+                        <p className={cn(
+                          "text-xs",
+                          isDark ? "text-[#FF5353]" : "text-red-600"
+                        )}>
                           💡 Tip: You can also create a channel by uploading
                           your first video to YouTube. After creating your
                           channel, return here to connect it.
                         </p>
-                        <div className="text-xs text-red-600">
+                        <div className={cn(
+                          "text-xs",
+                          isDark ? "text-[#FF5353]" : "text-red-600"
+                        )}>
                           <p className="mb-1">Additional Resources:</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
                             <li>
