@@ -2533,8 +2533,11 @@ export default function SubmitContentPage({
                           <AlertDescription>{libraryMessage}</AlertDescription>
                         </Alert>
                       ) : (
-                        <div className="text-center py-4">
-                          <p>No videos found in your YouTube channel.</p>
+                        <div className="text-center py-4" >
+                          <p className={cn(
+                            "text-md",
+                            isDark ? "text-white" : "text-black"
+                          )}>No videos found in your YouTube channel.</p>
                           <Button
                             variant="outline"
                             onClick={() => fetchYouTubeVideos()}
@@ -2783,7 +2786,11 @@ export default function SubmitContentPage({
                                     {/* Title */}
                                     <div className="space-y-2">
                                       <h3
-                                        className="font-medium text-lg leading-5 text-center sm:text-left line-clamp-2"
+                                        
+                                        className={cn(
+                                          "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
+                                          isDark ? "text-white" : "text-gray-900"
+                                        )}
                                         title={video.snippet.title}
                                       >
                                         {video.snippet.title}
@@ -2793,7 +2800,10 @@ export default function SubmitContentPage({
                                           href={`https://www.youtube.com/watch?v=${video.id.videoId}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center text-sm text-[#4A00BE] hover:underline"
+                                          className={cn(
+                                            "inline-flex items-center text-sm hover:underline",
+                                            isDark ? "text-purple-400" : "text-[#4A00BE]"
+                                          )}
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <ExternalLink className="h-3 w-3 mr-1" />
@@ -2934,7 +2944,11 @@ export default function SubmitContentPage({
                               {/* Title */}
                               <div className="space-y-1">
                                 <h3
-                                  className="font-medium text-lg leading-5 text-center sm:text-left line-clamp-2"
+                                  className={cn(
+                                    "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                 
                                   title={videoPreview.snippet.title}
                                 >
                                   {videoPreview.snippet.title}
@@ -2944,7 +2958,10 @@ export default function SubmitContentPage({
                                     href={`https://www.youtube.com/watch?v=${videoPreview.id.videoId}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center text-sm text-purple-600 hover:underline"
+                                    className={cn(
+                                      "inline-flex items-center text-sm hover:underline",
+                                      isDark ? "text-purple-400" : "text-purple-600"
+                                    )}
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <ExternalLink className="h-3 w-3 mr-1" />
