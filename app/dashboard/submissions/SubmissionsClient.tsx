@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -725,7 +726,11 @@ export default function SubmissionsClient({
                   return (
                     <div
                       key={submission.id}
-                      className="border border-[#D1B7F9] bg-white rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
+                     
+                      className={cn(
+                           "rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow",    
+                        isDark ? "border border-gray-600" : "border border-[#D1B7F9] bg-white "
+                      )}
                     >
                       <div className="flex items-center space-x-4 flex-grow">
                         {submission.video_thumbnail_url ? (
@@ -747,12 +752,18 @@ export default function SubmissionsClient({
                               href={`/dashboard/opportunities/${contestId}`}
                               className="hover:underline"
                             >
-                              <p className="text-xl font-semibold text-black">
+                              <p className={cn(
+                                "text-xl font-semibold",
+                                isDark ? "text-white" : "text-black"
+                              )}>
                                 {contest?.title || "Contest Title N/A"}
                               </p>
                             </Link>
                           ) : (
-                            <p className="text-xl font-semibold">
+                            <p className={cn(
+                              "text-xl font-semibold",
+                              isDark ? "text-white" : "text-black"
+                            )}>
                               {contest?.title || "Contest Title N/A"}
                             </p>
                           )}
@@ -801,7 +812,10 @@ export default function SubmissionsClient({
 
                       <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
                         <div className="text-sm text-left sm:text-right p-3 rounded-md min-w-[200px]">
-                          <p className="font-medium text-slate-700 dark:text-slate-300">
+                          <p className={cn(
+                            "font-medium",
+                            isDark ? "text-slate-300" : "text-slate-700"
+                          )}>
                             {views.toLocaleString()} views
                           </p>
 
