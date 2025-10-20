@@ -215,7 +215,7 @@ export default function BillingClientPage({
   >(null);
   const [withdrawalUserNotes, setWithdrawalUserNotes] = useState("");
 
-  // Read mode/compact flags from data attributes
+  // Read mode/compact flags from data attributes with immediate updates
   useEffect(() => {
     const checkFlags = () => {
       const container = document.querySelector("[data-mode][data-compact]");
@@ -224,23 +224,42 @@ export default function BillingClientPage({
         const currentMode = modeElement.getAttribute("data-mode") as
           | "light"
           | "dark";
-        if (currentMode) setMode(currentMode);
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
       }
       const compactElement =
         container || document.querySelector("[data-compact]");
       if (compactElement) {
-        setIsCompact(compactElement.getAttribute("data-compact") === "true");
+        const compactValue =
+          compactElement.getAttribute("data-compact") === "true";
+        if (compactValue !== isCompact) {
+          setIsCompact(compactValue);
+        }
       }
     };
 
+    // Check immediately
     checkFlags();
 
-    // Watch for changes in the data attributes
-    const observer = new MutationObserver(checkFlags);
+    // Watch for changes in the data attributes with immediate callback
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          (mutation.attributeName === "data-mode" ||
+            mutation.attributeName === "data-compact")
+        ) {
+          checkFlags();
+        }
+      });
+    });
+
     const targetNode =
       document.querySelector("[data-mode][data-compact]") ||
       document.querySelector("[data-mode]") ||
       document.querySelector("[data-compact]");
+
     if (targetNode) {
       observer.observe(targetNode, {
         attributes: true,
@@ -248,8 +267,62 @@ export default function BillingClientPage({
       });
     }
 
-    return () => observer.disconnect();
-  }, []);
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [mode, isCompact]);
+
+  // Additional effect to catch theme changes more immediately
+  useEffect(() => {
+    // Listen for custom theme change events that might be dispatched by the theme system
+    const handleThemeChange = (event: CustomEvent) => {
+      if (event.detail && event.detail.mode) {
+        const newMode = event.detail.mode as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+          // Force a re-render by updating a dummy state
+          setMode(newMode);
+        }
+      }
+    };
+
+    // Listen for the custom event
+    window.addEventListener("theme-change", handleThemeChange as EventListener);
+
+    // Also check for changes on a more frequent interval as a fallback
+    const intervalId = setInterval(() => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
+      }
+    }, 50); // Check every 50ms for faster response
+
+    return () => {
+      window.removeEventListener(
+        "theme-change",
+        handleThemeChange as EventListener
+      );
+      clearInterval(intervalId);
+    };
+  }, [mode]);
 
   // Pagination for cash transactions
   const {
@@ -836,13 +909,21 @@ export default function BillingClientPage({
   return (
     <div
       className={cn(
-        "mx-auto py-8",
+        "mx-auto py-8 no-theme-transition",
         // Full width in compact (85% zoom) mode, else constrain width
         isCompact ? "max-w-none px-4 md:px-6" : "max-w-[1200px]"
       )}
     >
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Billing & Account</h1>
+        <h1
+          className="text-2xl font-bold"
+          style={{
+            color: isDark ? "white" : "black",
+            transition: "none",
+          }}
+        >
+          Billing & Account
+        </h1>
       </div>
 
       {/* <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
@@ -1701,14 +1782,20 @@ export default function BillingClientPage({
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-800")}
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
             >
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
             </DialogTitle>
             <DialogDescription
-              className={cn(isDark ? "text-white" : "text-gray-800")}
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
             >
               Manage your payout methods. Your default method will be
               pre-selected for withdrawals.
@@ -2143,12 +2230,18 @@ export default function BillingClientPage({
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-800")}
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
             >
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
             <DialogDescription
-              className={cn(isDark ? "text-white" : "text-gray-800")}
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
             >
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.

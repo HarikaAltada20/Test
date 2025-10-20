@@ -3,13 +3,21 @@
 @tailwind utilities;
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
 
+/* Disable transitions for immediate theme changes */
+.no-theme-transition {
+  transition: none !important;
+}
+
+.no-theme-transition * {
+  transition: none !important;
+}
+
 .font-poppins {
   font-family: "Poppins", sans-serif;
 }
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
-
 
 /* Only affect elements with .pricing-scroll */
 .pricing-scroll::-webkit-scrollbar {

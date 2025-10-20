@@ -425,6 +425,12 @@ function DashboardContent({
     try {
       document.cookie = `dashboard-preset=${presetKey}; path=/; max-age=31536000`;
     } catch {}
+
+    // Dispatch custom event for immediate theme change notification
+    const event = new CustomEvent("theme-change", {
+      detail: { mode: preset.mode },
+    });
+    window.dispatchEvent(event);
   }, []);
 
   // Theme switching function - memoized for performance
@@ -442,6 +448,12 @@ function DashboardContent({
     try {
       document.cookie = `dashboard-mode=${modeKey}; path=/; max-age=31536000`;
     } catch {}
+
+    // Dispatch custom event for immediate theme change notification
+    const event = new CustomEvent("theme-change", {
+      detail: { mode: modeKey },
+    });
+    window.dispatchEvent(event);
   }, []);
 
   const toggleColorfulMode = useCallback((enabled: boolean) => {
