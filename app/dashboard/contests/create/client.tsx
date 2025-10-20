@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
@@ -310,10 +311,8 @@ export default function CreateContestPage({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRefreshWarning, setShowRefreshWarning] = useState(false);
 
-
-
-   // Read mode from data attribute
-   useEffect(() => {
+  // Read mode from data attribute
+  useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
@@ -3252,7 +3251,6 @@ export default function CreateContestPage({
               </div>
               {currentPlan ? (
                 <div className="space-y-12">
-                
                   <div
                     className={cn(
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
@@ -4033,7 +4031,12 @@ export default function CreateContestPage({
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full"
+                  className={cn(
+                    "w-full",
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                  )}
                 />
               </div>
               <div className="space-y-2">
@@ -4462,9 +4465,14 @@ export default function CreateContestPage({
             )}
 
             {/* New Bonus Features - Apply to both contest types */}
-            <div className="space-y-6 p-6 border-t-2 border-dashed mt-6">
+            <div className="space-y-6 py-6 px-2 border-t-2 border-dashed mt-6">
               <div>
-                <h3 className="text-xl font-semibold mb-4 text-purple-600">
+                <h3
+                  className={cn(
+                    "text-xl font-semibold mb-4",
+                    isDark ? "text-white" : "text-purple-600"
+                  )}
+                >
                   💰 Creator Earning Opportunities
                 </h3>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -4474,7 +4482,13 @@ export default function CreateContestPage({
               </div>
 
               {/* Flat Fee Bonus */}
-              <div className="space-y-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+              <div
+                className={`space-y-3 p-4 border rounded-lg ${
+                  isDark
+                    ? "bg-green-950/40 border-green-800"
+                    : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                }`}
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">🎁</span>
                   <Label
@@ -4492,6 +4506,11 @@ export default function CreateContestPage({
                   value={flatFeeBonus}
                   onChange={(e) => setFlatFeeBonus(e.target.value)}
                   placeholder="e.g., 10 for $10 per submission"
+                  className={cn(
+                    isDark
+                      ? "bg-green-950/40 border border-gray-600 text-white"
+                      : "bg-white"
+                  )}
                 />
                 <p className="text-sm text-muted-foreground">
                   Optional: Give creators a guaranteed payment for each verified
@@ -4499,8 +4518,15 @@ export default function CreateContestPage({
                   after the contest ends. Great for encouraging participation!
                 </p>
                 {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
-                  <Alert className="bg-green-100 border-green-300">
-                    <AlertDescription className="text-green-800">
+                  <Alert
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                        : "bg-[#F0E7FD] border-[#4A00BE] text-green-800"
+                    )}
+                  >
+                    <AlertDescription>
                       ✓ Creators will earn{" "}
                       <strong>
                         ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
@@ -4515,7 +4541,14 @@ export default function CreateContestPage({
               {contestType === "leaderboard" &&
                 flatFeeBonus &&
                 parseFloat(flatFeeBonus.toString()) > 0 && (
-                  <div className="space-y-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                  <div
+                    className={cn(
+                      "space-y-3 p-4 border rounded-lg",
+                      isDark
+                        ? "bg-blue-950/50 border-blue-800"
+                        : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200"
+                    )}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">💰</span>
                       <Label
@@ -4533,6 +4566,11 @@ export default function CreateContestPage({
                       value={totalBudget}
                       onChange={(e) => setTotalBudget(e.target.value)}
                       placeholder="e.g., 500 for $500 total budget"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white"
+                      )}
                     />
                     <p className="text-sm text-muted-foreground">
                       Optional: Set a budget limit for flat fee bonuses and
@@ -4609,7 +4647,14 @@ export default function CreateContestPage({
               )}
 
               {/* Additional Bonus Section */}
-              <div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <div
+                className={cn(
+                  "space-y-3 p-4 border rounded-lg",
+                  isDark
+                    ? "bg-purple-950/50 border-purple-800"
+                    : "bg-purple-50 border-purple-200"
+                )}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🏆</span>
@@ -4620,12 +4665,15 @@ export default function CreateContestPage({
                       Additional Bonus Opportunities
                     </Label>
                   </div>
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     id="bonusToggle"
                     checked={bonusEnabled}
-                    onChange={(e) => setBonusEnabled(e.target.checked)}
-                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                    onCheckedChange={(checked) =>
+                      setBonusEnabled(checked === true)
+                    }
+                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                      
+                  
                   />
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -4649,13 +4697,21 @@ export default function CreateContestPage({
                     </div>
 
                     {showBonusPreview ? (
-                      <div className="prose max-w-none p-4 bg-white border rounded-lg min-h-[200px]">
+                      <div
+                        className={cn(
+                          "prose max-w-none p-4 border rounded-lg min-h-[200px]",
+                          isDark
+                            ? "bg-[#180438] border-gray-600 text-white"
+                            : "bg-white"
+                        )}
+                      >
                         <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
                       </div>
                     ) : (
                       <div className="bg-white rounded-lg border">
                         <NovelEditor
                           value={bonusHtml}
+                          isDark={isDark}
                           placeholder="Example:
 • Top 3 creators get $100 each
 • Affiliate link available: https://yoursite.com/ref - 10% commission on sales  
@@ -5534,10 +5590,16 @@ export default function CreateContestPage({
                         <p
                           className={`text-[12px] mt-1 transition-colors duration-300 ${
                             isActive
-                              ? "text-black text-[12px]"
+                              ? isDark
+                                ? "text-white"
+                                : "text-black"
                               : isCompleted
-                              ? "text-black text-[12px]"
-                              : "text-slate-400 dark:text-slate-500"
+                              ? isDark
+                                ? "text-white"
+                                : "text-black"
+                              : isDark
+                              ? "text-slate-400"
+                              : "text-slate-400"
                           }`}
                         >
                           {stepItem.description}
@@ -5818,17 +5880,22 @@ export default function CreateContestPage({
                   value={contentType}
                   onValueChange={(value: any) => setContentType(value)}
                 >
-                  <SelectTrigger id="contentType">
+                  <SelectTrigger
+                    id="contentType"
+                    className={cn(
+                      isDark ? "border-gray-600" : "border-gray-300"
+                    )}
+                  >
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ugc">
+                  <SelectContent isDark={isDark}>
+                    <SelectItem value="ugc" isDark={isDark}>
                       📹 UGC (User Generated Content)
                     </SelectItem>
-                    <SelectItem value="clipping">
+                    <SelectItem value="clipping" isDark={isDark}>
                       ✂️ Clipping (Short clips/repurposed content)
                     </SelectItem>
-                    <SelectItem value="other">
+                    <SelectItem value="other" isDark={isDark}>
                       📋 Other (Check Rules for details)
                     </SelectItem>
                   </SelectContent>
@@ -5840,7 +5907,14 @@ export default function CreateContestPage({
               </div>
 
               {/* Multiple Submissions Configuration */}
-              <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+              <div
+                className={cn(
+                  "space-y-4 p-4 border rounded-lg",
+                  isDark
+                    ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                    : "bg-gray-50"
+                )}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <Label
@@ -5849,24 +5923,31 @@ export default function CreateContestPage({
                     >
                       Multiple Submissions
                     </Label>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p
+                      className={cn(
+                        "text-sm mt-1",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}
+                    >
                       Allow creators to submit multiple entries to this contest
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       id="multipleSubmissions"
                       checked={multipleSubmissionsEnabled}
-                      onChange={(e) => {
-                        setMultipleSubmissionsEnabled(e.target.checked);
-                        if (!e.target.checked) {
+                      onCheckedChange={(checked: any) => {
+                        setMultipleSubmissionsEnabled(Boolean(checked));
+                        if (!checked) {
                           setMaxSubmissionsPerCreator(1);
                         } else {
                           setMaxSubmissionsPerCreator(2);
                         }
                       }}
-                      className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500"
+                      )}
                     />
                   </div>
                 </div>
@@ -5888,6 +5969,11 @@ export default function CreateContestPage({
                           setMaxSubmissionsPerCreator(value);
                         }
                       }}
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black"
+                      )}
                       placeholder="Enter number between 2-100"
                     />
                     <p className="text-sm text-muted-foreground">
@@ -6952,7 +7038,7 @@ export default function CreateContestPage({
                                   rel="noopener noreferrer"
                                   className={cn(
                                     "text-sm hover:underline break-all",
-                                    isDark ? "text-purple-500" : "text-blue-600"
+                                    isDark ? "text-purple-400" : "text-blue-600"
                                   )}
                                 >
                                   {resource.url}
@@ -7023,7 +7109,6 @@ export default function CreateContestPage({
                     <div className="flex flex-col gap-2">
                       <Label htmlFor="inspirationUrlInput" className="mb-[2px]">
                         Inspiration Link <span className="text-red-500">*</span>
-                      
                       </Label>
                       <Input
                         id="inspirationUrlInput"
@@ -7106,7 +7191,7 @@ export default function CreateContestPage({
                                 rel="noopener noreferrer"
                                 className={cn(
                                   "font-medium hover:underline break-all",
-                                  isDark ? "text-purple-500" : "text-blue-600"
+                                  isDark ? "text-purple-400" : "text-blue-600"
                                 )}
                               >
                                 {item.url}
@@ -7141,15 +7226,25 @@ export default function CreateContestPage({
                       <CollapsibleTrigger asChild>
                         <button
                           type="button"
-                          className="w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition"
+                          className={cn(
+                            "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
+                            isDark
+                              ? "border-gray-500"
+                              : "border-gray-400 hover:bg-accent/50"
+                          )}
                         >
                           <span>Tracking Links</span>
-                          <span className="text-sm font-normal opacity-70">
+                          <span
+                            className={cn(
+                              "text-sm font-normal",
+                              isDark ? "text-gray-300" : "text-gray-600"
+                            )}
+                          >
                             {trackingLinksOpen ? "Hide" : "Show"}
                           </span>
                         </button>
                       </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-4 space-y-4">
+                      <CollapsibleContent className="mt-4 space-y-3">
                         {trackingError && (
                           <div className="text-red-500 text-sm">
                             {trackingError}
@@ -7165,6 +7260,11 @@ export default function CreateContestPage({
                             placeholder="https://example.com/tracking-link"
                             value={newTrackingUrl}
                             onChange={(e) => setNewTrackingUrl(e.target.value)}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white text-black"
+                            )}
                           />
                         </div>
                         <div className="space-y-2">
@@ -7178,13 +7278,23 @@ export default function CreateContestPage({
                             onChange={(e) =>
                               setNewTrackingDescription(e.target.value)
                             }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white text-black"
+                            )}
                           />
                         </div>
                         <Button
                           type="button"
                           onClick={addTrackingLink}
                           disabled={!newTrackingUrl || !newTrackingDescription}
-                          className="w-full py-6 text-md bg-[#6C43D0] hover:bg-[#6C43D0]"
+                          className={cn(
+                            "w-full py-6 text-md",
+                            isDark
+                              ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
+                              : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                          )}
                         >
                           Add Tracking Link
                         </Button>
@@ -7193,9 +7303,19 @@ export default function CreateContestPage({
                             {trackingLinks.map((item, index) => (
                               <li
                                 key={index}
-                                className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                                className={cn(
+                                  "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
+                                  isDark ? "border-gray-600" : "border-gray-300"
+                                )}
                               >
-                                <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
+                                <div
+                                  className={cn(
+                                    "rounded-full flex items-center justify-center w-12 h-12 mr-2",
+                                    isDark
+                                      ? "bg-[#FFFFFF36] text-white"
+                                      : "text-[#4A00BE] bg-[#D8C3FF]"
+                                  )}
+                                >
                                   <ExternalLink className="w-6 h-6" />
                                 </div>
                                 <div className="flex-1">
@@ -7212,7 +7332,12 @@ export default function CreateContestPage({
                                     }
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="font-medium text-blue-600 hover:underline break-all"
+                                    className={cn(
+                                      "font-medium hover:underline break-all",
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-blue-600"
+                                    )}
                                   >
                                     {item.url.includes("[creator]")
                                       ? item.url.replace(
@@ -7221,13 +7346,23 @@ export default function CreateContestPage({
                                         )
                                       : item.url}
                                   </a>
-                                  <div className="text-xs text-gray-500 mt-1">
+                                  <div
+                                    className={cn(
+                                      "text-xs mt-1",
+                                      isDark ? "text-white" : "text-gray-600"
+                                    )}
+                                  >
                                     {item.description}
                                   </div>
                                 </div>
                                 <button
                                   onClick={() => removeTrackingLink(index)}
-                                  className="text-[#4A00BE] bg-[#D8C3FF] p-3 mr-2 rounded-full"
+                                  className={cn(
+                                    "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
+                                    isDark
+                                      ? "bg-[#FFFFFF36] text-white"
+                                      : "text-[#4A00BE] bg-[#D8C3FF]"
+                                  )}
                                 >
                                   <Trash className="h-4 w-4" />
                                 </button>

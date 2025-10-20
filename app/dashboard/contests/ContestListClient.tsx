@@ -423,7 +423,8 @@ export function ContestListClient({ initialContests, isAdminView = false, select
                         {/* New Features Indicators */}
                         <div className="flex flex-wrap items-center gap-2 mt-2">
                             {contest.multiple_submissions_enabled && (
-                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200"
+                                >
                                     <CheckCheck className="h-3 w-3 mr-1" />
                                     {(contest.max_submissions_per_creator ?? 1) > 1 ? `${contest.max_submissions_per_creator} Submissions` : 'Multiple Entries'}
                                 </Badge>

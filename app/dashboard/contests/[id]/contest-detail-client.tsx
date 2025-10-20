@@ -1562,24 +1562,55 @@ export default function ContestDetailClient({
         {/* Enhanced Contest Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Platform Card */}
-
-          {/* Platform Card */}
-          <div className="group bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
-            <div className="p-6">
+          <div
+            className={cn(
+              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+              isDark
+                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                : "bg-gradient-to-br from-white to-gray-50 border border-gray-100"
+            )}
+          >
+            <div className="p-6 relative z-10">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-white shadow-lg border border-gray-200">
+                <div
+                  className={cn(
+                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                    isDark
+                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                      : "bg-white border border-gray-200"
+                  )}
+                >
                   {getPlatformIcon(currentContest.platform)}
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                  <p
+                    className={cn(
+                      "text-sm font-medium uppercase tracking-wide",
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                    )}
+                  >
                     Platform
                   </p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                  <p
+                    className={cn(
+                      "text-2xl font-bold mt-1",
+                      isDark
+                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                        : "text-gray-900"
+                    )}
+                  >
                     {currentContest.platform || "N/A"}
                   </p>
                 </div>
               </div>
-              <div className="h-1 w-full bg-gradient-to-r from-purple-200 to-purple-300 rounded-full"></div>
+              <div
+                className={cn(
+                  "h-1 w-full rounded-full",
+                  isDark
+                    ? "bg-gradient-to-r from-pink-400 via-purple-400 to-cyan-400 shadow-lg shadow-purple-400/70 animate-pulse"
+                    : "bg-gradient-to-r from-purple-200 to-purple-300"
+                )}
+              ></div>
             </div>
           </div>
           {/* <div className="bg-gradient-to-br from-red-50 to-pink-50 dark:from-red-900/20 dark:to-pink-900/20 border-red-200 dark:border-red-700/50 hover:shadow-lg transition-all duration-300">
@@ -1597,17 +1628,48 @@ export default function ContestDetailClient({
                     </div> */}
 
           {/* Duration Card */}
-          <div className="group bg-gradient-to-br from-white to-blue-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-blue-100 overflow-hidden">
-            <div className="p-6">
+          <div
+            className={cn(
+              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+              isDark
+                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                : "bg-gradient-to-br from-white to-blue-50 border border-blue-100"
+            )}
+          >
+            <div className="p-6 relative z-10">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg">
-                  <Calendar className="h-6 w-6" />
+                <div
+                  className={cn(
+                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                    isDark
+                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                      : "bg-gradient-to-br from-blue-500 to-blue-600 text-white"
+                  )}
+                >
+                  <Calendar
+                    className={cn(
+                      "h-6 w-6",
+                      isDark ? "text-white" : "text-white"
+                    )}
+                  />
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                  <p
+                    className={cn(
+                      "text-sm font-medium uppercase tracking-wide",
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                    )}
+                  >
                     Duration
                   </p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                  <p
+                    className={cn(
+                      "text-2xl font-bold mt-1",
+                      isDark
+                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-cyan-200 bg-clip-text text-transparent"
+                        : "text-gray-900"
+                    )}
+                  >
                     {durationDays !== null
                       ? `${durationDays} ${durationDays === 1 ? "day" : "days"}`
                       : "N/A"}
@@ -1616,7 +1678,12 @@ export default function ContestDetailClient({
               </div>
               {currentContest.start_date && currentContest.end_date && (
                 <div className="mb-3">
-                  <p className="text-sm text-gray-600 font-medium">
+                  <p
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                    )}
+                  >
                     {formatLocalDateTime(currentContest.start_date, {
                       month: "short",
                       day: "numeric",
@@ -1629,7 +1696,14 @@ export default function ContestDetailClient({
                   </p>
                 </div>
               )}
-              <div className="h-1 w-full bg-gradient-to-r from-blue-200 to-blue-300 rounded-full"></div>
+              <div
+                className={cn(
+                  "h-1 w-full rounded-full",
+                  isDark
+                    ? "bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-400 shadow-lg shadow-blue-400/70 animate-pulse"
+                    : "bg-gradient-to-r from-blue-200 to-blue-300"
+                )}
+              ></div>
             </div>
           </div>
           {/* <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700/50 hover:shadow-lg transition-all duration-300">
@@ -1655,17 +1729,50 @@ export default function ContestDetailClient({
           {currentContest.contest_type === "leaderboard" &&
             currentContest.contest_based_details?.leaderboard_contest
               ?.total_prize != null && (
-              <div className="group bg-gradient-to-br from-white to-yellow-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-yellow-100 overflow-hidden">
-                <div className="p-6">
+              <div
+                className={cn(
+                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  isDark
+                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-yellow-500/20"
+                    : "bg-gradient-to-br from-white to-yellow-50 border border-yellow-100"
+                )}
+              >
+                <div className="p-6 relative z-10">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-yellow-500 to-yellow-600 text-white shadow-lg">
-                      <Trophy className="h-6 w-6" />
+                    <div
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                        isDark
+                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                          : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white"
+                      )}
+                    >
+                      <Trophy
+                        className={cn(
+                          "h-6 w-6",
+                          isDark ? "text-white" : "text-white"
+                        )}
+                      />
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                      <p
+                        className={cn(
+                          "text-sm font-medium uppercase tracking-wide",
+                          isDark
+                            ? "text-white/90 drop-shadow-sm"
+                            : "text-gray-500"
+                        )}
+                      >
                         Prize Pool
                       </p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">
+                      <p
+                        className={cn(
+                          "text-2xl font-bold mt-1",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-yellow-200 bg-clip-text text-transparent"
+                            : "text-gray-900"
+                        )}
+                      >
                         {formatMoney(
                           currentContest.contest_based_details
                             .leaderboard_contest.total_prize
@@ -1674,7 +1781,14 @@ export default function ContestDetailClient({
                     </div>
                   </div>
                   <div className="mb-4">
-                    <p className="text-sm text-gray-600 font-medium">
+                    <p
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600"
+                      )}
+                    >
                       {
                         currentContest.contest_based_details.leaderboard_contest
                           .winner_count
@@ -1686,30 +1800,72 @@ export default function ContestDetailClient({
                   {/* Total Budget (if set) */}
                   {currentContest.contest_based_details?.leaderboard_contest
                     ?.total_budget && (
-                    <div className="border-t border-yellow-200 pt-4 mb-4">
+                    <div
+                      className={cn(
+                        "pt-4 mb-4",
+                        isDark
+                          ? "border-t border-white/30"
+                          : "border-t border-yellow-200"
+                      )}
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                          <p
+                            className={cn(
+                              "text-sm font-medium uppercase tracking-wide",
+                              isDark
+                                ? "text-white/90 drop-shadow-sm"
+                                : "text-gray-500"
+                            )}
+                          >
                             Total Budget
                           </p>
-                          <p className="text-xl font-bold text-blue-600 mt-1">
+                          <p
+                            className={cn(
+                              "text-xl font-bold mt-1",
+                              isDark
+                                ? "text-cyan-300 drop-shadow-sm"
+                                : "text-blue-600"
+                            )}
+                          >
                             {formatMoney(
                               currentContest.contest_based_details
                                 .leaderboard_contest.total_budget
                             )}
                           </p>
-                          <p className="text-xs text-gray-600 mt-1">
+                          <p
+                            className={cn(
+                              "text-xs mt-1",
+                              isDark
+                                ? "text-white/70 drop-shadow-sm"
+                                : "text-gray-600"
+                            )}
+                          >
                             For bonuses & extras
                           </p>
                         </div>
-                        <div className="w-10 h-10 flex items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                        <div
+                          className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-lg",
+                            isDark
+                              ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
+                              : "bg-blue-100 text-blue-600"
+                          )}
+                        >
                           <span className="text-lg">💰</span>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  <div className="h-1 w-full bg-gradient-to-r from-yellow-200 to-yellow-300 rounded-full"></div>
+                  <div
+                    className={cn(
+                      "h-1 w-full rounded-full",
+                      isDark
+                        ? "bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 shadow-lg shadow-yellow-400/70 animate-pulse"
+                        : "bg-gradient-to-r from-yellow-200 to-yellow-300"
+                    )}
+                  ></div>
                 </div>
               </div>
               // <Card className="bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-700/50 hover:shadow-lg transition-all duration-300">
@@ -1733,20 +1889,64 @@ export default function ContestDetailClient({
               null && (
               <div
                 className={cn(
-                  "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                  isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  isDark
+                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
+                    : "bg-white border border-gray-100"
                 )}
               >
-                <CardContent className="p-4 flex justify-between">
-                  <div className="flex-1 space-y-3">
-                    <p className="text-lg font-medium"> Total Budget</p>
-                    <p className="text-xl font-bold">
-                      {formatMoney(
-                        currentContest.contest_based_details.cpm_contest
-                          .total_budget
+                <div className="p-6 relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                        isDark
+                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
                       )}
-                    </p>
-                    <p className="text-md">
+                    >
+                      <DollarSign
+                        className={cn(
+                          "h-6 w-6",
+                          isDark ? "text-white" : "text-white"
+                        )}
+                      />
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={cn(
+                          "text-sm font-medium uppercase tracking-wide",
+                          isDark
+                            ? "text-white/90 drop-shadow-sm"
+                            : "text-gray-500"
+                        )}
+                      >
+                        Total Budget
+                      </p>
+                      <p
+                        className={cn(
+                          "text-2xl font-bold mt-1",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
+                            : "text-gray-900"
+                        )}
+                      >
+                        {formatMoney(
+                          currentContest.contest_based_details.cpm_contest
+                            .total_budget
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <p
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600"
+                      )}
+                    >
                       $
                       {
                         currentContest.contest_based_details.cpm_contest
@@ -1757,15 +1957,13 @@ export default function ContestDetailClient({
                   </div>
                   <div
                     className={cn(
-                      "w-10 h-10 flex items-center justify-center rounded-full",
+                      "h-1 w-full rounded-full",
                       isDark
-                        ? "bg-[#FFFFFF36] text-white"
-                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                        ? "bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 shadow-lg shadow-emerald-400/70 animate-pulse"
+                        : "bg-gradient-to-r from-emerald-200 to-emerald-300"
                     )}
-                  >
-                    <DollarSign className="h-5 w-5" />
-                  </div>
-                </CardContent>
+                  ></div>
+                </div>
               </div>
               // <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700/50 hover:shadow-lg transition-all duration-300">
               //   <CardContent className="p-4">
@@ -1803,17 +2001,50 @@ export default function ContestDetailClient({
               null &&
             currentContest.contest_based_details.cpm_contest.total_budget >
               0 && (
-              <div className="group bg-gradient-to-br from-white to-indigo-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-indigo-100 overflow-hidden">
-                <div className="p-6">
+              <div
+                className={cn(
+                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  isDark
+                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-indigo-500/20"
+                    : "bg-gradient-to-br from-white to-indigo-50 border border-indigo-100"
+                )}
+              >
+                <div className="p-6 relative z-10">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-lg mr-4">
-                      <span className="text-lg">📊</span>
+                    <div
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
+                        isDark
+                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                          : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white"
+                      )}
+                    >
+                      <BarChart3
+                        className={cn(
+                          "h-6 w-6",
+                          isDark ? "text-white" : "text-white"
+                        )}
+                      />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">
+                      <h3
+                        className={cn(
+                          "text-lg font-bold",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-indigo-200 bg-clip-text text-transparent"
+                            : "text-gray-900"
+                        )}
+                      >
                         Budget Tracker
                       </h3>
-                      <p className="text-sm text-gray-600">
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white/80 drop-shadow-sm"
+                            : "text-gray-600"
+                        )}
+                      >
                         Monitor spending progress
                       </p>
                     </div>
@@ -1842,17 +2073,45 @@ export default function ContestDetailClient({
               ?.total_budget != null &&
             currentContest.contest_based_details.leaderboard_contest
               .total_budget > 0 && (
-              <div className="group bg-gradient-to-br from-white to-emerald-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-emerald-100 overflow-hidden">
-                <div className="p-6">
+              <div
+                className={cn(
+                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  isDark
+                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-emerald-500/20"
+                    : "bg-gradient-to-br from-white to-emerald-50 border border-emerald-100"
+                )}
+              >
+                <div className="p-6 relative z-10">
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg mr-4">
-                      <span className="text-lg">📊</span>
+                    <div
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
+                        isDark
+                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                          : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
+                      )}
+                    >
+                      <BarChart3 className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">
+                      <h3
+                        className={cn(
+                          "text-lg font-bold",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent"
+                            : "text-gray-900"
+                        )}
+                      >
                         Budget Tracker
                       </h3>
-                      <p className="text-sm text-gray-600">
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white/80 drop-shadow-sm"
+                            : "text-gray-600"
+                        )}
+                      >
                         Monitor bonus spending progress
                       </p>
                     </div>
@@ -1876,27 +2135,70 @@ export default function ContestDetailClient({
             )}
 
           {/* Submissions Count Card */}
-          <div className="group bg-gradient-to-br from-white to-purple-50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-purple-100 overflow-hidden">
-            <div className="p-6">
+          <div
+            className={cn(
+              "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+              isDark
+                ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-purple-500/20"
+                : "bg-gradient-to-br from-white to-purple-50 border border-purple-100"
+            )}
+          >
+            <div className="p-6 relative z-10">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-lg">
-                  <Users className="h-6 w-6" />
+                <div
+                  className={cn(
+                    "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                    isDark
+                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                      : "bg-gradient-to-br from-purple-500 to-purple-600 text-white"
+                  )}
+                >
+                  <Users
+                    className={cn(
+                      "h-6 w-6",
+                      isDark ? "text-white" : "text-white"
+                    )}
+                  />
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                  <p
+                    className={cn(
+                      "text-sm font-medium uppercase tracking-wide",
+                      isDark ? "text-white/90 drop-shadow-sm" : "text-gray-500"
+                    )}
+                  >
                     Submissions
                   </p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
+                  <p
+                    className={cn(
+                      "text-2xl font-bold mt-1",
+                      isDark
+                        ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                        : "text-gray-900"
+                    )}
+                  >
                     {currentSubmissions.length}
                   </p>
                 </div>
               </div>
               <div className="mb-4">
-                <p className="text-sm text-gray-600 font-medium">
+                <p
+                  className={cn(
+                    "text-sm font-medium",
+                    isDark ? "text-white/80 drop-shadow-sm" : "text-gray-600"
+                  )}
+                >
                   Total entries
                 </p>
               </div>
-              <div className="h-1 w-full bg-gradient-to-r from-purple-200 to-purple-300 rounded-full"></div>
+              <div
+                className={cn(
+                  "h-1 w-full rounded-full",
+                  isDark
+                    ? "bg-gradient-to-r from-purple-400 via-violet-400 to-fuchsia-400 shadow-lg shadow-purple-400/70 animate-pulse"
+                    : "bg-gradient-to-r from-purple-200 to-purple-300"
+                )}
+              ></div>
             </div>
           </div>
           {/* <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700/50 hover:shadow-lg transition-all duration-300">
@@ -2767,8 +3069,20 @@ export default function ContestDetailClient({
                       <Gift className="h-5 w-5 text-green-600" />
                       Guaranteed Flat Bonus
                     </h3>
-                    <div className="border border-green-300 bg-green-50/50 rounded-xl p-4">
-                      <p className="text-2xl font-bold text-green-900 mb-2">
+                    <div
+                      className={cn(
+                        "border p-4 rounded-lg",
+                        isDark
+                          ? "bg-green-950/40 border-green-800"
+                          : "border-green-300 bg-green-50/50 rounded-xl p-4"
+                      )}
+                    >
+                      <p
+                        className={cn(
+                          "text-2xl font-bold mb-2",
+                          isDark ? "text-green-300" : "text-green-900"
+                        )}
+                      >
                         {formatMoney(
                           (
                             currentContest.contest_based_details
@@ -2782,7 +3096,12 @@ export default function ContestDetailClient({
                         )}{" "}
                         per verified submission
                       </p>
-                      <p className="text-sm text-green-700">
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark ? "text-green-400" : "text-green-700"
+                        )}
+                      >
                         🎁 Each creator earns this guaranteed amount for EVERY
                         verified submission, regardless of views or ranking!
                         Paid after the contest ends along with other earnings.
@@ -2990,16 +3309,22 @@ export default function ContestDetailClient({
                   currentContest.tracking_links.length > 0 && (
                     <div className="space-y-6">
                       <div className="flex flex-col gap-3">
-                        <h3 className={cn(
-                          "px-2 text-xl font-semibold",
-                          isDark
-                            ? "text-white"
-                            : "text-gray-900"
-                        )}
-                         >
+                        <h3
+                          className={cn(
+                            "px-2 text-xl font-semibold",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}
+                        >
                           Tracking Links
                         </h3>
-                        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900 dark:border-yellow-600/40 dark:bg-yellow-900/20 dark:text-yellow-200">
+                        <div
+                          className={cn(
+                            "rounded-md border p-3 text-sm",
+                            isDark
+                              ? "border-[#C9A7FF] bg-[#C9A7FF26] text-white"
+                              : "border-yellow-200 bg-yellow-50 text-yellow-900"
+                          )}
+                        >
                           <span className="font-medium">Note:</span> change the
                           sub1 and sub2 ... according to your submission number
                           if you are doing multiple submissions ..
@@ -3024,29 +3349,38 @@ export default function ContestDetailClient({
                                   ? "border-gray-600"
                                   : "border-gray-300 bg-white"
                               )}
-                            
                             >
                               <div className="flex items-start gap-4">
-                                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
-                                  <ExternalLink className="h-5 w-5 text-green-600 dark:text-green-400" />
+                                <div
+                                  className={cn(
+                                    "p-3 rounded-full flex-shrink-0",
+                                    isDark ? "bg-green-900/40" : "bg-green-100"
+                                  )}
+                                >
+                                  <ExternalLink
+                                    className={cn(
+                                      "h-5 w-5",
+                                      isDark
+                                        ? "text-green-400"
+                                        : "text-green-600"
+                                    )}
+                                  />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-2">
-                                    <a
-                                      href={processedUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                    
+                                    <p
+                                      // href={processedUrl}
+                                      // target="_blank"
+                                      // rel="noopener noreferrer"
                                       className={cn(
                                         "text-base font-medium hover:underline break-all flex-1",
                                         isDark
                                           ? "text-purple-300"
                                           : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                                       )}
-                                    
                                     >
                                       {processedUrl}
-                                    </a>
+                                    </p>
                                     <button
                                       onClick={() =>
                                         handleCopyTrackingLink(processedUrl)
@@ -3059,18 +3393,17 @@ export default function ContestDetailClient({
                                       )}
                                       title="Copy link"
                                     >
-                                      <Copy className=
-                                        "h-4 w-4"
-                                        />
+                                      <Copy className="h-4 w-4" />
                                     </button>
                                   </div>
-                                  <div 
-                                   className={cn(
-                                    "text-sm leading-relaxed",
-                                    isDark
-                                      ? "text-white"
-                                      : "text-gray-700 dark:text-gray-300"
-                                  )}>
+                                  <div
+                                    className={cn(
+                                      "text-sm leading-relaxed",
+                                      isDark
+                                        ? "text-white"
+                                        : "text-gray-700 dark:text-gray-300"
+                                    )}
+                                  >
                                     {item.description}
                                   </div>
                                 </div>
@@ -3563,21 +3896,32 @@ export default function ContestDetailClient({
                       {/* View Mode Toggle and Sort control */}
                       <div className="flex items-center justify-between px-4 py-2 mb-4">
                         <div className="flex items-center gap-3 text-md">
-                          <span className="text-slate-600">View</span>
+                          <span
+                            className={cn(
+                              isDark ? "text-white" : "text-slate-600"
+                            )}
+                          >
+                            View
+                          </span>
                           <Select
                             value={viewMode}
                             onValueChange={(v) =>
                               setViewMode(v as "normal" | "creator-wise")
                             }
                           >
-                            <SelectTrigger className="h-12 w-[180px]">
+                            <SelectTrigger
+                              className={cn(
+                                "h-12 w-[180px]",
+                                isDark ? "border-gray-500" : "border-gray-300"
+                              )}
+                            >
                               <SelectValue placeholder="View mode" />
                             </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="normal">
+                            <SelectContent isDark={isDark}>
+                              <SelectItem value="normal" isDark={isDark}>
                                 Normal View
                               </SelectItem>
-                              <SelectItem value="creator-wise">
+                              <SelectItem value="creator-wise" isDark={isDark}>
                                 Creator-wise
                               </SelectItem>
                             </SelectContent>
@@ -3625,7 +3969,14 @@ export default function ContestDetailClient({
                       {viewMode === "normal" && (
                         <Table>
                           <TableHeader>
-                            <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
+                            <TableRow
+                              className={cn(
+                                "border-b",
+                                isDark
+                                  ? "bg-[#391A6A] border-gray-600"
+                                  : "bg-slate-100 hover:bg-slate-100 border-slate-200"
+                              )}
+                            >
                               <TableHead className="w-12">#</TableHead>
                               <TableHead>Creator</TableHead>
                               <TableHead className="text-center">
@@ -3841,9 +4192,14 @@ export default function ContestDetailClient({
                                   <TableRow
                                     key={submission.id}
                                     className={cn(
-                                      "hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200",
+                                      "transition-colors duration-200",
+                                      isDark
+                                        ? ""
+                                        : "bg-white hover:bg-slate-100",
                                       rank <= 3 &&
-                                        "bg-gradient-to-r from-yellow-50 to-transparent dark:from-yellow-900/10 border-l-4 border-l-yellow-400"
+                                        (isDark
+                                          ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
+                                          : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400")
                                     )}
                                   >
                                     <TableCell className="font-bold text-center">
@@ -4236,7 +4592,10 @@ export default function ContestDetailClient({
                                           </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent
-                                          className="bg-white"
+                                          className={cn(
+                                            "border",
+                                            isDark ? "bg-black" : "bg-white"
+                                          )}
                                           align="end"
                                         >
                                           {currentContest.post_contest_status !==
@@ -4396,7 +4755,14 @@ export default function ContestDetailClient({
                         groupSubmissionsByCreator && (
                           <Table>
                             <TableHeader>
-                              <TableRow className="bg-slate-100 hover:bg-slate-100 border-b border-slate-200">
+                              <TableRow
+                                className={cn(
+                                  "border-b",
+                                  isDark
+                                    ? "bg-[#391A6A] border-gray-600"
+                                    : "bg-slate-100 hover:bg-slate-100 border-slate-200"
+                                )}
+                              >
                                 <TableHead className="w-12">#</TableHead>
                                 <TableHead>Creator</TableHead>
                                 <TableHead className="text-center">
@@ -4664,13 +5030,23 @@ export default function ContestDetailClient({
                     <TabsList className="grid w-full grid-cols-6">
                       <TabsTrigger
                         value="all"
-                        className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        )}
                       >
                         All ({currentSubmissions?.length || 0})
                       </TabsTrigger>
                       <TabsTrigger
                         value="verified"
-                        className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        )}
                       >
                         Verified (
                         {currentSubmissions?.filter(
@@ -4680,7 +5056,12 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="paid"
-                        className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        )}
                       >
                         Paid (
                         {currentSubmissions?.filter((s) => s.status === "paid")
@@ -4689,7 +5070,12 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="pending"
-                        className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        )}
                       >
                         Pending (
                         {currentSubmissions?.filter(
@@ -4699,7 +5085,12 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="rejected"
-                        className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        )}
                       >
                         Rejected (
                         {currentSubmissions?.filter(
@@ -4709,7 +5100,12 @@ export default function ContestDetailClient({
                       </TabsTrigger>
                       <TabsTrigger
                         value="verified_or_paid"
-                        className="text-xs data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        className={cn(
+                          "text-sm",
+                          isDark
+                            ? "text-white border border-gray-500"
+                            : "data-[state=inactive]:bg-gray-100 data-[state=inactive]:text-gray-600"
+                        )}
                       >
                         Verified/Paid (
                         {currentSubmissions?.filter(
@@ -4733,24 +5129,54 @@ export default function ContestDetailClient({
                     </p>
                   </div> */}
 
-                  <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+                  <div
+                    className={cn(
+                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                      isDark
+                        ? "bg-[#170337] border border-[#D1B7F9]"
+                        : "bg-white"
+                    )}
+                  >
                     <CardContent className="p-4 flex justify-between">
-                      <div className="flex-1 text-black space-y-3">
+                      <div
+                        className={cn(
+                          "flex-1 space-y-3",
+                          isDark ? "text-white" : "text-black"
+                        )}
+                      >
                         <p className="text-lg font-medium">Total Submissions</p>
                         <p className="text-xl font-bold">
                           {currentSubmissions?.length || 0}
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
-                      <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                      <div 
+                        className={cn(
+                          "w-10 h-10 flex items-center justify-center rounded-full ",
+                          isDark
+                            ? "bg-[#FFFFFF42] text-white"
+                            : "bg-purple-100 text-[#4A00BE]"
+                        )}>
                         <Users className="h-5 w-5 " />
                       </div>
                     </CardContent>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+                  <div
+                    className={cn(
+                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                      isDark
+                        ? "bg-[#170337] border border-[#D1B7F9]"
+                        : "bg-white"
+                    )}
+                  >
                     <CardContent className="p-4 flex justify-between">
-                      <div className="flex-1 text-black space-y-3">
+                      <div
+                        className={cn(
+                          "flex-1 space-y-3",
+                          isDark ? "text-white" : "text-black"
+                        )}
+                      >
                         <p className="text-lg font-medium">Approved Content</p>
                         <p className="text-xl font-bold">
                           {" "}
@@ -4761,7 +5187,13 @@ export default function ContestDetailClient({
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
-                      <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                      <div 
+                        className={cn(
+                          "w-10 h-10 flex items-center justify-center rounded-full",
+                          isDark
+                            ? "bg-[#FFFFFF42] text-white"
+                            : "bg-purple-100 text-[#4A00BE]"
+                        )}>
                         <Trophy className="h-4 w-4" />
                       </div>
                     </CardContent>
@@ -4778,9 +5210,21 @@ export default function ContestDetailClient({
                     </p>
                   </div> */}
 
-                  <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+                  <div
+                    className={cn(
+                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                      isDark
+                        ? "bg-[#170337] border border-[#D1B7F9]"
+                        : "bg-white"
+                    )}
+                  >
                     <CardContent className="p-4 flex justify-between">
-                      <div className="flex-1 text-black space-y-3">
+                      <div
+                        className={cn(
+                          "flex-1 space-y-3",
+                          isDark ? "text-white" : "text-black"
+                        )}
+                      >
                         <p className="text-lg font-medium">Contest Duration</p>
                         <p className="text-xl font-bold">
                           {" "}
@@ -4788,7 +5232,13 @@ export default function ContestDetailClient({
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
-                      <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                      <div 
+                        className={cn(
+                          "w-10 h-10 flex items-center justify-center rounded-full",
+                          isDark
+                            ? "bg-[#FFFFFF42] text-white"
+                            : "bg-purple-100 text-[#4A00BE]"
+                        )}>
                         <Calendar className="h-4 w-4" />
                       </div>
                     </CardContent>
@@ -4812,32 +5262,70 @@ export default function ContestDetailClient({
                     <h3 className="font-medium mb-4">Views Statistics</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                       {/* Total Views */}
-                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-gray-600">
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-white" : "text-gray-600"
+                              )}
+                            >
                               Total Views
                             </p>
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p
+                              className={cn(
+                                "text-2xl font-bold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {filteredAnalyticsSubmissions
                                 ?.reduce((sum, s) => sum + (s.views || 0), 0)
                                 .toLocaleString() || 0}
                             </p>
                           </div>
-                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                          <div 
+                           className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-full",
+                            isDark ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-600"
+                          )}>
                             <Eye className="h-5 w-5" />
                           </div>
                         </div>
                       </div>
 
                       {/* Average Views */}
-                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-gray-600">
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-white" : "text-gray-600"
+                              )}
+                            >
                               Avg Views
                             </p>
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p
+                              className={cn(
+                                "text-2xl font-bold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.round(
                                     filteredAnalyticsSubmissions.reduce(
@@ -4848,20 +5336,41 @@ export default function ContestDetailClient({
                                 : 0}
                             </p>
                           </div>
-                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 text-green-600">
+                          <div 
+                           className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-full",
+                            isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-600"
+                          )}>
                             <BarChart3 className="h-5 w-5" />
                           </div>
                         </div>
                       </div>
 
                       {/* Top Submission Views */}
-                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-gray-600">
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-white" : "text-gray-600"
+                              )}
+                            >
                               Highest Views
                             </p>
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p
+                              className={cn(
+                                "text-2xl font-bold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.max(
                                     ...filteredAnalyticsSubmissions.map(
@@ -4871,17 +5380,33 @@ export default function ContestDetailClient({
                                 : 0}
                             </p>
                           </div>
-                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-yellow-100 text-yellow-600">
+                          <div 
+                           className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-full",
+                            isDark ? "bg-yellow-900/50 text-yellow-400" : "bg-yellow-100 text-yellow-600"
+                          )}>
                             <TrendingUp className="h-5 w-5" />
                           </div>
                         </div>
                       </div>
 
                       {/* Filtered Submissions Views */}
-                      <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                      <div
+                        className={cn(
+                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                          isDark
+                            ? "bg-[#170337] border border-[#D1B7F9]"
+                            : "bg-white"
+                        )}
+                      >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-gray-600">
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-white" : "text-gray-600"
+                              )}
+                            >
                               {activeAnalyticsTab === "verified"
                                 ? "Verified Views"
                                 : activeAnalyticsTab === "paid"
@@ -4894,13 +5419,22 @@ export default function ContestDetailClient({
                                 ? "Verified/Paid Views"
                                 : "Filtered Views"}
                             </p>
-                            <p className="text-2xl font-bold text-gray-900">
+                            <p
+                              className={cn(
+                                "text-2xl font-bold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {filteredAnalyticsSubmissions
                                 ?.reduce((sum, s) => sum + (s.views || 0), 0)
                                 .toLocaleString() || 0}
                             </p>
                           </div>
-                          <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                          <div 
+                           className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-full",
+                            isDark ? "bg-purple-900/50 text-purple-300" : "bg-purple-100 text-purple-600"
+                          )}>
                             <CheckCircle className="h-5 w-5" />
                           </div>
                         </div>
@@ -4911,8 +5445,20 @@ export default function ContestDetailClient({
                   {/* ROI/Benefit Analysis - Collapsible Section */}
                   <div className="mt-8">
                     <details className="group">
-                      <summary className="flex items-center justify-between cursor-pointer p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <h3 className="font-medium text-gray-800">
+                      <summary
+                        className={cn(
+                          "flex items-center justify-between cursor-pointer p-4 rounded-lg transition-colors",
+                          isDark
+                            ? "border border-[#D1B7F9]"
+                            : "bg-gray-50 hover:bg-gray-100"
+                        )}
+                      >
+                        <h3
+                          className={cn(
+                            "font-medium",
+                            isDark ? "text-white" : "text-gray-800"
+                          )}
+                        >
                           ROI & Benefit Analysis
                         </h3>
                         <ChevronDown className="h-5 w-5 text-gray-500 group-open:rotate-180 transition-transform" />
@@ -4920,13 +5466,30 @@ export default function ContestDetailClient({
                       <div className="mt-4 space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                           {/* Total Investment */}
-                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          >
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-sm font-medium text-gray-600">
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
                                   Total Investment
                                 </p>
-                                <p className="text-2xl font-bold text-gray-900">
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
                                   {(() => {
                                     if (
                                       currentContest.contest_type ===
@@ -4953,26 +5516,52 @@ export default function ContestDetailClient({
                                     return formatMoney(0);
                                   })()}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
                                   {currentContest.contest_type === "leaderboard"
                                     ? "Prize Pool"
                                     : "Total Paid"}
                                 </p>
                               </div>
-                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-red-100 text-red-600">
+                              <div 
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark ? "bg-red-900/50 text-red-300" : "bg-red-100 text-red-600"
+                                )}>
                                 <DollarSign className="h-5 w-5" />
                               </div>
                             </div>
                           </div>
 
                           {/* Views Generated */}
-                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          >
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-sm font-medium text-gray-600">
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
                                   Views Generated
                                 </p>
-                                <p className="text-2xl font-bold text-gray-900">
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
                                   {filteredAnalyticsSubmissions
                                     ?.reduce(
                                       (sum, s) => sum + (s.views || 0),
@@ -4980,7 +5569,12 @@ export default function ContestDetailClient({
                                     )
                                     .toLocaleString() || 0}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
                                   {activeAnalyticsTab === "all"
                                     ? "All Submissions"
                                     : activeAnalyticsTab === "verified"
@@ -4996,20 +5590,41 @@ export default function ContestDetailClient({
                                     : "Filtered"}
                                 </p>
                               </div>
-                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                              <div 
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-600"
+                                )}>
                                 <Eye className="h-5 w-5" />
                               </div>
                             </div>
                           </div>
 
                           {/* Cost Per View */}
-                          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                          <div
+                            className={cn(
+                              "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              isDark
+                                ? "bg-[#170337] border border-gray-600"
+                                : "bg-white"
+                            )}
+                          >
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-sm font-medium text-gray-600">
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-gray-600"
+                                  )}
+                                >
                                   Cost Per View
                                 </p>
-                                <p className="text-2xl font-bold text-gray-900">
+                                <p
+                                  className={cn(
+                                    "text-2xl font-bold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}
+                                >
                                   {(() => {
                                     const totalViews =
                                       filteredAnalyticsSubmissions?.reduce(
@@ -5046,13 +5661,22 @@ export default function ContestDetailClient({
                                     return `$${costPerView.toFixed(4)}`;
                                   })()}
                                 </p>
-                                <p className="text-xs text-gray-500 mt-1">
+                                <p
+                                  className={cn(
+                                    "text-xs text-gray-500 mt-1",
+                                    isDark ? "text-white" : "text-gray-500"
+                                  )}
+                                >
                                   {currentContest.contest_type === "leaderboard"
                                     ? "Prize Pool ÷ Views"
                                     : "Paid ÷ Views"}
                                 </p>
                               </div>
-                              <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 text-green-600">
+                              <div 
+                                className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-600"
+                                )}>
                                 <BarChart3 className="h-5 w-5" />
                               </div>
                             </div>
@@ -5063,36 +5687,78 @@ export default function ContestDetailClient({
                         {currentContest.contest_type === "cpm" && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* CPM Rate */}
-                            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div
+                              className={cn(
+                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                isDark
+                                  ? "bg-[#170337] border border-gray-600"
+                                  : "bg-white"
+                              )}
+                            >
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <p className="text-sm font-medium text-gray-600">
+                                  <p
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-gray-600"
+                                    )}
+                                  >
                                     CPM Rate
                                   </p>
-                                  <p className="text-2xl font-bold text-gray-900">
+                                  <p
+                                    className={cn(
+                                      "text-2xl font-bold",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
                                     $
                                     {currentContest.contest_based_details?.cpm_contest?.cpm_rate_usd?.toFixed(
                                       2
                                     ) || "0.00"}
                                   </p>
-                                  <p className="text-xs text-gray-500 mt-1">
+                                  <p
+                                    className={cn(
+                                      "text-xs text-gray-500 mt-1",
+                                      isDark ? "text-white" : "text-gray-500"
+                                    )}
+                                  >
                                     Per 1,000 views
                                   </p>
                                 </div>
-                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                                <div className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark ? "bg-purple-900/50 text-purple-300" : "bg-purple-100 text-purple-600"
+                                )}>
                                   <TrendingUp className="h-5 w-5" />
                                 </div>
                               </div>
                             </div>
 
                             {/* Effective CPM */}
-                            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4">
+                            <div
+                              className={cn(
+                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                isDark
+                                  ? "bg-[#170337] border border-gray-600"
+                                  : "bg-white"
+                              )}
+                            >
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <p className="text-sm font-medium text-gray-600">
+                                  <p
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-gray-600"
+                                    )}
+                                  >
                                     Effective CPM
                                   </p>
-                                  <p className="text-2xl font-bold text-gray-900">
+                                  <p
+                                    className={cn(
+                                      "text-2xl font-bold",
+                                      isDark ? "text-white" : "text-gray-900"
+                                    )}
+                                  >
                                     {(() => {
                                       const totalViews =
                                         filteredAnalyticsSubmissions?.reduce(
@@ -5115,11 +5781,19 @@ export default function ContestDetailClient({
                                       return `$${effectiveCPM.toFixed(2)}`;
                                     })()}
                                   </p>
-                                  <p className="text-xs text-gray-500 mt-1">
+                                  <p
+                                    className={cn(
+                                      "text-xs text-gray-500 mt-1",
+                                      isDark ? "text-white" : "text-gray-500"
+                                    )}
+                                  >
                                     Actual rate achieved
                                   </p>
                                 </div>
-                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-orange-100 text-orange-600">
+                                <div className={cn(
+                                  "w-10 h-10 flex items-center justify-center rounded-full",
+                                  isDark ? "bg-orange-900/50 text-orange-300" : "bg-orange-100 text-orange-600"
+                                )}>
                                   <BarChart3 className="h-5 w-5" />
                                 </div>
                               </div>
@@ -5128,16 +5802,38 @@ export default function ContestDetailClient({
                         )}
 
                         {/* Summary Card */}
-                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border border-blue-200">
-                          <h4 className="font-semibold text-lg mb-3 text-gray-800">
+                        <div
+                          className={cn(
+                            "rounded-xl p-6 border",
+                            isDark
+                              ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-white/20 backdrop-blur-2xl"
+                              : "bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200"
+                          )}
+                        >
+                          <h4
+                            className={cn(
+                              "font-semibold text-lg mb-3",
+                              isDark ? "text-white" : "text-gray-800"
+                            )}
+                          >
                             Performance Summary
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                              <p className="text-sm text-gray-600 mb-1">
+                              <p
+                                className={cn(
+                                  "text-sm mb-1",
+                                  isDark ? "text-white/70" : "text-gray-600"
+                                )}
+                              >
                                 Investment Efficiency
                               </p>
-                              <p className="text-lg font-semibold text-gray-800">
+                              <p
+                                className={cn(
+                                  "text-lg font-semibold",
+                                  isDark ? "text-white" : "text-gray-800"
+                                )}
+                              >
                                 {(() => {
                                   const totalViews =
                                     filteredAnalyticsSubmissions?.reduce(
@@ -5176,10 +5872,20 @@ export default function ContestDetailClient({
                               </p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-600 mb-1">
+                              <p
+                                className={cn(
+                                  "text-sm mb-1",
+                                  isDark ? "text-white/70" : "text-gray-600"
+                                )}
+                              >
                                 Contest Type
                               </p>
-                              <p className="text-lg font-semibold text-gray-800 capitalize">
+                              <p
+                                className={cn(
+                                  "text-lg font-semibold capitalize",
+                                  isDark ? "text-white" : "text-gray-800"
+                                )}
+                              >
                                 {currentContest.contest_type} Contest
                               </p>
                             </div>
@@ -5191,8 +5897,22 @@ export default function ContestDetailClient({
 
                   {/* Views Distribution Chart */}
                   <div>
-                    <h3 className="font-medium mb-4">Views Distribution</h3>
-                    <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6">
+                    <h3
+                      className={cn(
+                        "font-medium mb-4",
+                        isDark ? "text-white" : "text-gray-900"
+                      )}
+                    >
+                      Views Distribution
+                    </h3>
+                    <div
+                      className={cn(
+                        "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6",
+                        isDark
+                          ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
+                          : "bg-white"
+                      )}
+                    >
                       {filteredAnalyticsSubmissions?.length > 0 ? (
                         <div className="space-y-4">
                           {/* Simple bar chart representation */}
@@ -5214,23 +5934,51 @@ export default function ContestDetailClient({
                                   key={submission.id}
                                   className="flex items-center space-x-4"
                                 >
-                                  <div className="w-8 text-sm font-medium text-gray-600">
+                                  <div
+                                    className={cn(
+                                      "w-8 text-sm font-medium",
+                                      isDark ? "text-white/70" : "text-gray-600"
+                                    )}
+                                  >
                                     #{index + 1}
                                   </div>
                                   <div className="flex-1">
                                     <div className="flex justify-between text-sm mb-1">
-                                      <span className="text-gray-600">
+                                      <span
+                                        className={cn(
+                                          isDark
+                                            ? "text-white/80"
+                                            : "text-gray-600"
+                                        )}
+                                      >
                                         {submission.creator_username ||
                                           submission.creator_display_name ||
                                           "Unknown Creator"}
                                       </span>
-                                      <span className="font-medium">
+                                      <span
+                                        className={cn(
+                                          "font-medium",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-900"
+                                        )}
+                                      >
                                         {views.toLocaleString()} views
                                       </span>
                                     </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className={cn(
+                                        "w-full rounded-full h-2",
+                                        isDark ? "bg-white/20" : "bg-gray-200"
+                                      )}
+                                    >
                                       <div
-                                        className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                                        className={cn(
+                                          "h-2 rounded-full transition-all duration-300",
+                                          isDark
+                                            ? "bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 shadow-lg shadow-purple-400/50"
+                                            : "bg-gradient-to-r from-blue-500 to-purple-600"
+                                        )}
                                         style={{ width: `${percentage}%` }}
                                       />
                                     </div>
@@ -5241,7 +5989,11 @@ export default function ContestDetailClient({
                         </div>
                       ) : (
                         <div className="h-40 flex items-center justify-center">
-                          <p className="text-gray-500">
+                          <p
+                            className={cn(
+                              isDark ? "text-white/60" : "text-gray-500"
+                            )}
+                          >
                             No submissions to display
                           </p>
                         </div>

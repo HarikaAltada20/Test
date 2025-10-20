@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -71,7 +72,11 @@ import { useToast } from "@/hooks/use-toast";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { formatName } from "@/lib/name-utils";
 
 // Dynamically import the Novel editor
@@ -174,9 +179,9 @@ export default function EditContestPage({
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
-  const [error, setError] = useState<string | null>(null)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  const [contest, setContest] = useState<ContestData | null>(null)
+  const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [contest, setContest] = useState<ContestData | null>(null);
 
   // State for subscription plans and user plan
   const [dbSubscriptionPlans, setDbSubscriptionPlans] = useState<
@@ -576,9 +581,7 @@ export default function EditContestPage({
           // Simplified logic: Check if contest has ended (no one can edit ended contests)
           let canEdit = true;
           const now = new Date();
-          const contestEndDate = data.end_date
-            ? new Date(data.end_date)
-            : null;
+          const contestEndDate = data.end_date ? new Date(data.end_date) : null;
           const isEnded = contestEndDate && contestEndDate <= now;
 
           // Block editing for ended contests (even for admins)
@@ -605,9 +608,7 @@ export default function EditContestPage({
                 "This contest has ended and cannot be edited. Contest integrity must be maintained after completion."
               );
             } else {
-              setError(
-                "This contest is already live and cannot be edited."
-              );
+              setError("This contest is already live and cannot be edited.");
             }
             setContest(data as ContestData); // Still set contest to allow viewing some info if needed
           } else {
@@ -1333,11 +1334,15 @@ export default function EditContestPage({
           if (isNewContest) {
             // For approved contests, only check that start time is in the future
             // For non-approved contests, apply the 2-day minimum restriction
-            if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
+            if (
+              contest?.moderation_status !== "approved" &&
+              daysUntilStart < MIN_DAYS_UNTIL_START
+            ) {
               toast({
                 title: "Invalid Start Date",
-                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-                  } day gap required).`,
+                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+                  MIN_DAYS_UNTIL_START - 1
+                } day gap required).`,
                 variant: "destructive",
               });
               setIsSubmitting(false);
@@ -1496,12 +1501,16 @@ export default function EditContestPage({
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
-        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
+        leaderboardDetails.total_budget = Math.round(
+          parseFloat(totalBudget.toString()) * 100
+        );
       }
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
-        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
+        leaderboardDetails.total_budget = Math.round(
+          parseFloat(totalBudget.toString()) * 100
+        );
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
@@ -1656,9 +1665,9 @@ export default function EditContestPage({
         setBonusJson(json);
         updatePayload.bonus_details = html
           ? {
-            description_html: html,
-            description_json: json,
-          }
+              description_html: html,
+              description_json: json,
+            }
           : null;
       } else {
         updatePayload.bonus_details = null;
@@ -1667,7 +1676,7 @@ export default function EditContestPage({
       // Add max earnings per creator (stored in cents)
       updatePayload.max_earnings_per_creator =
         maxEarningsPerCreator &&
-          parseFloat(maxEarningsPerCreator.toString()) > 0
+        parseFloat(maxEarningsPerCreator.toString()) > 0
           ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
           : null;
     }
@@ -2368,17 +2377,19 @@ export default function EditContestPage({
       // Show detailed refund breakdown if available
       const refundMessage = refundResult.breakdown
         ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-          2
-        )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-          2
-        )} + $${refundResult.breakdown.commissionRefund.toFixed(
-          2
-        )} commission (${refundDetails.commissionPercentage}%) = $${refundResult.breakdown.totalRefunded.toFixed(
-          2
-        )} total.`
+            2
+          )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
+            2
+          )} + $${refundResult.breakdown.commissionRefund.toFixed(
+            2
+          )} commission (${
+            refundDetails.commissionPercentage
+          }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
         : `$${(refundDetails.totalRefund / 100).toFixed(
-          2
-        )} has been refunded to your wallet (using original ${refundDetails.commissionPercentage}% commission rate)`;
+            2
+          )} has been refunded to your wallet (using original ${
+            refundDetails.commissionPercentage
+          }% commission rate)`;
 
       toast({
         title: "Refund Processed",
@@ -2413,31 +2424,32 @@ export default function EditContestPage({
     if (!refundDetails) return;
 
     try {
-      const contestBasedDetails = contestType === "leaderboard"
-        ? {
-          leaderboard_contest: {
-            prizes: winnerAmounts.map((amount, index) => ({
-              position: index + 1,
-              amount: amount,
-            })),
-            total_prize: winnerAmounts.reduce(
-              (sum, amount) => sum + amount,
-              0
-            ),
-            winner_count: winnerCount,
-          },
-        }
-        : {
-          cpm_contest: {
-            cpm_rate_usd: parseFloat(cpmRate.toString()),
-            min_views: minViews ? parseInt(minViews.toString()) : null,
-            max_views: maxViews ? parseInt(maxViews.toString()) : null,
-            total_budget: Math.round(
-              parseFloat(totalBudget.toString()) * 100
-            ),
-            terms_conditions: termsConditions,
-          },
-        };
+      const contestBasedDetails =
+        contestType === "leaderboard"
+          ? {
+              leaderboard_contest: {
+                prizes: winnerAmounts.map((amount, index) => ({
+                  position: index + 1,
+                  amount: amount,
+                })),
+                total_prize: winnerAmounts.reduce(
+                  (sum, amount) => sum + amount,
+                  0
+                ),
+                winner_count: winnerCount,
+              },
+            }
+          : {
+              cpm_contest: {
+                cpm_rate_usd: parseFloat(cpmRate.toString()),
+                min_views: minViews ? parseInt(minViews.toString()) : null,
+                max_views: maxViews ? parseInt(maxViews.toString()) : null,
+                total_budget: Math.round(
+                  parseFloat(totalBudget.toString()) * 100
+                ),
+                terms_conditions: termsConditions,
+              },
+            };
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -2588,8 +2600,9 @@ export default function EditContestPage({
       if (isNewContest) {
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-            } day gap required).`;
+          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+            MIN_DAYS_UNTIL_START - 1
+          } day gap required).`;
         }
       } else if (startDateTime < now) {
         return "Contest start time must be in the future.";
@@ -3370,11 +3383,15 @@ export default function EditContestPage({
           if (isNewContest) {
             // For approved contests, only check that start time is in the future
             // For non-approved contests, apply the 2-day minimum restriction
-            if (contest?.moderation_status !== "approved" && daysUntilStart < MIN_DAYS_UNTIL_START) {
+            if (
+              contest?.moderation_status !== "approved" &&
+              daysUntilStart < MIN_DAYS_UNTIL_START
+            ) {
               toast({
                 title: "Invalid Start Date",
-                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1
-                  } day gap required).`,
+                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+                  MIN_DAYS_UNTIL_START - 1
+                } day gap required).`,
                 variant: "destructive",
               });
               setIsSubmitting(false);
@@ -3489,10 +3506,11 @@ export default function EditContestPage({
           if (!winnerAmounts[i] || winnerAmounts[i] < MIN_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too Low",
-              description: `Prize for Winner ${i + 1
-                } must be at least ${formatCurrencyFromCents(
-                  MIN_PRIZE_PER_WINNER
-                )}`,
+              description: `Prize for Winner ${
+                i + 1
+              } must be at least ${formatCurrencyFromCents(
+                MIN_PRIZE_PER_WINNER
+              )}`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -3502,8 +3520,9 @@ export default function EditContestPage({
           if (winnerAmounts[i] > MAX_PRIZE_PER_WINNER) {
             toast({
               title: "Prize Amount Too High",
-              description: `Prize for Winner ${i + 1
-                } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
+              description: `Prize for Winner ${
+                i + 1
+              } cannot exceed ${formatCurrencyFromCents(MAX_PRIZE_PER_WINNER)}`,
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -3532,12 +3551,16 @@ export default function EditContestPage({
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
-        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
+        leaderboardDetails.total_budget = Math.round(
+          parseFloat(totalBudget.toString()) * 100
+        );
       }
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
-        leaderboardDetails.total_budget = Math.round(parseFloat(totalBudget.toString()) * 100);
+        leaderboardDetails.total_budget = Math.round(
+          parseFloat(totalBudget.toString()) * 100
+        );
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
@@ -3650,11 +3673,13 @@ export default function EditContestPage({
 
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        cpmDetails.flat_fee_bonus = Math.round(parseFloat(flatFeeBonus.toString()) * 100);
+        cpmDetails.flat_fee_bonus = Math.round(
+          parseFloat(flatFeeBonus.toString()) * 100
+        );
       }
 
       contestBasedDetails.cpm_contest = cpmDetails;
-      updatePayload.contest_type = 'cpm';
+      updatePayload.contest_type = "cpm";
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
@@ -3674,9 +3699,9 @@ export default function EditContestPage({
         setBonusJson(json);
         updatePayload.bonus_details = html
           ? {
-            description_html: html,
-            description_json: json,
-          }
+              description_html: html,
+              description_json: json,
+            }
           : null;
       } else {
         updatePayload.bonus_details = null;
@@ -3685,7 +3710,7 @@ export default function EditContestPage({
       // Add max earnings per creator (stored in cents)
       updatePayload.max_earnings_per_creator =
         maxEarningsPerCreator &&
-          parseFloat(maxEarningsPerCreator.toString()) > 0
+        parseFloat(maxEarningsPerCreator.toString()) > 0
           ? Math.round(parseFloat(maxEarningsPerCreator.toString()) * 100)
           : null;
     }
@@ -3994,7 +4019,13 @@ export default function EditContestPage({
     <div className="container max-w-[1200px] mx-auto py-8">
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="icon" asChild>
-          <Link href={isAdmin ? `/dashboard/admin/contests/${contestId}` : `/dashboard/contests/${contestId}`}>
+          <Link
+            href={
+              isAdmin
+                ? `/dashboard/admin/contests/${contestId}`
+                : `/dashboard/contests/${contestId}`
+            }
+          >
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
@@ -4009,14 +4040,20 @@ export default function EditContestPage({
       </div>
 
       {/* Admin Warning for Published Contests */}
-      {isAdmin && contest?.moderation_status === "published" && contest?.status !== "ended" && (
-        <Alert className="mb-6 border-amber-300 bg-amber-50 text-amber-900">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Admin Edit Warning:</strong> You are editing a published/live contest. Changes will be immediately visible to all users and creators. Please exercise caution when making edits to avoid disrupting ongoing contests. Note: Contests cannot be edited once they have ended.
-          </AlertDescription>
-        </Alert>
-      )}
+      {isAdmin &&
+        contest?.moderation_status === "published" &&
+        contest?.status !== "ended" && (
+          <Alert className="mb-6 border-amber-300 bg-amber-50 text-amber-900">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Admin Edit Warning:</strong> You are editing a
+              published/live contest. Changes will be immediately visible to all
+              users and creators. Please exercise caution when making edits to
+              avoid disrupting ongoing contests. Note: Contests cannot be edited
+              once they have ended.
+            </AlertDescription>
+          </Alert>
+        )}
 
       {/* Dates Only Warning */}
       {datesOnly && (
@@ -4165,22 +4202,36 @@ export default function EditContestPage({
                       <SelectItem value="crypto-financial" isDark={isDark}>
                         Crypto/Financial
                       </SelectItem>
-                      <SelectItem value="education" isDark={isDark}>Education</SelectItem>
-                      <SelectItem value="dating" isDark={isDark}>Dating</SelectItem>
-                      <SelectItem value="food-drink" isDark={isDark}>Food & Drink</SelectItem>
-                      <SelectItem value="games-toys" isDark={isDark}>Games & Toys</SelectItem>
+                      <SelectItem value="education" isDark={isDark}>
+                        Education
+                      </SelectItem>
+                      <SelectItem value="dating" isDark={isDark}>
+                        Dating
+                      </SelectItem>
+                      <SelectItem value="food-drink" isDark={isDark}>
+                        Food & Drink
+                      </SelectItem>
+                      <SelectItem value="games-toys" isDark={isDark}>
+                        Games & Toys
+                      </SelectItem>
                       <SelectItem value="health-wellness" isDark={isDark}>
                         Health & Wellness
                       </SelectItem>
-                      <SelectItem value="home-living" isDark={isDark}>Home & Living</SelectItem>
+                      <SelectItem value="home-living" isDark={isDark}>
+                        Home & Living
+                      </SelectItem>
                       <SelectItem value="pets-animals" isDark={isDark}>
                         Pets & Animals
                       </SelectItem>
                       <SelectItem value="sports-outdoors" isDark={isDark}>
                         Sports & Outdoors
                       </SelectItem>
-                      <SelectItem value="technology" isDark={isDark}>Technology</SelectItem>
-                      <SelectItem value="other" isDark={isDark}>Other</SelectItem>
+                      <SelectItem value="technology" isDark={isDark}>
+                        Technology
+                      </SelectItem>
+                      <SelectItem value="other" isDark={isDark}>
+                        Other
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -4548,7 +4599,6 @@ export default function EditContestPage({
                           Max file size: 20MB
                         </p>
                         <Button
-                          
                           className={`px-4 py-2 rounded-lg text-md transition-colors ${
                             isDark
                               ? "bg-[#7F39EC] text-white"
@@ -4990,11 +5040,14 @@ export default function EditContestPage({
                               </span>
                             )}
                           {resource.type === "external" && (
-                            <div 
-                            className={cn(
-                              "rounded-full flex items-center justify-center w-12 h-12",
-                              isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]"
-                            )}>
+                            <div
+                              className={cn(
+                                "rounded-full flex items-center justify-center w-12 h-12",
+                                isDark
+                                  ? "bg-[#FFFFFF36] text-white"
+                                  : "text-[#4A00BE] bg-[#D8C3FF]"
+                              )}
+                            >
                               <ExternalLink className="w-6= h-6" />
                             </div>
                           )}
@@ -5077,7 +5130,10 @@ export default function EditContestPage({
                             onClick={() => removeResource(idx)}
                             className={cn(
                               "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
-                               isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
+                              isDark
+                                ? "bg-[#FFFFFF36] text-white"
+                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                            )}
                           >
                             <Trash className="h-4 w-4" />
                           </button>
@@ -5111,8 +5167,7 @@ export default function EditContestPage({
                 )}
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="inspirationUrlInput">
-                    Inspiration Link{" "}
-                    <span className="text-red-500">*</span>
+                    Inspiration Link <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     id="inspirationUrlInput"
@@ -5120,6 +5175,11 @@ export default function EditContestPage({
                     placeholder="https://instagram.com/example"
                     value={newInspirationUrl}
                     onChange={(e) => setNewInspirationUrl(e.target.value)}
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                   <Label htmlFor="inspirationDescriptionInput">
                     Inspiration Description{" "}
@@ -5132,6 +5192,11 @@ export default function EditContestPage({
                     onChange={(e) =>
                       setNewInspirationDescription(e.target.value)
                     }
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                   <Button
                     type="button"
@@ -5148,15 +5213,22 @@ export default function EditContestPage({
                     {inspirationLinks.map((item, index) => (
                       <li
                         key={index}
-                        className="flex flex-col sm:flex-row sm:items-center gap-4 bg-white dark:bg-gray-800 
-                        border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
-
+                       
+                        className={cn(
+                          "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
+                          isDark
+                            ? "bg-[#180438] border-gray-600"
+                            : "bg-white dark:bg-gray-800 border border-gray-200"
+                        )}
                       >
-                        <div 
+                        <div
                           className={cn(
                             "rounded-full flex items-center justify-center w-12 h-12",
-                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]"
-                          )}>
+                            isDark
+                              ? "bg-[#FFFFFF36] text-white"
+                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                          )}
+                        >
                           <ExternalLink className="w-6 h-6" />
                         </div>
                         <div className="flex-1">
@@ -5183,8 +5255,11 @@ export default function EditContestPage({
                         <button
                           onClick={() => removeInspirationLink(index)}
                           className={cn(
-                           "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
-                            isDark ? "bg-[#FFFFFF36] text-white" : "text-[#4A00BE] bg-[#D8C3FF]")}
+                            "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
+                            isDark
+                              ? "bg-[#FFFFFF36] text-white"
+                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                          )}
                         >
                           <Trash className="h-4 w-4" />
                         </button>
@@ -5207,15 +5282,20 @@ export default function EditContestPage({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition"
+                    className={cn(
+                      "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition",
+                      isDark ? "border-gray-600" : "border-gray-400"
+                    )}
                   >
-                    <span>Tracking Links</span>
+                    <span className={cn(isDark ? "text-white" : "text-black")}>
+                      Tracking Links
+                    </span>
                     <span className="text-sm font-normal opacity-70">
                       {trackingLinksOpen ? "Hide" : "Show"}
                     </span>
                   </button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-4 space-y-4">
+                <CollapsibleContent className="mt-4 space-y-3">
                   {trackingError && (
                     <div className="text-red-500 text-sm">{trackingError}</div>
                   )}
@@ -5227,6 +5307,11 @@ export default function EditContestPage({
                       placeholder="https://example.com/tracking-link"
                       value={newTrackingUrl}
                       onChange={(e) => setNewTrackingUrl(e.target.value)}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
                   <div className="space-y-2">
@@ -5240,6 +5325,11 @@ export default function EditContestPage({
                       onChange={(e) =>
                         setNewTrackingDescription(e.target.value)
                       }
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
                   <Button
@@ -5255,9 +5345,19 @@ export default function EditContestPage({
                       {trackingLinks.map((item, index) => (
                         <li
                           key={index}
-                          className="flex items-center gap-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 shadow-sm"
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg p-4 shadow-sm",
+                            isDark
+                              ? "bg-[#180438] border border-gray-600"
+                              : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                          )}
                         >
-                          <div className="text-[#4A00BE] bg-[#D8C3FF] rounded-full flex items-center justify-center w-12 h-12 mr-2">
+                          <div className={cn(
+                            "rounded-full flex items-center justify-center w-12 h-12",
+                            isDark
+                              ? "bg-[#FFFFFF36] text-white"
+                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                          )}>
                             <ExternalLink className="w-6 h-6" />
                           </div>
                           <div className="flex-1">
@@ -5265,23 +5365,29 @@ export default function EditContestPage({
                               href={
                                 item.url.includes("[creator]")
                                   ? item.url.replace(
-                                    /\[creator\]/gi,
-                                    encodeURIComponent(currentUserFirstName)
-                                  )
+                                      /\[creator\]/gi,
+                                      encodeURIComponent(currentUserFirstName)
+                                    )
                                   : item.url
                               }
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="font-medium text-blue-600 hover:underline break-all"
+                              className={cn(
+                                "font-medium hover:underline break-all",
+                                isDark ? "text-purple-500" : "text-blue-600"
+                              )}
                             >
                               {item.url.includes("[creator]")
                                 ? item.url.replace(
-                                  /\[creator\]/gi,
-                                  currentUserFirstName
-                                )
+                                    /\[creator\]/gi,
+                                    currentUserFirstName
+                                  )
                                 : item.url}
                             </a>
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className={cn(
+                              "text-xs mt-1",
+                              isDark ? "text-white" : "text-gray-600"
+                            )}>
                               {item.description}
                             </div>
                           </div>
@@ -5405,7 +5511,12 @@ export default function EditContestPage({
                 <AlertDescription>{getContestDuration()}</AlertDescription>
               </Alert>
             )}
-            <p className="text-sm text-gray-500 mt-1">
+            <p
+              className={cn(
+                "text-sm mt-1",
+                isDark ? "text-white" : "text-gray-600"
+              )}
+            >
               <strong>Start Date Rule:</strong> Contest must start at least{" "}
               {MIN_DAYS_UNTIL_START} days from today.{" "}
               {getStartDateRuleExample()}
@@ -5424,13 +5535,14 @@ export default function EditContestPage({
             <div className="space-y-4">
               <div className="flex items-center flex-col gap-3 md:flex-row md:justify-between">
                 <h3 className="text-lg font-medium">Prize distribution</h3>
-                <div 
-                 className={cn(
-                  "flex items-center gap-2  px-4 py-2 rounded-full",
-                  isDark
-                    ? "bg-[#180438] text-purple-400"
-                    : "bg-gray-100 text-black"
-                )}>
+                <div
+                  className={cn(
+                    "flex items-center gap-2  px-4 py-2 rounded-full",
+                    isDark
+                      ? "bg-[#180438] text-purple-400"
+                      : "bg-gray-100 text-black"
+                  )}
+                >
                   <span className="text-sm font-medium">Total Prize Pool:</span>
                   <span className="text-lg font-bold">
                     {formatCurrencyFromCents(totalPrizePool)}
@@ -5441,10 +5553,14 @@ export default function EditContestPage({
               {/* Plan Requirements Info */}
 
               <div className="mb-6">
-                <div 
-                className={cn("border px-4 py-3 rounded-lg",
-                      isDark ? "bg-[#C9A7FF26] border-[#C9A7FF]" : "border-[#7F39EC] bg-[#D9C0FF26] text-black "
-                    )}>
+                <div
+                  className={cn(
+                    "border px-4 py-3 rounded-lg",
+                    isDark
+                      ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                      : "border-[#7F39EC] bg-[#D9C0FF26] text-black "
+                  )}
+                >
                   <AlertDescription className="flex items-center justify-between">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <Info className="h-4 w-4 shrink-0" />
@@ -5488,10 +5604,10 @@ export default function EditContestPage({
                 </AlertDescription>
               </Alert> */}
 
-              <div 
-               className={cn(
-                isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg"
-              )}
+              <div
+                className={cn(
+                  isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg"
+                )}
               >
                 <div className="flex items-center gap-4 mb-4">
                   <Label className="w-32 md:w-48">
@@ -5557,9 +5673,12 @@ export default function EditContestPage({
                       +
                     </Button>
                   </div>
-                  <div className={cn("text-sm",
+                  <div
+                    className={cn(
+                      "text-sm",
                       isDark ? "text-white" : "text-gray-600"
-                    )}>
+                    )}
+                  >
                     <span>Max: {planFeatures.maxWinnersPerContest}</span>
                   </div>
                 </div>
@@ -5620,7 +5739,6 @@ export default function EditContestPage({
                         }
                       }}
                       min={MIN_PRIZE_PER_WINNER / 100}
-                      
                       className={cn(
                         "w-full sm:w-40 md:w-48",
                         isDark
@@ -5628,9 +5746,12 @@ export default function EditContestPage({
                           : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
                       )}
                     />
-                    <div className={cn("text-xs sm:text-sm",
-                      isDark ? "text-gray-300" : "text-gray-600"
-                    )}>
+                    <div
+                      className={cn(
+                        "text-xs sm:text-sm",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}
+                    >
                       <span>
                         Min: {formatCurrencyFromCents(MIN_PRIZE_PER_WINNER)}
                       </span>
@@ -5917,15 +6038,23 @@ export default function EditContestPage({
                     setContentType(value as "ugc" | "clipping" | "other")
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={cn(
+                      isDark ? "border border-gray-600" : "bg-white"
+                    )}
+                  >
                     <SelectValue placeholder="Select content type (optional)" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ugc">
+                  <SelectContent isDark={isDark}>
+                    <SelectItem value="ugc" isDark={isDark}>
                       UGC (User Generated Content)
                     </SelectItem>
-                    <SelectItem value="clipping">Clipping</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="clipping" isDark={isDark}>
+                      Clipping
+                    </SelectItem>
+                    <SelectItem value="other" isDark={isDark}>
+                      Other
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
@@ -5935,27 +6064,41 @@ export default function EditContestPage({
               </div>
 
               {/* Multiple Submissions Toggle */}
-              <div className="space-y-3 rounded-lg border border-purple-200 bg-purple-50/30 p-4">
+              <div
+                className={cn(
+                  "space-y-3 rounded-lg border p-4",
+                  isDark
+                    ? "border-purple-600/50 bg-purple-900/20"
+                    : "border-purple-200 bg-purple-100/30"
+                )}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <Label
                       htmlFor="multiple-submissions"
-                      className="text-base font-medium"
+                      className={cn(
+                        "text-base font-medium",
+                        isDark ? "text-white" : "text-black"
+                      )}
                     >
                       Allow Multiple Submissions
                     </Label>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p
+                      className={cn(
+                        "text-sm text-muted-foreground mt-1",
+                        isDark ? "text-white" : "text-black"
+                      )}
+                    >
                       Enable creators to submit multiple entries to this
                       contest.
                     </p>
                   </div>
-                  <input
+                  <Checkbox
                     id="multiple-submissions"
-                    type="checkbox"
                     checked={multipleSubmissionsEnabled}
-                    onChange={(e) => {
-                      setMultipleSubmissionsEnabled(e.target.checked);
-                      if (!e.target.checked) {
+                    onCheckedChange={(checked) => {
+                      setMultipleSubmissionsEnabled(checked as boolean);
+                      if (!checked) {
                         setMaxSubmissionsPerCreator(1);
                         setMaxEarningsPerCreator("");
                       } else {
@@ -5963,7 +6106,7 @@ export default function EditContestPage({
                         setMaxSubmissionsPerCreator(2);
                       }
                     }}
-                    className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                     className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
                   />
                 </div>
 
@@ -5986,6 +6129,11 @@ export default function EditContestPage({
                             setMaxSubmissionsPerCreator(value);
                           }
                         }}
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black"
+                        )}
                         placeholder="e.g., 5"
                       />
                       <p className="text-xs text-muted-foreground">
@@ -6008,6 +6156,11 @@ export default function EditContestPage({
                         onChange={(e) =>
                           setMaxEarningsPerCreator(e.target.value)
                         }
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black"
+                        )}
                         placeholder="e.g., 500"
                       />
                       <p className="text-xs text-muted-foreground">
@@ -6031,6 +6184,11 @@ export default function EditContestPage({
                   step="0.01"
                   min="0"
                   value={flatFeeBonus}
+                  className={cn(
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 text-white"
+                      : "bg-white text-black"
+                  )}
                   onChange={(e) => setFlatFeeBonus(e.target.value)}
                   placeholder="e.g., 10.00"
                 />
@@ -6042,32 +6200,52 @@ export default function EditContestPage({
               </div>
 
               {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
-              {contestType === "leaderboard" && flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="total-budget">
-                    Total Budget for Bonuses (Optional)
-                  </Label>
-                  <Input
-                    id="total-budget"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={totalBudget}
-                    onChange={(e) => setTotalBudget(e.target.value)}
-                    placeholder="e.g., 500.00"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    💰 Set a budget limit for flat fee bonuses and future features. Leave empty for no limit.
-                    <br />
-                    <strong>Prize Pool:</strong> {formatCurrencyFromCents(totalPrizePool)} (for rankings)
-                    <br />
-                    <strong>Total Budget:</strong> {totalBudget ? `$${parseFloat(totalBudget.toString()).toFixed(2)}` : 'No limit'} (for bonuses & extras)
-                  </p>
-                </div>
-              )}
+              {contestType === "leaderboard" &&
+                flatFeeBonus &&
+                parseFloat(flatFeeBonus.toString()) > 0 && (
+                  <div className="space-y-2">
+                    <Label htmlFor="total-budget">
+                      Total Budget for Bonuses (Optional)
+                    </Label>
+                    <Input
+                      id="total-budget"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={totalBudget}
+                      onChange={(e) => setTotalBudget(e.target.value)}
+                      placeholder="e.g., 500.00"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      💰 Set a budget limit for flat fee bonuses and future
+                      features. Leave empty for no limit.
+                      <br />
+                      <strong>Prize Pool:</strong>{" "}
+                      {formatCurrencyFromCents(totalPrizePool)} (for rankings)
+                      <br />
+                      <strong>Total Budget:</strong>{" "}
+                      {totalBudget
+                        ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
+                        : "No limit"}{" "}
+                      (for bonuses & extras)
+                    </p>
+                  </div>
+                )}
 
               {/* Bonus Section Toggle & Editor */}
-              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/30 p-4">
+              <div
+                className={cn(
+                  "space-y-3 rounded-lg border p-4",
+                  isDark
+                    ? "border-[#C9A7FF] bg-[#C9A7FF26]"
+                    : "border-amber-200 bg-amber-100/30"
+                )}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <Label
@@ -6076,20 +6254,24 @@ export default function EditContestPage({
                     >
                       Additional Bonus Opportunities
                     </Label>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className={cn(
+                      "text-sm mt-1",
+                      isDark ? "text-gray-400" : "text-gray-600"
+                    )}>
                       Describe other bonuses (top creator rewards, affiliate
                       links, special bonuses). Handled manually by you.
                     </p>
                   </div>
-                  <input
+                  <Checkbox
                     id="bonus-enabled"
-                    type="checkbox"
                     checked={bonusEnabled}
-                    onChange={(e) => setBonusEnabled(e.target.checked)}
-                    className="h-5 w-5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    onCheckedChange={(checked) =>
+                      setBonusEnabled(checked === true)
+                    }
+                     className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
                   />
                 </div>
-
+                
                 {bonusEnabled && (
                   <div className="space-y-3 pt-3 border-t border-amber-300">
                     <div className="flex items-center justify-between">
@@ -6116,13 +6298,28 @@ export default function EditContestPage({
                       </Button>
                     </div>
                     {showBonusPreview ? (
-                      <div className="prose max-w-none p-4 bg-white border rounded-lg min-h-[200px]">
+                      <div
+                        className={cn(
+                          "prose max-w-none p-4 border rounded-lg min-h-[200px]",
+                          isDark
+                            ? "bg-[#180438] border-gray-700 prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white"
+                            : "bg-white border-gray-200"
+                        )}
+                      >
                         <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
                       </div>
                     ) : (
-                      <div className="bg-white rounded-lg border">
+                      <div
+                        className={cn(
+                          "rounded-lg border",
+                          isDark
+                            ? "bg-gray-900 border-gray-700"
+                            : "bg-white border-gray-200"
+                        )}
+                      >
                         <NovelEditor
                           value={bonusHtml}
+                          isDark={isDark}
                           placeholder="Example: 🏆 Top 3 Creators Bonus: Extra $100 for most creative submissions! 💰 Affiliate Program: Earn 10% commission on referrals. 🎯 Milestone Bonus: $50 for reaching 100k views."
                           height="250px"
                           ref={bonusRichTextEditorRef}
@@ -6133,7 +6330,10 @@ export default function EditContestPage({
                         />
                       </div>
                     )}
-                    <p className="text-xs text-muted-foreground">
+                    <p className={cn(
+                      "text-xs",
+                      isDark ? "text-gray-400" : "text-gray-600"
+                    )}>
                       ℹ️ These bonuses are visible to creators but handled
                       manually by you. Use formatting and emojis to make it
                       engaging!
@@ -6181,8 +6381,8 @@ export default function EditContestPage({
             </div>
           )}
 
-        {/* Prize Pool Change Warning - Moved above all buttons for better responsive layout */}
-        {budgetChanged && isContestPaid() && (
+          {/* Prize Pool Change Warning - Moved above all buttons for better responsive layout */}
+          {budgetChanged && isContestPaid() && (
             <div className="w-full">
               <Alert
                 variant={budgetDifference > 0 ? "destructive" : "default"}
@@ -6198,21 +6398,20 @@ export default function EditContestPage({
                   <div className="text-sm mt-1 break-words">
                     {budgetDifference > 0
                       ? `Prize pool increased by ${formatCurrencyFromCents(
-                        budgetDifference
-                      )}. Original: ${formatCurrencyFromCents(
-                        originalBudget
-                      )} → New Total: ${formatCurrencyFromCents(
-                        originalBudget + budgetDifference
-                      )}. Additional payment (including commission) will be required.`
+                          budgetDifference
+                        )}. Original: ${formatCurrencyFromCents(
+                          originalBudget
+                        )} → New Total: ${formatCurrencyFromCents(
+                          originalBudget + budgetDifference
+                        )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
-                        Math.abs(budgetDifference)
-                      )}. You will be refunded this amount plus commission.`}
+                          Math.abs(budgetDifference)
+                        )}. You will be refunded this amount plus commission.`}
                   </div>
                 </div>
               </Alert>
             </div>
           )}
-
 
           {/* Button Row - Cancel on left, Save/Submit on right */}
           <div className="flex px-4 flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2 w-full">
@@ -6239,9 +6438,7 @@ export default function EditContestPage({
                   disabled={isSubmitting || !!validationError}
                   className={cn(
                     "border text-white h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                    isDark
-                      ? "bg-[#7F39EC]"
-                      : "bg-[#4A00BE]"
+                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
                   )}
                 >
                   {isSubmitting ? (
@@ -6279,13 +6476,9 @@ export default function EditContestPage({
                     <Button
                       onClick={handleResubmitForApproval}
                       disabled={isSubmitting || !!validationError}
-                     
-
                       className={cn(
                         "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                        isDark
-                          ? "bg-[#7F39EC]"
-                          : "bg-[#4A00BE]"
+                        isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
                       )}
                     >
                       {isSubmitting ? (
@@ -6295,15 +6488,6 @@ export default function EditContestPage({
                         </div>
                       ) : contest?.moderation_status === "pending_approval" ? (
                         <>
-                          <span className="hidden xl:inline">
-                            Update & Resubmit for Approval
-                          </span>
-                          <span className="hidden md:inline xl:hidden">
-                            Update & Resubmit
-                          </span>
-                          <span className="hidden sm:inline md:hidden">
-                            Update & Submit
-                          </span>
                           <span className="hidden xl:inline">
                             Update & Resubmit for Approval
                           </span>
@@ -6355,8 +6539,8 @@ export default function EditContestPage({
         </CardFooter>
       </div>
 
-       {/* Refund Preview Modal */}
-       {showRefundPreview && refundDetails && (
+      {/* Refund Preview Modal */}
+      {showRefundPreview && refundDetails && (
         <div
           className={cn(
             "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
@@ -6493,7 +6677,6 @@ export default function EditContestPage({
               </div>
 
               <div className="flex flex-col gap-3">
-               
                 <button
                   onClick={processRefund}
                   disabled={isSubmitting}
@@ -6538,34 +6721,33 @@ export default function EditContestPage({
         </div>
       )}
 
-
       {/* Payment Modal */}
       {showPayment && contest && (
-        <div 
-        className={cn(
-          "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-          isDark ? "bg-[#100A33]" : "bg-black"
-        )}>
+        <div
+          className={cn(
+            "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
+            isDark ? "bg-[#100A33]" : "bg-black"
+          )}
+        >
           <div
-           className={cn(
-            "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-            isDark ? "bg-[#06021D] border border-gray-800 text-white" : "bg-white text-gray-900 "
-          )} >
+            className={cn(
+              "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
+              isDark
+                ? "bg-[#06021D] border border-gray-800 text-white"
+                : "bg-white text-gray-900 "
+            )}
+          >
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">
-                  Contest Payment
-                </h2>
-                <p >
-                  Complete payment to submit your contest for review
-                </p>
+                <h2 className="text-2xl font-bold mb-2">Contest Payment</h2>
+                <p>Complete payment to submit your contest for review</p>
               </div>
 
               {/* Plan Commission Rate Information */}
               {contestCommissionRate !== null &&
                 currentPlanCommissionRate !== null &&
                 contestCommissionRate !== currentPlanCommissionRate && (
-                  <Alert className='mb-4 w-full bg-[#D9C0FF26] border border-[#7F39EC]'>
+                  <Alert className="mb-4 w-full bg-[#D9C0FF26] border border-[#7F39EC]">
                     <Info className="h-4 w-4 flex-shrink-0" />
                     <AlertDescription className="min-w-0">
                       <strong>Commission Rate Notice:</strong> This contest was
@@ -6586,11 +6768,14 @@ export default function EditContestPage({
                 )}
 
               {budgetChanged && budgetDifference > 0 && (
-                <Alert 
-                className={cn(
-                  "mb-4 w-full border",
-                  isDark ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white" : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
-                )}>
+                <Alert
+                  className={cn(
+                    "mb-4 w-full border",
+                    isDark
+                      ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                      : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
+                  )}
+                >
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                   <AlertDescription className="min-w-0">
                     <strong>Prize Pool Increased:</strong> Your prize pool
@@ -6609,16 +6794,16 @@ export default function EditContestPage({
                 </Alert>
               )}
 
-<ContestPaymentSelection
+              <ContestPaymentSelection
                 contestAmount={
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                      ? winnerAmounts.reduce(
+                    ? winnerAmounts.reduce(
                         (sum, amount) => sum + (amount || 0),
                         0
                       ) / 100 // Convert cents to dollars
-                      : parseFloat(totalBudget.toString()) || 0
+                    : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}

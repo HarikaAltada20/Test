@@ -150,13 +150,16 @@ export default function GettingStartedClient({
           <div 
            className={cn(
             "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
-            isDark ? "bg-[#170337]" : "bg-white"
+            isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-300"
           )}>
             <div className="flex justify-start space-x-3">
               {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                                 </div> */}
-              <h2 className="text-2xl font-bold text-[#7F39EC]">
+              <h2 className={cn(
+                "text-2xl font-bold",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}>
                 Welcome to Game Of Creators
               </h2>
             </div>
@@ -362,7 +365,11 @@ export default function GettingStartedClient({
 
                 <div className="text-center pt-4">
                   <Link href="/dashboard/contests/create">
-                    <Button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-md text-white">
+                    <Button 
+                    className={cn(
+                      "text-md text-white",
+                      isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                    )}>
                       {/* <Play className="w-4 h-4 mr-2" /> */}
                       Create Your First Contest
                     </Button>
@@ -489,7 +496,11 @@ export default function GettingStartedClient({
 
                     <div className="text-center pt-4">
                       <Link href="/dashboard/contests/create">
-                        <Button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-md text-white w-full">
+                        <Button 
+                        className={cn(
+                          "text-md text-white w-full",
+                          isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                        )}>
                           <Trophy className="w-4 h-4" />
                           Create Leaderboard Contest
                         </Button>
@@ -605,7 +616,11 @@ export default function GettingStartedClient({
 
                     <div className="text-center pt-4">
                       <Link href="/dashboard/contests/create">
-                        <Button className="bg-[#4A00BE] hover:bg-[#4A00BE] text-md text-white w-full">
+                        <Button 
+                        className={cn(
+                          "text-md text-white w-full",
+                          isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                        )}>
                           <DollarSign className="w-4 h-4" />
                           Create CPM Contest
                         </Button>
@@ -767,13 +782,16 @@ export default function GettingStartedClient({
           <div
            className={cn(
             "border-b text-center shadow-xl px-6 rounded-tl-xl rounded-tr-xl pt-6 pb-4",
-            isDark ? "bg-[#170337]" : "bg-white"
+            isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-300"
           )}>
             <div className="flex justify-start space-x-3">
               {/* <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
                                     <Star className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                                 </div> */}
-              <h2 className="text-2xl font-bold text-[#7F39EC]">
+              <h2 className={cn(
+                "text-2xl font-bold",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}>
                 Welcome to Game Of Creators
               </h2>
             </div>
@@ -1033,7 +1051,11 @@ export default function GettingStartedClient({
 
                 <div className="text-center pt-3">
                   <Link href="/dashboard/opportunities">
-                    <Button className="bg-[#4A00BE] text-md text-white">
+                    <Button 
+                    className={cn(
+                      "text-md text-white",
+                      isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                    )}>
                       <Video className="w-4 h-4" />
                       Browse Contests
                     </Button>
@@ -1539,7 +1561,11 @@ export default function GettingStartedClient({
 
             <div className="text-center">
               <Link href="/dashboard/contests/create">
-                <Button className="bg-[#4A00BE] w-full hover:bg-[#4A00BE] text-white py-3 px-8 text-lg">
+                <Button 
+                className={cn(
+                  "w-full py-3 px-8 text-lg",
+                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                )}>
                   <Video className="w-6 h-6" />
                   Create Contest
                 </Button>
@@ -1575,7 +1601,11 @@ export default function GettingStartedClient({
 
             <div className="text-center flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/dashboard/opportunities">
-                <Button className="bg-[#4A00BE] w-full hover:bg-[#4A00BE] text-white py-3 px-8 text-lg">
+                <Button 
+                className={cn(
+                  "w-full py-3 px-8 text-lg",
+                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                )}>
                   <Video className="w-5 h-5" />
                   Browse Contests
                 </Button>
@@ -1585,7 +1615,11 @@ export default function GettingStartedClient({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <Button className="bg-[#4A00BE] w-full hover:bg-[#4A00BE] text-white py-3 px-8 text-lg">
+                <Button 
+                className={cn(
+                  "w-full py-3 px-8 text-lg",
+                  isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                )}>
                   <FaDiscord className="w-5 h-5" />
                   Join Creator Community
                 </Button>

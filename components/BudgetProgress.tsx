@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState } from "react";
 
 interface Submission {
     paid: boolean;
@@ -23,6 +24,7 @@ interface BudgetProgressProps {
 }
 
 export function BudgetProgress({ contest, submissions, showDetailed = true }: BudgetProgressProps) {
+    const [mode, setMode] = useState<"light" | "dark">("light");
     // Get contest config outside useMemo so it's available in the component
     const cpmConfig = contest.contest_type === 'cpm'
         ? (contest.contest_based_details as any)?.cpm_contest
@@ -175,6 +177,37 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
     if (contest.contest_type !== 'cpm' && contest.contest_type !== 'leaderboard') {
         return null;
     }
+ // Read mode from data attribute
+ useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  
+  const isDark = mode === "dark";
 
     if (!showDetailed) {
         // Simple view - just total budget used
@@ -212,14 +245,20 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
         return (
             <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                    <span className="font-medium text-gray-700 dark:text-gray-300">Budget Tracker</span>
+                    <span className={cn(
+                        "font-medium",
+                        isDark ? "text-gray-300" : "text-gray-700"
+                      )}>Budget Tracker</span>
                     <span className="font-bold text-gray-900 dark:text-gray-100">
                         {formatCurrency(bonusSpent)} / {formatCurrency(bonusBudget)}
                     </span>
                 </div>
 
                 {/* Progress bar for Total Budget only */}
-                <div className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <div className={cn(
+                    "relative w-full h-4 rounded-full overflow-hidden",
+                    isDark ? "bg-[#FFFFFF42]" : "bg-gray-200"
+                  )}>
                     <div
                         className={`absolute h-full transition-all duration-300 ${isOverBudget ? 'bg-red-500' : isNearLimit ? 'bg-yellow-500' : 'bg-green-500'
                             }`}
@@ -242,8 +281,14 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
                 <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
                     <div className="flex-1">
-                        <p className="font-medium text-gray-700 dark:text-gray-300 text-xs">Flat Fee Bonus</p>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-xs">{formatCurrency(bonusSpent)}</p>
+                        <p className={cn(
+                            "font-medium text-xs",
+                            isDark ? "text-gray-300" : "text-gray-700"
+                          )}>Flat Fee Bonus</p>
+                        <p className={cn(
+                            "font-semibold text-xs",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}>{formatCurrency(bonusSpent)}</p>
                     </div>
                 </div>
 
@@ -269,7 +314,10 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
                         </div>
                     </div>
                 ) : (
-                    <p className="text-xs text-gray-600 dark:text-gray-400 text-right">
+                    <p className={cn(
+                        "text-xs text-right",
+                        isDark ? "text-gray-300" : "text-gray-600"
+                      )}>
                         {formatCurrency(remaining)} remaining ({(100 - bonusPercentage).toFixed(1)}% available)
                     </p>
                 )}
@@ -281,18 +329,30 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
     return (
         <div className="space-y-3">
             <div className="flex justify-between text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Budget Tracker</span>
+                <span 
+                className={cn(
+                    "font-medium",
+                    isDark ? "text-gray-300" : "text-gray-700"
+                  )}>Budget Tracker</span>
                 <div className="text-right">
-                    <span className="font-bold text-gray-900 dark:text-gray-100">
+                    <span className={cn(
+                        "font-bold",
+                        isDark ? "text-white" : "text-gray-900"
+                      )}>
                         {formatCurrency(totalSpent)}
                     </span>
-                    <span className="text-gray-500 dark:text-gray-400"> / {formatCurrency(totalBudget)}</span>
+                    <span className={cn(           
+                        isDark ? "text-white" : "text-gray-600"
+                      )}> / {formatCurrency(totalBudget)}</span>
                 </div>
             </div>
 
             {/* Two-color progress bar */}
             <div
-                className="relative w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden"
+                className={cn(
+                    "relative w-full h-4 rounded-full overflow-hidden",
+                    isDark ? "bg-[#FFFFFF42]" : "bg-gray-200"
+                  )}
                 title={hasFlatFeeBonus && bonusPaid > 0
                     ? `${contest.contest_type === 'cpm' ? 'CPM' : 'Contest'} Earnings: ${formatCurrency(cpmPaid)} | Flat Fee Bonus: ${formatCurrency(bonusPaid)} | Total: ${formatCurrency(totalSpent)}`
                     : `Total ${contest.contest_type === 'cpm' ? 'based on views' : 'contest earnings'}: ${formatCurrency(cpmPaid)}`
@@ -331,18 +391,30 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
                 <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-sm" />
                     <div className="flex-1">
-                        <p className="font-medium text-gray-700 dark:text-gray-300">
+                        <p className={cn(
+                            "font-medium",
+                            isDark ? "text-gray-300" : "text-gray-700"
+                          )}>
                             {contest.contest_type === 'cpm' ? 'CPM Earnings' : 'Contest Earnings'}
                         </p>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(cpmPaid)}</p>
+                        <p className={cn(
+                            "font-semibold",
+                            isDark ? "text-white" : "text-gray-900"
+                          )}>{formatCurrency(cpmPaid)}</p>
                     </div>
                 </div>
                 {hasFlatFeeBonus && (
                     <div className="flex items-center gap-1.5">
                         <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-sm" />
                         <div className="flex-1">
-                            <p className="font-medium text-gray-700 dark:text-gray-300">Flat Fee Bonus</p>
-                            <p className="font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(bonusPaid)}</p>
+                            <p className={cn(
+                                "font-medium",
+                                isDark ? "text-gray-300" : "text-gray-700"
+                              )}>Flat Fee Bonus</p>
+                            <p className={cn(
+                                "font-semibold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}>{formatCurrency(bonusPaid)}</p>
                         </div>
                     </div>
                 )}
@@ -370,7 +442,11 @@ export function BudgetProgress({ contest, submissions, showDetailed = true }: Bu
                     </div>
                 </div>
             ) : (
-                <p className="text-xs text-gray-600 dark:text-gray-400 text-right">
+                <p 
+                className={cn(
+                    "text-xs text-right",
+                    isDark ? "text-gray-300" : "text-gray-600"
+                  )}>
                     {formatCurrency(remaining)} remaining ({(100 - totalPercentage).toFixed(1)}% available)
                 </p>
             )}

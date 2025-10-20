@@ -2730,11 +2730,11 @@ export function ContestClientPage({
                           className={cn(
                             "p-3 rounded-full",
                             isDark
-                              ? "bg-blue-500/30"
-                              : "bg-blue-100 dark:bg-blue-900/30"
+                              ? "bg-blue-500/30 text-blue-400"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
                           )}
                         >
-                          <Play className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <Play className="h-5 w-5" />
                         </div>
                         <div className="flex-1">
                           <p
@@ -2770,14 +2770,14 @@ export function ContestClientPage({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={cn(
-                            "p-3 rounded-full",
-                            isDark
-                              ? "bg-blue-500/30"
-                              : "bg-blue-100 dark:bg-blue-900/30"
-                          )}
+                         className={cn(
+                          "p-3 rounded-full",
+                          isDark
+                            ? "bg-blue-500/30 text-blue-400"
+                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                        )}
                         >
-                          <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <Clock className="h-5 w-5" />
                         </div>
                         <div className="flex-1">
                           <p
@@ -2813,14 +2813,14 @@ export function ContestClientPage({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={cn(
+                           className={cn(
                             "p-3 rounded-full",
                             isDark
-                              ? "bg-blue-500/30"
-                              : "bg-blue-100 dark:bg-blue-900/30"
+                              ? "bg-blue-500/30 text-blue-400"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
                           )}
                         >
-                          <Monitor className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <Monitor className="h-5 w-5" />
                         </div>
                         <div className="flex-1">
                           <p
@@ -2854,14 +2854,14 @@ export function ContestClientPage({
                     >
                       <div className="flex items-center gap-3">
                         <div
-                          className={cn(
-                            "p-3 rounded-full",
-                            isDark
-                              ? "bg-blue-500/30"
-                              : "bg-blue-100 dark:bg-blue-900/30"
-                          )}
+                         className={cn(
+                          "p-3 rounded-full",
+                          isDark
+                            ? "bg-blue-500/30 text-blue-400"
+                            : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"
+                        )}
                         >
-                          <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <Info className="h-5 w-5 " />
                         </div>
                         <div className="flex-1">
                           <p
@@ -3280,8 +3280,14 @@ export function ContestClientPage({
                                     </svg>
                                   </div>
                                 ) : (
-                                  <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
-                                    <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                  <div
+                                  className={cn(
+                                    "p-3 rounded-full flex-shrink-0",
+                                    isDark
+                                      ? "bg-[#FFFFFF42] text-white"
+                                      : "bg-purple-100 text-purple-600"
+                                  )}>
+                                    <ExternalLink className="h-5 w-5" />
                                   </div>
                                 )}
                                 <div className="min-w-0">
@@ -3416,8 +3422,14 @@ export function ContestClientPage({
                                   )}
                                 >
                                   <div className="flex items-start gap-4">
-                                    <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-full flex-shrink-0">
-                                      <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                                    <div 
+                                    className={cn(
+                                      "p-3 rounded-full flex-shrink-0",
+                                      isDark
+                                        ? "bg-[#FFFFFF42] text-white"
+                                        : "bg-purple-100 text-purple-600"
+                                    )}>
+                                      <ExternalLink className="h-5 w-5" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <a
@@ -3545,8 +3557,12 @@ export function ContestClientPage({
                                 )}
                               >
                                 <div className="flex items-start gap-3">
-                                  <div className="mt-0.5 p-2.5 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0">
-                                    <Link2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                  <div 
+                                     className={cn(
+                                      "mt-0.5 p-3 rounded-full flex-shrink-0",
+                                      isDark ? "bg-green-900/40 text-green-400" : "bg-green-100 text-green-600"
+                                    )}>
+                                    <Link2 className="h-5 w-5" />
                                   </div>
                                   <div className="flex-1 min-w-0 space-y-2">
                                     <div className="flex items-center justify-between gap-3">

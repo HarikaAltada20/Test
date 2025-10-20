@@ -25,7 +25,7 @@ const SelectTrigger = React.forwardRef<
     ref={ref}
     className={cn(
       "flex h-12 w-full items-center justify-between rounded-lg border border-input px-4 py-3 text-md font-medium ring-offset-background focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 hover:bg-accent/50 transition-all duration-200",
-      isDark && "bg-gray-800 border-gray-700 text-white hover:bg-gray-700",
+      isDark && "bg-[#07031D] border-gray-700 text-white hover:bg-gray-700",
       className
     )}
     {...props}
@@ -91,7 +91,7 @@ const SelectContent = React.forwardRef<
         ref={ref}
         className={cn(
           "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-lg border bg-white text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-          isDark && "bg-gray-800 border-gray-700 text-white",
+          isDark && "bg-[#07031D] border-gray-700 text-white",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className
@@ -142,12 +142,12 @@ const SelectItem = React.forwardRef<
     className={cn(
       "relative flex w-full cursor-default select-none items-center rounded-md py-2.5 pl-8 pr-3 text-md outline-none transition-all duration-200",
       // Default state
-      isDark ? "bg-gray-800 text-white" : "bg-white text-black",
+      isDark ? "bg-[#07031D] text-white" : "bg-white text-black",
       // Selected state
       "data-[state=checked]:bg-purple-600 data-[state=checked]:text-white",
       // Hover state
       isDark
-        ? "hover:bg-gray-700 hover:text-white"
+        ? "hover:bg-purple-500/30 hover:text-white"
         : "hover:bg-purple-100 hover:text-purple-800",
       // Disabled state
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",

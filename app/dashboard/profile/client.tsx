@@ -1673,11 +1673,10 @@ export default function ProfilePage({
                   )}
                 >
                   <p
-                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                      advertiserProfile?.subscription_info?.product_id
-                        ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                        : "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                    }`}
+                  className={cn(
+                    "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                    isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                  )}
                   >
                     {advertiserProfile?.subscription_info?.product_id
                       ? subscriptionPlans.find(
