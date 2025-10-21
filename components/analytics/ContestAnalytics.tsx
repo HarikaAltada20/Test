@@ -7,94 +7,152 @@ import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ContestAnalyticsProps {
-    userId: string;
-    activeFilter?: string;
-    onFilterChange?: (filter: string) => void;
+  userId: string;
+  activeFilter?: string;
+  onFilterChange?: (filter: string) => void;
 }
 
 interface Contest {
+  id: string;
+  title: string;
+  platform: string;
+  contest_type: string;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+  live_submission_count: number;
+  post_contest_status?: string;
+  moderation_status?: string;
+  contest_based_details?: any;
+  submissions?: Array<{
     id: string;
-    title: string;
-    platform: string;
-    contest_type: string;
-    start_date: string;
-    end_date: string;
+    views: number;
+    other_stats?: {
+      [platform: string]: {
+        likes?: number;
+        comments?: number;
+        shares?: number;
+        saved?: number;
+        reach?: number;
+        views?: number;
+      };
+    };
+    status: string;
     created_at: string;
-    live_submission_count: number;
-    post_contest_status?: string;
-    moderation_status?: string;
-    contest_based_details?: any;
-    submissions?: Array<{
-        id: string;
-        views: number;
-        other_stats?: {
-            [platform: string]: {
-                likes?: number;
-                comments?: number;
-                shares?: number;
-                saved?: number;
-                reach?: number;
-                views?: number;
-            };
-        };
-        status: string;
-        created_at: string;
-    }>;
+  }>;
 }
 
-export default function ContestAnalytics({ userId, activeFilter = "all", onFilterChange }: ContestAnalyticsProps) {
-    const [contests, setContests] = useState<Contest[]>([]);
-    const [filteredContests, setFilteredContests] = useState<Contest[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [mode, setMode] = useState<"light" | "dark">("light");
+export default function ContestAnalytics({
+  userId,
+  activeFilter = "all",
+  onFilterChange,
+}: ContestAnalyticsProps) {
+  const [contests, setContests] = useState<Contest[]>([]);
+  const [filteredContests, setFilteredContests] = useState<Contest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Initialize mode state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
 
-    useEffect(() => {
-        const checkMode = () => {
-          const modeElement = document.querySelector("[data-mode]");
-          if (modeElement) {
-            const currentMode = modeElement.getAttribute("data-mode") as
-              | "light"
-              | "dark";
-            if (currentMode) {
-              setMode(currentMode);
-            }
-          }
-        };
-    
-        checkMode();
-    
-        // Watch for changes in the data attribute
-        const observer = new MutationObserver(checkMode);
-        const targetNode = document.querySelector("[data-mode]");
-        if (targetNode) {
-          observer.observe(targetNode, {
-            attributes: true,
-            attributeFilter: ["data-mode"],
-          });
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
         }
-    
-        return () => observer.disconnect();
-      }, []);
-    
-      const isDark = mode === "dark";
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
 
-    useEffect(() => {
-        fetchContests();
-    }, [userId]);
+  // Read mode from data attribute with immediate updates
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
+      }
+    };
 
-    useEffect(() => {
-        filterContests();
-    }, [contests, activeFilter]);
+    // Check immediately
+    checkMode();
 
-    const fetchContests = async () => {
-        try {
-            setLoading(true);
-            const supabase = createClient();
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
 
-            const { data, error } = await supabase
-                .from("contests")
-                .select(`
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [mode]);
+
+  const isDark = mode === "dark";
+
+  useEffect(() => {
+    fetchContests();
+  }, [userId]);
+
+  useEffect(() => {
+    filterContests();
+  }, [contests, activeFilter]);
+
+  const fetchContests = async () => {
+    try {
+      setLoading(true);
+      const supabase = createClient();
+
+      const { data, error } = await supabase
+        .from("contests")
+        .select(
+          `
           id,
           title,
           platform,
@@ -114,195 +172,227 @@ export default function ContestAnalytics({ userId, activeFilter = "all", onFilte
             status,
             created_at
           )
-        `)
-                .eq("advertiser_id", userId)
-                .order("created_at", { ascending: false });
+        `
+        )
+        .eq("advertiser_id", userId)
+        .order("created_at", { ascending: false });
 
-            if (error) throw error;
+      if (error) throw error;
 
-            // Filter to only show live or ended contests (contests with submissions)
-            const liveOrEndedContests = (data || []).filter((contest: Contest) => {
-                // Only show contests that have submissions (live or ended)
-                return contest.submissions && contest.submissions.length > 0;
-            });
+      // Filter to only show live or ended contests (contests with submissions)
+      const liveOrEndedContests = (data || []).filter((contest: Contest) => {
+        // Only show contests that have submissions (live or ended)
+        return contest.submissions && contest.submissions.length > 0;
+      });
 
-            setContests(liveOrEndedContests);
-        } catch (err) {
-            console.error("Error fetching contests:", err);
-            setError("Failed to fetch contests");
-        } finally {
-            setLoading(false);
-        }
-    };
+      setContests(liveOrEndedContests);
+    } catch (err) {
+      console.error("Error fetching contests:", err);
+      setError("Failed to fetch contests");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const filterContests = () => {
-        let filtered = [...contests];
+  const filterContests = () => {
+    let filtered = [...contests];
 
-        // Apply filtering and recalculate metrics based on filtered submissions
-        filtered = contests.map(contest => {
-            let filteredSubmissions = contest.submissions || [];
+    // Apply filtering and recalculate metrics based on filtered submissions
+    filtered = contests.map((contest) => {
+      let filteredSubmissions = contest.submissions || [];
 
-            switch (activeFilter) {
-                case "verifiedPaid":
-                    filteredSubmissions = contest.submissions?.filter(sub =>
-                        sub.status === "verified" || sub.status === "paid"
-                    ) || [];
-                    break;
-                case "pending":
-                    filteredSubmissions = contest.submissions?.filter(sub =>
-                        sub.status === "pending"
-                    ) || [];
-                    break;
-                case "verified":
-                    filteredSubmissions = contest.submissions?.filter(sub =>
-                        sub.status === "verified"
-                    ) || [];
-                    break;
-                case "rejected":
-                    filteredSubmissions = contest.submissions?.filter(sub =>
-                        sub.status === "rejected"
-                    ) || [];
-                    break;
-                case "paid":
-                    filteredSubmissions = contest.submissions?.filter(sub =>
-                        sub.status === "paid"
-                    ) || [];
-                    break;
-                default:
-                    // "all" - no filtering needed
-                    break;
-            }
+      switch (activeFilter) {
+        case "verifiedPaid":
+          filteredSubmissions =
+            contest.submissions?.filter(
+              (sub) => sub.status === "verified" || sub.status === "paid"
+            ) || [];
+          break;
+        case "pending":
+          filteredSubmissions =
+            contest.submissions?.filter((sub) => sub.status === "pending") ||
+            [];
+          break;
+        case "verified":
+          filteredSubmissions =
+            contest.submissions?.filter((sub) => sub.status === "verified") ||
+            [];
+          break;
+        case "rejected":
+          filteredSubmissions =
+            contest.submissions?.filter((sub) => sub.status === "rejected") ||
+            [];
+          break;
+        case "paid":
+          filteredSubmissions =
+            contest.submissions?.filter((sub) => sub.status === "paid") || [];
+          break;
+        default:
+          // "all" - no filtering needed
+          break;
+      }
 
-            // Return contest with filtered submissions
-            return {
-                ...contest,
-                submissions: filteredSubmissions,
-                live_submission_count: filteredSubmissions.length
-            };
-        });
+      // Return contest with filtered submissions
+      return {
+        ...contest,
+        submissions: filteredSubmissions,
+        live_submission_count: filteredSubmissions.length,
+      };
+    });
 
-        // Only show contests that have submissions after filtering (unless it's "all")
-        if (activeFilter !== "all") {
-            filtered = filtered.filter(contest => contest.submissions && contest.submissions.length > 0);
-        }
-
-        setFilteredContests(filtered);
-    };
-
-
-    const calculateSummaryStats = () => {
-        // Use filtered contests for summary stats
-        const totalSubmissions = filteredContests.reduce((sum, contest) => sum + (contest.submissions?.length || 0), 0);
-        const totalViews = filteredContests.reduce((sum, contest) =>
-            sum + (contest.submissions?.reduce((subSum, sub) => subSum + (sub.views || 0), 0) || 0), 0
-        );
-
-        const totalSpent = filteredContests.reduce((sum, contest) => {
-            const details = contest.contest_based_details;
-            if (contest.contest_type === "leaderboard" && details?.leaderboard_contest?.total_prize) {
-                return sum + details.leaderboard_contest.total_prize;
-            } else if (contest.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
-                return sum + details.cpm_contest.total_budget;
-            }
-            return sum;
-        }, 0);
-
-        const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
-        const avgCostPerSubmission = totalSubmissions > 0 ? totalSpent / totalSubmissions : 0;
-
-        return {
-            totalContests: filteredContests.length,
-            totalSubmissions,
-            totalViews,
-            totalSpent,
-            avgCostPerView: Math.round(avgCostPerView * 100) / 100,
-            avgCostPerSubmission: Math.round(avgCostPerSubmission * 100) / 100
-        };
-    };
-
-    const handleViewDetails = (contestId: string) => {
-        // Navigate to contest details page
-        window.location.href = `/dashboard/contests/${contestId}`;
-    };
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-            </div>
-        );
+    // Only show contests that have submissions after filtering (unless it's "all")
+    if (activeFilter !== "all") {
+      filtered = filtered.filter(
+        (contest) => contest.submissions && contest.submissions.length > 0
+      );
     }
 
-    if (error) {
-        return (
-            <div className="text-center py-8">
-                <p className="text-red-600 mb-4">{error}</p>
-                <button
-                    onClick={fetchContests}
-                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                >
-                    Retry
-                </button>
-            </div>
-        );
-    }
+    setFilteredContests(filtered);
+  };
 
-    const stats = calculateSummaryStats();
-
-    return (
-        <div className="space-y-6">
-
-            {/* Filter Indicator */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "text-sm",
-                      isDark ? "text-gray-300" : "text-gray-600"
-                    )}>Showing stats based on:</span>
-                    <span className={cn(
-                      "px-3 py-1 rounded-full text-sm font-medium",
-                      isDark ? "bg-gray-800 text-gray-100" : "bg-gray-100 text-gray-800"
-                    )}>
-                        {activeFilter === "all" ? "All Submissions" :
-                            activeFilter === "verifiedPaid" ? "Verified + Paid Submissions" :
-                                activeFilter === "verified" ? "Verified Submissions" :
-                                    activeFilter === "paid" ? "Paid Submissions" :
-                                        activeFilter === "pending" ? "Pending Submissions" :
-                                            activeFilter === "rejected" ? "Rejected Submissions" :
-                                                activeFilter}
-                    </span>
-                </div>
-                <div className={cn(
-                  "text-sm",
-                  isDark ? "text-gray-300" : "text-gray-500"
-                )}>
-                    {filteredContests.length} contest{filteredContests.length !== 1 ? 's' : ''} found
-                </div>
-            </div>
-
-            {/* Contest Tiles */}
-            {filteredContests.length === 0 ? (
-                <div className="text-center py-12">
-                    <p className={cn(
-                      "text-lg",
-                      isDark ? "text-white" : "text-gray-500"
-                    )}>No contests found for the selected filter.</p>
-                    <p className={cn(
-                      "text-sm mt-2",
-                      isDark ? "text-gray-400" : "text-gray-500"
-                    )}>Create your first contest to get started!</p>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {filteredContests.map((contest) => (
-                        <ContestTile
-                            key={contest.id}
-                            contest={contest}
-                            onViewDetails={handleViewDetails}
-                        />
-                    ))}
-                </div>
-            )}
-        </div>
+  const calculateSummaryStats = () => {
+    // Use filtered contests for summary stats
+    const totalSubmissions = filteredContests.reduce(
+      (sum, contest) => sum + (contest.submissions?.length || 0),
+      0
     );
+    const totalViews = filteredContests.reduce(
+      (sum, contest) =>
+        sum +
+        (contest.submissions?.reduce(
+          (subSum, sub) => subSum + (sub.views || 0),
+          0
+        ) || 0),
+      0
+    );
+
+    const totalSpent = filteredContests.reduce((sum, contest) => {
+      const details = contest.contest_based_details;
+      if (
+        contest.contest_type === "leaderboard" &&
+        details?.leaderboard_contest?.total_prize
+      ) {
+        return sum + details.leaderboard_contest.total_prize;
+      } else if (
+        contest.contest_type === "cpm" &&
+        details?.cpm_contest?.total_budget
+      ) {
+        return sum + details.cpm_contest.total_budget;
+      }
+      return sum;
+    }, 0);
+
+    const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
+    const avgCostPerSubmission =
+      totalSubmissions > 0 ? totalSpent / totalSubmissions : 0;
+
+    return {
+      totalContests: filteredContests.length,
+      totalSubmissions,
+      totalViews,
+      totalSpent,
+      avgCostPerView: Math.round(avgCostPerView * 100) / 100,
+      avgCostPerSubmission: Math.round(avgCostPerSubmission * 100) / 100,
+    };
+  };
+
+  const handleViewDetails = (contestId: string) => {
+    // Navigate to contest details page
+    window.location.href = `/dashboard/contests/${contestId}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">{error}</p>
+        <button
+          onClick={fetchContests}
+          className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const stats = calculateSummaryStats();
+
+  return (
+    <div className="space-y-6">
+      {/* Filter Indicator */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span
+            className={cn(
+              "text-sm",
+              isDark ? "text-gray-300" : "text-gray-600"
+            )}
+          >
+            Showing stats based on:
+          </span>
+          <span
+            className={cn(
+              "px-3 py-1 rounded-full text-sm font-medium",
+              isDark ? "bg-gray-800 text-gray-100" : "bg-gray-100 text-gray-800"
+            )}
+          >
+            {activeFilter === "all"
+              ? "All Submissions"
+              : activeFilter === "verifiedPaid"
+              ? "Verified + Paid Submissions"
+              : activeFilter === "verified"
+              ? "Verified Submissions"
+              : activeFilter === "paid"
+              ? "Paid Submissions"
+              : activeFilter === "pending"
+              ? "Pending Submissions"
+              : activeFilter === "rejected"
+              ? "Rejected Submissions"
+              : activeFilter}
+          </span>
+        </div>
+        <div
+          className={cn("text-sm", isDark ? "text-gray-300" : "text-gray-500")}
+        >
+          {filteredContests.length} contest
+          {filteredContests.length !== 1 ? "s" : ""} found
+        </div>
+      </div>
+
+      {/* Contest Tiles */}
+      {filteredContests.length === 0 ? (
+        <div className="text-center py-12">
+          <p className={cn("text-lg", isDark ? "text-white" : "text-gray-500")}>
+            No contests found for the selected filter.
+          </p>
+          <p
+            className={cn(
+              "text-sm mt-2",
+              isDark ? "text-gray-400" : "text-gray-500"
+            )}
+          >
+            Create your first contest to get started!
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredContests.map((contest) => (
+            <ContestTile
+              key={contest.id}
+              contest={contest}
+              onViewDetails={handleViewDetails}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

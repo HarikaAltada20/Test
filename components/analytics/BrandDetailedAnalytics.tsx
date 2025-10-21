@@ -39,8 +39,45 @@ export default function BrandDetailedAnalytics({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
-  const [mode, setMode] = useState<"light" | "dark">("light");
-  // Read mode from data attribute
+  // Initialize mode state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
+
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
+
+  // Read mode from data attribute with immediate updates
   useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
@@ -48,12 +85,13 @@ export default function BrandDetailedAnalytics({
         const currentMode = modeElement.getAttribute("data-mode") as
           | "light"
           | "dark";
-        if (currentMode) {
+        if (currentMode && currentMode !== mode) {
           setMode(currentMode);
         }
       }
     };
 
+    // Check immediately
     checkMode();
 
     // Watch for changes in the data attribute
@@ -66,8 +104,23 @@ export default function BrandDetailedAnalytics({
       });
     }
 
-    return () => observer.disconnect();
-  }, []);
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [mode]);
 
   const isDark = mode === "dark";
 
@@ -183,13 +236,28 @@ export default function BrandDetailedAnalytics({
       </div>
 
       <div className="grid gap-3 sm:gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-blue-50">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-blue-900/50" : "bg-blue-50"
+              )}
+            >
               <FileText className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Draft Contests
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -205,20 +273,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalDraftContests}
             </div>
-            <p className="text-xs text-gray-700">Draft contests</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Draft contests
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-yellow-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-yellow-900/50" : "bg-yellow-100"
+              )}
+            >
               <AlertCircle className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-1">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Pending Approval
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -234,20 +329,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalPendingContests}
             </div>
-            <p className="text-xs text-gray-700">Pending approval</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Pending approval
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-green-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-green-900/50" : "bg-green-100"
+              )}
+            >
               <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Approved
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -263,20 +385,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalApprovedContests}
             </div>
-            <p className="text-xs text-gray-700">Approved contests</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Approved contests
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-purple-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-purple-900/50" : "bg-purple-100"
+              )}
+            >
               <PlayCircle className="h-6 w-6 sm:h-7 sm:w-7 text-purple-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Published
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -292,20 +441,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalPublishedContests}
             </div>
-            <p className="text-xs text-gray-700">Published contests</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Published contests
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-emerald-50">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-emerald-900/50" : "bg-emerald-100"
+              )}
+            >
               <Eye className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Active (Live)
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -321,20 +497,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalActiveContests}
             </div>
-            <p className="text-xs text-gray-700">Currently live</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Currently live
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-green-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-green-900/50" : "bg-green-100"
+              )}
+            >
               <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-600" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Completed
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -351,20 +554,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalCompletedContests}
             </div>
-            <p className="text-xs text-gray-700">Payouts processed</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Payouts processed
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-red-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-red-900/50" : "bg-red-100"
+              )}
+            >
               <XCircle className="h-6 w-6 sm:h-7 sm:w-7 text-red-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Total Rejected
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -380,20 +610,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalRejectedContests}
             </div>
-            <p className="text-xs text-gray-700">Rejected contests</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Rejected contests
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-orange-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-orange-900/50" : "bg-orange-100"
+              )}
+            >
               <Clock className="h-6 w-6 sm:h-7 sm:w-7  text-orange-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Upcoming
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -409,20 +666,47 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalUpcomingContests}
             </div>
-            <p className="text-xs text-muted-foreground">Scheduled contests</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-muted-foreground"
+              )}
+            >
+              Scheduled contests
+            </p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-300 py-4">
+        <div
+          className={cn(
+            "rounded-lg py-4",
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <div className="p-2 rounded-full bg-gray-100">
+            <div
+              className={cn(
+                "p-2 rounded-full",
+                isDark ? "bg-gray-700" : "bg-gray-100"
+              )}
+            >
               <StopCircle className="h-6 w-6 sm:h-7 sm:w-7 text-gray-500" />
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-center">
+              <CardTitle
+                className={cn(
+                  "text-xs sm:text-sm font-medium text-center",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Ended
               </CardTitle>
               <TooltipProvider delayDuration={0}>
@@ -439,17 +723,33 @@ export default function BrandDetailedAnalytics({
             </div>
           </div>
           <div className="text-center mt-2 sm:mt-3">
-            <div className="text-lg sm:text-xl lg:text-2xl font-bold">
+            <div
+              className={cn(
+                "text-lg sm:text-xl lg:text-2xl font-bold",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               {safeOverview.totalEndedContests}
             </div>
-            <p className="text-xs text-gray-700">Published but ended</p>
+            <p
+              className={cn(
+                "text-xs",
+                isDark ? "text-gray-300" : "text-gray-700"
+              )}
+            >
+              Published but ended
+            </p>
           </div>
         </div>
       </div>
 
       {/* Submissions Metrics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card className="bg-white">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Verified Submissions
@@ -463,7 +763,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Pending Submissions
@@ -477,7 +781,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Rejected Submissions
@@ -491,7 +799,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Paid Submissions
@@ -505,7 +817,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Total Submissions
@@ -521,8 +837,12 @@ export default function BrandDetailedAnalytics({
       </div>
 
       {/* View Analytics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-        <Card className="bg-white">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -558,7 +878,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -594,7 +918,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -630,7 +958,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -666,7 +998,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">Paid Views</CardTitle>
@@ -698,7 +1034,11 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark ? "bg-[#170337]" : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">Total Views</CardTitle>
@@ -738,8 +1078,14 @@ export default function BrandDetailedAnalytics({
         <h2 className="text-lg font-semibold">Financial Breakdown</h2>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="bg-white">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -777,7 +1123,13 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -816,7 +1168,13 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -859,8 +1217,14 @@ export default function BrandDetailedAnalytics({
       </div>
 
       {/* Money Breakdown */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="bg-white">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -900,7 +1264,13 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -940,7 +1310,13 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -982,8 +1358,14 @@ export default function BrandDetailedAnalytics({
       </div>
 
       {/* Projected Breakdown */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="bg-white">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -1022,7 +1404,13 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
@@ -1064,7 +1452,13 @@ export default function BrandDetailedAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337]"
+              : "bg-white border border-gray-300"
+          )}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <div className="flex items-center gap-2">
               <CardTitle className="text-sm font-medium">
