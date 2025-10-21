@@ -23,6 +23,7 @@ import {
   Pause,
   AlertCircle,
   FileText,
+  X,
 } from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import ContestAnalytics from "./ContestAnalytics";
@@ -475,24 +476,49 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
       {/* Tile Customization Modal */}
       {showTileSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div
+          className={cn(
+            "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50",
+            isDark ? "bg-[#100A33]" : "bg-black"
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto",
+              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
+            )}
+          >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold">
+              <h2
+                className={cn(
+                  "text-xl font-semibold",
+                  isDark ? "text-white" : "text-gray-900"
+                )}
+              >
                 Customize Analytics Tiles
               </h2>
-              <Button
-                variant="outline"
+              <p
                 onClick={() => setShowTileSettings(false)}
+                className={cn(
+                  "cursor-pointer",
+                  isDark
+                    ? "text-white hover:text-gray-300"
+                    : "text-gray-600 hover:text-gray-800"
+                )}
               >
-                Close
-              </Button>
+                <X className="w-4 h-4" />
+              </p>
             </div>
 
             <div className="space-y-6">
               {categories.map((category) => (
                 <div key={category}>
-                  <h3 className="text-lg font-medium capitalize mb-3">
+                  <h3
+                    className={cn(
+                      "text-lg font-medium capitalize mb-3",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
                     {category} Metrics
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -501,16 +527,43 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       .map((tile) => (
                         <div
                           key={tile.id}
-                          className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                          className={cn(
+                            "p-3 border rounded-lg cursor-pointer transition-all",
                             tile.enabled
-                              ? "bg-purple-50 border-purple-200"
-                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
-                          }`}
+                              ? isDark
+                                ? "bg-purple-900/30 border-purple-600/50 text-white"
+                                : "bg-purple-50 border-purple-200 text-gray-900"
+                              : isDark
+                              ? "bg-[#06021D] border-gray-600 text-white"
+                              : "border-gray-300 hover:bg-gray-100 text-gray-700"
+                          )}
                           onClick={() => toggleMetricTile(tile.id)}
                         >
                           <div className="flex items-center gap-2">
-                            <tile.icon className="w-4 h-4" />
-                            <span className="text-sm font-medium">
+                            <tile.icon
+                              className={cn(
+                                "w-4 h-4",
+                                tile.enabled
+                                  ? isDark
+                                    ? "text-purple-300"
+                                    : "text-purple-600"
+                                  : isDark
+                                  ? "text-gray-400"
+                                  : "text-gray-500"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                "text-sm font-medium",
+                                tile.enabled
+                                  ? isDark
+                                    ? "text-white"
+                                    : "text-gray-900"
+                                  : isDark
+                                  ? "text-gray-300"
+                                  : "text-gray-700"
+                              )}
+                            >
                               {tile.label}
                             </span>
                           </div>

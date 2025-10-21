@@ -176,7 +176,7 @@ export default function BrandDetailedAnalytics({
           onChange={(value) => setContestTypeFilter(value)}
         />
       </div>
-       
+
       {/* Contest Status Overview */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Contest Status Overview</h2>
@@ -185,7 +185,9 @@ export default function BrandDetailedAnalytics({
       <div className="grid gap-3 sm:gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <FileText className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-500" />
+            <div className="p-2 rounded-full bg-blue-50">
+              <FileText className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-blue-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Draft Contests
@@ -212,7 +214,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <AlertCircle className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-yellow-500" />
+            <div className="p-2 rounded-full bg-yellow-100">
+              <AlertCircle className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-1">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Pending Approval
@@ -239,7 +243,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-green-500" />
+            <div className="p-2 rounded-full bg-green-100">
+              <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Approved
@@ -266,7 +272,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <PlayCircle className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-purple-500" />
+            <div className="p-2 rounded-full bg-purple-100">
+              <PlayCircle className="h-6 w-6 sm:h-7 sm:w-7 text-purple-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Published
@@ -293,7 +301,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <Eye className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-emerald-500" />
+            <div className="p-2 rounded-full bg-emerald-50">
+              <Eye className="h-6 w-6 sm:h-7 sm:w-7 text-emerald-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Active (Live)
@@ -320,7 +330,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-green-600" />
+            <div className="p-2 rounded-full bg-green-100">
+              <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 text-green-600" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Completed
@@ -348,7 +360,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <XCircle className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-red-500" />
+            <div className="p-2 rounded-full bg-red-100">
+              <XCircle className="h-6 w-6 sm:h-7 sm:w-7 text-red-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Total Rejected
@@ -375,7 +389,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <Clock className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-orange-500" />
+            <div className="p-2 rounded-full bg-orange-100">
+              <Clock className="h-6 w-6 sm:h-7 sm:w-7  text-orange-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Upcoming
@@ -402,7 +418,9 @@ export default function BrandDetailedAnalytics({
 
         <div className="bg-white rounded-lg border border-gray-300 py-4">
           <div className="flex flex-col items-center space-y-2 sm:space-y-3">
-            <StopCircle className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 text-gray-500" />
+            <div className="p-2 rounded-full bg-gray-100">
+              <StopCircle className="h-6 w-6 sm:h-7 sm:w-7 text-gray-500" />
+            </div>
             <div className="flex items-center gap-1 sm:gap-2">
               <CardTitle className="text-xs sm:text-sm font-medium text-center">
                 Ended
@@ -428,6 +446,7 @@ export default function BrandDetailedAnalytics({
           </div>
         </div>
       </div>
+
       {/* Submissions Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="bg-white">
