@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import ContestTile from "./ContestTile";
 import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ContestAnalyticsProps {
     userId: string;
@@ -46,6 +47,37 @@ export default function ContestAnalytics({ userId, activeFilter = "all", onFilte
     const [filteredContests, setFilteredContests] = useState<Contest[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [mode, setMode] = useState<"light" | "dark">("light");
+
+    useEffect(() => {
+        const checkMode = () => {
+          const modeElement = document.querySelector("[data-mode]");
+          if (modeElement) {
+            const currentMode = modeElement.getAttribute("data-mode") as
+              | "light"
+              | "dark";
+            if (currentMode) {
+              setMode(currentMode);
+            }
+          }
+        };
+    
+        checkMode();
+    
+        // Watch for changes in the data attribute
+        const observer = new MutationObserver(checkMode);
+        const targetNode = document.querySelector("[data-mode]");
+        if (targetNode) {
+          observer.observe(targetNode, {
+            attributes: true,
+            attributeFilter: ["data-mode"],
+          });
+        }
+    
+        return () => observer.disconnect();
+      }, []);
+    
+      const isDark = mode === "dark";
 
     useEffect(() => {
         fetchContests();
@@ -223,8 +255,14 @@ export default function ContestAnalytics({ userId, activeFilter = "all", onFilte
             {/* Filter Indicator */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Showing stats based on:</span>
-                    <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-medium">
+                    <span className={cn(
+                      "text-sm",
+                      isDark ? "text-gray-300" : "text-gray-600"
+                    )}>Showing stats based on:</span>
+                    <span className={cn(
+                      "px-3 py-1 rounded-full text-sm font-medium",
+                      isDark ? "bg-gray-800 text-gray-100" : "bg-gray-100 text-gray-800"
+                    )}>
                         {activeFilter === "all" ? "All Submissions" :
                             activeFilter === "verifiedPaid" ? "Verified + Paid Submissions" :
                                 activeFilter === "verified" ? "Verified Submissions" :
@@ -234,7 +272,10 @@ export default function ContestAnalytics({ userId, activeFilter = "all", onFilte
                                                 activeFilter}
                     </span>
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className={cn(
+                  "text-sm",
+                  isDark ? "text-gray-300" : "text-gray-500"
+                )}>
                     {filteredContests.length} contest{filteredContests.length !== 1 ? 's' : ''} found
                 </div>
             </div>
@@ -242,8 +283,14 @@ export default function ContestAnalytics({ userId, activeFilter = "all", onFilte
             {/* Contest Tiles */}
             {filteredContests.length === 0 ? (
                 <div className="text-center py-12">
-                    <p className="text-gray-500 text-lg">No contests found for the selected filter.</p>
-                    <p className="text-gray-400 text-sm mt-2">Create your first contest to get started!</p>
+                    <p className={cn(
+                      "text-lg",
+                      isDark ? "text-white" : "text-gray-500"
+                    )}>No contests found for the selected filter.</p>
+                    <p className={cn(
+                      "text-sm mt-2",
+                      isDark ? "text-gray-400" : "text-gray-500"
+                    )}>Create your first contest to get started!</p>
                 </div>
             ) : (
                 <div className="space-y-4">
