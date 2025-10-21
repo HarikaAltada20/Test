@@ -218,11 +218,12 @@ export default function CreatorAnalytics({
           )}
         >
           <div className="flex flex-row items-center justify-between space-y-0 px-5 pt-2">
-            <h1 
-            className={cn(
-              "text-md font-medium",
-              isDark ? "text-white" : "text-gray-900"
-            )}>
+            <h1
+              className={cn(
+                "text-md font-medium",
+                isDark ? "text-white" : "text-gray-900"
+              )}
+            >
               Total Creators
             </h1>
             <div
@@ -240,13 +241,12 @@ export default function CreatorAnalytics({
             <div className="text-2xl font-bold">
               {summary.totalUniqueCreators}
             </div>
-            <p 
-             className={cn(
-              "text-sm mt-2",
-              isDark
-                ? "text-gray-300"
-                : "text-gray-600"
-            )}>
+            <p
+              className={cn(
+                "text-sm mt-2",
+                isDark ? "text-gray-300" : "text-gray-600"
+              )}
+            >
               Unique creators engaged
             </p>
           </CardContent>
@@ -275,13 +275,12 @@ export default function CreatorAnalytics({
             <div className="text-2xl font-bold">
               {summary.totalSubmissions.toLocaleString()}
             </div>
-            <p 
-             className={cn(
-              "text-sm mt-2",
-              isDark
-                ? "text-gray-300"
-                : "text-gray-600"
-            )}>
+            <p
+              className={cn(
+                "text-sm mt-2",
+                isDark ? "text-gray-300" : "text-gray-600"
+              )}
+            >
               {summary.avgSubmissionsPerCreator.toFixed(1)} per creator
             </p>
           </CardContent>
@@ -310,13 +309,12 @@ export default function CreatorAnalytics({
             <div className="text-2xl font-bold">
               {summary.totalViews.toLocaleString()}
             </div>
-            <p 
-             className={cn(
-              "text-sm mt-2",
-              isDark
-                ? "text-gray-300"
-                : "text-gray-600"
-            )}>
+            <p
+              className={cn(
+                "text-sm mt-2",
+                isDark ? "text-gray-300" : "text-gray-600"
+              )}
+            >
               {summary.avgViewsPerCreator.toLocaleString()} per creator
             </p>
           </CardContent>
@@ -345,13 +343,12 @@ export default function CreatorAnalytics({
             <div className="text-2xl font-bold">
               {formatCurrencyFromCents(summary.totalEarnings)}
             </div>
-            <p 
-             className={cn(
-              "text-sm mt-2",
-              isDark
-                ? "text-gray-300"
-                : "text-gray-600"
-            )}>
+            <p
+              className={cn(
+                "text-sm mt-2",
+                isDark ? "text-gray-300" : "text-gray-600"
+              )}
+            >
               {formatCurrencyFromCents(
                 Math.round(summary.avgEarningsPerCreator * 100)
               )}{" "}
@@ -363,7 +360,13 @@ export default function CreatorAnalytics({
 
       {/* Demographics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337] text-white"
+              : "bg-white text-black"
+          )}
+        >
           <CardHeader>
             <CardTitle className="text-lg">Platform Distribution</CardTitle>
           </CardHeader>
@@ -401,7 +404,13 @@ export default function CreatorAnalytics({
           </CardContent>
         </Card>
 
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337] text-white"
+              : "bg-white text-black"
+          )}
+        >
           <CardHeader>
             <CardTitle className="text-lg">Contest Type Preferences</CardTitle>
           </CardHeader>
@@ -438,16 +447,36 @@ export default function CreatorAnalytics({
       </div>
 
       {/* Creator Leaderboard */}
-      <Card className="bg-white">
+      <Card
+        className={cn(
+          isDark
+            ? "bg-[#170337] border-[#170337] text-white"
+            : "bg-white text-black"
+        )}
+      >
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg">{getLeaderboardTitle()}</CardTitle>
-            <div className="flex gap-2 text-purple-500">
+            <div
+              className={cn(
+                "flex gap-2 ",
+                isDark ? "text-purple-300" : "text-purple-700"
+              )}
+            >
               <Button
                 variant={activeTab === "views" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveTab("views")}
-                className="border border-purple-500 "
+                className={cn(
+                  "border",
+                  activeTab === "views"
+                    ? isDark
+                      ? "border-purple-400 bg-purple-600/20"
+                      : "border-purple-500 bg-purple-100 text-purple-700"
+                    : isDark
+                    ? "border-purple-300 bg-[#170337]"
+                    : "border-purple-500/50"
+                )}
               >
                 Views
               </Button>
@@ -455,7 +484,16 @@ export default function CreatorAnalytics({
                 variant={activeTab === "submissions" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveTab("submissions")}
-                className="border border-purple-500 "
+                className={cn(
+                  "border",
+                  activeTab === "submissions"
+                    ? isDark
+                      ? "border-purple-400 bg-purple-600/20 "
+                      : "border-purple-500 bg-purple-100 text-purple-700"
+                    : isDark
+                    ? "border-purple-300 bg-[#170337]"
+                    : "border-purple-500/50"
+                )}
               >
                 Submissions
               </Button>
@@ -463,7 +501,16 @@ export default function CreatorAnalytics({
                 variant={activeTab === "earnings" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveTab("earnings")}
-                className="border border-purple-500 "
+                className={cn(
+                  "border",
+                  activeTab === "earnings"
+                    ? isDark
+                      ? "border-purple-400 bg-purple-600/20"
+                      : "border-purple-500 bg-purple-100 text-purple-700"
+                    : isDark
+                    ? "border-purple-300 bg-[#170337]" 
+                    : "border-purple-500/50"
+                )}
               >
                 Earnings
               </Button>
@@ -477,7 +524,12 @@ export default function CreatorAnalytics({
               .map((creator: any, index: number) => (
                 <div
                   key={creator.creator.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                  className={cn(
+                    "flex items-center justify-between p-4 rounded-lg",
+                    isDark
+                      ? "bg-[#170337] border border-gray-600"
+                      : "bg-gray-50"
+                  )}
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
@@ -516,7 +568,13 @@ export default function CreatorAnalytics({
 
       {/* Top Creator Spotlight */}
       {leaderboards.topByViews.length > 0 && (
-        <Card className="bg-white">
+        <Card
+          className={cn(
+            isDark
+              ? "bg-[#170337] border-[#170337] text-white"
+              : "bg-white text-black"
+          )}
+        >
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Trophy className="w-5 h-5 text-yellow-500" />
@@ -524,7 +582,14 @@ export default function CreatorAnalytics({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between p-6 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg">
+            <div
+              className={cn(
+                "flex items-center justify-between p-6 rounded-lg",
+                isDark
+                  ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-white/20 backdrop-blur-2xl"
+                  : "bg-gradient-to-r from-purple-50 to-blue-50"
+              )}
+            >
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
                   <span className="text-2xl font-bold text-purple-600">1</span>

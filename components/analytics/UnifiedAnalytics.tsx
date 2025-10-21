@@ -353,16 +353,32 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   return (
     <div className="space-y-6">
       {/* Unified Filter */}
-      <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
+      <div
+        className={cn(
+          "rounded-lg p-4 shadow-sm border ",
+          isDark
+            ? "bg-[#170337] border-[#170337] text-white"
+            : "bg-white  border border-gray-200"
+        )}
+      >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
+          <h3
+            className={cn(
+              "text-lg font-semibold",
+              isDark ? "text-white" : "text-gray-900"
+            )}
+          >
             Filter by Submission Status
           </h3>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowTileSettings(!showTileSettings)}
-            className="flex items-center gap-2"
+            className={`flex items-center gap-2 ${
+              isDark
+                ? "bg-[#170337] text-white border-gray-600"
+                : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400"
+            }`}
           >
             <Settings className="w-4 h-4" />
             Customize Tiles
@@ -381,6 +397,8 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 className={`flex items-center gap-2 ${
                   activeFilter === option.id
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
+                    : isDark
+                    ? "bg-[#170337] hover:bg-[#2A0B5A] text-white border-gray-600"
                     : "bg-white hover:bg-gray-50 text-gray-700 border-gray-200"
                 }`}
               >
@@ -406,23 +424,24 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 isDark ? "bg-[#170337] text-white" : "bg-white text-black"
               )}
             >
-              <div className="flex flex-row items-center justify-between space-y-0 px-6 pt-2"
-              >
-                <h1 
-                 className={cn(
+              <div className="flex flex-row items-center justify-between space-y-0 px-6 pt-2">
+                <h1
+                  className={cn(
                     "text-lg font-medium",
                     isDark ? "text-white" : "text-gray-900"
                   )}
                 >
                   {tile.label}
                 </h1>
-                <div  className={cn(
+                <div
+                  className={cn(
                     "w-10 h-10 flex items-center justify-center rounded-full",
                     isDark
                       ? "bg-[#FFFFFF36] text-white"
                       : "bg-[#D8C3FF] text-[#4A00BE]"
-                  )}>
-                <Icon className="h-4 w-4" />
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
                 </div>
               </div>
               <CardContent>
@@ -430,12 +449,16 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   className={cn(
                     "text-2xl font-bold mb-2",
                     isDark ? "text-white" : "text-gray-900"
-                  )}>{value}</div>
-                <p 
-                 className={cn(
+                  )}
+                >
+                  {value}
+                </div>
+                <p
+                  className={cn(
                     "text-sm mt-2",
                     isDark ? "text-white" : "text-gray-600"
-                  )}>
+                  )}
+                >
                   {activeFilter === "all"
                     ? "All submissions"
                     : `Filtered by ${
@@ -517,19 +540,41 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           <div className="space-y-6">
             {/* Top Performing Contest */}
             {analyticsData.overview.topContest && (
-              <Card className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 shadow-sm">
+              <Card
+                className={cn(
+                  "border shadow-sm",
+                  isDark
+                    ? "bg-gradient-to-br from-purple-800/40 to-blue-900/40 border-purple-700/30"
+                    : "bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200"
+                )}
+              >
                 <CardHeader>
-                  <CardTitle className="text-lg text-gray-900">
+                  <CardTitle
+                    className={cn(
+                      "text-lg",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
                     Top Performing Contest
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-semibold text-lg text-gray-900">
+                      <h3
+                        className={cn(
+                          "font-semibold text-lg",
+                          isDark ? "text-white" : "text-gray-900"
+                        )}
+                      >
                         {analyticsData.overview.topContest.title}
                       </h3>
-                      <div className="flex gap-4 mt-2 text-sm text-gray-700">
+                      <div
+                        className={cn(
+                          "flex gap-4 mt-2 text-sm",
+                          isDark ? "text-gray-300" : "text-gray-700"
+                        )}
+                      >
                         <span>
                           {analyticsData.overview.topContest.views.toLocaleString()}{" "}
                           views
@@ -542,7 +587,12 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                     </div>
                     <Badge
                       variant="outline"
-                      className="bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300 shadow-sm"
+                      className={cn(
+                        "shadow-sm",
+                        isDark
+                          ? "bg-gradient-to-r from-purple-800/40 to-blue-800/40 text-purple-200 border-purple-600/50"
+                          : "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300"
+                      )}
                     >
                       Best Performer
                     </Badge>
@@ -553,9 +603,19 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
             {/* Platform Performance */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card className="bg-white border border-gray-200 shadow-sm">
+              <Card
+                className={cn(
+                  "shadow-sm",
+                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white"
+                )}
+              >
                 <CardHeader>
-                  <CardTitle className="text-lg text-gray-900">
+                  <CardTitle
+                    className={cn(
+                      "text-lg",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
                     Platform Performance
                   </CardTitle>
                 </CardHeader>
@@ -568,26 +628,53 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                           className="flex items-center justify-between"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                            <div
+                              className={cn(
+                                "w-8 h-8 rounded-full flex items-center justify-center",
+                                isDark ? "bg-[#FFFFFF36]" : "bg-gray-100"
+                              )}
+                            >
                               <span className="text-xs font-semibold capitalize">
                                 {platform[0]}
                               </span>
                             </div>
                             <div>
-                              <p className="font-medium capitalize text-gray-900">
+                              <p
+                                className={cn(
+                                  "font-medium capitalize",
+                                  isDark ? "text-white" : "text-gray-900"
+                                )}
+                              >
                                 {platform}
                               </p>
-                              <p className="text-sm text-gray-500">
+                              <p
+                                className={cn(
+                                  "text-sm",
+                                  isDark ? "text-gray-400" : "text-gray-500"
+                                )}
+                              >
                                 {stats.contests} contests • {stats.submissions}{" "}
                                 submissions
                               </p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold text-gray-900">
+                            <p
+                              className={cn(
+                                "font-semibold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {stats.views.toLocaleString()}
                             </p>
-                            <p className="text-sm text-gray-500">views</p>
+                            <p
+                              className={cn(
+                                "text-sm",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              views
+                            </p>
                           </div>
                         </div>
                       )
@@ -596,9 +683,19 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                 </CardContent>
               </Card>
 
-              <Card className="bg-white border border-gray-200 shadow-sm">
+              <Card
+                className={cn(
+                  "shadow-sm",
+                  isDark ? "bg-[#170337] border-[#170337]" : "bg-white"
+                )}
+              >
                 <CardHeader>
-                  <CardTitle className="text-lg text-gray-900">
+                  <CardTitle
+                    className={cn(
+                      "text-lg",
+                      isDark ? "text-white" : "text-gray-900"
+                    )}
+                  >
                     Contest Type Performance
                   </CardTitle>
                 </CardHeader>
@@ -611,19 +708,41 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                           className="flex items-center justify-between"
                         >
                           <div>
-                            <p className="font-medium capitalize text-gray-900">
+                            <p
+                              className={cn(
+                                "font-medium capitalize",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {type.replace("_", " ")}
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p
+                              className={cn(
+                                "text-sm",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
                               {stats.count} contests • {stats.submissions}{" "}
                               submissions
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold text-gray-900">
+                            <p
+                              className={cn(
+                                "font-semibold",
+                                isDark ? "text-white" : "text-gray-900"
+                              )}
+                            >
                               {formatCurrencyFromCents(stats.spent)}
                             </p>
-                            <p className="text-sm text-gray-500">spent</p>
+                            <p
+                              className={cn(
+                                "text-sm",
+                                isDark ? "text-gray-400" : "text-gray-500"
+                              )}
+                            >
+                              spent
+                            </p>
                           </div>
                         </div>
                       )
