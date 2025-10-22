@@ -2504,11 +2504,12 @@ export default function SubmitContentPage({
 
                   {/* Informational text for creators */}
                   <div className="mt-8 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
-                    <p 
-                     className={cn(
-                      "text-md text-center",
-                      isDark ? "text-white" : "text-[#7F39EC]"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-md text-center",
+                        isDark ? "text-white" : "text-[#7F39EC]"
+                      )}
+                    >
                       💡 <strong>Tip for creators:</strong> You can fetch videos
                       from your YouTube account by entering their URL in the
                       "Link" tab.
@@ -2525,19 +2526,25 @@ export default function SubmitContentPage({
                       libraryMessage ? (
                         <Alert
                           variant="default"
-                          
                           className={cn(
                             "text-center border border-[#7F39EC] bg-[#D9C0FF26]",
-                            isDark ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white" : "bg-[#D9C0FF26] border-[#7F39EC] texxt-black"
-                          )}>
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] texxt-black"
+                          )}
+                        >
                           <AlertDescription>{libraryMessage}</AlertDescription>
                         </Alert>
                       ) : (
-                        <div className="text-center py-4" >
-                          <p className={cn(
-                            "text-md",
-                            isDark ? "text-white" : "text-black"
-                          )}>No videos found in your YouTube channel.</p>
+                        <div className="text-center py-4">
+                          <p
+                            className={cn(
+                              "text-md",
+                              isDark ? "text-white" : "text-black"
+                            )}
+                          >
+                            No videos found in your YouTube channel.
+                          </p>
                           <Button
                             variant="outline"
                             onClick={() => fetchYouTubeVideos()}
@@ -2603,25 +2610,29 @@ export default function SubmitContentPage({
                             <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <CheckCheck 
+                                  <CheckCheck
                                     className={cn(
                                       "h-4 w-4",
-                                      isDark ? "text-purple-400" : "text-purple-600"
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-purple-600"
                                     )}
                                   />
-                                  <span 
+                                  <span
                                     className={cn(
                                       "text-sm font-medium",
                                       isDark ? "text-white" : "text-purple-800"
-                                    )}>
+                                    )}
+                                  >
                                     Multiple Submissions Enabled
                                   </span>
                                 </div>
-                                <div 
+                                <div
                                   className={cn(
                                     "text-sm font-semibold",
                                     isDark ? "text-gray-300" : "text-purple-800"
-                                  )}>
+                                  )}
+                                >
                                   Selected:{" "}
                                   {selectedVideosFromTabs.length +
                                     selectedReelsFromTabs.length +
@@ -2636,11 +2647,12 @@ export default function SubmitContentPage({
                                   remaining videos
                                 </div>
                               </div>
-                              <p 
+                              <p
                                 className={cn(
                                   "text-xs mt-1",
                                   isDark ? "text-gray-300" : "text-purple-600"
-                                )}>
+                                )}
+                              >
                                 Click on videos below to select them. You can
                                 mix videos from your channel and custom links.
                               </p>
@@ -2786,10 +2798,11 @@ export default function SubmitContentPage({
                                     {/* Title */}
                                     <div className="space-y-2">
                                       <h3
-                                        
                                         className={cn(
                                           "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
-                                          isDark ? "text-white" : "text-gray-900"
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-900"
                                         )}
                                         title={video.snippet.title}
                                       >
@@ -2802,7 +2815,9 @@ export default function SubmitContentPage({
                                           rel="noopener noreferrer"
                                           className={cn(
                                             "inline-flex items-center text-sm hover:underline",
-                                            isDark ? "text-purple-400" : "text-[#4A00BE]"
+                                            isDark
+                                              ? "text-purple-400"
+                                              : "text-[#4A00BE]"
                                           )}
                                           onClick={(e) => e.stopPropagation()}
                                         >
@@ -2948,7 +2963,6 @@ export default function SubmitContentPage({
                                     "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
                                     isDark ? "text-white" : "text-gray-900"
                                   )}
-                                 
                                   title={videoPreview.snippet.title}
                                 >
                                   {videoPreview.snippet.title}
@@ -2960,7 +2974,9 @@ export default function SubmitContentPage({
                                     rel="noopener noreferrer"
                                     className={cn(
                                       "inline-flex items-center text-sm hover:underline",
-                                      isDark ? "text-purple-400" : "text-purple-600"
+                                      isDark
+                                        ? "text-purple-400"
+                                        : "text-purple-600"
                                     )}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -3102,7 +3118,11 @@ export default function SubmitContentPage({
                 //     </TabsTrigger>
                 //   </TabsList>
                 <Tabs defaultValue="instagram-library" className="w-full">
-                  <TabsList className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"}`}>
+                  <TabsList
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${
+                      isDark ? "bg-black" : "bg-[#E4E4E4]"
+                    }`}
+                  >
                     {["instagram-library", "instagram-link"].map(
                       (tab, index, arr) => {
                         const isFirst = index === 0;
@@ -3158,11 +3178,11 @@ export default function SubmitContentPage({
 
                   {/* Informational text for creators */}
                   <div className="mt-6 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
-                    <p 
-                     className={cn(
-                      "text-md text-center",
-                      isDark ? "text-white" : "text-[#7F39EC]"
-                    )}
+                    <p
+                      className={cn(
+                        "text-md text-center",
+                        isDark ? "text-white" : "text-[#7F39EC]"
+                      )}
                     >
                       💡 <strong>Tip for creators:</strong> You can fetch reels
                       and videos from your Instagram account by entering their
@@ -3255,13 +3275,14 @@ export default function SubmitContentPage({
                         {/* Multiple Submissions Counter - Instagram */}
                         {contest?.multiple_submissions_enabled &&
                           contestPlatform === "instagram" && (
-                            <div 
-                            className={cn(
-                              "mt-4 p-3 border rounded-lg",
-                              isDark ? "bg-[#C9A7FF26] border-[#C9A7FF]" : "bg-purple-50 border-purple-200"
-                            )}
-                           
-                          >
+                            <div
+                              className={cn(
+                                "mt-4 p-3 border rounded-lg",
+                                isDark
+                                  ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                                  : "bg-purple-50 border-purple-200"
+                              )}
+                            >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <CheckCheck className="h-4 w-4 text-purple-600" />
@@ -3269,15 +3290,17 @@ export default function SubmitContentPage({
                                     className={cn(
                                       "text-sm font-medium",
                                       isDark ? "text-white" : "text-purple-800"
-                                    )}>
+                                    )}
+                                  >
                                     Multiple Submissions Enabled
                                   </span>
                                 </div>
-                                <div 
-                                className={cn(
-                                  "text-sm font-semibold",
-                                  isDark ? "text-white" : "text-purple-800"
-                                )}>
+                                <div
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark ? "text-white" : "text-purple-800"
+                                  )}
+                                >
                                   Selected:{" "}
                                   {selectedVideosFromTabs.length +
                                     selectedReelsFromTabs.length +
@@ -3292,11 +3315,12 @@ export default function SubmitContentPage({
                                   remaining videos
                                 </div>
                               </div>
-                              <p 
+                              <p
                                 className={cn(
                                   "text-xs mt-1",
                                   isDark ? "text-gray-300" : "text-purple-600"
-                                )}>
+                                )}
+                              >
                                 Click on videos below to select them. You can
                                 mix videos from your channel and custom links.
                               </p>
@@ -3622,23 +3646,30 @@ export default function SubmitContentPage({
               ? youtubeAccount
               : instagramAccount?.access_token) && (
               <div className="mt-8">
-                <Card 
-                 className={cn(
-                  "border",
-                  isDark ? "bg-[#C9A7FF26] border-[#C9A7FF]" : "border-purple-200 bg-purple-50/50"
-                )}>
+                <Card
+                  className={cn(
+                    "border",
+                    isDark
+                      ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                      : "border-purple-200 bg-purple-50/50"
+                  )}
+                >
                   <CardHeader>
-                    <CardTitle className={cn(
-                      "flex items-center gap-2",
-                      isDark ? "text-white" : "text-purple-800"
-                    )}>
+                    <CardTitle
+                      className={cn(
+                        "flex items-center gap-2",
+                        isDark ? "text-white" : "text-purple-800"
+                      )}
+                    >
                       <CheckCheck className="h-5 w-5" />
                       Multiple Submissions Allowed
                     </CardTitle>
-                    <CardDescription className={cn(
-                      "text-purple-700",
-                      isDark ? "text-gray-300" : "text-purple-700"
-                    )}>
+                    <CardDescription
+                      className={cn(
+                        "text-purple-700",
+                        isDark ? "text-gray-300" : "text-purple-700"
+                      )}
+                    >
                       You can submit up to{" "}
                       {contest.max_submissions_per_creator || 1} videos for this
                       contest. Choose from your recent videos above or add
@@ -3648,16 +3679,19 @@ export default function SubmitContentPage({
                   <CardContent>
                     <div className="space-y-4">
                       {/* Submission Counter */}
-                      <div 
-                      className={cn(
-                        "flex items-center justify-between p-3 rounded-lg",
-                        isDark ? "bg-[#C9A7FF26]" : "bg-purple-100"
-                      )}>
+                      <div
+                        className={cn(
+                          "flex items-center justify-between p-3 rounded-lg",
+                          isDark ? "bg-[#C9A7FF26]" : "bg-purple-100"
+                        )}
+                      >
                         <div>
-                          <span className={cn(
-                            "text-sm font-medium",
-                            isDark ? "text-white" : "text-purple-800"
-                          )}>
+                          <span
+                            className={cn(
+                              "text-sm font-medium",
+                              isDark ? "text-white" : "text-purple-800"
+                            )}
+                          >
                             Selected:{" "}
                             {selectedVideosFromTabs.length +
                               selectedReelsFromTabs.length +
@@ -3672,11 +3706,12 @@ export default function SubmitContentPage({
                             remaining submissions
                           </span>
                           {submissionProgress.submitted > 0 && (
-                            <div 
-                            className={cn(
-                              "text-xs",
-                              isDark ? "text-gray-300" : "text-purple-600"
-                            )}>
+                            <div
+                              className={cn(
+                                "text-xs",
+                                isDark ? "text-gray-300" : "text-purple-600"
+                              )}
+                            >
                               Already submitted: {submissionProgress.submitted}{" "}
                               / {submissionProgress.maxAllowed} videos
                             </div>
@@ -3699,7 +3734,9 @@ export default function SubmitContentPage({
                               (contest.max_submissions_per_creator || 1)
                             }
                             className={cn(
-                              isDark ? "bg-[#7F39EC] border-[#7F39EC] text-white" : "border text-purple-700 border-purple-300 hover:bg-purple-100"
+                              isDark
+                                ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                                : "border text-purple-700 border-purple-300 hover:bg-purple-100"
                             )}
                           >
                             <Plus className="h-4 w-4 mr-1" />
@@ -3715,8 +3752,9 @@ export default function SubmitContentPage({
                                 setSubmissionLinks(newLinks);
                               }}
                               className={cn(
-                                
-                                isDark ? "bg-[#7F39EC] border-[#7F39EC] text-white" : "border text-purple-700 border-purple-300 hover:bg-purple-100"
+                                isDark
+                                  ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                                  : "border text-purple-700 border-purple-300 hover:bg-purple-100"
                               )}
                             >
                               <Minus className="h-4 w-4 mr-1" />
@@ -3735,7 +3773,8 @@ export default function SubmitContentPage({
                             </div>
                             <Input
                               type="text"
-                              className={cn("flex-1",
+                              className={cn(
+                                "flex-1",
                                 isDark
                                   ? "bg-[#180438] border border-gray-700 text-white"
                                   : "bg-white text-black"
@@ -3764,7 +3803,6 @@ export default function SubmitContentPage({
                                   }));
                                 }
                               }}
-                              
                             />
                             <Button
                               size="sm"
@@ -3788,8 +3826,9 @@ export default function SubmitContentPage({
                               variant="outline"
                               onClick={() => handleIndividualRemove(index)}
                               className={cn(
-                                
-                                isDark ? "text-red-400 border-red-500 hover:bg-red-900" : "text-red-600 border-red-300 hover:bg-red-50"
+                                isDark
+                                  ? "text-red-400 border-red-500 hover:bg-red-900"
+                                  : "text-red-600 border-red-300 hover:bg-red-50"
                               )}
                             >
                               <Minus className="h-4 w-4" />
@@ -4030,9 +4069,22 @@ export default function SubmitContentPage({
                       {/* Earnings Cap Warning */}
                       {contest.contest_based_details?.cpm_contest
                         ?.max_earnings_per_creator && (
-                        <Alert className="border-amber-200 bg-amber-50">
-                          <AlertTriangle className="h-4 w-4 text-amber-600" />
-                          <AlertDescription className="text-amber-800">
+                        <Alert className={cn(
+                          isDark
+                            ? "border-[#C9A7FF] bg-[#C9A7FF26]"
+                            : "border-amber-200 bg-amber-50"
+                        )}>
+                       
+                          <AlertTriangle className={cn(
+                            isDark
+                              ? "text-purple-400"
+                              : "text-amber-600"
+                          )} />
+                          <AlertDescription className={cn(
+                            isDark
+                              ? "text-white"
+                              : "text-amber-800"
+                          )}>
                             <strong>Earnings Cap:</strong> You can earn up to $
                             {(
                               contest.contest_based_details.cpm_contest
