@@ -2163,14 +2163,36 @@ export function ContestClientPage({
                       {contest.contest_type === "leaderboard" &&
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus && (
-                          <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg border border-green-200 dark:border-green-700/50 p-4">
+                          <div
+                            className={cn(
+                              "bg-gradient-to-r rounded-lg border p-4",
+                              isDark
+                                ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
+                                : "from-green-50 to-emerald-50 border-green-200"
+                            )}
+                          >
                             <div className="flex items-center gap-3 mb-3">
-                              <Gift className="h-5 w-5 text-green-600 dark:text-green-400" />
-                              <span className="font-semibold text-green-900 dark:text-green-100">
+                              <Gift
+                                className={cn(
+                                  "h-5 w-5",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "font-semibold",
+                                  isDark ? "text-green-100" : "text-green-900"
+                                )}
+                              >
                                 Bonus Budget
                               </span>
                               <div className="group relative">
-                                <Info className="h-4 w-4 text-green-600 dark:text-green-400 cursor-help" />
+                                <Info
+                                  className={cn(
+                                    "h-4 w-4 cursor-help",
+                                    isDark ? "text-green-400" : "text-green-600"
+                                  )}
+                                />
                                 <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center">
                                   Additional bonus on top of prize pool. Every
                                   verified submission receives the
@@ -2180,11 +2202,28 @@ export function ContestClientPage({
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                              <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-green-200 dark:border-green-700/30">
-                                <div className="text-xs text-green-700 dark:text-green-300 mb-1">
+                              <div
+                                className={cn(
+                                  "rounded-lg p-3 border",
+                                  isDark
+                                    ? "bg-slate-800 border-green-700/30"
+                                    : "bg-white border-green-200"
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "text-xs mb-1",
+                                    isDark ? "text-green-300" : "text-green-700"
+                                  )}
+                                >
                                   Per Submission
                                 </div>
-                                <div className="text-lg font-bold text-green-900 dark:text-green-100">
+                                <div
+                                  className={cn(
+                                    "text-lg font-bold",
+                                    isDark ? "text-green-100" : "text-green-900"
+                                  )}
+                                >
                                   {formatMoney(
                                     contest.contest_based_details
                                       .leaderboard_contest.flat_fee_bonus
@@ -2193,11 +2232,32 @@ export function ContestClientPage({
                               </div>
                               {contest.contest_based_details.leaderboard_contest
                                 .total_budget && (
-                                <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-green-200 dark:border-green-700/30">
-                                  <div className="text-xs text-green-700 dark:text-green-300 mb-1">
+                                <div
+                                  className={cn(
+                                    "rounded-lg p-3 border",
+                                    isDark
+                                      ? "bg-slate-800 border-green-700/30"
+                                      : "bg-white border-green-200"
+                                  )}
+                                >
+                                  <div
+                                    className={cn(
+                                      "text-xs mb-1",
+                                      isDark
+                                        ? "text-green-300"
+                                        : "text-green-700"
+                                    )}
+                                  >
                                     Total Budget
                                   </div>
-                                  <div className="text-lg font-bold text-green-900 dark:text-green-100">
+                                  <div
+                                    className={cn(
+                                      "text-lg font-bold",
+                                      isDark
+                                        ? "text-green-100"
+                                        : "text-green-900"
+                                    )}
+                                  >
                                     {formatMoney(
                                       contest.contest_based_details
                                         .leaderboard_contest.total_budget
@@ -2527,20 +2587,53 @@ export function ContestClientPage({
                           </div>
                           {contest.contest_based_details.leaderboard_contest
                             .flat_fee_bonus && (
-                            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-lg p-4 border border-green-200 dark:border-green-700/50">
+                            <div
+                              className={cn(
+                                "bg-gradient-to-r rounded-lg p-4 border",
+                                isDark
+                                  ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
+                                  : "from-green-50 to-emerald-50 border-green-200"
+                              )}
+                            >
                               <div className="flex items-center gap-3">
-                                <Gift className="h-6 w-6 text-green-600 dark:text-green-400" />
+                                <Gift
+                                  className={cn(
+                                    "h-6 w-6",
+                                    isDark ? "text-green-400" : "text-green-600"
+                                  )}
+                                />
                                 <div>
-                                  <div className="text-sm font-medium text-green-800 dark:text-green-200">
+                                  <div
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark
+                                        ? "text-green-200"
+                                        : "text-green-800"
+                                    )}
+                                  >
                                     Bonus Budget
                                   </div>
-                                  <div className="text-2xl font-bold text-green-900 dark:text-green-100">
+                                  <div
+                                    className={cn(
+                                      "text-2xl font-bold",
+                                      isDark
+                                        ? "text-green-100"
+                                        : "text-green-900"
+                                    )}
+                                  >
                                     {formatMoney(
                                       contest.contest_based_details
                                         .leaderboard_contest.flat_fee_bonus
                                     )}
                                   </div>
-                                  <div className="text-xs text-green-700 dark:text-green-300 mt-0.5">
+                                  <div
+                                    className={cn(
+                                      "text-xs mt-0.5",
+                                      isDark
+                                        ? "text-green-300"
+                                        : "text-green-700"
+                                    )}
+                                  >
                                     per verified submission
                                   </div>
                                 </div>
@@ -2552,14 +2645,36 @@ export function ContestClientPage({
                         {/* Bonus Budget Note */}
                         {contest.contest_based_details.leaderboard_contest
                           .flat_fee_bonus && (
-                          <div className="mb-6 p-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-700/50 rounded-lg">
+                          <div
+                            className={cn(
+                              "mb-6 p-4 border rounded-lg",
+                              isDark
+                                ? "bg-green-900/10 border-green-700/50"
+                                : "bg-green-50 border-green-200"
+                            )}
+                          >
                             <div className="flex items-start gap-3">
-                              <Gift className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                              <Gift
+                                className={cn(
+                                  "h-5 w-5 mt-0.5 flex-shrink-0",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )}
+                              />
                               <div>
-                                <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">
+                                <p
+                                  className={cn(
+                                    "text-sm font-semibold mb-1",
+                                    isDark ? "text-green-200" : "text-green-900"
+                                  )}
+                                >
                                   Additional Bonus Earnings
                                 </p>
-                                <p className="text-sm text-green-800 dark:text-green-200">
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark ? "text-green-300" : "text-green-800"
+                                  )}
+                                >
                                   Every verified submission receives{" "}
                                   <span className="font-bold">
                                     {formatMoney(
@@ -3493,7 +3608,7 @@ export function ContestClientPage({
                             "rounded-lg border p-4",
                             isDark
                               ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                              : "border-yellow-200 bg-yellow-25"
+                              : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
                           )}
                         >
                           <p
@@ -3649,21 +3764,52 @@ export function ContestClientPage({
                     contest.contest_based_details?.cpm_contest
                       ?.flat_fee_bonus ||
                     (contest as any).bonus_details?.description_html) && (
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-800/50 dark:to-blue-900/20 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div
+                      className={cn(
+                        "flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 p-4 rounded-xl border shadow-sm",
+                        isDark
+                          ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                          : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                      )}
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white dark:bg-slate-700 rounded-lg shadow-sm">
-                          <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <div
+                          className={cn(
+                            "p-2 rounded-lg",
+                            isDark
+                              ? "bg-[#FFFFFF42] text-white"
+                              : "bg-[#D8C3FF] text-[#4A00BE]"
+                          )}
+                        >
+                          <Eye className="h-4 w-4" />
                         </div>
                         <div>
-                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                          <span
+                            className={cn(
+                              "text-sm font-semibold",
+                              isDark ? "text-white" : "text-slate-800"
+                            )}
+                          >
                             Earnings Display
                           </span>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                          <p
+                            className={cn(
+                              "text-xs mt-0.5",
+                              isDark ? "text-white" : "text-slate-700"
+                            )}
+                          >
                             Choose how to view your earnings breakdown
                           </p>
                         </div>
                       </div>
-                      <div className="flex bg-white dark:bg-slate-700 rounded-lg p-1 shadow-sm border border-slate-200 dark:border-slate-600 w-full sm:w-auto">
+                      <div
+                        className={cn(
+                          "flex rounded-lg p-1 w-full sm:w-auto",
+                          isDark
+                            ? "bg-[#C9A7FF26]  border-[#C9A7FF]"
+                            : "bg-[#D9C0FF26] border-[#D9C0FF]"
+                        )}
+                      >
                         <Button
                           variant={
                             leaderboardViewMode === "simple"
@@ -3674,8 +3820,12 @@ export function ContestClientPage({
                           onClick={() => setLeaderboardViewMode("simple")}
                           className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
                             leaderboardViewMode === "simple"
-                              ? "bg-blue-600 text-white shadow-sm"
-                              : "text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              ? isDark
+                                ? "bg-purple-600 text-white"
+                                : "bg-purple-500 text-white"
+                              : isDark
+                              ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                              : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                           }`}
                         >
                           <span className="flex items-center gap-1.5">
@@ -3693,8 +3843,12 @@ export function ContestClientPage({
                           onClick={() => setLeaderboardViewMode("detailed")}
                           className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
                             leaderboardViewMode === "detailed"
-                              ? "bg-blue-600 text-white shadow-sm"
-                              : "text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              ? isDark
+                                ? "bg-purple-600 text-white"
+                                : "bg-purple-500 text-white"
+                              : isDark
+                              ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                              : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                           }`}
                         >
                           <span className="flex items-center gap-1.5">
@@ -3973,12 +4127,12 @@ export function ContestClientPage({
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className={cn(
-                                    "w-full text-xs border",
-                                    isDark
-                                      ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                                      : "bg-white border-slate-200 hover:bg-slate-50"
-                                  )}
+                                  className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
+                                  style={{
+                                    backgroundColor: isDark ? "#7F39EC" : "#D9C0FF61",
+                                    color: isDark ? "white" : "#7F39EC",
+                                    transition: "none",
+                                  }}
                                 >
                                   <ListOrdered className="h-3 w-3 mr-2" />
                                   View All Your Submissions (
@@ -4023,8 +4177,12 @@ export function ContestClientPage({
                                             }
                                             className={`text-xs px-3 py-1.5 transition-all duration-200 ${
                                               modalViewMode === "simple"
-                                                ? "bg-blue-600 text-white shadow-sm"
-                                                : "text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                ? isDark
+                                                  ? "bg-purple-600 text-white"
+                                                  : "bg-purple-500 text-white"
+                                                : isDark
+                                                ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                                             }`}
                                           >
                                             Simple
@@ -4041,8 +4199,12 @@ export function ContestClientPage({
                                             }
                                             className={`text-xs px-3 py-1.5 transition-all duration-200 ${
                                               modalViewMode === "detailed"
-                                                ? "bg-blue-600 text-white shadow-sm"
-                                                : "text-slate-600 dark:text-slate-300 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                ? isDark
+                                                  ? "bg-purple-600 text-white"
+                                                  : "bg-purple-500 text-white"
+                                                : isDark
+                                                ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
                                             }`}
                                           >
                                             Detailed
