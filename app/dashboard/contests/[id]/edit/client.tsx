@@ -373,7 +373,7 @@ export default function EditContestPage({
 
   console.log({ isLoading, isPlansLoading, isUserPlanLoading, error, contest });
 
-  // Read mode from data attribute
+  // Read mode from data attribute with immediate updates
   useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
@@ -381,16 +381,27 @@ export default function EditContestPage({
         const currentMode = modeElement.getAttribute("data-mode") as
           | "light"
           | "dark";
-        if (currentMode) {
+        if (currentMode && currentMode !== mode) {
           setMode(currentMode);
         }
       }
     };
 
+    // Check immediately
     checkMode();
 
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
+    // Watch for changes in the data attribute with immediate callback
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "data-mode"
+        ) {
+          checkMode();
+        }
+      });
+    });
+
     const targetNode = document.querySelector("[data-mode]");
     if (targetNode) {
       observer.observe(targetNode, {
@@ -399,8 +410,23 @@ export default function EditContestPage({
       });
     }
 
-    return () => observer.disconnect();
-  }, []);
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [mode]);
 
   useEffect(() => {
     if (showPayment) {
@@ -4016,7 +4042,7 @@ export default function EditContestPage({
   const isDark = mode === "dark";
 
   return (
-    <div className="container max-w-[1200px] mx-auto py-8">
+    <div className="container max-w-[1200px] mx-auto py-8 transition-colors duration-200">
       <div className="flex items-center gap-2 mb-6">
         <Button variant="ghost" size="icon" asChild>
           <Link
@@ -4143,13 +4169,13 @@ export default function EditContestPage({
 
       <div
         className={cn(
-          "mx-auto rounded-xl shadow-lg py-4",
+          "mx-auto rounded-xl shadow-lg py-4 transition-colors duration-200",
           isDark ? "bg-[#170337]" : "bg-white"
         )}
       >
         <div
           className={cn(
-            "py-2 px-6 border-b",
+            "py-2 px-6 border-b transition-colors duration-200",
             isDark ? "border-gray-600" : "border-[#D0D0D0]"
           )}
         >
@@ -4176,6 +4202,7 @@ export default function EditContestPage({
                   }}
                   placeholder="Game Of Creators! Get Paid to Create"
                   className={cn(
+                    "transition-colors duration-200",
                     isDark ? "bg-[#180438] border border-gray-600" : "bg-white"
                   )}
                   required
@@ -4191,6 +4218,7 @@ export default function EditContestPage({
                   >
                     <SelectTrigger
                       className={cn(
+                        "transition-colors duration-200",
                         isDark
                           ? "bg-[#180438] border border-gray-600"
                           : "bg-white"
@@ -4378,7 +4406,7 @@ export default function EditContestPage({
 
               {showBriefPreview ? (
                 <div
-                  className={`border rounded-lg p-4 min-h-[300px] ${
+                  className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${
                     isDark
                       ? "text-white bg-[#170337] border-gray-600"
                       : "bg-white"
@@ -4450,7 +4478,7 @@ export default function EditContestPage({
 
               {showRulesPreview ? (
                 <div
-                  className={`border rounded-lg p-4 min-h-[300px] ${
+                  className={`border rounded-lg p-4 min-h-[300px] transition-colors duration-200 ${
                     isDark
                       ? "text-white bg-[#170337] border-gray-600"
                       : "bg-white"
@@ -5213,7 +5241,6 @@ export default function EditContestPage({
                     {inspirationLinks.map((item, index) => (
                       <li
                         key={index}
-                       
                         className={cn(
                           "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                           isDark
@@ -5352,12 +5379,14 @@ export default function EditContestPage({
                               : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
                           )}
                         >
-                          <div className={cn(
-                            "rounded-full flex items-center justify-center w-12 h-12",
-                            isDark
-                              ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]"
-                          )}>
+                          <div
+                            className={cn(
+                              "rounded-full flex items-center justify-center w-12 h-12",
+                              isDark
+                                ? "bg-[#FFFFFF36] text-white"
+                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                            )}
+                          >
                             <ExternalLink className="w-6 h-6" />
                           </div>
                           <div className="flex-1">
@@ -5384,10 +5413,12 @@ export default function EditContestPage({
                                   )
                                 : item.url}
                             </a>
-                            <div className={cn(
-                              "text-xs mt-1",
-                              isDark ? "text-white" : "text-gray-600"
-                            )}>
+                            <div
+                              className={cn(
+                                "text-xs mt-1",
+                                isDark ? "text-white" : "text-gray-600"
+                              )}
+                            >
                               {item.description}
                             </div>
                           </div>
@@ -6106,7 +6137,7 @@ export default function EditContestPage({
                         setMaxSubmissionsPerCreator(2);
                       }
                     }}
-                     className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
                   />
                 </div>
 
@@ -6254,10 +6285,12 @@ export default function EditContestPage({
                     >
                       Additional Bonus Opportunities
                     </Label>
-                    <p className={cn(
-                      "text-sm mt-1",
-                      isDark ? "text-gray-400" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-sm mt-1",
+                        isDark ? "text-gray-400" : "text-gray-600"
+                      )}
+                    >
                       Describe other bonuses (top creator rewards, affiliate
                       links, special bonuses). Handled manually by you.
                     </p>
@@ -6268,10 +6301,10 @@ export default function EditContestPage({
                     onCheckedChange={(checked) =>
                       setBonusEnabled(checked === true)
                     }
-                     className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
                   />
                 </div>
-                
+
                 {bonusEnabled && (
                   <div className="space-y-3 pt-3 border-t border-amber-300">
                     <div className="flex items-center justify-between">
@@ -6330,10 +6363,12 @@ export default function EditContestPage({
                         />
                       </div>
                     )}
-                    <p className={cn(
-                      "text-xs",
-                      isDark ? "text-gray-400" : "text-gray-600"
-                    )}>
+                    <p
+                      className={cn(
+                        "text-xs",
+                        isDark ? "text-gray-400" : "text-gray-600"
+                      )}
+                    >
                       ℹ️ These bonuses are visible to creators but handled
                       manually by you. Use formatting and emojis to make it
                       engaging!
