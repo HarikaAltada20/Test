@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { cn } from "@/lib/utils";
+import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 
 interface ContestTileProps {
   contest: {
@@ -170,47 +171,11 @@ export default function ContestTile({
   onViewDetails,
 }: ContestTileProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const { isDark } = useAnalyticsDarkMode();
 
   // Calculate metrics from filtered submissions
   const filteredSubmissions = contest.submissions || [];
   const platform = contest.platform?.toLowerCase();
-  // Initialize mode state with proper detection to prevent flash
-  const [mode, setMode] = useState<"light" | "dark">(() => {
-    // Check if we're in browser environment
-    if (typeof window !== "undefined") {
-      // Try to get theme from data-theme attribute first
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme") as
-        | "light"
-        | "dark";
-      if (dataTheme) return dataTheme;
-
-      // Fallback to data-mode attribute
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (dataMode) return dataMode;
-      }
-
-      // Check localStorage as last resort
-      try {
-        const savedMode = localStorage.getItem("dashboard-mode") as
-          | "light"
-          | "dark";
-        if (savedMode) return savedMode;
-
-        const preset = localStorage.getItem("dashboard-preset");
-        if (preset === "game-of-creators" || preset === "dark-professional") {
-          return "dark";
-        }
-      } catch (e) {
-        // Ignore localStorage errors
-      }
-    }
-    return "light";
-  });
   // Extract metrics from nested other_stats structure
   const totalViews = filteredSubmissions.reduce((sum, sub) => {
     // Use platform-specific views from other_stats, fallback to direct views
@@ -257,52 +222,6 @@ export default function ContestTile({
   const daysRemaining = getDaysRemaining(contest.end_date);
   const isActive = daysRemaining > 0;
   const status = isActive ? "Active" : "Completed";
-  // Read mode from data attribute with immediate updates
-  useEffect(() => {
-    const checkMode = () => {
-      const modeElement = document.querySelector("[data-mode]");
-      if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode && currentMode !== mode) {
-          setMode(currentMode);
-        }
-      }
-    };
-
-    // Check immediately
-    checkMode();
-
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
-    const targetNode = document.querySelector("[data-mode]");
-    if (targetNode) {
-      observer.observe(targetNode, {
-        attributes: true,
-        attributeFilter: ["data-mode"],
-      });
-    }
-
-    // Also listen for storage events to catch theme changes from other tabs
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "dashboard-mode" && e.newValue) {
-        const newMode = e.newValue as "light" | "dark";
-        if (newMode !== mode) {
-          setMode(newMode);
-        }
-      }
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-
-    return () => {
-      if (observer) observer.disconnect();
-      window.removeEventListener("storage", handleStorageChange);
-    };
-  }, [mode]);
-
-  const isDark = mode === "dark";
   // Platform-specific metrics
   const getPlatformMetrics = () => {
     const platform = contest.platform?.toLowerCase();
@@ -368,7 +287,7 @@ export default function ContestTile({
     <div
       className={`transition-all duration-300 rounded-xl hover:shadow-lg cursor-pointer group border hover:border-purple-300 ${
         isDark
-          ? ` ${isHovered ? "shadow-lg border-purple-300" : "border-gray-600"}`
+          ? `bg-[#06021D] ${isHovered ? "shadow-lg border-purple-300" : "border-gray-600"}`
           : `bg-white ${
               isHovered ? "shadow-lg border-purple-300" : "border-gray-400"
             }`
