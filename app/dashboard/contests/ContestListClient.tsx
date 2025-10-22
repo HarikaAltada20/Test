@@ -627,11 +627,16 @@ export function ContestListClient({
               {contest.title || "Untitled Contest"}
             </CardTitle>
             {/* New Features Indicators */}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
+            <div className="flex flex-wrap items-center gap-2 mt-3">
               {contest.multiple_submissions_enabled && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-purple-50 text-purple-700 border-purple-200"
+                  className={cn(
+                    "text-[12px]",
+                    isDark
+                      ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                      : "bg-purple-50 text-purple-700 border-purple-200"
+                  )}
                 >
                   <CheckCheck className="h-3 w-3 mr-1" />
                   {(contest.max_submissions_per_creator ?? 1) > 1
@@ -644,7 +649,12 @@ export function ContestListClient({
                   ?.flat_fee_bonus) && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-green-50 text-green-700 border-green-200"
+                  className={cn(
+                    "text-[12px]",
+                    isDark
+                      ? "bg-green-900/30 text-green-300 border-green-700/50"
+                      : "bg-green-50 text-green-700 border-green-200"
+                  )}
                 >
                   <Gift className="h-3 w-3 mr-1" />
                   {formatMoney(
@@ -660,7 +670,12 @@ export function ContestListClient({
               {contest.content_type && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                  className={cn(
+                    "text-[12px]",
+                    isDark
+                      ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  )}
                 >
                   <Tag className="h-3 w-3 mr-1" />
                   {contest.content_type.toUpperCase()}
@@ -669,7 +684,12 @@ export function ContestListClient({
               {contest.bonus_details?.description_html && (
                 <Badge
                   variant="outline"
-                  className="text-xs bg-amber-50 text-amber-700 border-amber-200"
+                  className={cn(
+                    "text-[12px]",
+                    isDark
+                      ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  )}
                 >
                   <Star className="h-3 w-3 mr-1" />
                   Bonus Available
@@ -1428,25 +1448,32 @@ export function ContestListClient({
         className="w-full mb-8"
       >
         <TabsList className="flex gap-6">
-          <TabsTrigger value="all"
+          <TabsTrigger
+            value="all"
             className={cn(
               "border",
-              isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-            )}>
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
+          >
             All{" "}
             <Badge
               variant="secondary"
               className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-              
             >
               {contestsByStatus.all.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="draft"
-          className={cn(
-            "border",
-            isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-          )}>
+          <TabsTrigger
+            value="draft"
+            className={cn(
+              "border",
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
+          >
             Draft{" "}
             <Badge
               variant="secondary"
@@ -1456,10 +1483,12 @@ export function ContestListClient({
             </Badge>
           </TabsTrigger>
           <TabsTrigger
-         className={cn(
-          "border",
-          isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-        )}
+            className={cn(
+              "border",
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
             value="pending_approval"
           >
             Pending Approval{" "}
@@ -1470,11 +1499,15 @@ export function ContestListClient({
               {contestsByStatus.pending_approval.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="ready"
-          className={cn(
-            "border",
-            isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-          )}>
+          <TabsTrigger
+            value="ready"
+            className={cn(
+              "border",
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
+          >
             Ready{" "}
             <Badge
               variant="secondary"
@@ -1483,10 +1516,15 @@ export function ContestListClient({
               {contestsByStatus.ready.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="active" className={cn(
+          <TabsTrigger
+            value="active"
+            className={cn(
               "border",
-              isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-            )}>
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
+          >
             Active{" "}
             <Badge
               variant="secondary"
@@ -1498,7 +1536,9 @@ export function ContestListClient({
           <TabsTrigger
             className={cn(
               "border",
-              isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
             )}
             value="pending_verification"
           >
@@ -1510,11 +1550,15 @@ export function ContestListClient({
               {contestsByStatus.pending_verification.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="done"
-          className={cn(
-            "border",
-            isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-          )}>
+          <TabsTrigger
+            value="done"
+            className={cn(
+              "border",
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
+          >
             Done{" "}
             <Badge
               variant="secondary"
@@ -1523,11 +1567,15 @@ export function ContestListClient({
               {contestsByStatus.done.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="rejected"
-          className={cn(
-            "border",
-            isDark ? "border-gray-400 text-white" : "border-gray-500 text-gray-800"
-          )}>
+          <TabsTrigger
+            value="rejected"
+            className={cn(
+              "border",
+              isDark
+                ? "border-gray-400 text-white"
+                : "border-gray-500 text-gray-800"
+            )}
+          >
             Rejected{" "}
             <Badge
               variant="secondary"

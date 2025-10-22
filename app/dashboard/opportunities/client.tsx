@@ -803,7 +803,12 @@ export default function OpportunitiesPage({
                       {contest.multiple_submissions_enabled && (
                         <Badge
                           variant="outline"
-                          className="text-xs bg-purple-50 text-purple-700 border-purple-200"
+                          className={cn(
+                            "text-[12px]",
+                            isDark
+                              ? "bg-purple-900/30 text-purple-300 border-purple-700/50"
+                              : "bg-purple-50 text-purple-700 border-purple-200"
+                          )}
                         >
                           <CheckCheck className="h-3 w-3 mr-1" />
                           {contest.max_submissions_per_creator > 1
@@ -817,7 +822,12 @@ export default function OpportunitiesPage({
                           ?.flat_fee_bonus) && (
                         <Badge
                           variant="outline"
-                          className="text-xs bg-green-50 text-green-700 border-green-200"
+                          className={cn(
+                            "text-[12px]",
+                            isDark
+                              ? "bg-green-900/30 text-green-300 border-green-700/50"
+                              : "bg-green-50 text-green-700 border-green-200"
+                          )}
                         >
                           <Gift className="h-3 w-3 mr-1" />
                           {formatMoney(
@@ -833,7 +843,12 @@ export default function OpportunitiesPage({
                       {contest.content_type && (
                         <Badge
                           variant="outline"
-                          className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                          className={cn(
+                            "text-[12px]",
+                            isDark
+                              ? "bg-blue-900/30 text-blue-300 border-blue-700/50"
+                              : "bg-blue-50 text-blue-700 border-blue-200"
+                          )}
                         >
                           <Tag className="h-3 w-3 mr-1" />
                           {contest.content_type.toUpperCase()}
@@ -842,7 +857,12 @@ export default function OpportunitiesPage({
                       {contest.bonus_details?.description_html && (
                         <Badge
                           variant="outline"
-                          className="text-xs bg-amber-50 text-amber-700 border-amber-200"
+                          className={cn(
+                            "text-[12px]",
+                            isDark
+                              ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          )}
                         >
                           <Star className="h-3 w-3 mr-1" />
                           Bonus Available
