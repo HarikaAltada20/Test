@@ -3962,12 +3962,19 @@ export function ContestClientPage({
                             <Dialog
                               open={showAllSubmissionsModal}
                               onOpenChange={setShowAllSubmissionsModal}
+                              isdark={isDark}
                             >
                               <DialogTrigger asChild>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  className="w-full text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
+                                
+                                  className={cn(
+                                    "w-full text-xs border",
+                                    isDark
+                                      ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                                      : "bg-white border-slate-200 hover:bg-slate-50"
+                                  )}
                                 >
                                   <ListOrdered className="h-3 w-3 mr-2" />
                                   View All Your Submissions (
@@ -3992,7 +3999,13 @@ export function ContestClientPage({
                                       (contest as any).bonus_details
                                         ?.description_html) && (
                                       <div className="flex justify-center mt-4">
-                                        <div className="flex bg-white dark:bg-slate-700 rounded-lg p-1 shadow-sm border border-slate-200 dark:border-slate-600">
+                                        <div 
+                                         className={cn(
+                                          "flex rounded-lg p-1",
+                                          isDark
+                                            ? "bg-[#170337]"
+                                            : "bg-white dark:bg-slate-700 shadow-sm border border-slate-200 dark:border-slate-600"
+                                        )}>
                                           <Button
                                             variant={
                                               modalViewMode === "simple"
@@ -4038,7 +4051,10 @@ export function ContestClientPage({
                                 <div className="flex-1 overflow-y-auto space-y-3 pr-2">
                                   {getUserSubmissions().length === 0 ? (
                                     <div className="text-center py-8">
-                                      <p className="text-slate-600 dark:text-slate-400">
+                                      <p className={cn(
+                                        "text-sm",
+                                        isDark ? "text-gray-400" : "text-gray-600"
+                                      )}>
                                         No submissions found
                                       </p>
                                     </div>
@@ -4103,14 +4119,24 @@ export function ContestClientPage({
                                                 ) {
                                                   prizeDisplay = (
                                                     <div className="space-y-1">
-                                                      <div className="font-semibold text-green-600 dark:text-green-400 text-sm">
+                                                      <div className={cn(
+                                                        "font-semibold text-green-600 dark:text-green-400 text-sm",
+                                                        isDark ? "text-green-400" : "text-green-600"
+                                                      )}>
                                                         {earningsLabel}:{" "}
                                                         {formatMoney(
                                                           totalEarnings
                                                         )}
                                                       </div>
-                                                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-md border border-green-200 dark:border-green-800">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                                      <div className={cn(
+                                                        "flex flex-wrap items-center gap-1.5 text-xs",
+                                                        isDark ? "text-green-400 bg-green-900/20 border border-green-800" : "text-green-600 bg-green-50 border border-green-200"
+                                                      )}>
+                                                        <div className={cn(
+                                                          "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                                          isDark ? "bg-green-400" : "bg-green-500"
+                                                        )}>
+                                                        </div>
                                                         <span className="whitespace-nowrap">
                                                           {formatMoney(
                                                             submission.earnings
@@ -4119,7 +4145,10 @@ export function ContestClientPage({
                                                             ? "CPM"
                                                             : "Prize"}
                                                         </span>
-                                                        <span className="text-green-600 dark:text-green-400">
+                                                        <span className={cn(
+                                                          "text-green-600 dark:text-green-400",
+                                                          isDark ? "text-green-400" : "text-green-600"
+                                                        )}>
                                                           +
                                                         </span>
                                                         <span className="whitespace-nowrap">
@@ -4133,7 +4162,10 @@ export function ContestClientPage({
                                                   );
                                                 } else {
                                                   prizeDisplay = (
-                                                    <span className="font-semibold text-green-600 dark:text-green-400">
+                                                    <span className={cn(
+                                                      "font-semibold text-green-600 dark:text-green-400",
+                                                      isDark ? "text-green-400" : "text-green-600"
+                                                    )}>
                                                       {earningsLabel}:{" "}
                                                       {formatMoney(
                                                         totalEarnings
@@ -4165,14 +4197,20 @@ export function ContestClientPage({
                                                           submission.user_platform_username
                                                         }
                                                       />
-                                                      <AvatarFallback className="bg-primary/20 text-primary">
+                                                      <AvatarFallback className={cn(
+                                                        "bg-primary/20 text-primary",
+                                                        isDark ? "text-primary-foreground" : "text-primary"
+                                                      )}>
                                                         {submission.user_platform_username?.[0]?.toUpperCase() ||
                                                           "U"}
                                                       </AvatarFallback>
                                                     </Avatar>
                                                     <div className="flex-grow min-w-0">
                                                       <div className="flex items-center gap-2 mb-1">
-                                                        <p className="text-sm sm:text-base font-semibold text-primary dark:text-primary-foreground truncate">
+                                                        <p className={cn(
+                                                          "text-sm sm:text-base font-semibold truncate",
+                                                          isDark ? "text-primary-foreground" : "text-primary"
+                                                        )}>
                                                           {
                                                             submission.user_platform_username
                                                           }{" "}
@@ -4184,13 +4222,19 @@ export function ContestClientPage({
                                                           submission.status
                                                         )}
                                                       </div>
-                                                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-2">
+                                                      <p className={cn(
+                                                        "text-xs text-slate-600 dark:text-slate-400 mb-2",
+                                                        isDark ? "text-gray-400" : "text-gray-600"
+                                                      )}>
                                                         Submitted:{" "}
                                                         {formatTimeAgo(
                                                           submission.created_at
                                                         )}
                                                       </p>
-                                                      <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+                                                      <div className={cn(
+                                                        "flex items-center gap-4 text-xs",
+                                                        isDark ? "text-gray-400" : "text-gray-600"
+                                                      )}>
                                                         <div className="flex items-center gap-1">
                                                           <Eye className="h-3 w-3" />
                                                           {submission.views.toLocaleString()}{" "}

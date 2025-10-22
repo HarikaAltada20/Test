@@ -5424,7 +5424,12 @@ export default function EditContestPage({
                           </div>
                           <button
                             onClick={() => removeTrackingLink(index)}
-                            className="text-[#4A00BE] bg-[#D8C3FF] p-3 mr-2 rounded-full"
+                            className={cn(
+                              "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
+                              isDark
+                                ? "bg-[#FFFFFF36] text-white"
+                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                            )}
                           >
                             <Trash className="h-4 w-4" />
                           </button>
@@ -5452,7 +5457,7 @@ export default function EditContestPage({
                 className={cn(
                   "cursor-not-allowed",
                   isDark
-                    ? "bg-[#180438] border border-gray-600 text-white"
+                    ? "bg-[#180438] border border-gray-600 text-gray-400"
                     : "bg-gray-100"
                 )}
               />
@@ -6312,7 +6317,7 @@ export default function EditContestPage({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
+                        size="sm"                    
                         onClick={() => {
                           if (
                             !showBonusPreview &&
@@ -6325,7 +6330,11 @@ export default function EditContestPage({
                           }
                           setShowBonusPreview(!showBonusPreview);
                         }}
-                        className="text-xs"
+                    
+                        className={cn(
+                          "text-sm font-semibold",
+                          isDark ? "bg-[#7F39EC] text-white" : "border border-[#4A00BE] text-[#4A00BE]"
+                        )}
                       >
                         {showBonusPreview ? "Edit" : "Preview"}
                       </Button>

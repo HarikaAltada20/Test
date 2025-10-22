@@ -632,31 +632,41 @@ export default function ContestDetailClient({
         return {
           text: "Pending",
           icon: <AlertTriangle className="h-3 w-3 mr-1.5" />,
-          className: "bg-yellow-100 text-yellow-700 border-yellow-300",
+          className: isDark
+            ? "bg-yellow-900/30 text-yellow-300 border-yellow-500/50"
+            : "bg-yellow-100 text-yellow-700 border-yellow-300",
         };
       case "verified":
         return {
           text: "Verified",
-          icon: <CheckCircle2 className="h-3 w-3 mr-1.5" />,
-          className: "bg-green-100 text-green-700 border-green-300",
+          icon: <CheckCircle2 className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-green-900/40 text-green-300 border-green-500/50"
+            : "bg-green-100 text-green-700 border-green-300",
         };
       case "rejected":
         return {
           text: "Rejected",
-          icon: <XCircle className="h-3 w-3 mr-1.5" />,
-          className: "bg-red-100 text-red-700 border-red-300",
+          icon: <XCircle className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-red-900/40 text-red-300 border-red-500/50"
+            : "bg-red-100 text-red-700 border-red-300",
         };
       case "paid":
         return {
           text: "Paid",
-          icon: <DollarSign className="h-3 w-3 mr-1.5" />,
-          className: "bg-sky-100 text-sky-700 border-sky-300",
+          icon: <DollarSign className="h-3 w-3" />,
+          className: isDark
+            ? "bg-sky-900/40 text-sky-200 border-sky-500/50"
+            : "bg-sky-100 text-sky-700 border-sky-300",
         };
       default:
         return {
           text: "Unknown",
-          icon: <AlertTriangle className="h-3 w-3 mr-1.5" />,
-          className: "bg-gray-100 text-gray-700 border-gray-300",
+          icon: <AlertTriangle className="h-3 w-3 mr-1" />,
+          className: isDark
+            ? "bg-gray-900/30 text-gray-300 border-gray-500/50"
+            : "bg-gray-100 text-gray-700 border-gray-300",
         };
     }
   };
@@ -4945,6 +4955,12 @@ export default function ContestDetailClient({
                                         <Button
                                           size="sm"
                                           variant="outline"
+                                          className={cn(
+                                            "border",
+                                            isDark
+                                              ? "bg-[#170337] border-gray-600 text-white"
+                                              : "border-gray-400 bg-white text-gray-800"
+                                          )}
                                           onClick={() =>
                                             setSelectedCreatorForModal(
                                               group.creator.id
@@ -5150,13 +5166,14 @@ export default function ContestDetailClient({
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
-                      <div 
+                      <div
                         className={cn(
                           "w-10 h-10 flex items-center justify-center rounded-full ",
                           isDark
                             ? "bg-[#FFFFFF42] text-white"
                             : "bg-purple-100 text-[#4A00BE]"
-                        )}>
+                        )}
+                      >
                         <Users className="h-5 w-5 " />
                       </div>
                     </CardContent>
@@ -5187,13 +5204,14 @@ export default function ContestDetailClient({
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
-                      <div 
+                      <div
                         className={cn(
                           "w-10 h-10 flex items-center justify-center rounded-full",
                           isDark
                             ? "bg-[#FFFFFF42] text-white"
                             : "bg-purple-100 text-[#4A00BE]"
-                        )}>
+                        )}
+                      >
                         <Trophy className="h-4 w-4" />
                       </div>
                     </CardContent>
@@ -5232,13 +5250,14 @@ export default function ContestDetailClient({
                         </p>
                         {/* <p className="text-md">Total entries</p> */}
                       </div>
-                      <div 
+                      <div
                         className={cn(
                           "w-10 h-10 flex items-center justify-center rounded-full",
                           isDark
                             ? "bg-[#FFFFFF42] text-white"
                             : "bg-purple-100 text-[#4A00BE]"
-                        )}>
+                        )}
+                      >
                         <Calendar className="h-4 w-4" />
                       </div>
                     </CardContent>
@@ -5291,11 +5310,14 @@ export default function ContestDetailClient({
                                 .toLocaleString() || 0}
                             </p>
                           </div>
-                          <div 
-                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full",
-                            isDark ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-600"
-                          )}>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-blue-900/50 text-blue-300"
+                                : "bg-blue-100 text-blue-600"
+                            )}
+                          >
                             <Eye className="h-5 w-5" />
                           </div>
                         </div>
@@ -5336,11 +5358,14 @@ export default function ContestDetailClient({
                                 : 0}
                             </p>
                           </div>
-                          <div 
-                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full",
-                            isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-600"
-                          )}>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-green-900/50 text-green-400"
+                                : "bg-green-100 text-green-600"
+                            )}
+                          >
                             <BarChart3 className="h-5 w-5" />
                           </div>
                         </div>
@@ -5380,11 +5405,14 @@ export default function ContestDetailClient({
                                 : 0}
                             </p>
                           </div>
-                          <div 
-                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full",
-                            isDark ? "bg-yellow-900/50 text-yellow-400" : "bg-yellow-100 text-yellow-600"
-                          )}>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-yellow-900/50 text-yellow-400"
+                                : "bg-yellow-100 text-yellow-600"
+                            )}
+                          >
                             <TrendingUp className="h-5 w-5" />
                           </div>
                         </div>
@@ -5430,11 +5458,14 @@ export default function ContestDetailClient({
                                 .toLocaleString() || 0}
                             </p>
                           </div>
-                          <div 
-                           className={cn(
-                            "w-10 h-10 flex items-center justify-center rounded-full",
-                            isDark ? "bg-purple-900/50 text-purple-300" : "bg-purple-100 text-purple-600"
-                          )}>
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full",
+                              isDark
+                                ? "bg-purple-900/50 text-purple-300"
+                                : "bg-purple-100 text-purple-600"
+                            )}
+                          >
                             <CheckCircle className="h-5 w-5" />
                           </div>
                         </div>
@@ -5527,11 +5558,14 @@ export default function ContestDetailClient({
                                     : "Total Paid"}
                                 </p>
                               </div>
-                              <div 
+                              <div
                                 className={cn(
                                   "w-10 h-10 flex items-center justify-center rounded-full",
-                                  isDark ? "bg-red-900/50 text-red-300" : "bg-red-100 text-red-600"
-                                )}>
+                                  isDark
+                                    ? "bg-red-900/50 text-red-300"
+                                    : "bg-red-100 text-red-600"
+                                )}
+                              >
                                 <DollarSign className="h-5 w-5" />
                               </div>
                             </div>
@@ -5590,11 +5624,14 @@ export default function ContestDetailClient({
                                     : "Filtered"}
                                 </p>
                               </div>
-                              <div 
+                              <div
                                 className={cn(
                                   "w-10 h-10 flex items-center justify-center rounded-full",
-                                  isDark ? "bg-blue-900/50 text-blue-300" : "bg-blue-100 text-blue-600"
-                                )}>
+                                  isDark
+                                    ? "bg-blue-900/50 text-blue-300"
+                                    : "bg-blue-100 text-blue-600"
+                                )}
+                              >
                                 <Eye className="h-5 w-5" />
                               </div>
                             </div>
@@ -5672,11 +5709,14 @@ export default function ContestDetailClient({
                                     : "Paid ÷ Views"}
                                 </p>
                               </div>
-                              <div 
+                              <div
                                 className={cn(
                                   "w-10 h-10 flex items-center justify-center rounded-full",
-                                  isDark ? "bg-green-900/50 text-green-400" : "bg-green-100 text-green-600"
-                                )}>
+                                  isDark
+                                    ? "bg-green-900/50 text-green-400"
+                                    : "bg-green-100 text-green-600"
+                                )}
+                              >
                                 <BarChart3 className="h-5 w-5" />
                               </div>
                             </div>
@@ -5725,10 +5765,14 @@ export default function ContestDetailClient({
                                     Per 1,000 views
                                   </p>
                                 </div>
-                                <div className={cn(
-                                  "w-10 h-10 flex items-center justify-center rounded-full",
-                                  isDark ? "bg-purple-900/50 text-purple-300" : "bg-purple-100 text-purple-600"
-                                )}>
+                                <div
+                                  className={cn(
+                                    "w-10 h-10 flex items-center justify-center rounded-full",
+                                    isDark
+                                      ? "bg-purple-900/50 text-purple-300"
+                                      : "bg-purple-100 text-purple-600"
+                                  )}
+                                >
                                   <TrendingUp className="h-5 w-5" />
                                 </div>
                               </div>
@@ -5790,10 +5834,14 @@ export default function ContestDetailClient({
                                     Actual rate achieved
                                   </p>
                                 </div>
-                                <div className={cn(
-                                  "w-10 h-10 flex items-center justify-center rounded-full",
-                                  isDark ? "bg-orange-900/50 text-orange-300" : "bg-orange-100 text-orange-600"
-                                )}>
+                                <div
+                                  className={cn(
+                                    "w-10 h-10 flex items-center justify-center rounded-full",
+                                    isDark
+                                      ? "bg-orange-900/50 text-orange-300"
+                                      : "bg-orange-100 text-orange-600"
+                                  )}
+                                >
                                   <BarChart3 className="h-5 w-5" />
                                 </div>
                               </div>
