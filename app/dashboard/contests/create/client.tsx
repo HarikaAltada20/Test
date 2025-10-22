@@ -4569,7 +4569,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white"
+                          : "bg-white text-black"
                       )}
                     />
                     <p className="text-sm text-muted-foreground">
@@ -4586,8 +4586,17 @@ export default function CreateContestPage({
                       (for bonuses & extras)
                     </p>
                     {totalBudget && parseFloat(totalBudget.toString()) > 0 && (
-                      <Alert className="bg-blue-100 border-blue-300">
-                        <AlertDescription className="text-blue-800">
+                      <Alert 
+                      className={cn(
+                        isDark
+                          ? "bg-blue-900/30 border-blue-900"
+                          : "bg-blue-100 border-blue-300"
+                      )}>
+                        <AlertDescription className={cn(
+                          isDark
+                            ? "text-blue-200"
+                            : "text-blue-800"
+                        )}>
                           ✓ Budget set to{" "}
                           <strong>
                             ${parseFloat(totalBudget.toString()).toFixed(2)}
@@ -4601,7 +4610,14 @@ export default function CreateContestPage({
 
               {/* Max Earnings Per Creator */}
               {multipleSubmissionsEnabled && (
-                <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div
+                  className={cn(
+                    "space-y-3 p-4 border rounded-lg",
+                    isDark
+                      ? "bg-blue-950/50 border-blue-800"
+                      : "bg-blue-50 border-blue-200"
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🎯</span>
                     <Label
@@ -4617,6 +4633,11 @@ export default function CreateContestPage({
                     min="0"
                     step="0.01"
                     value={maxEarningsPerCreator}
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                     onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
                     placeholder="e.g., 500 for $500 max per creator"
                   />
@@ -4630,8 +4651,18 @@ export default function CreateContestPage({
                   </p>
                   {maxEarningsPerCreator &&
                     parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                      <Alert className="bg-blue-100 border-blue-300">
-                        <AlertDescription className="text-blue-800">
+                      <Alert
+                        className={cn(
+                          isDark
+                            ? "bg-blue-900/30 border-blue-900"
+                            : "bg-blue-100 border-blue-300"
+                        )}
+                      >
+                        <AlertDescription
+                          className={cn(
+                            isDark ? "text-blue-200" : "text-blue-800"
+                          )}
+                        >
                           ℹ️ Each creator can earn up to{" "}
                           <strong>
                             $
@@ -4672,8 +4703,6 @@ export default function CreateContestPage({
                       setBonusEnabled(checked === true)
                     }
                     className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
-                      
-                  
                   />
                 </div>
                 <p className="text-sm text-muted-foreground">

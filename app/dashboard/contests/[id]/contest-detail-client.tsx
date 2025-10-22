@@ -2289,7 +2289,7 @@ export default function ContestDetailClient({
                       <img
                         src={currentContest.thumbnail_url}
                         alt={`${currentContest.title} thumbnail`}
-                        className="max-w-full max-h-80 object-contain border rounded-lg shadow-sm"
+                        className="max-w-full max-h-80 object-contain shadow-sm"
                       />
                     </div>
                   </div>
