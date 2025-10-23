@@ -46,7 +46,7 @@ export interface CoinTransaction {
   withdrawal_request_id?: string | null; // Added for linking to withdrawal requests
 }
 
-export type PayoutMethodType = "crypto" | "upi" | "bank_transfer";
+export type PayoutMethodType = "crypto" | "upi" | "bank_transfer" | "phantom";
 
 // For the 'user_payout_info' table
 export interface PayoutMethod {
@@ -65,6 +65,13 @@ export interface CryptoPayoutDetails {
   network: string;
 }
 
+export interface PhantomPayoutDetails {
+  wallet_address: string;
+  preferred_token: 'USDC' | 'USDT';
+  network: 'devnet' | 'mainnet';
+  friendly_name?: string;
+}
+
 export interface UpiPayoutDetails {
   upi_id: string;
 }
@@ -79,7 +86,7 @@ export interface BankPayoutDetails {
   country: string;
 }
 
-export type PayoutMethodDetails = CryptoPayoutDetails | UpiPayoutDetails | BankPayoutDetails;
+export type PayoutMethodDetails = CryptoPayoutDetails | UpiPayoutDetails | BankPayoutDetails | PhantomPayoutDetails;
 
 // For creator earnings props
 export interface EarningsClientPageProps {

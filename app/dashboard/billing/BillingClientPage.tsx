@@ -55,6 +55,7 @@ import {
   CreditCard,
   Landmark,
   Wallet as CryptoWalletIcon,
+  Wallet,
   Sparkles,
   Power,
   Loader2,
@@ -88,6 +89,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -148,6 +150,7 @@ export default function BillingClientPage({
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
   const [isTopUpModalOpen, setIsTopUpModalOpen] = useState(false);
+  const [isPhantomModalOpen, setIsPhantomModalOpen] = useState(false);
   const [currentPayoutMethod, setCurrentPayoutMethod] =
     useState<PayoutMethod | null>(null);
   const [activeTabModal, setActiveTabModal] = useState<"cash" | "coins">(
@@ -203,6 +206,8 @@ export default function BillingClientPage({
         return `UPI: ${method.details?.upi_id || 'N/A'} (${method.friendly_name || 'UPI'})`;
       case "bank_transfer":
         return `Bank: ...${method.details?.account_number?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Bank'})`;
+      case "phantom":
+        return `Phantom: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Phantom Wallet'})`;
       default:
         return "Unknown Method Type";
     }
@@ -574,6 +579,8 @@ export default function BillingClientPage({
         return <Sparkles className="h-5 w-5 mr-3 text-purple-500" />;
       case "bank_transfer":
         return <Landmark className="h-5 w-5 mr-3 text-blue-500" />;
+      case "phantom":
+        return <Wallet className="h-5 w-5 mr-3 text-purple-600" />;
       default:
         return <CreditCard className="h-5 w-5 mr-3 text-gray-500" />;
     }
@@ -614,7 +621,7 @@ export default function BillingClientPage({
     return (
       <div className="container mx-auto py-8 px-4 md:px-6">
         <div className="flex items-center justify-center h-64">
-          <PageLoadingSpinner mode="light"/>
+          <PageLoadingSpinner mode="light" />
           <p>Loading billing data or not authenticated...</p>
         </div>
       </div>
@@ -658,7 +665,7 @@ export default function BillingClientPage({
       {/* Cash Account Tab */}
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
-        <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
+          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
             {/*Total Spent*/}
             <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4 flex justify-between">
@@ -1359,54 +1366,56 @@ export default function BillingClientPage({
               className="w-full"
             >
               {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-3 gap-4">
+                <TabsList className="grid w-full grid-cols-4 gap-2">
                   <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500"value="bank_transfer">Bank Transfer</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="bank_transfer">Bank Transfer</TabsTrigger>
                   <TabsTrigger className="border border-gray-500" value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="phantom">Phantom Wallet</TabsTrigger>
                 </TabsList>
               ) : (
-                <TabsList className="grid w-full grid-cols-1">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger value="phantom">Phantom Wallet</TabsTrigger>
                 </TabsList>
               )}
 
               <TabsContent value="crypto" className="pt-4 space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameCrypto"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My Binance USDT"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameCrypto"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My Binance USDT"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoNetwork">Network</Label>
-                <Select
-                  value={cryptoNetwork}
-                  onValueChange={(val) => setCryptoNetwork(val)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BNB_BEP20">
-                      BNB Smart Chain (BEP20)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Label htmlFor="cryptoNetwork">Network</Label>
+                  <Select
+                    value={cryptoNetwork}
+                    onValueChange={(val) => setCryptoNetwork(val)}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BNB_BEP20">
+                        BNB Smart Chain (BEP20)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
-                <Input
-                  id="cryptoAddress"
-                  value={cryptoAddress}
-                  onChange={(e) => setCryptoAddress(e.target.value)}
-                  placeholder={`Enter your ${cryptoNetwork} wallet address`}
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
+                  <Input
+                    id="cryptoAddress"
+                    value={cryptoAddress}
+                    onChange={(e) => setCryptoAddress(e.target.value)}
+                    placeholder={`Enter your ${cryptoNetwork} wallet address`}
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
                   We only support BNB Smart Chain (BEP20). Do not enter
@@ -1421,16 +1430,16 @@ export default function BillingClientPage({
 
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameBank"
-                 
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., Primary Savings"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameBank"
+
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., Primary Savings"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -1481,35 +1490,35 @@ export default function BillingClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameUpi"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My UPI"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameUpi"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My UPI"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="upiHolder">Account Holder Name</Label>
-                <Input
-                  id="upiHolder"
-                  value={bankAccountHolder}
-                  onChange={(e) => setBankAccountHolder(e.target.value)}
-                  placeholder="e.g., Rahul Kumar"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiHolder">Account Holder Name</Label>
+                  <Input
+                    id="upiHolder"
+                    value={bankAccountHolder}
+                    onChange={(e) => setBankAccountHolder(e.target.value)}
+                    placeholder="e.g., Rahul Kumar"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="upiId">UPI ID</Label>
-                <Input
-                  id="upiId"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="yourname@bank"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiId">UPI ID</Label>
+                  <Input
+                    id="upiId"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="yourname@bank"
+                    disabled={isLoading}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   UPI withdrawals are instant and usually free. You are
@@ -1517,11 +1526,32 @@ export default function BillingClientPage({
                   as per Indian law.
                 </p>
               </TabsContent>
+
+              <TabsContent value="phantom" className="space-y-4">
+                <div className="text-center py-8">
+                  <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Phantom Wallet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Add your Phantom Wallet to receive USDC or USDT payouts directly to your wallet.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      // Close current modal and open Phantom form
+                      setIsPayoutModalOpen(false);
+                      setIsPhantomModalOpen(true);
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Add Phantom Wallet
+                  </Button>
+                </div>
+              </TabsContent>
             </Tabs>
           </div>
           <DialogFooter>
-          <Button  onClick={handleSavePayoutMethod} disabled={isLoading}
-             className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
+            <Button onClick={handleSavePayoutMethod} disabled={isLoading}
+              className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
@@ -1533,7 +1563,7 @@ export default function BillingClientPage({
                 Cancel
               </Button>
             </DialogClose>
-            
+
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
@@ -1563,7 +1593,7 @@ export default function BillingClientPage({
                         <Button
                           variant="ghost"
                           size="sm"
-                           className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
+                          className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
                           onClick={() =>
                             handleSetDefaultPayoutMethod(method.id)
                           }
@@ -1577,7 +1607,7 @@ export default function BillingClientPage({
                         size="icon"
                         onClick={() => handleEditPayoutMethod(method)}
                         disabled={isLoading}
-                         className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
+                        className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
                       >
                         <Edit3 className="h-4 w-4" />
                       </Button>
@@ -1717,9 +1747,9 @@ export default function BillingClientPage({
             )}
           </div>
           <DialogFooter>
-           
+
             <Button
-            className="w-full py-6 rounded-full text-md"
+              className="w-full py-6 rounded-full text-md"
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
               loadingText="Processing..."
@@ -1742,7 +1772,7 @@ export default function BillingClientPage({
               Request Withdrawal
             </Button>
             <DialogClose asChild>
-              <Button disabled={isLoading}  className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
                 Cancel
               </Button>
             </DialogClose>
@@ -1796,6 +1826,49 @@ export default function BillingClientPage({
               onProcessingChange={setIsProcessingPayment}
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Phantom Wallet Modal */}
+      <Dialog open={isPhantomModalOpen} onOpenChange={setIsPhantomModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogTitle className="sr-only">Add Phantom Wallet</DialogTitle>
+          <PhantomPayoutForm
+            onSave={async (details) => {
+              // Save Phantom Wallet payout method
+              setIsLoading(true);
+              try {
+                const { error } = await supabase
+                  .from('payout_methods')
+                  .insert({
+                    user_id: authUser.id,
+                    method_type: 'phantom',
+                    details,
+                    is_default: payoutMethods.length === 0, // Set as default if first method
+                    friendly_name: details.friendly_name || 'Phantom Wallet'
+                  });
+
+                if (error) throw error;
+
+                // Refresh payout methods
+                const { data: newMethods } = await supabase
+                  .from('payout_methods')
+                  .select('*')
+                  .eq('user_id', authUser.id)
+                  .order('created_at', { ascending: false });
+
+                setPayoutMethods(newMethods || []);
+                setIsPhantomModalOpen(false);
+                toast.success('Phantom Wallet added successfully!');
+              } catch (error: any) {
+                toast.error(error.message || 'Failed to add Phantom Wallet');
+              } finally {
+                setIsLoading(false);
+              }
+            }}
+            onCancel={() => setIsPhantomModalOpen(false)}
+            isLoading={isLoading}
+          />
         </DialogContent>
       </Dialog>
     </div>

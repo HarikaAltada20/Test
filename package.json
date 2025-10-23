@@ -10,7 +10,9 @@
     "update:db": "node scripts/update_db_views.js",
     "update:storage": "node scripts/update_storage_config.js",
     "update:all": "node scripts/update_all.js",
-    "convert-images": "node ./scripts/convert-images.mjs"
+    "convert-images": "node ./scripts/convert-images.mjs",
+    "refund-old-withdrawals": "node scripts/refund-old-rejected-withdrawals.js",
+    "test-phantom-wallet": "node scripts/test-phantom-wallet-integration.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -41,6 +43,8 @@
     "@radix-ui/react-toggle": "^1.1.1",
     "@radix-ui/react-toggle-group": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
+    "@solana/spl-token": "^0.4.14",
+    "@solana/web3.js": "^1.98.4",
     "@stripe/react-stripe-js": "^3.8.1",
     "@stripe/stripe-js": "^7.7.0",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
@@ -57,6 +61,7 @@
     "@tiptap/starter-kit": "^2.12.0",
     "@vercel/analytics": "^1.5.0",
     "autoprefixer": "^10.4.20",
+    "bs58": "^6.0.0",
     "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

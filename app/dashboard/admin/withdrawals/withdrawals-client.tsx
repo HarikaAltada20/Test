@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { RefundOldWithdrawalsButton } from "@/components/admin/RefundOldWithdrawalsButton";
 import {
     Eye,
     Clock,
@@ -21,7 +22,8 @@ import {
     Mail,
     Calendar,
     CreditCard,
-    Settings
+    Settings,
+    Wallet
 } from "lucide-react";
 
 type Request = {
@@ -61,7 +63,10 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
         const paid = requests
             .filter((r) => r.status === "processed" || r.status === "approved")
             .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
-        return { all, pending, paid };
+        const rejected = requests
+            .filter((r) => r.status === "rejected" || r.status === "cancelled")
+            .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
+        return { all, pending, paid, rejected };
     }, [requests]);
 
     const updateStatus = async (id: string, newStatus: string, extras?: { transaction_reference?: string; admin_notes?: string }) => {
@@ -120,12 +125,28 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
         setDetailsOpen(true);
     };
 
+    const getPaymentMethodIcon = (r: Request) => {
+        const type = (r.payout_method_type_snapshot || "").toLowerCase();
+        if (type === "phantom") return Wallet;
+        if (type === "crypto") return CreditCard;
+        if (type === "upi") return CreditCard;
+        if (type === "bank_transfer") return CreditCard;
+        return CreditCard;
+    };
+
+    const getPaymentMethodColor = (r: Request) => {
+        const type = (r.payout_method_type_snapshot || "").toLowerCase();
+        if (type === "phantom") return "text-purple-600 dark:text-purple-400";
+        return "text-orange-600 dark:text-orange-400";
+    };
+
     const formatPayoutSummary = (r: Request) => {
         const type = (r.payout_method_type_snapshot || "").toLowerCase();
         const d: any = r.payout_method_details_snapshot || {};
         if (type === "upi") return `UPI: ${d?.upi_id || ""} (${d?.account_holder_name || ""})`;
         if (type === "crypto") return `${(d?.network || "").toUpperCase()} Wallet: ${d?.wallet_address || ""}`;
         if (type === "bank_transfer") return `Bank • ${d?.account_holder_name || ""} • ****${String(d?.account_number || "").slice(-4)} • ${d?.ifsc_code || d?.swift_bic_code || ""}`;
+        if (type === "phantom") return `Phantom Wallet • ${d?.preferred_token || "USDC"} • ${d?.wallet_address || ""} • ${d?.network || "devnet"}`;
         return type ? `${type}: ${JSON.stringify(d)}` : "Unknown method";
     };
 
@@ -379,11 +400,12 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
     const allRows = requests;
     const pendingRows = requests.filter((r) => r.status === "pending" || r.status === "in_review");
     const paidRows = requests.filter((r) => r.status === "processed" || r.status === "approved");
+    const rejectedRows = requests.filter((r) => r.status === "rejected" || r.status === "cancelled");
 
     return (
         <TooltipProvider>
             <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-4">
                     <Card>
                         <CardHeader>
                             <CardTitle>Total</CardTitle>
@@ -408,6 +430,26 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                             <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.paid)}</div>
                         </CardContent>
                     </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Rejected</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-red-600">{formatCurrencyFromCents(totals.rejected)}</div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Refund Old Withdrawals Button - Minimized */}
+                <div className="flex justify-end">
+                    <details className="group">
+                        <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                            Additional Controls
+                        </summary>
+                        <div className="mt-2 p-3 border rounded-lg bg-muted/30">
+                            <RefundOldWithdrawalsButton />
+                        </div>
+                    </details>
                 </div>
 
                 <Tabs defaultValue="all">
@@ -415,10 +457,12 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                         <TabsTrigger value="all">All</TabsTrigger>
                         <TabsTrigger value="pending">Pending</TabsTrigger>
                         <TabsTrigger value="paid">Paid</TabsTrigger>
+                        <TabsTrigger value="rejected">Rejected</TabsTrigger>
                     </TabsList>
                     <TabsContent value="all">{renderTable(allRows)}</TabsContent>
                     <TabsContent value="pending">{renderTable(pendingRows)}</TabsContent>
                     <TabsContent value="paid">{renderTable(paidRows)}</TabsContent>
+                    <TabsContent value="rejected">{renderTable(rejectedRows)}</TabsContent>
                 </Tabs>
 
                 {/* Enhanced Details Modal */}
@@ -519,13 +563,40 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                                     <CardContent className="pt-0">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
-                                                <CreditCard className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                                {(() => {
+                                                    const IconComponent = getPaymentMethodIcon(active);
+                                                    const colorClass = getPaymentMethodColor(active);
+                                                    return <IconComponent className={`h-4 w-4 ${colorClass}`} />;
+                                                })()}
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <p className="text-xs font-medium text-muted-foreground">Payment Method</p>
-                                                <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded mt-1 break-all">
-                                                    {formatPayoutSummary(active)}
-                                                </p>
+                                                <div className="text-sm bg-muted/50 px-2 py-1 rounded mt-1">
+                                                    {(() => {
+                                                        const type = (active.payout_method_type_snapshot || "").toLowerCase();
+                                                        const d: any = active.payout_method_details_snapshot || {};
+
+                                                        if (type === "phantom") {
+                                                            return (
+                                                                <div className="space-y-1">
+                                                                    <div className="font-medium">Phantom Wallet</div>
+                                                                    <div className="text-xs text-muted-foreground">
+                                                                        Token: {d?.preferred_token || "USDC"} • Network: {d?.network || "devnet"}
+                                                                    </div>
+                                                                    <div className="font-mono text-xs break-all bg-background/50 p-1 rounded">
+                                                                        {d?.wallet_address || "No address"}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <p className="font-mono break-all">
+                                                                {formatPayoutSummary(active)}
+                                                            </p>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </div>
                                         </div>
                                     </CardContent>

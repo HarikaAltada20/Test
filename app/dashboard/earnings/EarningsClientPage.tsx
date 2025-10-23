@@ -51,6 +51,7 @@ import {
   CreditCard,
   Landmark,
   Wallet as CryptoWalletIcon, // Renamed to avoid conflict
+  Wallet,
   Sparkles,
   Power,
   Loader2,
@@ -76,6 +77,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
+import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -142,6 +144,7 @@ export default function EarningsClientPage({
   // Modal States (same as before)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
+  const [isPhantomModalOpen, setIsPhantomModalOpen] = useState(false);
   const [currentPayoutMethod, setCurrentPayoutMethod] =
     useState<PayoutMethod | null>(null);
   const [selectedPayoutType, setSelectedPayoutType] =
@@ -194,19 +197,18 @@ export default function EarningsClientPage({
   const getPayoutMethodSummary = (method: PayoutMethod): string => {
     switch (method.method_type) {
       case "crypto":
-        return `${
-          method.details?.network?.toUpperCase() || "Crypto"
-        } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${
-          method.friendly_name || "Crypto"
-        })`;
+        return `${method.details?.network?.toUpperCase() || "Crypto"
+          } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${method.friendly_name || "Crypto"
+          })`;
       case "upi":
-        return `UPI: ${method.details?.upi_id || "N/A"} (${
-          method.friendly_name || "UPI"
-        })`;
+        return `UPI: ${method.details?.upi_id || "N/A"} (${method.friendly_name || "UPI"
+          })`;
       case "bank_transfer":
-        return `Bank: ...${
-          method.details?.account_number?.slice(-4) || "XXXX"
-        } (${method.friendly_name || "Bank"})`;
+        return `Bank: ...${method.details?.account_number?.slice(-4) || "XXXX"
+          } (${method.friendly_name || "Bank"})`;
+      case "phantom":
+        return `Phantom: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${method.friendly_name || "Phantom Wallet"
+          })`;
       default:
         const exhaustiveCheck: never = method.method_type;
         return "Unknown Method Type";
@@ -312,6 +314,10 @@ export default function EarningsClientPage({
       if (bankBranchName.trim())
         bankDetails.branch_name = bankBranchName.trim();
       details = bankDetails;
+    } else if (selectedPayoutType === "phantom") {
+      // For Phantom Wallet, we'll use a separate form component
+      toast.error("Please use the dedicated Phantom Wallet form to add your wallet.");
+      return;
     } else {
       const exhaustiveCheck: never = selectedPayoutType;
       toast.error("Invalid payout method type selected.");
@@ -353,8 +359,7 @@ export default function EarningsClientPage({
           }
         });
         toast.success(
-          `Payout method ${
-            currentPayoutMethod ? "updated" : "added"
+          `Payout method ${currentPayoutMethod ? "updated" : "added"
           } successfully!`
         );
         setIsPayoutModalOpen(false);
@@ -601,10 +606,9 @@ export default function EarningsClientPage({
     ) {
       const createdRequest = rpcResponse[0] as WithdrawalRequest;
       toast.success(
-        `Withdrawal request for ${
-          activeTabModal === "cash"
-            ? formatCurrencyFromCents(createdRequest.amount)
-            : formatCoins(createdRequest.amount) + " coins"
+        `Withdrawal request for ${activeTabModal === "cash"
+          ? formatCurrencyFromCents(createdRequest.amount)
+          : formatCoins(createdRequest.amount) + " coins"
         } submitted successfully!`
       );
       setWithdrawalRequests((prev) => [
@@ -622,10 +626,10 @@ export default function EarningsClientPage({
         setProfile((prev) =>
           prev
             ? {
-                ...prev,
-                withdrawable_balance:
-                  (prev.withdrawable_balance || 0) - createdRequest.amount,
-              }
+              ...prev,
+              withdrawable_balance:
+                (prev.withdrawable_balance || 0) - createdRequest.amount,
+            }
             : null
         );
       } else {
@@ -685,10 +689,10 @@ export default function EarningsClientPage({
         setProfile((prev) =>
           prev
             ? {
-                ...prev,
-                withdrawable_balance:
-                  (prev.withdrawable_balance || 0) + amountToRestore,
-              }
+              ...prev,
+              withdrawable_balance:
+                (prev.withdrawable_balance || 0) + amountToRestore,
+            }
             : null
         );
       } else {
@@ -701,16 +705,16 @@ export default function EarningsClientPage({
         prevReqs.map((req) =>
           req.id === requestId
             ? {
-                ...req,
-                status: "cancelled",
-                payout_method_summary: getPayoutMethodSummaryById(
-                  req.payout_method_id === undefined
-                    ? null
-                    : req.payout_method_id
-                ),
-                cancelled_at: new Date().toISOString(),
-                cancellation_reason: "Cancelled by user",
-              }
+              ...req,
+              status: "cancelled",
+              payout_method_summary: getPayoutMethodSummaryById(
+                req.payout_method_id === undefined
+                  ? null
+                  : req.payout_method_id
+              ),
+              cancelled_at: new Date().toISOString(),
+              cancellation_reason: "Cancelled by user",
+            }
             : req
         )
       );
@@ -732,6 +736,7 @@ export default function EarningsClientPage({
     if (type === "crypto") return <CryptoWalletIcon className="mr-2 h-5 w-5" />;
     if (type === "bank_transfer") return <Landmark className="mr-2 h-5 w-5" />;
     if (type === "upi") return <Sparkles className="mr-2 h-5 w-5" />;
+    if (type === "phantom") return <Wallet className="mr-2 h-5 w-5 text-purple-600" />;
     return <CreditCard className="mr-2 h-5 w-5" />;
   };
 
@@ -907,11 +912,11 @@ export default function EarningsClientPage({
                         setProfile((prev) =>
                           prev
                             ? {
-                                ...prev,
-                                withdrawable_balance:
-                                  (prev.withdrawable_balance || 0) +
-                                  data.cash_cents,
-                              }
+                              ...prev,
+                              withdrawable_balance:
+                                (prev.withdrawable_balance || 0) +
+                                data.cash_cents,
+                            }
                             : prev
                         );
                         creditedParts.push(
@@ -924,12 +929,12 @@ export default function EarningsClientPage({
                         setUserData((prev) =>
                           prev
                             ? {
-                                ...prev,
-                                coins: (prev.coins || 0) + data.coins,
-                                total_lifetime_coins_earned:
-                                  (prev.total_lifetime_coins_earned || 0) +
-                                  data.coins,
-                              }
+                              ...prev,
+                              coins: (prev.coins || 0) + data.coins,
+                              total_lifetime_coins_earned:
+                                (prev.total_lifetime_coins_earned || 0) +
+                                data.coins,
+                            }
                             : prev
                         );
                         creditedParts.push(`${data.coins} coins`);
@@ -993,24 +998,24 @@ export default function EarningsClientPage({
                 !profile || isLoading
                   ? "Loading account..."
                   : balance < MIN_WITHDRAWAL_AMOUNT
-                  ? `Minimum withdrawal: ${formatCurrencyFromCents(
+                    ? `Minimum withdrawal: ${formatCurrencyFromCents(
                       MIN_WITHDRAWAL_AMOUNT
                     )}`
-                  : "Withdraw Balance";
+                    : "Withdraw Balance";
               return (
-                <Button  size="lg" className="bg-[#6C43D0] py-3 flex-1 text-md text-white" disabled>
+                <Button size="lg" className="bg-[#6C43D0] py-3 flex-1 text-md text-white" disabled>
                   <ArrowDownToLine className="h-4 w-4 mr-2" /> {reason}
                 </Button>
               );
             })()}
 
             <Button
-            size="lg"  
+              size="lg"
               onClick={() => {
                 resetPayoutForm();
                 setIsPayoutModalOpen(true);
               }}
-               className="bg-[#6C43D0] flex-1 py-3 text-md text-white"
+              className="bg-[#6C43D0] flex-1 py-3 text-md text-white"
               disabled={isLoading}
             >
               <PlusCircle className="h-4 w-4 mr-2" /> Manage Payout Methods
@@ -1036,7 +1041,7 @@ export default function EarningsClientPage({
               )}
 
               <Table>
-              <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1085,14 +1090,14 @@ export default function EarningsClientPage({
                           <Badge
                             variant={
                               transaction.status === "completed" ||
-                              transaction.status === "credited" ||
-                              transaction.status === "success"
+                                transaction.status === "credited" ||
+                                transaction.status === "success"
                                 ? "default"
                                 : transaction.status === "pending"
-                                ? "secondary"
-                                : transaction.status === "failed"
-                                ? "destructive"
-                                : "outline"
+                                  ? "secondary"
+                                  : transaction.status === "failed"
+                                    ? "destructive"
+                                    : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
                               ${transaction.status === "completed" ||
@@ -1143,7 +1148,7 @@ export default function EarningsClientPage({
             </CardHeader>
             <CardContent>
               <Table>
-              <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1169,10 +1174,10 @@ export default function EarningsClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                ? "secondary"
-                                : req.status === "cancelled"
-                                ? "outline"
-                                : "destructive"
+                                  ? "secondary"
+                                  : req.status === "cancelled"
+                                    ? "outline"
+                                    : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1225,12 +1230,12 @@ export default function EarningsClientPage({
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-          <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
               <CardContent className="p-4 flex justify-between">
                 <div className="flex-1 text-black space-y-3">
                   <p className="text-lg font-medium">Total Coins Earned</p>
                   <p className="text-xl font-bold">
-                  {formatCoins(userData.total_lifetime_coins_earned)}
+                    {formatCoins(userData.total_lifetime_coins_earned)}
                   </p>
                   <p className="text-md">Lifetime coin earnings</p>
                 </div>
@@ -1260,7 +1265,7 @@ export default function EarningsClientPage({
                 <div className="flex-1 text-black space-y-3">
                   <p className="text-lg font-medium">Coins Available</p>
                   <p className="text-xl font-bold">
-                  {formatCoins(userData.coins)}
+                    {formatCoins(userData.coins)}
                   </p>
                   <p className="text-md">Your current coin balance</p>
                 </div>
@@ -1291,7 +1296,7 @@ export default function EarningsClientPage({
                 <div className="flex-1 text-black space-y-3">
                   <p className="text-lg font-medium">Total Referrals</p>
                   <p className="text-xl font-bold">
-                  {totalReferrals}
+                    {totalReferrals}
                   </p>
                   <p className="text-md">Successful referrals</p>
                 </div>
@@ -1362,13 +1367,13 @@ export default function EarningsClientPage({
                           <Badge
                             variant={
                               tx.status === "completed" ||
-                              tx.status === "credited"
+                                tx.status === "credited"
                                 ? "default"
                                 : tx.status === "pending"
-                                ? "secondary"
-                                : tx.status === "failed"
-                                ? "destructive"
-                                : "outline"
+                                  ? "secondary"
+                                  : tx.status === "failed"
+                                    ? "destructive"
+                                    : "outline"
                             }
                             className="capitalize"
                           >
@@ -1393,7 +1398,7 @@ export default function EarningsClientPage({
                 </TableBody>
               </Table>
             </CardContent>
-            </div>
+          </div>
 
           {/* Coin Redemption Requests Section - Stays inside coin tab */}
           <div className="mt-8 bg-white rounded-xl shadow">
@@ -1402,7 +1407,7 @@ export default function EarningsClientPage({
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader  className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Coins</TableHead>
@@ -1423,7 +1428,7 @@ export default function EarningsClientPage({
                             ? typeof req.redeemed_item_description === "string"
                               ? req.redeemed_item_description
                               : (req.redeemed_item_description as any)?.name ||
-                                JSON.stringify(req.redeemed_item_description)
+                              JSON.stringify(req.redeemed_item_description)
                             : "N/A"}
                         </TableCell>
                         <TableCell className="max-w-xs truncate">
@@ -1436,10 +1441,10 @@ export default function EarningsClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                ? "secondary"
-                                : req.status === "cancelled"
-                                ? "outline"
-                                : "destructive"
+                                  ? "secondary"
+                                  : req.status === "cancelled"
+                                    ? "outline"
+                                    : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1539,44 +1544,46 @@ export default function EarningsClientPage({
               className="w-full"
             >
               {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-3 gap-4">
+                <TabsList className="grid w-full grid-cols-4 gap-2">
                   <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
                   <TabsTrigger className="border border-gray-500" value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500"value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="phantom">Phantom Wallet</TabsTrigger>
                 </TabsList>
               ) : (
-                <TabsList className="grid w-full grid-cols-1">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger value="phantom">Phantom Wallet</TabsTrigger>
                 </TabsList>
               )}
               {/* Content for each payout type */}
               <TabsContent value="crypto" className="space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameCrypto"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My Binance USDT"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameCrypto"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My Binance USDT"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoNetwork">Network</Label>
-                <Select
-                  value={cryptoNetwork}
-                  onValueChange={(val) => setCryptoNetwork(val)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BNB_BEP20">
-                      BNB Smart Chain (BEP20)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Label htmlFor="cryptoNetwork">Network</Label>
+                  <Select
+                    value={cryptoNetwork}
+                    onValueChange={(val) => setCryptoNetwork(val)}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BNB_BEP20">
+                        BNB Smart Chain (BEP20)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
                   We only support BNB Smart Chain (BEP20). Do not enter
@@ -1588,30 +1595,30 @@ export default function EarningsClientPage({
                   taxes as per your country’s laws.
                 </p>
                 <div className="space-y-1">
-                <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
-                <Input
-                  id="cryptoAddress"
-                  value={cryptoAddress}
-                  onChange={(e) => setCryptoAddress(e.target.value)}
-                  placeholder={`Enter your ${cryptoNetwork} wallet address`}
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
+                  <Input
+                    id="cryptoAddress"
+                    value={cryptoAddress}
+                    onChange={(e) => setCryptoAddress(e.target.value)}
+                    placeholder={`Enter your ${cryptoNetwork} wallet address`}
+                    disabled={isLoading}
+                  />
                 </div>
               </TabsContent>
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameBank"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., Primary Savings"
-                  disabled={isLoading}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameBank"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., Primary Savings"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1">            
+                  <div className="space-y-1">
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1668,32 +1675,53 @@ export default function EarningsClientPage({
                   placeholder="e.g., My UPI"
                   disabled={isLoading}
                 />
-                
+
                 <div className="space-y-1">
-                <Label htmlFor="upiHolder">Account Holder Name</Label>
-                <Input
-                  id="upiHolder"
-                  value={bankAccountHolder}
-                  onChange={(e) => setBankAccountHolder(e.target.value)}
-                  placeholder="e.g., Rahul Kumar"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiHolder">Account Holder Name</Label>
+                  <Input
+                    id="upiHolder"
+                    value={bankAccountHolder}
+                    onChange={(e) => setBankAccountHolder(e.target.value)}
+                    placeholder="e.g., Rahul Kumar"
+                    disabled={isLoading}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label htmlFor="upiId">UPI ID</Label>
-                <Input
-                  id="upiId"
-                  value={upiId}
-                  onChange={(e) => setUpiId(e.target.value)}
-                  placeholder="yourname@bank"
-                  disabled={isLoading}
-                />
+                  <Label htmlFor="upiId">UPI ID</Label>
+                  <Input
+                    id="upiId"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    placeholder="yourname@bank"
+                    disabled={isLoading}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   UPI withdrawals are instant and usually free. You are
                   responsible for declaring your earnings and paying any taxes
                   as per Indian law.
                 </p>
+              </TabsContent>
+
+              <TabsContent value="phantom" className="space-y-4">
+                <div className="text-center py-8">
+                  <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Phantom Wallet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Add your Phantom Wallet to receive USDC or USDT payouts directly to your wallet.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      // Close current modal and open Phantom form
+                      setIsPayoutModalOpen(false);
+                      setIsPhantomModalOpen(true);
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Add Phantom Wallet
+                  </Button>
+                </div>
               </TabsContent>
             </Tabs>
           </div>
@@ -1707,8 +1735,8 @@ export default function EarningsClientPage({
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
-                ? "Save Changes"
-                : "Add Method"}
+                  ? "Save Changes"
+                  : "Add Method"}
             </Button>
           </DialogFooter>
 
@@ -1907,7 +1935,7 @@ export default function EarningsClientPage({
                 (activeTabModal === "cash" &&
                   (!profile ||
                     withdrawAmountDollars * 100 >
-                      (profile.withdrawable_balance || 0))) ||
+                    (profile.withdrawable_balance || 0))) ||
                 (activeTabModal === "coins" &&
                   (!userData ||
                     withdrawAmountCoins > (userData.coins || 0) ||
@@ -1920,6 +1948,48 @@ export default function EarningsClientPage({
               Request Withdrawal
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Phantom Wallet Modal */}
+      <Dialog open={isPhantomModalOpen} onOpenChange={setIsPhantomModalOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <PhantomPayoutForm
+            onSave={async (details) => {
+              // Save Phantom Wallet payout method
+              setIsLoading(true);
+              try {
+                const { error } = await supabase
+                  .from('payout_methods')
+                  .insert({
+                    user_id: authUser.id,
+                    method_type: 'phantom',
+                    details,
+                    is_default: payoutMethods.length === 0, // Set as default if first method
+                    friendly_name: details.friendly_name || 'Phantom Wallet'
+                  });
+
+                if (error) throw error;
+
+                // Refresh payout methods
+                const { data: newMethods } = await supabase
+                  .from('payout_methods')
+                  .select('*')
+                  .eq('user_id', authUser.id)
+                  .order('created_at', { ascending: false });
+
+                setPayoutMethods(newMethods || []);
+                setIsPhantomModalOpen(false);
+                toast.success('Phantom Wallet added successfully!');
+              } catch (error: any) {
+                toast.error(error.message || 'Failed to add Phantom Wallet');
+              } finally {
+                setIsLoading(false);
+              }
+            }}
+            onCancel={() => setIsPhantomModalOpen(false)}
+            isLoading={isLoading}
+          />
         </DialogContent>
       </Dialog>
     </div>
