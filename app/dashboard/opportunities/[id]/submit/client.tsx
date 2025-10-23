@@ -2607,7 +2607,14 @@ export default function SubmitContentPage({
                         {/* Multiple Submissions Counter - YouTube */}
                         {contest?.multiple_submissions_enabled &&
                           contestPlatform === "youtube" && (
-                            <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                            <div
+                              className={cn(
+                                "mt-4 p-3 border rounded-lg",
+                                isDark
+                                  ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                                  : "bg-purple-50 border-purple-200"
+                              )}
+                            >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <CheckCheck
@@ -2893,7 +2900,12 @@ export default function SubmitContentPage({
                           placeholder="Enter YouTube video URL"
                           value={contentLink}
                           onChange={(e) => setContentLink(e.target.value)}
-                          className="flex-1 text-base font-medium border-2 border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                          className={cn(
+                            "flex-1 text-base font-medium border",
+                            isDark
+                              ? "bg-[#180438] border border-gray-600"
+                              : "bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                          )}
                         />
                         <Button
                           onClick={handleFetchVideo}
@@ -3520,7 +3532,12 @@ export default function SubmitContentPage({
                           placeholder="Enter Instagram media URL"
                           value={instagramLink}
                           onChange={(e) => setInstagramLink(e.target.value)}
-                          className="flex-1 text-base font-medium border-2"
+                          className={cn(
+                            "flex-1 text-base font-medium border",
+                            isDark
+                              ? "bg-[#180438] border border-gray-600"
+                              : "bg-white"
+                          )}
                         />
                         <Button
                           onClick={handleFetchInstagramByLink}
@@ -3875,7 +3892,12 @@ export default function SubmitContentPage({
                       {(fetchedVideos.length > 0 ||
                         fetchedReels.length > 0) && (
                         <div className="mt-6">
-                          <h4 className="text-lg font-semibold text-purple-800 mb-4">
+                          <h4
+                            className={cn(
+                              "text-lg font-semibold",
+                              isDark ? "text-white" : "text-purple-800"
+                            )}
+                          >
                             Fetched Videos - Select the ones you want to submit:
                           </h4>
                           <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -3936,24 +3958,36 @@ export default function SubmitContentPage({
                                                 )}
                                               </div>
                                               <div className="flex items-center gap-4 text-xs text-gray-600">
+                                                <div className="flex items-center gap-1">
+                                                  <Eye className="h-4 w-4" />
+                                                  <span className="font-medium">
+                                                    {video.statistics
+                                                      ?.viewCount || 0}{" "}
+                                                  </span>
+                                                  <span>views</span>
+                                                </div>
+
+
+                                                <div className="flex items-center gap-1">
                                                 <span>
-                                                  👁️{" "}
-                                                  {video.statistics
-                                                    ?.viewCount || 0}{" "}
-                                                  views
-                                                </span>
-                                                <span>
-                                                  👍{" "}
+                                                  <ThumbsUp className="h-4 w-4" />
                                                   {video.statistics
                                                     ?.likeCount || 0}{" "}
-                                                  likes
+                                                  
                                                 </span>
-                                                <span>
-                                                  💬{" "}
+                                                <span>likes</span>
+                                                </div>
+
+
+                                                <div className="flex items-center gap-1">
+                                                  <MessageSquare className="h-4 w-4" />
+                                                  <span className="font-medium">
                                                   {video.statistics
                                                     ?.commentCount || 0}{" "}
-                                                  comments
-                                                </span>
+                                                    </span>
+                                                  <span>comments</span>
+                                                </div>
+                                                
                                               </div>
                                             </div>
                                             <div className="flex-shrink-0 ml-2">
@@ -4032,7 +4066,13 @@ export default function SubmitContentPage({
                                                   </div>
                                                 )}
                                               </div>
-                                              <div className="flex items-center gap-4 text-xs text-gray-600">
+                                              <div 
+                                               className={cn(
+                                                "flex items-center gap-4 text-xs",
+                                                isDark
+                                                  ? "text-gray-300"
+                                                  : "text-gray-600"
+                                              )}>
                                                 <span>
                                                   📅{" "}
                                                   {dayjs(reel.timestamp).format(
@@ -4069,22 +4109,23 @@ export default function SubmitContentPage({
                       {/* Earnings Cap Warning */}
                       {contest.contest_based_details?.cpm_contest
                         ?.max_earnings_per_creator && (
-                        <Alert className={cn(
-                          isDark
-                            ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                            : "border-amber-200 bg-amber-50"
-                        )}>
-                       
-                          <AlertTriangle className={cn(
+                        <Alert
+                          className={cn(
                             isDark
-                              ? "text-purple-400"
-                              : "text-amber-600"
-                          )} />
-                          <AlertDescription className={cn(
-                            isDark
-                              ? "text-white"
-                              : "text-amber-800"
-                          )}>
+                              ? "border-[#C9A7FF] bg-[#C9A7FF26]"
+                              : "border-amber-200 bg-amber-50"
+                          )}
+                        >
+                          <AlertTriangle
+                            className={cn(
+                              isDark ? "text-purple-400" : "text-amber-600"
+                            )}
+                          />
+                          <AlertDescription
+                            className={cn(
+                              isDark ? "text-white" : "text-amber-800"
+                            )}
+                          >
                             <strong>Earnings Cap:</strong> You can earn up to $
                             {(
                               contest.contest_based_details.cpm_contest

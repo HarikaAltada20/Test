@@ -2273,15 +2273,36 @@ export function ContestClientPage({
                       {contest.contest_type === "cpm" &&
                         contest.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus && (
-                          <div className="flex items-center justify-between p-3 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700/50">
+                          <div className={cn(
+                            "flex items-center justify-between p-3 rounded-lg border transition-all duration-300",
+                            isDark
+                              ? "bg-gradient-to-r from-green-900/40 to-emerald-900/40 border-green-400/40"
+                              : "bg-gradient-to-r from-green-50 to-green-50 border-green-200"
+                          )}>
                             <div className="flex items-center gap-3">
-                              <Gift className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-                              <span className="font-medium text-slate-900 dark:text-slate-100">
+                              <Gift className={cn(
+                                "h-5 w-5",
+                                isDark ? "text-green-400" : "text-green-600"
+                              )} />
+                              <span className={cn(
+                                "font-medium",
+                                isDark ? "text-slate-100" : "text-slate-900"
+                              )}>
                                 Guaranteed Bonus
                               </span>
                               <div className="group relative">
-                                <Info className="h-4 w-4 text-yellow-600 dark:text-yellow-400 cursor-help" />
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center">
+                                <Info className={cn(
+                                  "h-4 w-4 cursor-help",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )} />
+                                <div
+                                  className={cn(
+                                    "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20 min-w-64 max-w-80 text-center",
+                                    isDark
+                                      ? "bg-slate-800 text-slate-100"
+                                      : "bg-slate-900 text-white"
+                                  )}
+                                >
                                   Every submission that gets verified will
                                   receive this guaranteed bonus amount. Your
                                   submission will only get verified if you
@@ -2290,18 +2311,24 @@ export function ContestClientPage({
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className="text-lg font-bold text-yellow-900 dark:text-yellow-100">
+                              <div className={cn(
+                                "text-lg font-bold",
+                                isDark ? "text-green-100" : "text-green-900"
+                              )}>
                                 {formatMoney(
                                   contest.contest_based_details.cpm_contest
                                     .flat_fee_bonus
-                                )}
+                                )} 
                               </div>
-                              <div className="text-xs text-yellow-700 dark:text-yellow-300">
+                              <div className={cn(
+                                "text-xs",
+                                isDark ? "text-green-300" : "text-green-700"
+                              )}>
                                 per verified submission
                               </div>
                             </div>
                           </div>
-                        )}
+                         )} 
 
                       {/* Multiple Submissions */}
                       {(contest as any).multiple_submissions_enabled && (
@@ -3750,7 +3777,11 @@ export function ContestClientPage({
             ) : leaderboard.length === 0 && totalLeaderboardEntries === 0 ? (
               <div className="text-center py-8">
                 <Trophy className="mx-auto h-12 w-12 text-slate-400" />
-                <p className="text-slate-600 dark:text-slate-400 mb-2">
+                <p 
+                  className={cn(
+                    "mb-2",
+                    isDark ? "text-slate-300" : "text-slate-600"
+                  )}>
                   No submissions yet. Be the first!
                 </p>
               </div>
@@ -4129,7 +4160,9 @@ export function ContestClientPage({
                                   size="sm"
                                   className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
                                   style={{
-                                    backgroundColor: isDark ? "#7F39EC" : "#D9C0FF61",
+                                    backgroundColor: isDark
+                                      ? "#7F39EC"
+                                      : "#D9C0FF61",
                                     color: isDark ? "white" : "#7F39EC",
                                     transition: "none",
                                   }}
@@ -4598,7 +4631,12 @@ export function ContestClientPage({
 
                 {/* Leaderboard Header */}
                 <div className="flex items-center justify-between mb-4">
-                  <div className="text-md text-black">
+                  <div
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
                     Last updated:{" "}
                     {contest?.last_metrics_updated
                       ? formatTimeAgo(contest.last_metrics_updated)
@@ -4658,7 +4696,7 @@ export function ContestClientPage({
                   className={cn(
                     "border rounded-lg p-3 mb-4",
                     isDark
-                      ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                      ? "bg-blue-700/30 border-blue-700/50"
                       : "bg-blue-50 border-blue-200"
                   )}
                 >
@@ -4667,7 +4705,7 @@ export function ContestClientPage({
                       className={cn(
                         "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center mt-0.5",
                         isDark
-                          ? "bg-purple-500/30 text-white"
+                          ? "bg-blue-500/30 text-white"
                           : "bg-blue-100 text-blue-600"
                       )}
                     >
@@ -4685,7 +4723,7 @@ export function ContestClientPage({
                       <div
                         className={cn(
                           "text-sm mt-1 space-y-1",
-                          isDark ? "text-gray-400" : "text-blue-700"
+                          isDark ? "text-gray-300" : "text-blue-700"
                         )}
                       >
                         <p>
@@ -4807,7 +4845,12 @@ export function ContestClientPage({
                           const totalEarnings = entry.earnings + flatFeeBonus;
                           prizeDisplay = (
                             <div className="space-y-1">
-                              <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                              <div
+                                className={cn(
+                                  "font-semibold text-base",
+                                  isDark ? "text-green-300" : "text-green-600"
+                                )}
+                              >
                                 Earned: {formatMoney(totalEarnings)}
                               </div>
                               <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">

@@ -2767,21 +2767,53 @@ export default function ContestDetailClient({
                 {/* Payment Information */}
                 {(currentContest as any).payment_details && (
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg text-foreground">
+                    <h3
+                      className={cn(
+                        "font-semibold text-lg",
+                        isDark ? "text-white" : "text-foreground"
+                      )}
+                    >
                       Payment Information
                     </h3>
 
-                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
+                    <div
+                      className={cn(
+                        "rounded-xl p-4",
+                        isDark
+                          ? "bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-blue-700/50"
+                          : "bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200"
+                      )}
+                    >
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
-                            <Trophy className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          <div
+                            className={cn(
+                              "p-2 rounded-lg",
+                              isDark ? "bg-blue-800/30" : "bg-blue-100"
+                            )}
+                          >
+                            <Trophy
+                              className={cn(
+                                "h-5 w-5",
+                                isDark ? "text-blue-400" : "text-blue-600"
+                              )}
+                            />
                           </div>
                           <div>
-                            <p className="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase tracking-wide">
+                            <p
+                              className={cn(
+                                "text-xs font-medium uppercase tracking-wide",
+                                isDark ? "text-blue-300" : "text-blue-800"
+                              )}
+                            >
                               Prize Pool
                             </p>
-                            <p className="text-xl font-bold text-blue-900 dark:text-blue-100">
+                            <p
+                              className={cn(
+                                "text-xl font-bold",
+                                isDark ? "text-blue-100" : "text-blue-900"
+                              )}
+                            >
                               {(() => {
                                 const paymentDetails =
                                   typeof (currentContest as any)
@@ -2799,11 +2831,26 @@ export default function ContestDetailClient({
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
-                            <CreditCard className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                          <div
+                            className={cn(
+                              "p-2 rounded-lg",
+                              isDark ? "bg-purple-800/30" : "bg-purple-100"
+                            )}
+                          >
+                            <CreditCard
+                              className={cn(
+                                "h-5 w-5",
+                                isDark ? "text-purple-400" : "text-purple-600"
+                              )}
+                            />
                           </div>
                           <div>
-                            <p className="text-xs font-medium text-purple-800 dark:text-purple-300 uppercase tracking-wide">
+                            <p
+                              className={cn(
+                                "text-xs font-medium uppercase tracking-wide",
+                                isDark ? "text-purple-300" : "text-purple-800"
+                              )}
+                            >
                               Commission (
                               {(() => {
                                 const paymentDetails =
@@ -2819,7 +2866,12 @@ export default function ContestDetailClient({
                               })()}
                               %)
                             </p>
-                            <p className="text-xl font-bold text-purple-900 dark:text-purple-100">
+                            <p
+                              className={cn(
+                                "text-xl font-bold",
+                                isDark ? "text-purple-100" : "text-purple-900"
+                              )}
+                            >
                               {(() => {
                                 const paymentDetails =
                                   typeof (currentContest as any)
@@ -2838,17 +2890,42 @@ export default function ContestDetailClient({
                       </div>
 
                       {/* Total Paid and Payment Method */}
-                      <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700/50">
+                      <div
+                        className={cn(
+                          "mt-4 pt-4 border-t",
+                          isDark ? "border-blue-700/50" : "border-blue-200"
+                        )}
+                      >
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="flex items-center gap-3">
-                            <div className="p-2 bg-green-100 dark:bg-green-800/30 rounded-lg">
-                              <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                            <div
+                              className={cn(
+                                "p-2 rounded-lg",
+                                isDark ? "bg-green-800/30" : "bg-green-100"
+                              )}
+                            >
+                              <DollarSign
+                                className={cn(
+                                  "h-5 w-5",
+                                  isDark ? "text-green-400" : "text-green-600"
+                                )}
+                              />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-green-800 dark:text-green-300 uppercase tracking-wide">
+                              <p
+                                className={cn(
+                                  "text-xs font-medium uppercase tracking-wide",
+                                  isDark ? "text-green-300" : "text-green-800"
+                                )}
+                              >
                                 Total Paid
                               </p>
-                              <p className="text-lg font-bold text-green-900 dark:text-green-100">
+                              <p
+                                className={cn(
+                                  "text-lg font-bold",
+                                  isDark ? "text-green-100" : "text-green-900"
+                                )}
+                              >
                                 {(() => {
                                   const paymentDetails =
                                     typeof (currentContest as any)
@@ -2884,27 +2961,83 @@ export default function ContestDetailClient({
                               return (
                                 <>
                                   <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-emerald-100 dark:bg-emerald-800/30 rounded-lg">
-                                      <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                    <div
+                                      className={cn(
+                                        "p-2 rounded-lg",
+                                        isDark
+                                          ? "bg-emerald-800/30"
+                                          : "bg-emerald-100"
+                                      )}
+                                    >
+                                      <Wallet
+                                        className={cn(
+                                          "h-5 w-5",
+                                          isDark
+                                            ? "text-emerald-400"
+                                            : "text-emerald-600"
+                                        )}
+                                      />
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">
+                                      <p
+                                        className={cn(
+                                          "text-xs font-medium uppercase tracking-wide",
+                                          isDark
+                                            ? "text-emerald-300"
+                                            : "text-emerald-800"
+                                        )}
+                                      >
                                         From Wallet
                                       </p>
-                                      <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
+                                      <p
+                                        className={cn(
+                                          "text-lg font-bold",
+                                          isDark
+                                            ? "text-emerald-100"
+                                            : "text-emerald-900"
+                                        )}
+                                      >
                                         {formatMoney(walletUsed)}
                                       </p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-3">
-                                    <div className="p-2 bg-indigo-100 dark:bg-indigo-800/30 rounded-lg">
-                                      <CreditCard className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                    <div
+                                      className={cn(
+                                        "p-2 rounded-lg",
+                                        isDark
+                                          ? "bg-indigo-800/30"
+                                          : "bg-indigo-100"
+                                      )}
+                                    >
+                                      <CreditCard
+                                        className={cn(
+                                          "h-5 w-5",
+                                          isDark
+                                            ? "text-indigo-400"
+                                            : "text-indigo-600"
+                                        )}
+                                      />
                                     </div>
                                     <div>
-                                      <p className="text-xs font-medium text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">
+                                      <p
+                                        className={cn(
+                                          "text-xs font-medium uppercase tracking-wide",
+                                          isDark
+                                            ? "text-indigo-300"
+                                            : "text-indigo-800"
+                                        )}
+                                      >
                                         From Card
                                       </p>
-                                      <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">
+                                      <p
+                                        className={cn(
+                                          "text-lg font-bold",
+                                          isDark
+                                            ? "text-indigo-100"
+                                            : "text-indigo-900"
+                                        )}
+                                      >
                                         {formatMoney(stripeUsed)}
                                       </p>
                                     </div>
@@ -2915,14 +3048,42 @@ export default function ContestDetailClient({
                               // Wallet only
                               return (
                                 <div className="flex items-center gap-3">
-                                  <div className="p-2 bg-emerald-100 dark:bg-emerald-800/30 rounded-lg">
-                                    <Wallet className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                  <div
+                                    className={cn(
+                                      "p-2 rounded-lg",
+                                      isDark
+                                        ? "bg-emerald-800/30"
+                                        : "bg-emerald-100"
+                                    )}
+                                  >
+                                    <Wallet
+                                      className={cn(
+                                        "h-5 w-5",
+                                        isDark
+                                          ? "text-emerald-400"
+                                          : "text-emerald-600"
+                                      )}
+                                    />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">
+                                    <p
+                                      className={cn(
+                                        "text-xs font-medium uppercase tracking-wide",
+                                        isDark
+                                          ? "text-emerald-300"
+                                          : "text-emerald-800"
+                                      )}
+                                    >
                                       Payment Method
                                     </p>
-                                    <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">
+                                    <p
+                                      className={cn(
+                                        "text-lg font-bold",
+                                        isDark
+                                          ? "text-emerald-100"
+                                          : "text-emerald-900"
+                                      )}
+                                    >
                                       Wallet
                                     </p>
                                   </div>
@@ -2932,14 +3093,42 @@ export default function ContestDetailClient({
                               // Credit card only
                               return (
                                 <div className="flex items-center gap-3">
-                                  <div className="p-2 bg-indigo-100 dark:bg-indigo-800/30 rounded-lg">
-                                    <CreditCard className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                  <div
+                                    className={cn(
+                                      "p-2 rounded-lg",
+                                      isDark
+                                        ? "bg-indigo-800/30"
+                                        : "bg-indigo-100"
+                                    )}
+                                  >
+                                    <CreditCard
+                                      className={cn(
+                                        "h-5 w-5",
+                                        isDark
+                                          ? "text-indigo-400"
+                                          : "text-indigo-600"
+                                      )}
+                                    />
                                   </div>
                                   <div>
-                                    <p className="text-xs font-medium text-indigo-800 dark:text-indigo-300 uppercase tracking-wide">
+                                    <p
+                                      className={cn(
+                                        "text-xs font-medium uppercase tracking-wide",
+                                        isDark
+                                          ? "text-indigo-300"
+                                          : "text-indigo-800"
+                                      )}
+                                    >
                                       Payment Method
                                     </p>
-                                    <p className="text-lg font-bold text-indigo-900 dark:text-indigo-100">
+                                    <p
+                                      className={cn(
+                                        "text-lg font-bold",
+                                        isDark
+                                          ? "text-indigo-100"
+                                          : "text-indigo-900"
+                                      )}
+                                    >
                                       Credit Card
                                     </p>
                                   </div>
@@ -2951,10 +3140,25 @@ export default function ContestDetailClient({
                         </div>
 
                         {/* Payment Status and Date */}
-                        <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-700/50 flex items-center justify-between">
+                        <div
+                          className={cn(
+                            "mt-4 pt-4 border-t flex items-center justify-between",
+                            isDark ? "border-blue-700/50" : "border-blue-200"
+                          )}
+                        >
                           <div className="flex items-center gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="text-sm font-medium text-green-800 dark:text-green-300">
+                            <CheckCircle2
+                              className={cn(
+                                "h-4 w-4",
+                                isDark ? "text-green-400" : "text-green-600"
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-green-300" : "text-green-800"
+                              )}
+                            >
                               Payment{" "}
                               {(() => {
                                 const paymentDetails =
@@ -2980,7 +3184,12 @@ export default function ContestDetailClient({
                                   )
                                 : (currentContest as any).payment_details;
                             return paymentDetails.paid_at ? (
-                              <span className="text-xs text-blue-700 dark:text-blue-400">
+                              <span
+                                className={cn(
+                                  "text-xs",
+                                  isDark ? "text-blue-400" : "text-blue-700"
+                                )}
+                              >
                                 Paid on{" "}
                                 {formatLocalDateTime(paymentDetails.paid_at, {
                                   month: "short",
