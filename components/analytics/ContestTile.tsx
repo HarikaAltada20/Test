@@ -171,7 +171,56 @@ export default function ContestTile({
   onViewDetails,
 }: ContestTileProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const { isDark } = useAnalyticsDarkMode();
+  const { isDark, isInitialized } = useAnalyticsDarkMode();
+
+  // Get initial theme from DOM to prevent flash
+  const getInitialTheme = () => {
+    if (typeof window === "undefined") return false;
+
+    // Check data-theme attribute first
+    const themeElement = document.documentElement;
+    const dataTheme = themeElement.getAttribute("data-theme");
+    if (dataTheme === "dark") return true;
+
+    // Check data-mode attribute
+    const modeElement = document.querySelector("[data-mode]");
+    if (modeElement) {
+      const dataMode = modeElement.getAttribute("data-mode");
+      if (dataMode === "dark") return true;
+    }
+
+    // Check localStorage
+    try {
+      const savedMode = localStorage.getItem("dashboard-mode");
+      if (savedMode === "dark") return true;
+
+      const preset = localStorage.getItem("dashboard-preset");
+      if (preset === "game-of-creators" || preset === "dark-professional") {
+        return true;
+      }
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+
+    return false;
+  };
+
+  // Don't render until dark mode is properly initialized to prevent flash
+  if (!isInitialized) {
+    const isInitiallyDark = getInitialTheme();
+    return (
+      <div className="animate-pulse">
+        <div
+          className={cn(
+            "rounded-xl border h-48 w-full",
+            isInitiallyDark
+              ? "bg-[#06021D] border-gray-600"
+              : "bg-gray-100 border-gray-200"
+          )}
+        ></div>
+      </div>
+    );
+  }
 
   // Calculate metrics from filtered submissions
   const filteredSubmissions = contest.submissions || [];
@@ -287,7 +336,9 @@ export default function ContestTile({
     <div
       className={`transition-all duration-300 rounded-xl hover:shadow-lg cursor-pointer group border hover:border-purple-300 ${
         isDark
-          ? `bg-[#06021D] ${isHovered ? "shadow-lg border-purple-300" : "border-gray-600"}`
+          ? `bg-[#06021D] ${
+              isHovered ? "shadow-lg border-purple-300" : "border-gray-600"
+            }`
           : `bg-white ${
               isHovered ? "shadow-lg border-purple-300" : "border-gray-400"
             }`

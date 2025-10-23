@@ -399,8 +399,8 @@ export default function GettingStartedClient({
                       isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
                     )}>
                     <div className="flex flex-wrap items-center gap-3 mb-4">
-                      <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                        <Trophy className="w-6 h-6 text-purple-600" />
+                      <div className="p-2 bg-[#D8C3FF]  rounded-full">
+                        <Trophy className="w-5 h-5 text-[#4A00BE]" />
                       </div>
                       <h3 className="font-bold text-lg">
                         Leaderboard Contests
@@ -514,8 +514,8 @@ export default function GettingStartedClient({
                       isDark ? "bg-[#170337] text-white" : "bg-[#D9C0FF26]"
                     )}>
                   <div className="flex flex-wrap items-center gap-3 mb-4">
-                      <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                        <DollarSign className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                      <div className="p-2 bg-[#D8C3FF]  rounded-full">
+                        <DollarSign className="w-5 h-5 text-[#4A00BE]" />
                       </div>
                       <h3 className="font-bold text-lg flex items-center">
                         CPM Contests

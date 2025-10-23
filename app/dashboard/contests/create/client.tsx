@@ -311,7 +311,7 @@ export default function CreateContestPage({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showRefreshWarning, setShowRefreshWarning] = useState(false);
 
-  // Read mode from data attribute
+  // Read mode from data attribute with immediate updates
   useEffect(() => {
     const checkMode = () => {
       const modeElement = document.querySelector("[data-mode]");
@@ -319,16 +319,27 @@ export default function CreateContestPage({
         const currentMode = modeElement.getAttribute("data-mode") as
           | "light"
           | "dark";
-        if (currentMode) {
+        if (currentMode && currentMode !== mode) {
           setMode(currentMode);
         }
       }
     };
 
+    // Check immediately
     checkMode();
 
-    // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
+    // Watch for changes in the data attribute with immediate callback
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "data-mode"
+        ) {
+          checkMode();
+        }
+      });
+    });
+
     const targetNode = document.querySelector("[data-mode]");
     if (targetNode) {
       observer.observe(targetNode, {
@@ -337,8 +348,36 @@ export default function CreateContestPage({
       });
     }
 
-    return () => observer.disconnect();
-  }, []);
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    // Listen for custom theme-change events for immediate updates
+    const handleThemeChange = (e: CustomEvent) => {
+      const newMode = e.detail?.mode;
+      if (newMode && newMode !== mode) {
+        setMode(newMode);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("theme-change", handleThemeChange as EventListener);
+
+    return () => {
+      if (observer) observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener(
+        "theme-change",
+        handleThemeChange as EventListener
+      );
+    };
+  }, [mode]);
   useEffect(() => {
     if (showPayment) {
       // Disable background scroll
@@ -4591,12 +4630,13 @@ export default function CreateContestPage({
                         isDark
                           ? "bg-blue-900/30 border-blue-900"
                           : "bg-blue-100 border-blue-300"
-                      )}>
-                        <AlertDescription className={cn(
-                          isDark
-                            ? "text-blue-200"
-                            : "text-blue-800"
-                        )}>
+                        )}
+                      >
+                        <AlertDescription
+                          className={cn(
+                            isDark ? "text-blue-200" : "text-blue-800"
+                          )}
+                        >
                           ✓ Budget set to{" "}
                           <strong>
                             ${parseFloat(totalBudget.toString()).toFixed(2)}
@@ -5411,7 +5451,7 @@ export default function CreateContestPage({
   );
 
   return (
-    <div className="container mx-auto py-8 bg-background text-foreground transition-colors duration-300">
+    <div className="container mx-auto py-8 bg-background text-foreground no-theme-transition">
       {/* Prevent theme flash during navigation */}
       <script
         dangerouslySetInnerHTML={{
@@ -5698,7 +5738,7 @@ export default function CreateContestPage({
       </div>
 
       {/* Step Content */}
-      <div className="max-w-[1100px] mx-auto ">
+      <div className="max-w-[1100px] mx-auto no-theme-transition">
         {/* Removed global success Alert (for draft save) that was at the top of the card */}
 
         {step === "basics" && (

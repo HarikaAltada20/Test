@@ -41,6 +41,8 @@ export function useAnalyticsDarkMode() {
     return "light";
   });
 
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Read mode from data attribute with immediate updates
   useEffect(() => {
     const checkMode = () => {
@@ -55,8 +57,9 @@ export function useAnalyticsDarkMode() {
       }
     };
 
-    // Check immediately
+    // Check immediately and mark as initialized
     checkMode();
+    setIsInitialized(true);
 
     // Watch for changes in the data attribute
     const observer = new MutationObserver(checkMode);
@@ -91,6 +94,7 @@ export function useAnalyticsDarkMode() {
   return {
     mode,
     isDark,
+    isInitialized,
     setMode,
   };
 }
