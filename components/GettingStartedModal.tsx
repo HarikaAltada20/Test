@@ -822,7 +822,10 @@ export default function GettingStartedModal({
             >
               Ready to Start?
             </h3>
-            <p className={cn(isDark ? "text-white" : "text-gray-900")}>
+            <p className={cn(
+              "text-md",
+              isDark ? "text-gray-300" : "text-gray-600"
+            )}>
               Start creating contests and campaigns
             </p>
           </div>

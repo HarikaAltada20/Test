@@ -1554,7 +1554,10 @@ export default function GettingStartedClient({
               )}>
                 Ready to Start?
               </h3>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p 
+               className={cn(           
+                isDark ? "text-gray-300" : "text-gray-600"
+              )}>
                 Start creating contests and campaigns
               </p>
             </div>

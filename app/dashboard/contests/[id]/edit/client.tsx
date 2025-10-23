@@ -4069,7 +4069,12 @@ export default function EditContestPage({
       {isAdmin &&
         contest?.moderation_status === "published" &&
         contest?.status !== "ended" && (
-          <Alert className="mb-6 border-amber-300 bg-amber-50 text-amber-900">
+          <Alert className={cn(
+            "mb-6",
+            isDark 
+              ? "border-amber-600 bg-yellow-800/30 text-amber-300" 
+              : "border-amber-300 bg-amber-50 text-amber-900"
+          )}>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <strong>Admin Edit Warning:</strong> You are editing a
@@ -4079,7 +4084,7 @@ export default function EditContestPage({
               once they have ended.
             </AlertDescription>
           </Alert>
-        )}
+         )} 
 
       {/* Dates Only Warning */}
       {datesOnly && (

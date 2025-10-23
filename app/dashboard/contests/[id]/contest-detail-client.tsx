@@ -255,46 +255,22 @@ export default function ContestDetailClient({
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [statusUpdateReason, setStatusUpdateReason] = useState("");
-  // Initialize theme state with proper detection to prevent flash
-  const [mode, setMode] = useState<"light" | "dark">(() => {
-    // Check if we're in browser environment
+  // Get theme from parent layout instead of managing independent state
+  const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      // Try to get theme from data-theme attribute first
-      const themeElement = document.documentElement;
-      const dataTheme = themeElement.getAttribute("data-theme") as
-        | "light"
-        | "dark";
-      if (dataTheme) return dataTheme;
-
-      // Fallback to data-mode attribute
+      // Check data-mode attribute from parent layout
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
-        const dataMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (dataMode) return dataMode;
+        const dataMode = modeElement.getAttribute("data-mode");
+        return dataMode === "dark";
       }
-
-      // Check localStorage as last resort
-      try {
-        const savedMode = localStorage.getItem("dashboard-mode") as
-          | "light"
-          | "dark";
-        if (savedMode) return savedMode;
-
-        const preset = localStorage.getItem("dashboard-preset");
-        if (preset === "game-of-creators" || preset === "dark-professional") {
-          return "dark";
-        }
-      } catch (e) {
-        // Ignore localStorage errors
-      }
+      // Fallback to data-theme attribute
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme");
+      return dataTheme === "dark";
     }
-    return "light";
+    return false; // Default to light mode
   });
-
-  // Derive isDark from mode
-  const isDark = mode === "dark";
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -520,24 +496,23 @@ export default function ContestDetailClient({
     return Object.values(grouped);
   }, [filteredSubmissions, viewMode, currentContest, activeStatusTab]);
 
-  // Read mode from data attribute
+  // Watch for theme changes from parent layout
   useEffect(() => {
-    const checkMode = () => {
+    const checkTheme = () => {
       const modeElement = document.querySelector("[data-mode]");
       if (modeElement) {
-        const currentMode = modeElement.getAttribute("data-mode") as
-          | "light"
-          | "dark";
-        if (currentMode) {
-          setMode(currentMode);
+        const currentMode = modeElement.getAttribute("data-mode");
+        const newIsDark = currentMode === "dark";
+        if (newIsDark !== isDark) {
+          setIsDark(newIsDark);
         }
       }
     };
 
-    checkMode();
+    checkTheme();
 
     // Watch for changes in the data attribute
-    const observer = new MutationObserver(checkMode);
+    const observer = new MutationObserver(checkTheme);
     const targetNode = document.querySelector("[data-mode]");
     if (targetNode) {
       observer.observe(targetNode, {
@@ -547,7 +522,7 @@ export default function ContestDetailClient({
     }
 
     return () => observer.disconnect();
-  }, []);
+  }, [isDark]);
 
   useEffect(() => {
     setCurrentSubmissions(initialSubmissions || []);
@@ -1267,60 +1242,7 @@ export default function ContestDetailClient({
 
   return (
     <div>
-      {/* Prevent theme flash during navigation */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            (function() {
-              try {
-                var html = document.documentElement;
-                var getTheme = function() {
-                  // Check data-theme attribute first
-                  var dataTheme = html.getAttribute('data-theme');
-                  if (dataTheme === 'dark' || dataTheme === 'light') {
-                    return dataTheme;
-                  }
-                  
-                  // Check data-mode attribute
-                  var modeElement = document.querySelector('[data-mode]');
-                  if (modeElement) {
-                    var dataMode = modeElement.getAttribute('data-mode');
-                    if (dataMode === 'dark' || dataMode === 'light') {
-                      return dataMode;
-                    }
-                  }
-                  
-                  // Check localStorage
-                  try {
-                    var savedMode = localStorage.getItem('dashboard-mode');
-                    if (savedMode === 'dark' || savedMode === 'light') {
-                      return savedMode;
-                    }
-                    
-                    var preset = localStorage.getItem('dashboard-preset');
-                    if (preset === 'game-of-creators' || preset === 'dark-professional') {
-                      return 'dark';
-                    }
-                  } catch(e) {}
-                  
-                  return 'light';
-                };
-                
-                var theme = getTheme();
-                html.setAttribute('data-theme', theme);
-                if (theme === 'dark') {
-                  html.style.backgroundColor = '#07031E';
-                  html.style.color = 'rgb(248, 250, 252)';
-                } else {
-                  html.style.backgroundColor = '#ffffff';
-                  html.style.color = '#111827';
-                }
-              } catch(e) {}
-            })();
-          `,
-        }}
-      />
-      <div className="flex flex-col px-1 lg:flex-row lg:justify-between lg:items-center gap-4 mb-8 ">
+      <div className="flex flex-col px-1 lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <Button
             className="cursor-pointer"
