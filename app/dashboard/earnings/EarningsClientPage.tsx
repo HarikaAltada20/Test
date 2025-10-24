@@ -55,6 +55,8 @@ import {
   Sparkles,
   Power,
   Loader2,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { User } from "@supabase/supabase-js";
 import { Badge } from "@/components/ui/badge";
@@ -172,9 +174,15 @@ export default function EarningsClientPage({
   ); // State for current tab
   const [withdrawAmountCoins, setWithdrawAmountCoins] = useState<number>(0); // Example for coin withdrawal amount
 
-  const [cryptoNetwork, setCryptoNetwork] = useState<string>("BNB_BEP20"); // Added for crypto network
+  const [cryptoNetwork, setCryptoNetwork] = useState<string>("BNB_SMART_CHAIN"); // Added for crypto network
+  const [cryptoCurrency, setCryptoCurrency] = useState<string>("BNB"); // Added for crypto currency
   const [payoutFriendlyName, setPayoutFriendlyName] = useState<string>(""); // Added for friendly name
   const [payoutCountry, setPayoutCountry] = useState<"IN" | "OTHER">("IN");
+
+  // Wallet validation states
+  const [isValidatingWallet, setIsValidatingWallet] = useState<boolean>(false);
+  const [walletValidationStatus, setWalletValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+  const [walletValidationError, setWalletValidationError] = useState<string>('');
 
   // Coupon/code redemption
   const [redeemCode, setRedeemCode] = useState<string>("");
@@ -251,6 +259,50 @@ export default function EarningsClientPage({
     router,
   ]);
 
+  // Wallet format validation functions
+  const validateWalletAddress = async () => {
+    if (!cryptoAddress.trim()) {
+      setWalletValidationStatus('idle');
+      return;
+    }
+
+    setIsValidatingWallet(true);
+    setWalletValidationStatus('validating');
+    setWalletValidationError('');
+
+    try {
+      let isValid = false;
+
+      if (cryptoNetwork === "BNB_SMART_CHAIN") {
+        // BNB Smart Chain (BEP20) validation: 0x + 40 hex characters
+        isValid = /^0x[a-fA-F0-9]{40}$/.test(cryptoAddress.trim());
+        if (!isValid) {
+          setWalletValidationError('Invalid BNB Smart Chain (BEP20) address format. Must start with 0x and be 42 characters total.');
+        }
+      } else if (cryptoNetwork === "SOLANA") {
+        // Solana validation: 32-44 base58 characters
+        isValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cryptoAddress.trim());
+        if (!isValid) {
+          setWalletValidationError('Invalid Solana wallet address format. Must be 32-44 base58 characters.');
+        }
+      }
+
+      if (isValid) {
+        setWalletValidationStatus('valid');
+        toast.success('Wallet address format is correct!');
+      } else {
+        setWalletValidationStatus('invalid');
+        toast.error('Invalid wallet address format');
+      }
+    } catch (error: any) {
+      setWalletValidationStatus('invalid');
+      setWalletValidationError(error.message || 'Failed to validate wallet address');
+      toast.error('Wallet validation failed');
+    } finally {
+      setIsValidatingWallet(false);
+    }
+  };
+
   const handleSavePayoutMethod = async () => {
     if (!authUser) {
       toast.error("Authentication error.");
@@ -268,19 +320,14 @@ export default function EarningsClientPage({
         toast.error("Crypto wallet address and network are required.");
         return;
       }
-      if (cryptoNetwork !== "BNB_BEP20") {
-        toast.error("Only BNB Smart Chain (BEP20) is supported.");
-        return;
-      }
-      if (!/^0x[a-fA-F0-9]{40}$/.test(cryptoAddress.trim())) {
-        toast.error(
-          "Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars)."
-        );
+      if (walletValidationStatus !== 'valid') {
+        toast.error("Please validate your wallet address first.");
         return;
       }
       details = {
         wallet_address: cryptoAddress.trim(),
         network: cryptoNetwork.trim(),
+        currency: cryptoCurrency.trim(),
       };
     } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
@@ -438,7 +485,10 @@ export default function EarningsClientPage({
     setCurrentPayoutMethod(null);
     setSelectedPayoutType("crypto");
     setCryptoAddress("");
-    setCryptoNetwork("BNB_BEP20");
+    setCryptoNetwork("BNB_SMART_CHAIN");
+    setCryptoCurrency("BNB");
+    setWalletValidationStatus('idle');
+    setWalletValidationError('');
     setUpiId("");
     setBankAccountHolder("");
     setBankAccountNumber("");
@@ -457,7 +507,8 @@ export default function EarningsClientPage({
 
     if (method.method_type === "crypto" && method.details) {
       setCryptoAddress(method.details.wallet_address || "");
-      setCryptoNetwork(method.details.network || "BNB_BEP20");
+      setCryptoNetwork(method.details.network || "BNB_SMART_CHAIN");
+      setCryptoCurrency(method.details.currency || "BNB");
     } else if (method.method_type === "upi" && method.details) {
       setUpiId(method.details.upi_id || "");
     } else if (method.method_type === "bank_transfer" && method.details) {
@@ -1547,12 +1598,12 @@ export default function EarningsClientPage({
                 <TabsList className="grid w-full grid-cols-4 gap-2">
                   <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
                   <TabsTrigger className="border border-gray-500" value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger className="border border-gray-500" value="crypto">Crypto</TabsTrigger>
                   <TabsTrigger className="border border-gray-500" value="phantom">Phantom Wallet</TabsTrigger>
                 </TabsList>
               ) : (
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="crypto">BNB (BEP20)</TabsTrigger>
+                  <TabsTrigger value="crypto">Crypto</TabsTrigger>
                   <TabsTrigger value="phantom">Phantom Wallet</TabsTrigger>
                 </TabsList>
               )}
@@ -1572,37 +1623,121 @@ export default function EarningsClientPage({
                   <Label htmlFor="cryptoNetwork">Network</Label>
                   <Select
                     value={cryptoNetwork}
-                    onValueChange={(val) => setCryptoNetwork(val)}
+                    onValueChange={(val) => {
+                      setCryptoNetwork(val);
+                      // Reset currency when network changes
+                      if (val === "BNB_SMART_CHAIN") {
+                        setCryptoCurrency("BNB");
+                      } else if (val === "SOLANA") {
+                        setCryptoCurrency("SOL");
+                      }
+                    }}
                     disabled={isLoading}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="BNB_BEP20">
+                      <SelectItem value="BNB_SMART_CHAIN">
                         BNB Smart Chain (BEP20)
+                      </SelectItem>
+                      <SelectItem value="SOLANA">
+                        Solana
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cryptoCurrency">Cryptocurrency</Label>
+                  <Select
+                    value={cryptoCurrency}
+                    onValueChange={(val) => setCryptoCurrency(val)}
+                    disabled={isLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cryptoNetwork === "BNB_SMART_CHAIN" ? (
+                        <>
+                          <SelectItem value="BNB">BNB</SelectItem>
+                          <SelectItem value="USDT">USDT (BEP20)</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="SOL">SOL</SelectItem>
+                          <SelectItem value="USDT">USDT</SelectItem>
+                          <SelectItem value="USDC">USDC</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
-                  We only support BNB Smart Chain (BEP20). Do not enter
-                  ERC20/other chain addresses. Wrong address = funds lost.
+                  {cryptoNetwork === "BNB_SMART_CHAIN" ? (
+                    <>We only support BNB Smart Chain (BEP20). Do not enter ERC20/other chain addresses. Wrong address = funds lost.</>
+                  ) : (
+                    <>We only support Solana network. Do not enter other chain addresses. Wrong address = funds lost.</>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
                   Crypto payouts are optional digital rewards. By choosing this
                   method, you accept responsibility for declaring and paying
-                  taxes as per your country’s laws.
+                  taxes as per your country's laws.
+                </p>
+                <p className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                  <strong>Note:</strong> We only validate the format of your wallet address.
+                  Please double-check that you've entered the correct address for your selected network,
+                  as sending to the wrong address will result in permanent loss of funds.
                 </p>
                 <div className="space-y-1">
-                  <Label htmlFor="cryptoAddress">Your Wallet Address</Label>
-                  <Input
-                    id="cryptoAddress"
-                    value={cryptoAddress}
-                    onChange={(e) => setCryptoAddress(e.target.value)}
-                    placeholder={`Enter your ${cryptoNetwork} wallet address`}
-                    disabled={isLoading}
-                  />
+                  <Label htmlFor="cryptoAddress" className="flex items-center gap-2">
+                    Your Wallet Address
+                    {walletValidationStatus === 'valid' && <CheckCircle className="h-4 w-4 text-green-600" />}
+                    {walletValidationStatus === 'invalid' && <AlertCircle className="h-4 w-4 text-red-600" />}
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="cryptoAddress"
+                      value={cryptoAddress}
+                      onChange={(e) => {
+                        setCryptoAddress(e.target.value);
+                        // Reset validation status when address changes
+                        if (walletValidationStatus !== 'idle') {
+                          setWalletValidationStatus('idle');
+                          setWalletValidationError('');
+                        }
+                      }}
+                      placeholder={`Enter your ${cryptoCurrency} wallet address`}
+                      disabled={isLoading}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={validateWalletAddress}
+                      disabled={!cryptoAddress.trim() || isValidatingWallet || isLoading}
+                      className="px-4"
+                    >
+                      {isValidatingWallet ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Validate'
+                      )}
+                    </Button>
+                  </div>
+
+                  {walletValidationStatus === 'validating' && (
+                    <p className="text-sm text-blue-600">Validating wallet address...</p>
+                  )}
+
+                  {walletValidationStatus === 'invalid' && (
+                    <p className="text-sm text-red-600">{walletValidationError}</p>
+                  )}
+
+                  {walletValidationStatus === 'valid' && (
+                    <p className="text-sm text-green-600">Wallet address format is correct!</p>
+                  )}
                 </div>
               </TabsContent>
               {/* Bank Transfer Form (India) */}

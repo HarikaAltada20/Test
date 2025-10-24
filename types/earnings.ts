@@ -63,6 +63,7 @@ export interface PayoutMethod {
 export interface CryptoPayoutDetails {
   wallet_address: string;
   network: string;
+  currency: string;
 }
 
 export interface PhantomPayoutDetails {
