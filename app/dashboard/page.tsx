@@ -348,7 +348,7 @@ function DashboardPage() {
           Dashboard
         </h2>
         <div className="flex items-center gap-3">
-          <SurveyButton />
+          {!isAdvertiser && <SurveyButton />}
           {isAdvertiser && (
             <button
               onClick={handleCreateContestClick}
