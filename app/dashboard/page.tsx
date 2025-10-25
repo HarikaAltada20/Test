@@ -33,6 +33,7 @@ import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
+import { SurveyButton } from "@/components/SurveyButton";
 
 function DashboardPage() {
   const router = useRouter();
@@ -52,6 +53,11 @@ function DashboardPage() {
   const [userCoins, setUserCoins] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+  const [userDetails, setUserDetails] = useState<{
+    email: string;
+    username: string;
+    fullName: string;
+  } | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -135,7 +141,7 @@ function DashboardPage() {
       try {
         const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("user_type, coins")
+          .select("user_type, coins, email, username, full_name")
           .eq("id", user.id)
           .single();
 
@@ -149,6 +155,13 @@ function DashboardPage() {
 
         const userType = userData?.user_type;
         setUserCoins(userData?.coins || 0);
+
+        // Set user details for survey
+        setUserDetails({
+          email: userData?.email || user?.email || "",
+          username: userData?.username || "",
+          fullName: userData?.full_name || user?.user_metadata?.full_name || "",
+        });
 
         if (userType === "advertiser") {
           // Fetch advertiser profile
@@ -262,12 +275,15 @@ function DashboardPage() {
               .filter(Boolean);
 
             // Remove duplicate contests by keeping only unique contest IDs
-            const uniqueContests = contests.reduce((acc: any[], contest: any) => {
-              if (!acc.find(c => c.id === contest.id)) {
-                acc.push(contest);
-              }
-              return acc;
-            }, []);
+            const uniqueContests = contests.reduce(
+              (acc: any[], contest: any) => {
+                if (!acc.find((c) => c.id === contest.id)) {
+                  acc.push(contest);
+                }
+                return acc;
+              },
+              []
+            );
 
             setRecentContests(uniqueContests || []);
           }
@@ -331,20 +347,23 @@ function DashboardPage() {
         <h2 className="pl-2 text-2xl md:text-3xl font-bold tracking-tight">
           Dashboard
         </h2>
-        {isAdvertiser && (
-          <button
-            onClick={handleCreateContestClick}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Create Contest
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          <SurveyButton />
+          {isAdvertiser && (
+            <button
+              onClick={handleCreateContestClick}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Create Contest
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
