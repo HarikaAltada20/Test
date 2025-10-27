@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
   CheckCircle2,
@@ -24,6 +25,7 @@ export default function SurveyClaimPage() {
     claimed: boolean;
   } | null>(null);
   const { user, isAuthenticated, isLoading: authLoading } = useClientAuth();
+  const { toast } = useToast();
   const router = useRouter();
   const supabase = createClient();
 
@@ -88,6 +90,13 @@ export default function SurveyClaimPage() {
       if (!response.ok) {
         throw new Error(result.error || "Failed to redeem bonus");
       }
+
+      // Show success toast
+      toast({
+        title: "Reward Claimed!",
+        description: "$0.40 credited to wallet",
+        variant: "default",
+      });
 
       // Successfully redeemed, redirect to earnings page
       router.push("/dashboard/earnings");

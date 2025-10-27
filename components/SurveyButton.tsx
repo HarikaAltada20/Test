@@ -295,8 +295,8 @@ export function SurveyButton({
       console.error("Invalid URL:", error);
     }
 
-    // Open Google form in a new tab with pre-filled data
-    window.open(url, "_blank", "noopener,noreferrer");
+    // Open Google form in the same tab with pre-filled data
+    window.location.href = url;
   };
 
   if (isLoading) {
@@ -317,7 +317,8 @@ export function SurveyButton({
     if (isRewardClaimed) {
       buttonText = "Survey Complete";
       buttonDisabled = true;
-      buttonClassName = "border border-gray-900 bg-white text-gray-900 font-semibold cursor-not-allowed";
+      buttonClassName =
+        "border border-gray-900 bg-white text-gray-900 font-semibold cursor-not-allowed";
     } else {
       buttonText = "Claim Your Reward";
       buttonDisabled = false;
