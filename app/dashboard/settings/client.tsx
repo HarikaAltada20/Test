@@ -1448,7 +1448,7 @@ export default function SettingsPage({
                 <img
                   src="/images/360_F_1018050560_kQHuMNjN5tHrhUKxnT9dBbOoxjCEe9cu-removebg-preview.avif"
                   alt="Survey illustration"
-                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
+                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[145px] object-contain"
                 />
               </div>
               {/* Text Content */}
@@ -1457,10 +1457,18 @@ export default function SettingsPage({
                   <h3 className="font-semibold text-base sm:text-lg mb-1 text-gray-900">
                     Take Our Survey
                   </h3>
-                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
+                  {/* <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
                     Share your valuable feedback and help us improve the
                     platform. Your opinion matters to us and helps shape the
                     future of GoViral!
+                  </p> */}
+                  <p className="text-xs sm:text-[12.5px] text-gray-600 leading-relaxed">
+                    We really value honest and thoughtful feedback. So, we will
+                    give an extra $5 bonus to the most genuine and
+                    well-thought-out survey responses. Take your time, read each
+                    question carefully, and answer with full honesty — we'll
+                    pick the best responses based on clarity, effort, and real
+                    insights.
                   </p>
                 </div>
                 {/* Reward Badge */}
@@ -1473,7 +1481,7 @@ export default function SettingsPage({
               </div>
             </div>
             {/* Button Section */}
-            <div className="w-full sm:w-auto lg:ml-6 lg:flex-shrink-0 mt-3 md:mt-0">
+            <div className="w-full sm:w-auto lg:pr-2 lg:flex-shrink-0 mt-3 md:mt-0">
               <SurveyButton className="w-full sm:w-auto justify-center sm:justify-start" />
             </div>
           </div>
