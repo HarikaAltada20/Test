@@ -5,6 +5,7 @@ import { MessageSquare, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { useRouter } from "next/navigation";
 
 interface SurveyButtonProps {
   className?: string;
@@ -42,15 +43,19 @@ export function SurveyButton({
 }: SurveyButtonProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSurveyTaken, setIsSurveyTaken] = useState(false);
+  const [isRewardClaimed, setIsRewardClaimed] = useState(false);
   const { user, isAuthenticated } = useClientAuth();
+  const router = useRouter();
   const supabase = createClient();
 
   // Google Form URL - Note: Removed ?usp=pp_url to prevent "Continue current draft" popup
-  const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfQ8vf1rLEYhIb_PAgujJHjL2t_nHNaSn9CXHvLdbvIJzECKA/viewform";
+  const GOOGLE_FORM_URL =
+    "https://docs.google.com/forms/d/e/1FAIpQLSfQ8vf1rLEYhIb_PAgujJHjL2t_nHNaSn9CXHvLdbvIJzECKA/viewform";
 
   // "https://docs.google.com/forms/d/e/1FAIpQLSfQ8vf1rLEYhIb_PAgujJHjL2t_nHNaSn9CXHvLdbvIJzECKA/viewform";
 
-  // Fetch user data from Supabase
+  // Fetch user data from Supabase and check survey status
   useEffect(() => {
     const fetchUserData = async () => {
       if (!isAuthenticated || !user?.id) {
@@ -96,6 +101,27 @@ export function SurveyButton({
           fullName,
           username,
         });
+
+        // Check if user has already taken the survey and if reward is claimed
+        const { data: redemption, error: redemptionError } = await supabase
+          .from("survey_redemptions")
+          .select("survey_button_clicked, survey_reward_claimed")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (
+          !redemptionError &&
+          redemption &&
+          redemption.survey_button_clicked
+        ) {
+          console.log("Survey already taken");
+          setIsSurveyTaken(true);
+
+          if (redemption.survey_reward_claimed) {
+            console.log("Reward already claimed");
+            setIsRewardClaimed(true);
+          }
+        }
       } catch (error) {
         console.error("Error fetching user data:", error);
         // Fallback to props if available
@@ -114,7 +140,96 @@ export function SurveyButton({
     fetchUserData();
   }, [isAuthenticated, user, userEmail, userFullName, userUsername, supabase]);
 
-  const handleSurveyClick = () => {
+  const handleSurveyClick = async () => {
+    if (!isAuthenticated || !user?.id) {
+      console.error("User not authenticated");
+      return;
+    }
+
+    // If reward is already claimed, prevent any action
+    if (isSurveyTaken && isRewardClaimed) {
+      console.log("Survey complete, reward already claimed");
+      return;
+    }
+
+    // If survey already taken but reward not claimed, redirect to claim page
+    if (isSurveyTaken && !isRewardClaimed) {
+      console.log(
+        "Survey taken but reward not claimed, redirecting to claim page"
+      );
+      router.push("/survey-claim");
+      return;
+    }
+
+    let trackingSuccess = false;
+
+    try {
+      // Track button click in database
+      const now = new Date().toISOString();
+
+      // Check if survey_redemptions record exists
+      const { data: existingRecord, error: checkError } = await supabase
+        .from("survey_redemptions")
+        .select("id, survey_button_clicked")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error("Error checking survey redemption:", checkError);
+        throw new Error("Failed to check survey redemption status");
+      }
+
+      if (existingRecord) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from("survey_redemptions")
+          .update({
+            survey_button_clicked: true,
+            survey_button_clicked_at: now,
+          })
+          .eq("user_id", user.id);
+
+        if (updateError) {
+          console.error("Error updating survey redemption:", updateError);
+          throw new Error("Failed to update survey redemption");
+        } else {
+          console.log("✅ Survey button click tracked");
+          trackingSuccess = true;
+        }
+      } else {
+        // Create new record
+        const { error: insertError } = await supabase
+          .from("survey_redemptions")
+          .insert({
+            user_id: user.id,
+            survey_button_clicked: true,
+            survey_button_clicked_at: now,
+            survey_reward_claimed: false,
+          });
+
+        if (insertError) {
+          console.error("Error creating survey redemption:", insertError);
+          throw new Error("Failed to create survey redemption");
+        } else {
+          console.log("✅ Survey button click tracked");
+          trackingSuccess = true;
+        }
+      }
+    } catch (error) {
+      console.error("Error tracking survey button click:", error);
+      alert(
+        "Failed to track survey access. Please try again or contact support."
+      );
+      return;
+    }
+
+    // Only open the form and update state if tracking was successful
+    if (!trackingSuccess) {
+      return;
+    }
+
+    setIsSurveyTaken(true);
+
     // Build URL with pre-filled data
     let url = GOOGLE_FORM_URL;
     const params = new URLSearchParams();
@@ -193,15 +308,34 @@ export function SurveyButton({
     );
   }
 
+  // Determine button text and state
+  let buttonText = "Take Survey";
+  let buttonDisabled = false;
+  let buttonClassName = "bg-[#4A00BE] text-white";
+
+  if (isSurveyTaken) {
+    if (isRewardClaimed) {
+      buttonText = "Survey Complete";
+      buttonDisabled = true;
+      buttonClassName = "border border-gray-900 bg-white text-gray-900 font-semibold cursor-not-allowed";
+    } else {
+      buttonText = "Claim Your Reward";
+      buttonDisabled = false;
+      buttonClassName =
+        "border border-purple-500 bg-white text-purple-500 font-semibold";
+    }
+  }
+
   return (
     <Button
       onClick={handleSurveyClick}
       variant={variant}
       size={size}
-      className={`bg-[#6C43D0] text-white hover:bg-[#5A3BC0] transition-colors ${className}`}
+      disabled={buttonDisabled}
+      className={`${buttonClassName} ${className}`}
     >
-      <MessageSquare className="h-4 w-4 mr-2" />
-      Take Survey
+      <MessageSquare className="h-4 w-4" />
+      {buttonText}
     </Button>
   );
 }

@@ -33,7 +33,6 @@ import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
-import { SurveyButton } from "@/components/SurveyButton";
 
 function DashboardPage() {
   const router = useRouter();
@@ -348,7 +347,6 @@ function DashboardPage() {
           Dashboard
         </h2>
         <div className="flex items-center gap-3">
-          {!isAdvertiser && <SurveyButton />}
           {isAdvertiser && (
             <button
               onClick={handleCreateContestClick}
