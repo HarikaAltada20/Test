@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { MessageSquare, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { hasSubmitted } from "@/lib/form-submissions";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { useRouter } from "next/navigation";
 
@@ -58,80 +59,62 @@ export function SurveyButton({
   // Fetch user data from Supabase and check survey status
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!isAuthenticated || !user?.id) {
-        setIsLoading(false);
-        return;
-      }
-
       try {
-        // Fetch user profile data from users table
-        const { data: profile, error: profileError } = await supabase
-          .from("users")
-          .select("full_name, username, email")
-          .eq("id", user.id)
-          .single();
+        // If authenticated, enrich with profile; otherwise rely on provided props
+        if (isAuthenticated && user?.id) {
+          const { data: profile, error: profileError } = await supabase
+            .from("users")
+            .select("full_name, username, email")
+            .eq("id", user.id)
+            .single();
 
-        if (profileError) {
-          console.error("Error fetching user profile:", profileError);
-          console.log("Profile error details:", {
-            code: profileError.code,
-            message: profileError.message,
-            details: profileError.details,
-            hint: profileError.hint,
-          });
+          if (profileError) {
+            console.error("Error fetching user profile:", profileError);
+          }
+
+          const email = userEmail || profile?.email || user?.email || "";
+          const fullName = userFullName || profile?.full_name || "";
+          const username = userUsername || profile?.username || "";
+
+          setUserData({ email, fullName, username });
+
+          // For signed-in users, keep existing redemption checks for reward flow
+          const { data: redemption, error: redemptionError } = await supabase
+            .from("survey_redemptions")
+            .select("survey_button_clicked, survey_reward_claimed")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (
+            !redemptionError &&
+            redemption &&
+            redemption.survey_button_clicked
+          ) {
+            setIsSurveyTaken(true);
+            if (redemption.survey_reward_claimed) {
+              setIsRewardClaimed(true);
+            }
+          }
+
+          // Also check global form_submissions table to prevent extra attempts
+          if (email) {
+            const submitted = await hasSubmitted(email);
+            if (submitted) setIsSurveyTaken(true);
+          }
         } else {
-          console.log("Successfully fetched profile:", profile);
-        }
+          // Anonymous user path: rely on passed props (if any)
+          const email = userEmail || "";
+          const fullName = userFullName || "";
+          const username = userUsername || "";
+          setUserData({ email, fullName, username });
 
-        // Use the fetched data or fallback to props
-        const email = userEmail || profile?.email || user?.email || "";
-        const fullName = userFullName || profile?.full_name || "";
-        const username = userUsername || profile?.username || "";
-
-        // Debug: Log the email sources for troubleshooting
-        console.log("Email sources:", {
-          userEmail,
-          profileEmail: profile?.email,
-          userAuthEmail: user?.email,
-          finalEmail: email,
-        });
-
-        setUserData({
-          email,
-          fullName,
-          username,
-        });
-
-        // Check if user has already taken the survey and if reward is claimed
-        const { data: redemption, error: redemptionError } = await supabase
-          .from("survey_redemptions")
-          .select("survey_button_clicked, survey_reward_claimed")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (
-          !redemptionError &&
-          redemption &&
-          redemption.survey_button_clicked
-        ) {
-          console.log("Survey already taken");
-          setIsSurveyTaken(true);
-
-          if (redemption.survey_reward_claimed) {
-            console.log("Reward already claimed");
-            setIsRewardClaimed(true);
+          if (email) {
+            const submitted = await hasSubmitted(email);
+            if (submitted) setIsSurveyTaken(true);
           }
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
-        // Fallback to props if available
-        const fallbackEmail = userEmail || user?.email || "";
-        console.log("Using fallback email:", fallbackEmail);
-        setUserData({
-          email: fallbackEmail,
-          fullName: userFullName || "",
-          username: userUsername || "",
-        });
+        console.error("Error initializing survey state:", error);
       } finally {
         setIsLoading(false);
       }
@@ -141,11 +124,6 @@ export function SurveyButton({
   }, [isAuthenticated, user, userEmail, userFullName, userUsername, supabase]);
 
   const handleSurveyClick = async () => {
-    if (!isAuthenticated || !user?.id) {
-      console.error("User not authenticated");
-      return;
-    }
-
     // If reward is already claimed, prevent any action
     if (isSurveyTaken && isRewardClaimed) {
       console.log("Survey complete, reward already claimed");
@@ -164,63 +142,65 @@ export function SurveyButton({
     let trackingSuccess = false;
 
     try {
-      // Track button click in database
-      const now = new Date().toISOString();
-
-      // Check if survey_redemptions record exists
-      const { data: existingRecord, error: checkError } = await supabase
-        .from("survey_redemptions")
-        .select("id, survey_button_clicked")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (checkError && checkError.code !== "PGRST116") {
-        console.error("Error checking survey redemption:", checkError);
-        throw new Error("Failed to check survey redemption status");
-      }
-
-      if (existingRecord) {
-        // Update existing record
-        const { error: updateError } = await supabase
+      // Only track redemption for signed-in users
+      if (isAuthenticated && user?.id) {
+        const now = new Date().toISOString();
+        const { data: existingRecord, error: checkError } = await supabase
           .from("survey_redemptions")
-          .update({
-            survey_button_clicked: true,
-            survey_button_clicked_at: now,
-          })
-          .eq("user_id", user.id);
+          .select("id, survey_button_clicked")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-        if (updateError) {
-          console.error("Error updating survey redemption:", updateError);
-          throw new Error("Failed to update survey redemption");
+        if (checkError && checkError.code !== "PGRST116") {
+          console.error("Error checking survey redemption:", checkError);
+          throw new Error("Failed to check survey redemption status");
+        }
+
+        if (existingRecord) {
+          const { error: updateError } = await supabase
+            .from("survey_redemptions")
+            .update({
+              survey_button_clicked: true,
+              survey_button_clicked_at: now,
+            })
+            .eq("user_id", user.id);
+
+          if (updateError) {
+            console.error("Error updating survey redemption:", updateError);
+            throw new Error("Failed to update survey redemption");
+          } else {
+            trackingSuccess = true;
+          }
         } else {
-          console.log("✅ Survey button click tracked");
-          trackingSuccess = true;
+          const { error: insertError } = await supabase
+            .from("survey_redemptions")
+            .insert({
+              user_id: user.id,
+              survey_button_clicked: true,
+              survey_button_clicked_at: now,
+              survey_reward_claimed: false,
+            });
+
+          if (insertError) {
+            console.error("Error creating survey redemption:", insertError);
+            throw new Error("Failed to create survey redemption");
+          } else {
+            trackingSuccess = true;
+          }
         }
       } else {
-        // Create new record
-        const { error: insertError } = await supabase
-          .from("survey_redemptions")
-          .insert({
-            user_id: user.id,
-            survey_button_clicked: true,
-            survey_button_clicked_at: now,
-            survey_reward_claimed: false,
-          });
-
-        if (insertError) {
-          console.error("Error creating survey redemption:", insertError);
-          throw new Error("Failed to create survey redemption");
-        } else {
-          console.log("✅ Survey button click tracked");
-          trackingSuccess = true;
-        }
+        // Anonymous users: don't block opening if tracking fails; just proceed
+        trackingSuccess = true;
       }
     } catch (error) {
       console.error("Error tracking survey button click:", error);
-      alert(
-        "Failed to track survey access. Please try again or contact support."
-      );
-      return;
+      // For anonymous users, allow proceeding; for authed users, block on tracking failure
+      if (isAuthenticated && user?.id) {
+        alert(
+          "Failed to track survey access. Please try again or contact support."
+        );
+        return;
+      }
     }
 
     // Only open the form and update state if tracking was successful
@@ -228,7 +208,7 @@ export function SurveyButton({
       return;
     }
 
-    setIsSurveyTaken(true);
+    // Do not mark as taken on click; rely on form_submissions.submitted_at
 
     // Build URL with pre-filled data
     let url = GOOGLE_FORM_URL;
@@ -295,8 +275,15 @@ export function SurveyButton({
       console.error("Invalid URL:", error);
     }
 
-    // Open Google form in the same tab with pre-filled data
-    window.location.href = url;
+    // Open Google form in a new tab to prevent back navigation issues
+    const newWindow = window.open(url, "_blank");
+
+    // If popup was blocked, fallback to same tab navigation
+    if (!newWindow) {
+      // Replace current history entry to prevent back navigation
+      window.history.replaceState(null, "", window.location.href);
+      window.location.href = url;
+    }
   };
 
   if (isLoading) {
@@ -306,6 +293,11 @@ export function SurveyButton({
         Loading...
       </Button>
     );
+  }
+
+  // For anonymous users who already submitted, hide the button entirely
+  if (!isAuthenticated && isSurveyTaken) {
+    return null;
   }
 
   // Determine button text and state
