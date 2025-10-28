@@ -72,34 +72,27 @@ export function SurveyButton({
             console.error("Error fetching user profile:", profileError);
           }
 
-          const email = userEmail || profile?.email || user?.email || "";
+          const email = profile?.email || user?.email || userEmail || "";
           const fullName = userFullName || profile?.full_name || "";
           const username = userUsername || profile?.username || "";
 
           setUserData({ email, fullName, username });
 
-          // For signed-in users, keep existing redemption checks for reward flow
-          const { data: redemption, error: redemptionError } = await supabase
-            .from("survey_redemptions")
-            .select("survey_button_clicked, survey_reward_claimed")
-            .eq("user_id", user.id)
-            .maybeSingle();
-
-          if (
-            !redemptionError &&
-            redemption &&
-            redemption.survey_button_clicked
-          ) {
-            setIsSurveyTaken(true);
-            if (redemption.survey_reward_claimed) {
-              setIsRewardClaimed(true);
-            }
-          }
+          // Do not set UI state from survey_redemptions; rely solely on form_submissions
 
           // Also check global form_submissions table to prevent extra attempts
           if (email) {
             const submitted = await hasSubmitted(email);
-            if (submitted) setIsSurveyTaken(true);
+            if (submitted) {
+              setIsSurveyTaken(true);
+              setIsRewardClaimed(true); // Reflect completion based on form_submissions
+            } else {
+              setIsSurveyTaken(false);
+              setIsRewardClaimed(false);
+            }
+          } else {
+            setIsSurveyTaken(false);
+            setIsRewardClaimed(false);
           }
         } else {
           // Anonymous user path: rely on passed props (if any)
@@ -110,7 +103,16 @@ export function SurveyButton({
 
           if (email) {
             const submitted = await hasSubmitted(email);
-            if (submitted) setIsSurveyTaken(true);
+            if (submitted) {
+              setIsSurveyTaken(true);
+              setIsRewardClaimed(true); // Reflect completion based on form_submissions
+            } else {
+              setIsSurveyTaken(false);
+              setIsRewardClaimed(false);
+            }
+          } else {
+            setIsSurveyTaken(false);
+            setIsRewardClaimed(false);
           }
         }
       } catch (error) {
@@ -124,18 +126,35 @@ export function SurveyButton({
   }, [isAuthenticated, user, userEmail, userFullName, userUsername, supabase]);
 
   const handleSurveyClick = async () => {
+    // Re-check form submission status just-in-time to prevent multiple submissions
+    try {
+      const emailToCheck =
+        (isAuthenticated ? user?.email : undefined) ||
+        userData?.email ||
+        userEmail ||
+        "";
+      if (emailToCheck) {
+        const alreadySubmitted = await hasSubmitted(emailToCheck);
+        if (alreadySubmitted) {
+          setIsSurveyTaken(true);
+          setIsRewardClaimed(true); // Reflect completion based on form_submissions
+          return; // Block opening the Google Form again
+        }
+      }
+    } catch (e) {
+      console.error("Error re-checking submission status:", e);
+      // Fail-open: allow flow to continue; server-side will still prevent duplicate rewards
+    }
+
     // If reward is already claimed, prevent any action
     if (isSurveyTaken && isRewardClaimed) {
       console.log("Survey complete, reward already claimed");
       return;
     }
 
-    // If survey already taken but reward not claimed, redirect to claim page
+    // If survey already taken but reward not claimed, do nothing (kept for safety)
     if (isSurveyTaken && !isRewardClaimed) {
-      console.log(
-        "Survey taken but reward not claimed, redirecting to claim page"
-      );
-      router.push("/survey-claim");
+      console.log("Survey taken, waiting for processing");
       return;
     }
 
@@ -275,15 +294,8 @@ export function SurveyButton({
       console.error("Invalid URL:", error);
     }
 
-    // Open Google form in a new tab to prevent back navigation issues
-    const newWindow = window.open(url, "_blank");
-
-    // If popup was blocked, fallback to same tab navigation
-    if (!newWindow) {
-      // Replace current history entry to prevent back navigation
-      window.history.replaceState(null, "", window.location.href);
-      window.location.href = url;
-    }
+    // Redirect to Google Form in the same tab
+    window.location.assign(url);
   };
 
   if (isLoading) {
@@ -306,17 +318,10 @@ export function SurveyButton({
   let buttonClassName = "bg-[#4A00BE] text-white";
 
   if (isSurveyTaken) {
-    if (isRewardClaimed) {
-      buttonText = "Survey Complete";
-      buttonDisabled = true;
-      buttonClassName =
-        "border border-gray-900 bg-white text-gray-900 font-semibold cursor-not-allowed";
-    } else {
-      buttonText = "Claim Your Reward";
-      buttonDisabled = false;
-      buttonClassName =
-        "border border-purple-500 bg-white text-purple-500 font-semibold";
-    }
+    buttonText = isRewardClaimed ? "Survey Complete" : "Survey Received";
+    buttonDisabled = true;
+    buttonClassName =
+      "border border-gray-900 bg-white text-gray-900 font-semibold cursor-not-allowed";
   }
 
   return (
