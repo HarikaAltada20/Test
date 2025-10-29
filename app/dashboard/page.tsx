@@ -374,7 +374,7 @@ function DashboardPage() {
               className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
             >
               <MessageSquare className="h-4 w-4" />
-              Take Survey
+              Fill survey and earn upto $5
             </button>
           )}
           {isAdvertiser && (

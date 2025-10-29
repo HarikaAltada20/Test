@@ -259,26 +259,26 @@ export function SurveyModal({ isOpen, onClose }: SurveyModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-purple-600" />
+            {/* <MessageSquare className="h-5 w-5 text-purple-600" /> */}
             Take Our Survey
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-gray-700">
             Share your valuable feedback and help us improve the platform.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* Survey Content - Two Column Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr] gap-6 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 items-center">
             {/* Left Column - Image */}
             <div className="flex justify-center">
               <img
-                src="/images/360_F_1018050560_kQHuMNjN5tHrhUKxnT9dBbOoxjCEe9cu-removebg-preview.avif"
+                src="/images/online-survey.avif"
                 alt="Survey illustration"
-                className="h-[200px] w-auto object-contain"
+                className="h-[300px] w-auto object-contain"
               />
             </div>
 
@@ -296,6 +296,17 @@ export function SurveyModal({ isOpen, onClose }: SurveyModalProps) {
                 the best responses based on clarity, effort, and real insights.
               </p>
 
+              <div className="mt-4">
+                <Button
+                  onClick={handleSurveyClick}
+                  disabled={buttonDisabled}
+                  className={`${buttonClassName} text-md`}
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  {buttonText}
+                </Button>
+              </div>
+
               {/* Reward Badge */}
               {/* <div className="flex items-center gap-2 bg-gradient-to-r from-purple-100 to-pink-100 px-4 py-3 rounded-lg border border-purple-200 shadow-sm">
                 <Gift className="h-5 w-5 text-purple-600 animate-pulse flex-shrink-0" />
@@ -304,26 +315,6 @@ export function SurveyModal({ isOpen, onClose }: SurveyModalProps) {
                 </span>
               </div> */}
             </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1"
-              disabled={buttonDisabled}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSurveyClick}
-              disabled={buttonDisabled}
-              className={`${buttonClassName} flex-1`}
-            >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              {buttonText}
-            </Button>
           </div>
         </div>
       </DialogContent>

@@ -41,6 +41,7 @@ import {
 } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { SurveyButton } from "@/components/SurveyButton";
+import { hasSubmitted } from "@/lib/form-submissions";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -126,6 +127,8 @@ export default function SettingsPage({
     details?: string;
     code?: "no_channel" | "generic";
   } | null>(null);
+  const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
+  const [isSurveyLoading, setIsSurveyLoading] = useState(true);
 
   // Handle URL error parameters
   useEffect(() => {
@@ -886,6 +889,28 @@ export default function SettingsPage({
     checkAndRefreshYouTubeToken();
   }, [checkAndRefreshInstagramToken, checkAndRefreshYouTubeToken]);
 
+  // Check survey completion status
+  useEffect(() => {
+    const checkSurveyCompletion = async () => {
+      if (!user?.email) {
+        setIsSurveyLoading(false);
+        return;
+      }
+
+      try {
+        const completed = await hasSubmitted(user.email);
+        setIsSurveyCompleted(completed);
+      } catch (error) {
+        console.error("Error checking survey completion:", error);
+        setIsSurveyCompleted(false);
+      } finally {
+        setIsSurveyLoading(false);
+      }
+    };
+
+    checkSurveyCompletion();
+  }, [user?.email]);
+
   if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
@@ -1437,8 +1462,8 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* Survey Section - Only for Creators */}
-      {userType === "creator" && (
+      {/* Survey Section - Only for Creators who have completed the survey */}
+      {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
         <div className="bg-white rounded-xl shadow-lg border border-purple-100 overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5">
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
             {/* Content Section */}
@@ -1448,42 +1473,39 @@ export default function SettingsPage({
                 <img
                   src="/images/360_F_1018050560_kQHuMNjN5tHrhUKxnT9dBbOoxjCEe9cu-removebg-preview.avif"
                   alt="Survey illustration"
-                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[145px] object-contain"
+                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
                 />
               </div>
               {/* Text Content */}
-              <div className="flex-1 space-y-4 w-full sm:w-auto text-center sm:text-left">
+              <div className="flex-1 space-y-4 w-full sm:w-auto text-center pt-7 sm:text-left">
                 <div>
                   <h3 className="font-semibold text-base sm:text-lg mb-1 text-gray-900">
-                    Take Our Survey
+                    Survey Completed
                   </h3>
-                  {/* <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                    Share your valuable feedback and help us improve the
-                    platform. Your opinion matters to us and helps shape the
-                    future of GoViral!
-                  </p> */}
                   <p className="text-xs sm:text-[12.5px] text-gray-600 leading-relaxed">
-                    We really value honest and thoughtful feedback. So, we will
-                    give an extra $5 bonus to the most genuine and
-                    well-thought-out survey responses. Take your time, read each
-                    question carefully, and answer with full honesty — we'll
-                    pick the best responses based on clarity, effort, and real
-                    insights.
+                    Thank you for completing our survey! Your feedback is
+                    valuable to us and helps improve the platform. We appreciate
+                    your time and thoughtful responses.
                   </p>
                 </div>
                 {/* Reward Badge */}
-                <div className="flex items-center justify-center sm:justify-start gap-2 bg-gradient-to-r from-purple-100 to-pink-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-purple-200 w-full sm:w-fit shadow-sm">
+                {/* <div className="flex items-center justify-center sm:justify-start gap-2 bg-gradient-to-r from-purple-100 to-pink-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-purple-200 w-full sm:w-fit shadow-sm">
                   <Gift className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 animate-pulse flex-shrink-0" />
                   <span className="text-xs sm:text-sm font-semibold text-purple-700 whitespace-nowrap">
-                    Earn $0.40 reward upon completion!
+                    Survey completed - Thank you!
                   </span>
-                </div>
+                </div> */}
               </div>
             </div>
             {/* Button Section */}
-            <div className="w-full sm:w-auto lg:pr-2 lg:flex-shrink-0 mt-3 md:mt-0">
-              <SurveyButton className="w-full sm:w-auto justify-center sm:justify-start" />
-            </div>
+            {/* <div className="w-full sm:w-auto lg:pr-2 lg:flex-shrink-0 mt-3 md:mt-0">
+              <div className="flex items-center justify-center sm:justify-start gap-2 bg-green-100 px-4 py-2 rounded-lg border border-green-200">
+                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                <span className="text-sm font-medium text-green-700">
+                  Completed
+                </span>
+              </div>
+            </div> */}
           </div>
         </div>
       )}
