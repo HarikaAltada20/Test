@@ -21,6 +21,7 @@ import {
   Eye,
   Coins,
   Loader2,
+  MessageSquare,
 } from "lucide-react";
 import { formatLocalDateTime } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,6 +34,8 @@ import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
+import { SurveyModal } from "@/components/SurveyModal";
+import { hasSubmitted } from "@/lib/form-submissions";
 
 function DashboardPage() {
   const router = useRouter();
@@ -62,6 +65,8 @@ function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
   const [showPopup, setShowPopup] = useState(false);
+  const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
+  const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
     const success = searchParams.get("success");
@@ -120,6 +125,21 @@ function DashboardPage() {
       }
     }
   }, [profile]);
+
+  // Check survey completion status
+  useEffect(() => {
+    const checkSurveyStatus = async () => {
+      if (userDetails?.email) {
+        try {
+          const submitted = await hasSubmitted(userDetails.email);
+          setIsSurveyCompleted(submitted);
+        } catch (error) {
+          console.error("Error checking survey status:", error);
+        }
+      }
+    };
+    checkSurveyStatus();
+  }, [userDetails?.email]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -347,6 +367,16 @@ function DashboardPage() {
           Dashboard
         </h2>
         <div className="flex items-center gap-3">
+          {/* Survey Button - Only show for creators and if survey not completed */}
+          {!isAdvertiser && !isSurveyCompleted && (
+            <button
+              onClick={() => setIsSurveyModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Take Survey
+            </button>
+          )}
           {isAdvertiser && (
             <button
               onClick={handleCreateContestClick}
@@ -689,6 +719,11 @@ function DashboardPage() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         userId={user?.id || ""}
+      />
+      {/* Survey Modal */}
+      <SurveyModal
+        isOpen={isSurveyModalOpen}
+        onClose={() => setIsSurveyModalOpen(false)}
       />
     </div>
   );
