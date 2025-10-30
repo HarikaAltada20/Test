@@ -1120,7 +1120,7 @@ function DashboardContent({
                   <Separator
                     orientation="vertical"
                     className={cn(
-                      "h-6",
+                      "h-6 hidden md:block",
                       currentMode === "light"
                         ? "bg-slate-300"
                         : "bg-violet-400/20"

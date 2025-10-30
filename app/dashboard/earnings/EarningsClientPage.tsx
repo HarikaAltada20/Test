@@ -1245,11 +1245,19 @@ export default function EarningsClientPage({
                                 transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
                                   : transaction.status === "pending"
-                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
                                   : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
@@ -1590,7 +1598,27 @@ export default function EarningsClientPage({
                                 ? "destructive"
                                 : "outline"
                             }
-                            className="capitalize"
+                            className={`capitalize px-3 py-1 rounded-full text-sm font-medium
+                              ${
+                                tx.status === "completed" ||
+                                tx.status === "credited" ||
+                                tx.status === "success"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
+                                  : tx.status === "pending"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  : tx.status === "failed"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                              }
+                            `}
                           >
                             {tx.status?.replace(/_/g, " ") || "N/A"}
                           </Badge>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,7 @@ import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface UnifiedAnalyticsProps {
   userId: string;
@@ -199,15 +200,21 @@ const submissionStatusOptions = [
   { id: "verifiedPaid", label: "Verified + Paid", icon: CheckCircle },
 ];
 
-const tabs = [
-  { id: "overview", label: "Overview" },
-  { id: "detailed", label: "Detailed Analytics" },
-  { id: "contests", label: "Contests" },
-  { id: "creators", label: "Creators" },
-];
+// Tabs are computed responsively so small screens show shorter labels
 
 export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
-  const { activeTab, setActiveTab } = useTabState(tabs, {
+  const isMobile = useIsMobile();
+  const computedTabs = useMemo(
+    () => [
+      { id: "overview", label: "Overview" },
+      { id: "detailed", label: isMobile ? "Analytics" : "Detailed Analytics" },
+      { id: "contests", label: "Contests" },
+      { id: "creators", label: "Creators" },
+    ],
+    [isMobile]
+  );
+
+  const { activeTab, setActiveTab } = useTabState(computedTabs, {
     defaultTab: "overview",
   });
   const [activeFilter, setActiveFilter] = useState("all");
@@ -549,7 +556,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
       {/* Tabs */}
       <EnhancedTabs
-        tabs={tabs}
+        tabs={computedTabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         className="mb-6"
@@ -565,7 +572,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
             {analyticsData.overview.topContest && (
               <Card
                 className={cn(
-                  "border shadow-sm",
+                  "border shadow-smv flex-col sm:flex-row",
                   isDark
                     ? "bg-gradient-to-br from-purple-800/40 to-blue-900/40 border-purple-700/30"
                     : "bg-gradient-to-br from-purple-50 to-blue-50 border-purple-200"
@@ -582,7 +589,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3
                         className={cn(
@@ -611,7 +618,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                     <Badge
                       variant="outline"
                       className={cn(
-                        "shadow-sm",
+                        "shadow-sm self-start sm:self-auto",
                         isDark
                           ? "bg-gradient-to-r from-purple-800/40 to-blue-800/40 text-purple-200 border-purple-600/50"
                           : "bg-gradient-to-r from-purple-100 to-blue-100 text-purple-800 border-purple-300"

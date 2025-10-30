@@ -426,11 +426,11 @@ export default function CreatorAnalytics({
         )}
       >
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-lg">{getLeaderboardTitle()}</CardTitle>
             <div
               className={cn(
-                "flex gap-2 ",
+                "flex gap-2 flex-wrap sm:flex-nowrap sm:justify-end",
                 isDark ? "text-purple-300" : "text-purple-700"
               )}
             >
@@ -496,7 +496,7 @@ export default function CreatorAnalytics({
                 <div
                   key={creator.creator.id}
                   className={cn(
-                    "flex items-center justify-between p-4 rounded-lg",
+                    "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg",
                     isDark
                       ? "bg-[#170337] border border-gray-600"
                       : "bg-gray-50"
@@ -512,7 +512,7 @@ export default function CreatorAnalytics({
                       <h3 className="font-semibold">
                         @{creator.creator.username}
                       </h3>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
                         {creator.platforms.map((platform: string) => (
                           <PlatformIcon key={platform} platform={platform} />
                         ))}
@@ -522,7 +522,7 @@ export default function CreatorAnalytics({
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right w-full sm:w-auto">
                     <div className="text-lg font-bold">
                       {getLeaderboardMetric(creator)}
                     </div>
@@ -555,24 +555,24 @@ export default function CreatorAnalytics({
           <CardContent>
             <div
               className={cn(
-                "flex items-center justify-between p-6 rounded-lg",
+                "flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-4 sm:p-6 rounded-lg",
                 isDark
                   ? "bg-gradient-to-r from-purple-900/30 to-blue-900/30 border-white/20 backdrop-blur-2xl"
                   : "bg-gradient-to-r from-purple-50 to-blue-50"
               )}
             >
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-purple-100 rounded-full flex items-center justify-center">
                   <span className="text-2xl font-bold text-purple-600">1</span>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold">
+                  <h3 className="text-lg sm:text-xl font-bold">
                     @{leaderboards.topByViews[0].creator.username}
                   </h3>
                   <p className="text-muted-foreground">
                     Top performer across all contests
                   </p>
-                  <div className="flex items-center gap-4 mt-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-2 text-sm">
                     <span className="flex items-center gap-1">
                       <Eye className="w-4 h-4" />
                       {leaderboards.topByViews[0].totalViews.toLocaleString()}{" "}
@@ -592,7 +592,7 @@ export default function CreatorAnalytics({
                   </div>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left md:text-right self-start md:self-auto">
                 <Badge
                   variant="outline"
                   className="bg-yellow-50 text-yellow-700 border-yellow-200"

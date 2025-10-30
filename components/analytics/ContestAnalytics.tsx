@@ -246,11 +246,11 @@ export default function ContestAnalytics({
   return (
     <div className="space-y-6">
       {/* Filter Indicator */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-row items-center justify-between gap-3 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-wrap">
           <span
             className={cn(
-              "text-sm",
+              "text-xs sm:text-sm",
               isDark ? "text-gray-300" : "text-gray-600"
             )}
           >
@@ -258,7 +258,7 @@ export default function ContestAnalytics({
           </span>
           <span
             className={cn(
-              "px-3 py-1 rounded-full text-sm font-medium",
+              "px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium inline-flex shrink-0 w-fit",
               isDark ? "bg-gray-800 text-gray-100" : "bg-gray-100 text-gray-800"
             )}
           >
@@ -278,7 +278,10 @@ export default function ContestAnalytics({
           </span>
         </div>
         <div
-          className={cn("text-sm", isDark ? "text-gray-300" : "text-gray-500")}
+          className={cn(
+            "text-xs sm:text-sm whitespace-nowrap",
+            isDark ? "text-gray-300" : "text-gray-500"
+          )}
         >
           {filteredContests.length} contest
           {filteredContests.length !== 1 ? "s" : ""} found

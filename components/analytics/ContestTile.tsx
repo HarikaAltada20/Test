@@ -54,8 +54,14 @@ interface ContestTileProps {
   onViewDetails: (contestId: string) => void;
 }
 
-const PlatformIcon = ({ platform }: { platform: string }) => {
-  const iconClass = "w-5 h-5";
+const PlatformIcon = ({
+  platform,
+  className,
+}: {
+  platform: string;
+  className?: string;
+}) => {
+  const iconClass = className || "w-4 h-4 sm:w-5 sm:h-5";
   const gradientId = `instagram-gradient-${Math.random()
     .toString(36)
     .substr(2, 9)}`;
@@ -212,7 +218,7 @@ export default function ContestTile({
       <div className="animate-pulse">
         <div
           className={cn(
-            "rounded-xl border h-48 w-full",
+            "rounded-xl border h-40 sm:h-48 lg:h-56 w-full",
             isInitiallyDark
               ? "bg-[#06021D] border-gray-600"
               : "bg-gray-100 border-gray-200"
@@ -334,7 +340,8 @@ export default function ContestTile({
 
   return (
     <div
-      className={`transition-all duration-300 rounded-xl hover:shadow-lg cursor-pointer group border hover:border-purple-300 ${
+      className={cn(
+        "transition-all duration-300 rounded-xl hover:shadow-lg cursor-pointer group border hover:border-purple-300 w-full",
         isDark
           ? `bg-[#06021D] ${
               isHovered ? "shadow-lg border-purple-300" : "border-gray-600"
@@ -342,21 +349,21 @@ export default function ContestTile({
           : `bg-white ${
               isHovered ? "shadow-lg border-purple-300" : "border-gray-400"
             }`
-      }`}
+      )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onViewDetails(contest.id)}
     >
-      <CardContent className="p-6">
-        <div className="flex items-center gap-6">
+      <CardContent className="p-4 sm:p-5 lg:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4 sm:gap-5 lg:gap-6">
           {/* Contest Thumbnail */}
-          <div className="flex-shrink-0">
-            <div className="w-32 h-20 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg flex items-center justify-center border-2 border-purple-200 group-hover:border-purple-300 transition-colors overflow-hidden">
+          <div className="flex-shrink-0 flex justify-center lg:justify-start w-full sm:w-auto">
+            <div className="w-full sm:w-40 md:w-32 h-40 sm:h-28 md:h-20 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg flex items-center justify-center border-2 border-purple-200 group-hover:border-purple-300 transition-colors overflow-hidden relative">
               {contest.thumbnail_url && contest.thumbnail_url.trim() !== "" ? (
                 <img
                   src={contest.thumbnail_url}
                   alt={contest.title}
-                  className="w-full h-full object-cover rounded-lg"
+                  className="w-full h-full object-contain sm:object-cover rounded-lg"
                   onError={(e) => {
                     // Hide image on error and show platform icon instead
                     const img = e.currentTarget;
@@ -374,41 +381,42 @@ export default function ContestTile({
 
           {/* Contest Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
                   <h3
                     className={cn(
-                      "text-xl font-bold flex items-center gap-2",
+                      "text-base sm:text-lg lg:text-xl font-bold flex items-center gap-2 flex-wrap",
                       isDark
                         ? "text-white"
-                        : "text-gray-900 group-hover:text-purple-700 transition-colors "
+                        : "text-gray-900 group-hover:text-purple-700 transition-colors"
                     )}
                   >
-                    {contest.title}
+                    <span className="break-words">{contest.title}</span>
                     <PlatformIcon platform={contest.platform} />
                   </h3>
                   <Badge
                     variant="outline"
-                    className={`text-sm px-3 py-1 ${getStatusColor(
-                      status,
-                      isDark
-                    )} font-medium`}
+                    className={cn(
+                      "text-xs sm:text-sm px-2 sm:px-3 py-1",
+                      getStatusColor(status, isDark),
+                      "font-medium shrink-0"
+                    )}
                   >
                     {status}
                   </Badge>
                   <span
-                    className={`text-sm px-3 py-1 rounded-full border ${getPlatformColor(
-                      contest.platform,
-                      isDark
-                    )}`}
+                    className={cn(
+                      "text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full border shrink-0",
+                      getPlatformColor(contest.platform, isDark)
+                    )}
                   >
                     {contest.platform?.toUpperCase()}
                   </span>
                   {isActive && (
                     <span
                       className={cn(
-                        "text-sm px-3 py-1 rounded-full border",
+                        "text-xs sm:text-sm px-2 sm:px-3 py-1 rounded-full border shrink-0",
                         isDark
                           ? "text-purple-300 bg-purple-900/30 border-purple-700"
                           : "text-gray-600 bg-purple-50 border-purple-200"
@@ -422,10 +430,10 @@ export default function ContestTile({
                   )}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-left sm:text-right flex-shrink-0">
                 <div
                   className={cn(
-                    "text-2xl font-bold mb-1",
+                    "text-xl sm:text-2xl font-bold mb-1",
                     isDark ? "text-purple-400" : "text-purple-600"
                   )}
                 >
@@ -444,11 +452,12 @@ export default function ContestTile({
 
             {/* Platform-specific Metrics */}
             <div
-              className={`grid gap-3 mb-4 ${
+              className={cn(
+                "grid gap-2 sm:gap-3 mb-3 sm:mb-4",
                 platform === "instagram"
-                  ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7"
-                  : "grid-cols-2 md:grid-cols-4"
-              }`}
+                  ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7"
+                  : "grid-cols-2 sm:grid-cols-2 md:grid-cols-4"
+              )}
             >
               {platformMetrics.map((metric, index) => {
                 const Icon = metric.icon;
@@ -456,23 +465,23 @@ export default function ContestTile({
                   <div
                     key={index}
                     className={cn(
-                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-3 flex flex-col items-center text-center",
+                      "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 sm:p-3 flex flex-col items-center text-center",
                       isDark ? "bg-[#170337] text-white" : "bg-white text-black"
                     )}
                   >
                     <div
                       className={cn(
-                        "w-8 h-8 flex items-center justify-center rounded-full mb-2",
+                        "w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-full mb-1 sm:mb-2",
                         isDark
                           ? "bg-[#FFFFFF36] text-white"
                           : "bg-[#D8C3FF] text-[#4A00BE]"
                       )}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
                     </div>
                     <span
                       className={cn(
-                        "text-[12px] font-medium mb-1",
+                        "text-[10px] sm:text-[12px] font-medium mb-1",
                         isDark ? "text-gray-300" : "text-gray-700"
                       )}
                     >
@@ -480,7 +489,7 @@ export default function ContestTile({
                     </span>
                     <div
                       className={cn(
-                        "text-lg font-bold",
+                        "text-sm sm:text-base lg:text-lg font-bold",
                         isDark ? "text-white" : "text-gray-900"
                       )}
                     >
@@ -494,46 +503,51 @@ export default function ContestTile({
             {/* Contest Dates */}
             <div
               className={cn(
-                "flex items-center gap-6 text-sm",
+                "flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 lg:gap-6 text-xs sm:text-sm",
                 isDark ? "text-gray-300" : "text-gray-600"
               )}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Calendar
                   className={cn(
-                    "w-4 h-4",
+                    "w-3 h-3 sm:w-4 sm:h-4 shrink-0",
                     isDark ? "text-purple-400" : "text-purple-600"
                   )}
                 />
                 <span className="font-medium">Launch:</span>
-                <span>{formatDate(contest.start_date)}</span>
+                <span className="break-words">
+                  {formatDate(contest.start_date)}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Clock
                   className={cn(
-                    "w-4 h-4",
+                    "w-3 h-3 sm:w-4 sm:h-4 shrink-0",
                     isDark ? "text-purple-400" : "text-purple-600"
                   )}
                 />
                 <span className="font-medium">End:</span>
-                <span>{formatDate(contest.end_date)}</span>
+                <span className="break-words">
+                  {formatDate(contest.end_date)}
+                </span>
               </div>
             </div>
           </div>
 
           {/* View Details Button */}
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 flex justify-center lg:justify-end">
             <Button
               variant="outline"
               size="sm"
               className={cn(
-                "opacity-0 group-hover:opacity-100 transition-all duration-300",
+                "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300 w-full sm:w-auto",
                 isDark
                   ? "text-purple-400 border-purple-300"
-                  : "text-purple-600 border-purple-300 text-purple-600 hover:bg-purple-50 hover:border-purple-400"
+                  : "text-purple-600 border-purple-300 hover:bg-purple-50 hover:border-purple-400"
               )}
             >
-              View Details →
+              <span className="hidden sm:inline">View Details →</span>
+              <span className="sm:hidden">View Details</span>
             </Button>
           </div>
         </div>

@@ -438,7 +438,7 @@ export default function OverviewAnalytics({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3
                   className={cn(
@@ -460,7 +460,8 @@ export default function OverviewAnalytics({
                 className={cn(
                   isDark
                     ? "bg-green-900/50 text-green-200 border-green-700"
-                    : "bg-green-50 text-green-700 border-green-200"
+                    : "bg-green-50 text-green-700 border-green-200",
+                  "self-start sm:self-auto"
                 )}
               >
                 Best Performer
@@ -487,7 +488,7 @@ export default function OverviewAnalytics({
               {Object.entries(platformStats).map(([platform, stats]) => (
                 <div
                   key={platform}
-                  className="flex items-center justify-between"
+                  className="flex flex-wrap items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -515,7 +516,7 @@ export default function OverviewAnalytics({
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right w-full sm:w-auto">
                     <p
                       className={cn(
                         "font-semibold",
@@ -545,7 +546,10 @@ export default function OverviewAnalytics({
           <CardContent>
             <div className="space-y-4">
               {Object.entries(contestTypeStats).map(([type, stats]) => (
-                <div key={type} className="flex items-center justify-between">
+                <div
+                  key={type}
+                  className="flex flex-wrap items-start justify-between gap-3"
+                >
                   <div>
                     <p
                       className={cn(
@@ -559,7 +563,7 @@ export default function OverviewAnalytics({
                       {stats.count} contests • {stats.submissions} submissions
                     </p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right w-full sm:w-auto">
                     <p
                       className={cn(
                         "font-semibold",
@@ -604,7 +608,7 @@ export default function OverviewAnalytics({
                 <div
                   key={month}
                   className={cn(
-                    "flex items-center justify-between p-3 rounded-lg",
+                    "flex flex-col gap-3 md:flex-row md:items-center md:justify-between p-3 rounded-lg",
                     isDark ? "bg-gray-800" : "bg-gray-50"
                   )}
                 >
@@ -618,7 +622,7 @@ export default function OverviewAnalytics({
                       {monthName}
                     </p>
                   </div>
-                  <div className="flex gap-6 text-sm">
+                  <div className="flex flex-wrap gap-4 md:gap-6 text-sm md:justify-end">
                     <div className="text-center">
                       <p
                         className={cn(
