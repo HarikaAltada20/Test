@@ -71,7 +71,7 @@ import {
   WithdrawalRequest,
   PayoutMethodDetails,
 } from "@/types/earnings"; // Centralized types
-import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { formatCurrencyFromCents, formatErrorWithCurrency } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner"; // Import toast
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -649,7 +649,8 @@ export default function EarningsClientPage({
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
-      toast.error(`Withdrawal request failed: ${rpcError.message}`);
+      const formattedError = formatErrorWithCurrency(rpcError.message || "Unknown error");
+      toast.error(`Withdrawal request failed: ${formattedError}`);
     } else if (
       rpcResponse &&
       Array.isArray(rpcResponse) &&

@@ -79,7 +79,7 @@ import {
   PayoutMethodDetails,
   BillingClientPageProps,
 } from "@/types/earnings";
-import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { formatCurrencyFromCents, formatErrorWithCurrency } from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
@@ -539,7 +539,8 @@ export default function BillingClientPage({
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
-      toast.error(`Withdrawal request failed: ${rpcError.message}`);
+      const formattedError = formatErrorWithCurrency(rpcError.message || "Unknown error");
+      toast.error(`Withdrawal request failed: ${formattedError}`);
     } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
       const createdRequest = rpcResponse[0] as WithdrawalRequest;
       toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrencyFromCents(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
