@@ -173,26 +173,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Always compute per-platform view totals per creator for accurate "Both" display
-    const youtubeViewsMap: Map<string, number> = new Map();
-    const instagramViewsMap: Map<string, number> = new Map();
-    const { data: allSubs, error: allSubsError } = await supabase
-      .from("submissions")
-      .select("creator_id, platform, views");
-    if (!allSubsError && allSubs) {
-      allSubs.forEach((sub: any) => {
-        const creatorId = sub.creator_id;
-        const views = sub.views || 0;
-        const plat = (sub.platform || "").toLowerCase();
-        if (plat === "youtube") {
-          const cur = youtubeViewsMap.get(creatorId) || 0;
-          youtubeViewsMap.set(creatorId, cur + views);
-        } else if (plat === "instagram") {
-          const cur = instagramViewsMap.get(creatorId) || 0;
-          instagramViewsMap.set(creatorId, cur + views);
-        }
-      });
-    }
+   
 
     // Process users to calculate metrics
     const leaders = await Promise.all(
@@ -204,9 +185,6 @@ export async function GET(request: NextRequest) {
 
         // Prefer metrics persisted on creator_profiles to avoid heavy per-user queries
         const totalViews = isCreator ? profile?.total_views || 0 : 0;
-        // Per-platform views derived from submissions
-        const ytViews = isCreator ? youtubeViewsMap.get(creator.id) || 0 : 0;
-        const igViews = isCreator ? instagramViewsMap.get(creator.id) || 0 : 0;
         // Verified views should always reflect the profile's total_views without platform filtering
         const safeVerifiedViews = totalViews;
 
@@ -315,8 +293,6 @@ export async function GET(request: NextRequest) {
             affiliate_earnings: affiliateEarnings,
             contests_won: contestsWon,
             verified_views: safeVerifiedViews,
-            youtube_verified_views: ytViews,
-            instagram_verified_views: igViews,
             submissions_won: submissionsWon,
             contests_participated: contestsParticipated,
             submissions_made: submissionsMade,
