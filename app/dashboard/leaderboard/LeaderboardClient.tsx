@@ -74,6 +74,8 @@ type LeaderboardEntry = {
 
 type SummaryStats = {
   totalCreators: number;
+  instagramCreators?: number;
+  youtubeCreators?: number;
   totalWinnings: number;
   totalAffiliateEarnings: number;
   totalViews: number;
@@ -100,6 +102,9 @@ export default function LeaderboardClient() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [summary, setSummary] = useState<SummaryStats | null>(null);
+  const [staticSummary, setStaticSummary] = useState<SummaryStats | null>(null);
+  const [creatorCardPlatform, setCreatorCardPlatform] =
+    useState<PlatformFilter>("all");
 
   const sortOptions: {
     value: SortBy;
@@ -153,11 +158,40 @@ export default function LeaderboardClient() {
     setCurrentPage(1);
   }, [sortBy, platform]);
 
+  // Fetch static summary once on mount (always with platform="all")
+  useEffect(() => {
+    fetchStaticSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Fetch leaderboard data
   useEffect(() => {
     fetchLeaderboard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy, platform, currentPage, limit]);
+
+  const fetchStaticSummary = async () => {
+    try {
+      // Fetch summary with platform="all" to get stats for all platforms
+      const params = new URLSearchParams({
+        sortBy: "winnings", // Default sort, we only need the summary
+        platform: "all",
+        page: "1",
+        limit: "1", // Minimal limit since we only need summary
+      });
+      const response = await fetch(`/api/creators/leaderboard?${params}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch summary");
+      }
+
+      setStaticSummary(data.summary || null);
+    } catch (err: any) {
+      console.error("Error fetching static summary:", err);
+      // Don't set error state here to avoid blocking the UI
+    }
+  };
 
   const fetchLeaderboard = async () => {
     setLoading(true);
@@ -237,7 +271,7 @@ export default function LeaderboardClient() {
       </div>
 
       {/* Summary Statistics Cards */}
-      {summary && (
+      {staticSummary && (
         <div className="mb-4 sm:mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-white shadow-lg transition-all duration-300 overflow-hidden group rounded-lg sm:rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 sm:pb-3 bg-gradient-to-br from-violet-100 via-violet-50 to-purple-50 border-b border-violet-100/50 px-3 sm:px-6 pt-3 sm:pt-6">
@@ -250,19 +284,25 @@ export default function LeaderboardClient() {
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-violet-700 to-purple-700 bg-clip-text text-transparent">
-                {summary.totalCreators.toLocaleString()}
+                {staticSummary.totalCreators.toLocaleString()}
               </div>
-              <p className="text-xs text-violet-600/80 mt-1 sm:mt-2 font-medium">
-                {sortBy === "referrals" ||
-                sortBy === "total_coins" ||
-                sortBy === "affiliate_earnings"
-                  ? "All creators"
-                  : platform === "all"
-                  ? "All platforms"
-                  : platform === "youtube"
-                  ? "YouTube creators"
-                  : "Instagram creators"}
-              </p>
+
+              {/* Platform Breakdown */}
+              {staticSummary.instagramCreators !== undefined &&
+                staticSummary.youtubeCreators !== undefined && (
+                  <p className="text-xs text-violet-600/70 mt-1 sm:mt-2 font-medium flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1.5">
+                      <Instagram className="w-3 h-3 text-pink-600" />
+                      {staticSummary.instagramCreators.toLocaleString()}{" "}
+                      Instagram
+                    </span>
+                    <span className="text-violet-400">|</span>
+                    <span className="flex items-center gap-1.5">
+                      <Youtube className="w-3 h-3 text-red-600" />
+                      {staticSummary.youtubeCreators.toLocaleString()} YouTube
+                    </span>
+                  </p>
+                )}
             </CardContent>
           </div>
 
@@ -277,10 +317,10 @@ export default function LeaderboardClient() {
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-amber-700 to-orange-700 bg-clip-text text-transparent">
-                {summary.totalContestsWon.toLocaleString()}
+                {staticSummary.totalContestsWon.toLocaleString()}
               </div>
               <p className="text-xs text-amber-600/80 mt-1 sm:mt-2 font-medium">
-                {summary.totalContestsParticipated.toLocaleString()}{" "}
+                {staticSummary.totalContestsParticipated.toLocaleString()}{" "}
                 participated
               </p>
             </CardContent>
@@ -297,10 +337,10 @@ export default function LeaderboardClient() {
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">
-                {summary.totalSubmissionsWon.toLocaleString()}
+                {staticSummary.totalSubmissionsWon.toLocaleString()}
               </div>
               <p className="text-xs text-indigo-600/80 mt-1 sm:mt-2 font-medium">
-                {summary.totalSubmissionsMade.toLocaleString()} total
+                {staticSummary.totalSubmissionsMade.toLocaleString()} total
                 submissions
               </p>
             </CardContent>
@@ -317,11 +357,11 @@ export default function LeaderboardClient() {
             </CardHeader>
             <CardContent className="pt-3 sm:pt-4 px-3 sm:px-6 pb-3 sm:pb-6">
               <div className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-pink-700 to-rose-700 bg-clip-text text-transparent">
-                {summary.totalReferrals.toLocaleString()}
+                {staticSummary.totalReferrals.toLocaleString()}
               </div>
               <p className="text-xs text-pink-600/80 mt-1 sm:mt-2 font-medium">
-                {summary.totalAdvertisersReferred} brands,{" "}
-                {summary.totalCreatorsReferred} creators
+                {staticSummary.totalAdvertisersReferred} brands,{" "}
+                {staticSummary.totalCreatorsReferred} creators
               </p>
             </CardContent>
           </div>

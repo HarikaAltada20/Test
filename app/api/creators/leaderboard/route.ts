@@ -57,6 +57,107 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ leaders: [] });
     }
 
+    // Fetch platform-specific contest wins, participations, submissions, and winnings if platform filter is applied
+    // This ensures all metrics only count data from the selected platform
+    let platformContestWins: Map<string, number> = new Map();
+    let platformContestParticipations: Map<string, number> = new Map();
+    let platformSubmissionsWon: Map<string, number> = new Map();
+    let platformSubmissionsMade: Map<string, number> = new Map();
+    let platformWinnings: Map<string, number> = new Map();
+    if (platform !== "all") {
+      const platformValue = platform === "youtube" ? "youtube" : "instagram";
+
+      // First, get all contest IDs for the specified platform
+      const { data: platformContests, error: contestsError } = await supabase
+        .from("contests")
+        .select("id")
+        .eq("platform", platformValue);
+
+      if (!contestsError && platformContests && platformContests.length > 0) {
+        const contestIds = platformContests.map((c) => c.id);
+
+        // Get all contest wins for these contests
+        const { data: contestWinsData, error: contestWinsError } =
+          await supabase
+            .from("creator_contest_wins")
+            .select("creator_id")
+            .in("contest_id", contestIds);
+
+        if (!contestWinsError && contestWinsData) {
+          contestWinsData.forEach((win: any) => {
+            const creatorId = win.creator_id;
+            const currentCount = platformContestWins.get(creatorId) || 0;
+            platformContestWins.set(creatorId, currentCount + 1);
+          });
+        }
+
+        // Get all submissions for these contests
+        const { data: submissionsData, error: submissionsError } =
+          await supabase
+            .from("submissions")
+            .select("creator_id, contest_id, status, earnings")
+            .in("contest_id", contestIds);
+
+        if (!submissionsError && submissionsData) {
+          // Count distinct contests per creator for participations
+          const creatorContestMap = new Map<string, Set<string>>();
+          // Count submissions won (status = 'paid') per creator
+          const creatorSubmissionsWonMap = new Map<string, number>();
+          // Count total submissions made per creator
+          const creatorSubmissionsMadeMap = new Map<string, number>();
+          // Sum earnings from paid submissions per creator
+          const creatorWinningsMap = new Map<string, number>();
+
+          submissionsData.forEach((sub: any) => {
+            const creatorId = sub.creator_id;
+            const contestId = sub.contest_id;
+            const status = sub.status;
+            const earnings = sub.earnings || 0;
+
+            // Count participations (distinct contests)
+            if (!creatorContestMap.has(creatorId)) {
+              creatorContestMap.set(creatorId, new Set());
+            }
+            creatorContestMap.get(creatorId)?.add(contestId);
+
+            // Count submissions won (status = 'paid')
+            if (status === "paid") {
+              const currentWon = creatorSubmissionsWonMap.get(creatorId) || 0;
+              creatorSubmissionsWonMap.set(creatorId, currentWon + 1);
+
+              // Sum earnings from paid submissions (winnings)
+              const currentWinnings = creatorWinningsMap.get(creatorId) || 0;
+              creatorWinningsMap.set(creatorId, currentWinnings + earnings);
+            }
+
+            // Count total submissions made
+            const currentMade = creatorSubmissionsMadeMap.get(creatorId) || 0;
+            creatorSubmissionsMadeMap.set(creatorId, currentMade + 1);
+          });
+
+          // Set participations (distinct contests)
+          creatorContestMap.forEach((contestSet, creatorId) => {
+            platformContestParticipations.set(creatorId, contestSet.size);
+          });
+
+          // Set submissions won
+          creatorSubmissionsWonMap.forEach((count, creatorId) => {
+            platformSubmissionsWon.set(creatorId, count);
+          });
+
+          // Set submissions made
+          creatorSubmissionsMadeMap.forEach((count, creatorId) => {
+            platformSubmissionsMade.set(creatorId, count);
+          });
+
+          // Set winnings (sum of earnings from paid submissions)
+          creatorWinningsMap.forEach((total, creatorId) => {
+            platformWinnings.set(creatorId, total);
+          });
+        }
+      }
+    }
+
     // Process creators to calculate metrics
     const leaders = await Promise.all(
       creators
@@ -78,15 +179,38 @@ export async function GET(request: NextRequest) {
           const safeVerifiedViews = totalViews;
 
           // Money won can be either aggregated in profile or derived from transactions; prefer profile
-          const totalWinnings = profile?.total_money_won || 0;
+          let totalWinnings = profile?.total_money_won || 0;
+
+          // Calculate platform-specific winnings
+          if (platform !== "all") {
+            // Use platform-specific total when filter is applied
+            // This ensures we only count winnings from contests on the selected platform
+            totalWinnings = platformWinnings.get(creator.id) || 0;
+          }
 
           // Submissions metrics sourced from creator_profiles
-          const submissionsWon = profile?.total_submissions_won || 0;
-          const submissionsMade = profile?.total_submissions_made || 0;
+          let submissionsWon = profile?.total_submissions_won || 0;
+          let submissionsMade = profile?.total_submissions_made || 0;
+
+          // Calculate platform-specific submissions_won and submissions_made
+          if (platform !== "all") {
+            // Use platform-specific count when filter is applied
+            // This ensures we only count submissions for the selected platform
+            submissionsWon = platformSubmissionsWon.get(creator.id) || 0;
+            submissionsMade = platformSubmissionsMade.get(creator.id) || 0;
+          }
 
           // Prefer explicit profile counter if present; fallback to distinct contests from submissions
           let contestsParticipated = profile?.total_contests_participated || 0;
           // No fallback to live counting here to keep endpoint efficient and aligned with persisted metrics
+
+          // Calculate platform-specific contests_participated
+          if (platform !== "all") {
+            // Use platform-specific count when filter is applied
+            // This ensures we only count contests participated for the selected platform
+            contestsParticipated =
+              platformContestParticipations.get(creator.id) || 0;
+          }
 
           const hasYouTube =
             profile?.youtube_account !== null &&
@@ -97,6 +221,14 @@ export async function GET(request: NextRequest) {
 
           // Calculate affiliate earnings from total_other_earnings in users table
           const affiliateEarnings = creator.total_other_earnings || 0;
+
+          // Calculate platform-specific contests_won
+          let contestsWon = profile?.total_contests_won || 0;
+          if (platform !== "all") {
+            // Use platform-specific count when filter is applied
+            // This ensures we only count contests won for the selected platform
+            contestsWon = platformContestWins.get(creator.id) || 0;
+          }
 
           // Derive a consistent account display name similar to analytics usage
           let accountDisplayName: string | null = null;
@@ -133,7 +265,7 @@ export async function GET(request: NextRequest) {
             metrics: {
               winnings: totalWinnings,
               affiliate_earnings: affiliateEarnings,
-              contests_won: profile?.total_contests_won || 0,
+              contests_won: contestsWon,
               verified_views: safeVerifiedViews,
               youtube_verified_views: 0,
               instagram_verified_views: 0,
@@ -223,9 +355,19 @@ export async function GET(request: NextRequest) {
     // filteredLeaders already contains all creators with profiles, filtered by platform
     const totalCreatorsCount = filteredLeaders.length;
 
+    // Count creators by platform (always calculate from all leaders, not filtered)
+    const instagramCreatorsCount = leaders.filter(
+      (entry) => entry.platforms.has_instagram
+    ).length;
+    const youtubeCreatorsCount = leaders.filter(
+      (entry) => entry.platforms.has_youtube
+    ).length;
+
     // Calculate summary statistics from filtered leaders
     const summary = {
       totalCreators: totalCreatorsCount,
+      instagramCreators: instagramCreatorsCount,
+      youtubeCreators: youtubeCreatorsCount,
       totalWinnings: filteredLeaders.reduce(
         (sum, entry) => sum + entry.metrics.winnings,
         0
