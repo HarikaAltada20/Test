@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
     let platformSubmissionsWon: Map<string, number> = new Map();
     let platformSubmissionsMade: Map<string, number> = new Map();
     let platformWinnings: Map<string, number> = new Map();
+    let platformViews: Map<string, number> = new Map();
     if (platform !== "all") {
       const platformValue = platform === "youtube" ? "youtube" : "instagram";
 
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
         const { data: submissionsData, error: submissionsError } =
           await supabase
             .from("submissions")
-            .select("creator_id, contest_id, status, earnings")
+            .select("creator_id, contest_id, status, earnings, views")
             .in("contest_id", contestIds);
 
         if (!submissionsError && submissionsData) {
@@ -107,12 +108,15 @@ export async function GET(request: NextRequest) {
           const creatorSubmissionsMadeMap = new Map<string, number>();
           // Sum earnings from paid submissions per creator
           const creatorWinningsMap = new Map<string, number>();
+          // Sum views per creator (platform-scoped since submissions filtered by contestIds)
+          const creatorViewsMap = new Map<string, number>();
 
           submissionsData.forEach((sub: any) => {
             const creatorId = sub.creator_id;
             const contestId = sub.contest_id;
             const status = sub.status;
             const earnings = sub.earnings || 0;
+            const views = sub.views || 0;
 
             // Count participations (distinct contests)
             if (!creatorContestMap.has(creatorId)) {
@@ -133,6 +137,10 @@ export async function GET(request: NextRequest) {
             // Count total submissions made
             const currentMade = creatorSubmissionsMadeMap.get(creatorId) || 0;
             creatorSubmissionsMadeMap.set(creatorId, currentMade + 1);
+
+            // Sum views per creator
+            const currentViews = creatorViewsMap.get(creatorId) || 0;
+            creatorViewsMap.set(creatorId, currentViews + views);
           });
 
           // Set participations (distinct contests)
@@ -154,8 +162,34 @@ export async function GET(request: NextRequest) {
           creatorWinningsMap.forEach((total, creatorId) => {
             platformWinnings.set(creatorId, total);
           });
+
+          // Set views (sum of submission views for contests on selected platform)
+          creatorViewsMap.forEach((total, creatorId) => {
+            platformViews.set(creatorId, total);
+          });
         }
       }
+    }
+
+    // Always compute per-platform view totals per creator for accurate "Both" display
+    const youtubeViewsMap: Map<string, number> = new Map();
+    const instagramViewsMap: Map<string, number> = new Map();
+    const { data: allSubs, error: allSubsError } = await supabase
+      .from("submissions")
+      .select("creator_id, platform, views");
+    if (!allSubsError && allSubs) {
+      allSubs.forEach((sub: any) => {
+        const creatorId = sub.creator_id;
+        const views = sub.views || 0;
+        const plat = (sub.platform || "").toLowerCase();
+        if (plat === "youtube") {
+          const cur = youtubeViewsMap.get(creatorId) || 0;
+          youtubeViewsMap.set(creatorId, cur + views);
+        } else if (plat === "instagram") {
+          const cur = instagramViewsMap.get(creatorId) || 0;
+          instagramViewsMap.set(creatorId, cur + views);
+        }
+      });
     }
 
     // Process creators to calculate metrics
@@ -175,8 +209,19 @@ export async function GET(request: NextRequest) {
 
           // Prefer metrics persisted on creator_profiles to avoid heavy per-user queries
           const totalViews = profile?.total_views || 0;
-          // Business rule: Treat total verified views as the value stored in creator_profiles.total_views
-          const safeVerifiedViews = totalViews;
+          // Per-platform views derived from submissions
+          const ytViews = youtubeViewsMap.get(creator.id) || 0;
+          const igViews = instagramViewsMap.get(creator.id) || 0;
+          // Platform-aware "verified views"
+          let safeVerifiedViews = totalViews;
+          if (platform === "youtube") {
+            safeVerifiedViews = platformViews.get(creator.id) ?? ytViews;
+          } else if (platform === "instagram") {
+            safeVerifiedViews = platformViews.get(creator.id) ?? igViews;
+          } else {
+            const sumBoth = ytViews + igViews;
+            safeVerifiedViews = sumBoth || totalViews;
+          }
 
           // Money won can be either aggregated in profile or derived from transactions; prefer profile
           let totalWinnings = profile?.total_money_won || 0;
@@ -267,8 +312,8 @@ export async function GET(request: NextRequest) {
               affiliate_earnings: affiliateEarnings,
               contests_won: contestsWon,
               verified_views: safeVerifiedViews,
-              youtube_verified_views: 0,
-              instagram_verified_views: 0,
+              youtube_verified_views: ytViews,
+              instagram_verified_views: igViews,
               submissions_won: submissionsWon,
               contests_participated: contestsParticipated,
               submissions_made: submissionsMade,

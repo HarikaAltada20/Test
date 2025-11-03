@@ -115,6 +115,12 @@ export function DashboardSidebar({
       description: "Admin overview",
     },
     {
+      name: "Leaderboard",
+      href: "/dashboard/admin/leaderboard",
+      icon: Award,
+      description: "Top creators",
+    },
+    {
       name: "Withdrawal Requests",
       href: "/dashboard/admin/withdrawals",
       icon: DollarSign,
