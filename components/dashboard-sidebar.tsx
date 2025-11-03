@@ -115,18 +115,6 @@ export function DashboardSidebar({
       description: "Admin overview",
     },
     {
-      name: "Leaderboard",
-      href: "/dashboard/admin/leaderboard",
-      icon: Award,
-      description: "Top creators",
-    },
-    {
-      name: "Withdrawal Requests",
-      href: "/dashboard/admin/withdrawals",
-      icon: DollarSign,
-      description: "Manage payout withdrawals",
-    },
-    {
       name: "All Contests",
       href: "/dashboard/admin/contests",
       icon: Trophy,
@@ -137,6 +125,18 @@ export function DashboardSidebar({
       href: "/dashboard/admin/contest-moderation",
       icon: Shield,
       description: "Review & approve contests",
+    },
+    {
+      name: "Leaderboard",
+      href: "/dashboard/admin/leaderboard",
+      icon: Award,
+      description: "Top creators",
+    },
+    {
+      name: "Withdrawal Requests",
+      href: "/dashboard/admin/withdrawals",
+      icon: DollarSign,
+      description: "Manage payout withdrawals",
     },
     {
       name: "Affiliate",

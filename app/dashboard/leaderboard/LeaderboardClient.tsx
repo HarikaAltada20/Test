@@ -94,11 +94,13 @@ type SummaryStats = {
 type LeaderboardClientProps = {
   showAdminSummary?: boolean;
   summaryOnly?: boolean;
+  hideHeroHeader?: boolean;
 };
 
 export default function LeaderboardClient({
   showAdminSummary = false,
   summaryOnly = false,
+  hideHeroHeader = false,
 }: LeaderboardClientProps) {
   const [sortBy, setSortBy] = useState<SortBy>("winnings");
   const [platform, setPlatform] = useState<PlatformFilter>("all");
@@ -187,6 +189,9 @@ export default function LeaderboardClient({
         page: "1",
         limit: "1", // Minimal limit since we only need summary
       });
+      if (showAdminSummary) {
+        params.set("admin", "1");
+      }
       const response = await fetch(`/api/creators/leaderboard?${params}`);
       const data = await response.json();
 
@@ -211,6 +216,9 @@ export default function LeaderboardClient({
         page: currentPage.toString(),
         limit: limit.toString(),
       });
+      if (showAdminSummary) {
+        params.set("admin", "1");
+      }
       const response = await fetch(`/api/creators/leaderboard?${params}`);
       const data = await response.json();
 
@@ -258,7 +266,7 @@ export default function LeaderboardClient({
   return (
     <div className="px-2 sm:px-4 py-4 sm:py-6 md:py-8">
       {/* Hero Header */}
-      {!summaryOnly && (
+      {!summaryOnly && !hideHeroHeader && (
         <div className="mb-4 sm:mb-6 md:mb-8">
           <div className="relative overflow-hidden rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 bg-white shadow-md">
             {/* <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:20px_20px]" /> */}

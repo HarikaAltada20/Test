@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const platform = searchParams.get("platform") || "all";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "25");
+    const isAdmin = searchParams.get("admin") === "1";
 
     // Fetch all active users (creators and advertisers); include creator_profiles when present
     let usersQuery = supabase
@@ -402,8 +403,8 @@ export async function GET(request: NextRequest) {
       return bVal - aVal;
     });
 
-    // Limit to top 100
-    const top100Leaders = sortedLeaders.slice(0, 100);
+    // Apply top-100 cap only for non-admin views
+    const cappedLeaders = isAdmin ? sortedLeaders : sortedLeaders.slice(0, 100);
 
     // Prepare subsets for summary
     const creatorsAll = leaders.filter((e: any) => e.is_creator);
@@ -490,17 +491,17 @@ export async function GET(request: NextRequest) {
     };
 
     // Calculate pagination
-    const totalPages = Math.ceil(top100Leaders.length / limit);
+    const totalPages = Math.ceil(cappedLeaders.length / limit);
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
-    const paginatedLeaders = top100Leaders.slice(startIndex, endIndex);
+    const paginatedLeaders = cappedLeaders.slice(startIndex, endIndex);
 
     return NextResponse.json({
       leaders: paginatedLeaders,
       pagination: {
         currentPage: page,
         totalPages,
-        totalItems: top100Leaders.length,
+        totalItems: cappedLeaders.length,
         itemsPerPage: limit,
       },
       summary,
