@@ -272,8 +272,8 @@ export default function LeaderboardClient({
                 </h1>
               </div>
               <p className="text-gray-900 text-sm sm:text-base md:text-lg">
-                See who's dominating the leaderboard across different metrics.
-                Compare your performance and climb the ranks!
+                Explore the Top 100 creators across every metric—compare your
+                performance and climb the ranks.
               </p>
             </div>
           </div>
@@ -416,7 +416,8 @@ export default function LeaderboardClient({
             </div>
             {sortBy !== "referrals" &&
               sortBy !== "total_coins" &&
-              sortBy !== "affiliate_earnings" && (
+              sortBy !== "affiliate_earnings" &&
+              sortBy !== "verified_views" && (
                 <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
                   <div className="inline-flex items-center gap-1 rounded-lg sm:rounded-xl border-2 border-gray-200 p-0.5 sm:p-1 bg-white overflow-x-auto whitespace-nowrap shadow-inner">
                     <Button

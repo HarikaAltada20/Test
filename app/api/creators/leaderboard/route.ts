@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "25");
 
-    // Fetch all creators with their profiles
+    // Fetch all active users (creators and advertisers); include creator_profiles when present
     let usersQuery = supabase
       .from("users")
       .select(
@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         advertisers_referred,
         creators_referred,
         total_other_earnings,
+        user_type,
         creator_profiles (
           id,
           youtube_account,
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
         )
       `
       )
-      .eq("user_type", "creator")
+      .in("user_type", ["creator", "advertiser"]) // include both creators and advertisers
       .eq("is_active", true);
 
     const { data: creators, error: creatorsError } = await usersQuery;
@@ -192,144 +193,145 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Process creators to calculate metrics
+    // Process users to calculate metrics
     const leaders = await Promise.all(
-      creators
-        .filter((creator: any) => {
-          // Only include creators who have a creator_profile
-          const profile = Array.isArray(creator.creator_profiles)
-            ? creator.creator_profiles[0]
-            : creator.creator_profiles;
-          return profile !== null && profile !== undefined;
-        })
-        .map(async (creator: any) => {
-          const profile = Array.isArray(creator.creator_profiles)
-            ? creator.creator_profiles[0]
-            : creator.creator_profiles;
+      creators.map(async (creator: any) => {
+        const profile = Array.isArray(creator.creator_profiles)
+          ? creator.creator_profiles[0]
+          : creator.creator_profiles;
+        const isCreator = creator.user_type === "creator" && !!profile;
 
-          // Prefer metrics persisted on creator_profiles to avoid heavy per-user queries
-          const totalViews = profile?.total_views || 0;
-          // Per-platform views derived from submissions
-          const ytViews = youtubeViewsMap.get(creator.id) || 0;
-          const igViews = instagramViewsMap.get(creator.id) || 0;
-          // Platform-aware "verified views"
-          let safeVerifiedViews = totalViews;
-          if (platform === "youtube") {
-            safeVerifiedViews = platformViews.get(creator.id) ?? ytViews;
-          } else if (platform === "instagram") {
-            safeVerifiedViews = platformViews.get(creator.id) ?? igViews;
-          } else {
-            const sumBoth = ytViews + igViews;
-            safeVerifiedViews = sumBoth || totalViews;
+        // Prefer metrics persisted on creator_profiles to avoid heavy per-user queries
+        const totalViews = isCreator ? profile?.total_views || 0 : 0;
+        // Per-platform views derived from submissions
+        const ytViews = isCreator ? youtubeViewsMap.get(creator.id) || 0 : 0;
+        const igViews = isCreator ? instagramViewsMap.get(creator.id) || 0 : 0;
+        // Verified views should always reflect the profile's total_views without platform filtering
+        const safeVerifiedViews = totalViews;
+
+        // Money won can be either aggregated in profile or derived from transactions; prefer profile
+        let totalWinnings = isCreator ? profile?.total_money_won || 0 : 0;
+
+        // Calculate platform-specific winnings
+        if (platform !== "all") {
+          // Use platform-specific total when filter is applied
+          // This ensures we only count winnings from contests on the selected platform
+          totalWinnings = isCreator ? platformWinnings.get(creator.id) || 0 : 0;
+        }
+
+        // Submissions metrics sourced from creator_profiles
+        let submissionsWon = isCreator
+          ? profile?.total_submissions_won || 0
+          : 0;
+        let submissionsMade = isCreator
+          ? profile?.total_submissions_made || 0
+          : 0;
+
+        // Calculate platform-specific submissions_won and submissions_made
+        if (platform !== "all") {
+          // Use platform-specific count when filter is applied
+          // This ensures we only count submissions for the selected platform
+          submissionsWon = isCreator
+            ? platformSubmissionsWon.get(creator.id) || 0
+            : 0;
+          submissionsMade = isCreator
+            ? platformSubmissionsMade.get(creator.id) || 0
+            : 0;
+        }
+
+        // Prefer explicit profile counter if present; fallback to distinct contests from submissions
+        let contestsParticipated = isCreator
+          ? profile?.total_contests_participated || 0
+          : 0;
+        // No fallback to live counting here to keep endpoint efficient and aligned with persisted metrics
+
+        // Calculate platform-specific contests_participated
+        if (platform !== "all") {
+          // Use platform-specific count when filter is applied
+          // This ensures we only count contests participated for the selected platform
+          contestsParticipated = isCreator
+            ? platformContestParticipations.get(creator.id) || 0
+            : 0;
+        }
+
+        const hasYouTube = isCreator
+          ? profile?.youtube_account !== null &&
+            profile?.youtube_account !== undefined
+          : false;
+        const hasInstagram = isCreator
+          ? profile?.instagram_account !== null &&
+            profile?.instagram_account !== undefined
+          : false;
+
+        // Calculate affiliate earnings from total_other_earnings in users table
+        const affiliateEarnings = creator.total_other_earnings || 0;
+
+        // Calculate platform-specific contests_won
+        let contestsWon = isCreator ? profile?.total_contests_won || 0 : 0;
+        if (platform !== "all") {
+          // Use platform-specific count when filter is applied
+          // This ensures we only count contests won for the selected platform
+          contestsWon = isCreator
+            ? platformContestWins.get(creator.id) || 0
+            : 0;
+        }
+
+        // Derive a consistent account display name similar to analytics usage
+        let accountDisplayName: string | null = null;
+        try {
+          if (hasYouTube) {
+            const ytAccount =
+              typeof profile?.youtube_account === "string"
+                ? JSON.parse(profile?.youtube_account as unknown as string)
+                : profile?.youtube_account;
+            accountDisplayName = ytAccount?.channel_title || null;
           }
-
-          // Money won can be either aggregated in profile or derived from transactions; prefer profile
-          let totalWinnings = profile?.total_money_won || 0;
-
-          // Calculate platform-specific winnings
-          if (platform !== "all") {
-            // Use platform-specific total when filter is applied
-            // This ensures we only count winnings from contests on the selected platform
-            totalWinnings = platformWinnings.get(creator.id) || 0;
+          if (!accountDisplayName && hasInstagram) {
+            const igAccount =
+              typeof profile?.instagram_account === "string"
+                ? JSON.parse(profile?.instagram_account as unknown as string)
+                : profile?.instagram_account;
+            accountDisplayName =
+              igAccount?.username || igAccount?.full_name || null;
           }
+        } catch {}
 
-          // Submissions metrics sourced from creator_profiles
-          let submissionsWon = profile?.total_submissions_won || 0;
-          let submissionsMade = profile?.total_submissions_made || 0;
+        // Ensure username is always populated; fallback to platform account name or full name
+        const resolvedUsername =
+          creator.username ||
+          accountDisplayName ||
+          creator.full_name ||
+          "anonymous";
 
-          // Calculate platform-specific submissions_won and submissions_made
-          if (platform !== "all") {
-            // Use platform-specific count when filter is applied
-            // This ensures we only count submissions for the selected platform
-            submissionsWon = platformSubmissionsWon.get(creator.id) || 0;
-            submissionsMade = platformSubmissionsMade.get(creator.id) || 0;
-          }
-
-          // Prefer explicit profile counter if present; fallback to distinct contests from submissions
-          let contestsParticipated = profile?.total_contests_participated || 0;
-          // No fallback to live counting here to keep endpoint efficient and aligned with persisted metrics
-
-          // Calculate platform-specific contests_participated
-          if (platform !== "all") {
-            // Use platform-specific count when filter is applied
-            // This ensures we only count contests participated for the selected platform
-            contestsParticipated =
-              platformContestParticipations.get(creator.id) || 0;
-          }
-
-          const hasYouTube =
-            profile?.youtube_account !== null &&
-            profile?.youtube_account !== undefined;
-          const hasInstagram =
-            profile?.instagram_account !== null &&
-            profile?.instagram_account !== undefined;
-
-          // Calculate affiliate earnings from total_other_earnings in users table
-          const affiliateEarnings = creator.total_other_earnings || 0;
-
-          // Calculate platform-specific contests_won
-          let contestsWon = profile?.total_contests_won || 0;
-          if (platform !== "all") {
-            // Use platform-specific count when filter is applied
-            // This ensures we only count contests won for the selected platform
-            contestsWon = platformContestWins.get(creator.id) || 0;
-          }
-
-          // Derive a consistent account display name similar to analytics usage
-          let accountDisplayName: string | null = null;
-          try {
-            if (hasYouTube) {
-              const ytAccount =
-                typeof profile?.youtube_account === "string"
-                  ? JSON.parse(profile?.youtube_account as unknown as string)
-                  : profile?.youtube_account;
-              accountDisplayName = ytAccount?.channel_title || null;
-            }
-            if (!accountDisplayName && hasInstagram) {
-              const igAccount =
-                typeof profile?.instagram_account === "string"
-                  ? JSON.parse(profile?.instagram_account as unknown as string)
-                  : profile?.instagram_account;
-              accountDisplayName =
-                igAccount?.username || igAccount?.full_name || null;
-            }
-          } catch {}
-
-          // Ensure username is always populated; fallback to platform account name or full name
-          const resolvedUsername =
-            creator.username ||
-            accountDisplayName ||
-            creator.full_name ||
-            "anonymous";
-
-          return {
-            user_id: creator.id,
-            username: resolvedUsername,
-            full_name: creator.full_name,
-            profile_picture_url: creator.profile_picture_url,
-            metrics: {
-              winnings: totalWinnings,
-              affiliate_earnings: affiliateEarnings,
-              contests_won: contestsWon,
-              verified_views: safeVerifiedViews,
-              youtube_verified_views: ytViews,
-              instagram_verified_views: igViews,
-              submissions_won: submissionsWon,
-              contests_participated: contestsParticipated,
-              submissions_made: submissionsMade,
-              referrals:
-                (creator.advertisers_referred || 0) +
-                (creator.creators_referred || 0),
-              advertisers_referred: creator.advertisers_referred || 0,
-              creators_referred: creator.creators_referred || 0,
-              total_coins: creator.total_lifetime_coins_earned || 0,
-            },
-            platforms: {
-              has_youtube: hasYouTube,
-              has_instagram: hasInstagram,
-            },
-          };
-        })
+        return {
+          user_id: creator.id,
+          username: resolvedUsername,
+          full_name: creator.full_name,
+          profile_picture_url: creator.profile_picture_url,
+          is_creator: isCreator,
+          metrics: {
+            winnings: totalWinnings,
+            affiliate_earnings: affiliateEarnings,
+            contests_won: contestsWon,
+            verified_views: safeVerifiedViews,
+            youtube_verified_views: ytViews,
+            instagram_verified_views: igViews,
+            submissions_won: submissionsWon,
+            contests_participated: contestsParticipated,
+            submissions_made: submissionsMade,
+            referrals:
+              (creator.advertisers_referred || 0) +
+              (creator.creators_referred || 0),
+            advertisers_referred: creator.advertisers_referred || 0,
+            creators_referred: creator.creators_referred || 0,
+            total_coins: creator.total_lifetime_coins_earned || 0,
+          },
+          platforms: {
+            has_youtube: hasYouTube,
+            has_instagram: hasInstagram,
+          },
+        };
+      })
     );
 
     // Filter by platform (skip filter for referrals, total_coins, and affiliate_earnings as they're not platform-specific)
@@ -338,15 +340,22 @@ export async function GET(request: NextRequest) {
       sortBy === "total_coins" ||
       sortBy === "affiliate_earnings"
         ? leaders
-        : platform === "all"
-        ? leaders
-        : leaders.filter((entry) =>
-            platform === "youtube"
-              ? entry.platforms.has_youtube
-              : platform === "instagram"
-              ? entry.platforms.has_instagram
-              : true
-          );
+        : (platform === "all" ? leaders : leaders).filter((entry: any) => {
+            // Only include creators when sorting by creator-specific metrics
+            if (
+              !(
+                sortBy === "referrals" ||
+                sortBy === "total_coins" ||
+                sortBy === "affiliate_earnings"
+              )
+            ) {
+              if (!entry.is_creator) return false;
+            }
+            if (platform === "all") return true;
+            if (platform === "youtube") return entry.platforms.has_youtube;
+            if (platform === "instagram") return entry.platforms.has_instagram;
+            return true;
+          });
 
     // Sort by selected metric
     const sortedLeaders = [...filteredLeaders].sort((a, b) => {
@@ -396,83 +405,86 @@ export async function GET(request: NextRequest) {
     // Limit to top 100
     const top100Leaders = sortedLeaders.slice(0, 100);
 
-    // Count total creators from creator_profiles table
-    // filteredLeaders already contains all creators with profiles, filtered by platform
-    const totalCreatorsCount = filteredLeaders.length;
+    // Prepare subsets for summary
+    const creatorsAll = leaders.filter((e: any) => e.is_creator);
 
     // Count creators by platform (always calculate from all leaders, not filtered)
     const instagramCreatorsCount = leaders.filter(
-      (entry) => entry.platforms.has_instagram
+      (entry: any) => entry.is_creator && entry.platforms.has_instagram
     ).length;
     const youtubeCreatorsCount = leaders.filter(
-      (entry) => entry.platforms.has_youtube
+      (entry: any) => entry.is_creator && entry.platforms.has_youtube
     ).length;
 
-    // Calculate summary statistics from filtered leaders
+    // Calculate summary statistics; creator-only metrics over creators, mixed over all filtered
     const summary = {
-      totalCreators: totalCreatorsCount,
+      // creators count should reflect only creators
+      totalCreators: creatorsAll.length,
       instagramCreators: instagramCreatorsCount,
       youtubeCreators: youtubeCreatorsCount,
-      totalWinnings: filteredLeaders.reduce(
-        (sum, entry) => sum + entry.metrics.winnings,
+      // creator-only aggregates
+      totalWinnings: creatorsAll.reduce(
+        (sum: number, entry: any) => sum + entry.metrics.winnings,
         0
       ),
-      totalAffiliateEarnings: filteredLeaders.reduce(
+      totalViews: creatorsAll.reduce(
+        (sum: number, entry: any) => sum + entry.metrics.verified_views,
+        0
+      ),
+      totalContestsWon: creatorsAll.reduce(
+        (sum: number, entry: any) => sum + entry.metrics.contests_won,
+        0
+      ),
+      totalSubmissionsWon: creatorsAll.reduce(
+        (sum: number, entry: any) => sum + entry.metrics.submissions_won,
+        0
+      ),
+      totalContestsParticipated: creatorsAll.reduce(
+        (sum: number, entry: any) => sum + entry.metrics.contests_participated,
+        0
+      ),
+      totalSubmissionsMade: creatorsAll.reduce(
+        (sum: number, entry: any) => sum + entry.metrics.submissions_made,
+        0
+      ),
+      // mixed metrics include both creators and advertisers
+      totalAffiliateEarnings: leaders.reduce(
         (sum, entry) => sum + entry.metrics.affiliate_earnings,
         0
       ),
-      totalViews: filteredLeaders.reduce(
-        (sum, entry) => sum + entry.metrics.verified_views,
-        0
-      ),
-      totalContestsWon: filteredLeaders.reduce(
-        (sum, entry) => sum + entry.metrics.contests_won,
-        0
-      ),
-      totalSubmissionsWon: filteredLeaders.reduce(
-        (sum, entry) => sum + entry.metrics.submissions_won,
-        0
-      ),
-      totalContestsParticipated: filteredLeaders.reduce(
-        (sum, entry) => sum + entry.metrics.contests_participated,
-        0
-      ),
-      totalSubmissionsMade: filteredLeaders.reduce(
-        (sum, entry) => sum + entry.metrics.submissions_made,
-        0
-      ),
-      totalReferrals: filteredLeaders.reduce(
+      totalReferrals: leaders.reduce(
         (sum, entry) => sum + entry.metrics.referrals,
         0
       ),
-      totalAdvertisersReferred: filteredLeaders.reduce(
+      totalAdvertisersReferred: leaders.reduce(
         (sum, entry) => sum + (entry.metrics.advertisers_referred || 0),
         0
       ),
-      totalCreatorsReferred: filteredLeaders.reduce(
+      totalCreatorsReferred: leaders.reduce(
         (sum, entry) => sum + (entry.metrics.creators_referred || 0),
         0
       ),
-      totalCoins: filteredLeaders.reduce(
+      totalCoins: leaders.reduce(
         (sum, entry) => sum + entry.metrics.total_coins,
         0
       ),
+      // averages over creators only
       averageWinnings:
-        filteredLeaders.length > 0
+        creatorsAll.length > 0
           ? Math.round(
-              filteredLeaders.reduce(
-                (sum, entry) => sum + entry.metrics.winnings,
+              creatorsAll.reduce(
+                (sum: number, entry: any) => sum + entry.metrics.winnings,
                 0
-              ) / filteredLeaders.length
+              ) / creatorsAll.length
             )
           : 0,
       averageViews:
-        filteredLeaders.length > 0
+        creatorsAll.length > 0
           ? Math.round(
-              filteredLeaders.reduce(
-                (sum, entry) => sum + entry.metrics.verified_views,
+              creatorsAll.reduce(
+                (sum: number, entry: any) => sum + entry.metrics.verified_views,
                 0
-              ) / filteredLeaders.length
+              ) / creatorsAll.length
             )
           : 0,
     };
