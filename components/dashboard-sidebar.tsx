@@ -22,6 +22,7 @@ import {
   User,
   Phone,
   HelpCircle,
+  Award,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -169,6 +170,12 @@ export function DashboardSidebar({
       href: "/dashboard/opportunities",
       icon: Trophy,
       description: "Available contests",
+    },
+    {
+      name: "Leaderboard",
+      href: "/dashboard/leaderboard",
+      icon: Award,
+      description: "Top creators",
     },
     {
       name: "Wallet",
