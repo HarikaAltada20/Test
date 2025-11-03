@@ -1669,7 +1669,7 @@ export default function BillingClientPage({
                   <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">Phantom Wallet</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Add your Phantom Wallet to receive USDC or USDT payouts directly to your wallet.
+                    Add your Phantom Wallet to receive USDC or USDT payouts via Solana network directly to your wallet.
                   </p>
                   <Button
                     onClick={() => {
@@ -1968,7 +1968,7 @@ export default function BillingClientPage({
 
       {/* Phantom Wallet Modal */}
       <Dialog open={isPhantomModalOpen} onOpenChange={setIsPhantomModalOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogTitle className="sr-only">Add Phantom Wallet</DialogTitle>
           <PhantomPayoutForm
             onSave={async (details) => {

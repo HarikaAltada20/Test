@@ -68,8 +68,8 @@ export function SolanaTransactionHistory({ refreshTrigger }: SolanaTransactionHi
     };
 
     const getSolscanUrl = (signature: string) => {
-        const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
-        const cluster = network === 'mainnet-beta' ? '' : '?cluster=devnet';
+        const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
+        const cluster = (network === 'mainnet-beta' || network === 'mainnet') ? '' : '?cluster=devnet';
         return `https://solscan.io/tx/${signature}${cluster}`;
     };
 

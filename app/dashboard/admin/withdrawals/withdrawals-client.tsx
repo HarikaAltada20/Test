@@ -155,7 +155,7 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
         if (type === "phantom") {
             const friendlyName = d?.friendly_name || "";
             const token = d?.preferred_token || "USDC";
-            const network = d?.network || "devnet";
+            const network = d?.network || (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta' || process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet' ? 'mainnet' : 'devnet');
             const address = d?.wallet_address || "";
             const addressShort = address ? `${address.slice(0, 8)}...${address.slice(-8)}` : "";
             return `Phantom${friendlyName ? ` (${friendlyName})` : ""} • ${token} • ${network} • ${addressShort}`;
@@ -287,7 +287,7 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                                                     return (
                                                         <div className="space-y-1">
                                                             <div><strong>Friendly Name:</strong> {d?.friendly_name || "N/A"}</div>
-                                                            <div><strong>Network:</strong> {d?.network || "devnet"}</div>
+                                                            <div><strong>Network:</strong> {d?.network || (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta' || process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet' ? 'mainnet' : 'devnet')}</div>
                                                             <div><strong>Token:</strong> {d?.preferred_token || "USDC"}</div>
                                                             <div><strong>Wallet Address:</strong> {d?.wallet_address || "N/A"}</div>
                                                         </div>
@@ -657,7 +657,7 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                                                                     <div className="grid grid-cols-2 gap-2 text-xs">
                                                                         <div>
                                                                             <span className="text-muted-foreground">Network:</span>{" "}
-                                                                            <span className="font-medium">{d?.network || "devnet"}</span>
+                                                                            <span className="font-medium">{d?.network || (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta' || process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet' ? 'mainnet' : 'devnet')}</span>
                                                                         </div>
                                                                         <div>
                                                                             <span className="text-muted-foreground">Token:</span>{" "}

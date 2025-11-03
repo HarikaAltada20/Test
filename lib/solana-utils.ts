@@ -17,7 +17,8 @@ import bs58 from 'bs58';
 // =====================================================
 
 // Solana network configuration (devnet or mainnet-beta)
-export const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet';
+// Production: mainnet-beta (set NEXT_PUBLIC_SOLANA_NETWORK=devnet for testing)
+export const SOLANA_NETWORK = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
 
 // RPC endpoint
 export const SOLANA_RPC_ENDPOINT =
