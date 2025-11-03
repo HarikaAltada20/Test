@@ -253,7 +253,11 @@ export default function LeaderboardClient() {
                 {summary.totalCreators.toLocaleString()}
               </div>
               <p className="text-xs text-violet-600/80 mt-1 sm:mt-2 font-medium">
-                {platform === "all"
+                {sortBy === "referrals" ||
+                sortBy === "total_coins" ||
+                sortBy === "affiliate_earnings"
+                  ? "All creators"
+                  : platform === "all"
                   ? "All platforms"
                   : platform === "youtube"
                   ? "YouTube creators"
@@ -357,53 +361,57 @@ export default function LeaderboardClient() {
               Showing top 100 creators • {limit} per page
             </p> */}
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
-            <div className="inline-flex items-center gap-1 rounded-lg sm:rounded-xl border-2 border-gray-200 p-0.5 sm:p-1 bg-white overflow-x-auto whitespace-nowrap shadow-inner">
-              <Button
-                type="button"
-                size="sm"
-                variant={platform === "all" ? "default" : "ghost"}
-                className={
-                  platform === "all"
-                    ? "shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-violet-300/50 font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                    : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                }
-                onClick={() => setPlatform("all")}
-              >
-                Both
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={platform === "youtube" ? "default" : "ghost"}
-                className={
-                  platform === "youtube"
-                    ? "bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-red-700/30 font-bold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                    : "text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                }
-                onClick={() => setPlatform("youtube")}
-              >
-                <Youtube className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 flex-shrink-0" />
-                <span >YouTube</span>
-                {/* <span className="sm:hidden">YT</span> */}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={platform === "instagram" ? "default" : "ghost"}
-                className={
-                  platform === "instagram"
-                    ? "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-purple-700/30 font-bold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                    : "text-pink-600 hover:text-pink-700 hover:bg-pink-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                }
-                onClick={() => setPlatform("instagram")}
-              >
-                <Instagram className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 flex-shrink-0" />
-                <span >Instagram</span>
-                {/* <span className="sm:hidden">IG</span> */}
-              </Button>
-            </div>
-          </div>
+          {sortBy !== "referrals" &&
+            sortBy !== "total_coins" &&
+            sortBy !== "affiliate_earnings" && (
+              <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
+                <div className="inline-flex items-center gap-1 rounded-lg sm:rounded-xl border-2 border-gray-200 p-0.5 sm:p-1 bg-white overflow-x-auto whitespace-nowrap shadow-inner">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={platform === "all" ? "default" : "ghost"}
+                    className={
+                      platform === "all"
+                        ? "shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-violet-300/50 font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                        : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                    }
+                    onClick={() => setPlatform("all")}
+                  >
+                    Both
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={platform === "youtube" ? "default" : "ghost"}
+                    className={
+                      platform === "youtube"
+                        ? "bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-red-700/30 font-bold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                        : "text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                    }
+                    onClick={() => setPlatform("youtube")}
+                  >
+                    <Youtube className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 flex-shrink-0" />
+                    <span>YouTube</span>
+                    {/* <span className="sm:hidden">YT</span> */}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={platform === "instagram" ? "default" : "ghost"}
+                    className={
+                      platform === "instagram"
+                        ? "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-purple-700/30 font-bold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                        : "text-pink-600 hover:text-pink-700 hover:bg-pink-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                    }
+                    onClick={() => setPlatform("instagram")}
+                  >
+                    <Instagram className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 flex-shrink-0" />
+                    <span>Instagram</span>
+                    {/* <span className="sm:hidden">IG</span> */}
+                  </Button>
+                </div>
+              </div>
+            )}
         </div>
         <div className="p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50/30 to-white">
           {loading ? (

@@ -155,9 +155,13 @@ export async function GET(request: NextRequest) {
         })
     );
 
-    // Filter by platform
+    // Filter by platform (skip filter for referrals, total_coins, and affiliate_earnings as they're not platform-specific)
     const filteredLeaders =
-      platform === "all"
+      sortBy === "referrals" ||
+      sortBy === "total_coins" ||
+      sortBy === "affiliate_earnings"
+        ? leaders
+        : platform === "all"
         ? leaders
         : leaders.filter((entry) =>
             platform === "youtube"
