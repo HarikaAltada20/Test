@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     const { data: userRow, error: userErr } = await supabase
       .from("users")
-      .select("user_type, coins, total_lifetime_coins_earned")
+      .select("user_type, coins, total_lifetime_coins_earned, other_earnings")
       .eq("id", user.id)
       .single();
 
@@ -229,6 +229,18 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("✅ Success! Cash credited:", creditRes);
+
+    // Also increment other_earnings in users table
+    const { error: otherEarningsErr } = await supabase
+      .from("users")
+      .update({
+        other_earnings: ((userRow as any).other_earnings || 0) + cashCredited,
+      })
+      .eq("id", user.id);
+    if (otherEarningsErr) {
+      console.error("❌ Failed to update other_earnings:", otherEarningsErr);
+      // Don't fail the request, just log the error
+    }
 
     return NextResponse.json({
       success: true,
