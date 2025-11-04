@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { RefundOldWithdrawalsButton } from "@/components/admin/RefundOldWithdrawalsButton";
 import {
     Eye,
     Clock,
@@ -21,7 +22,8 @@ import {
     Mail,
     Calendar,
     CreditCard,
-    Settings
+    Settings,
+    Wallet
 } from "lucide-react";
 
 type Request = {
@@ -61,7 +63,10 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
         const paid = requests
             .filter((r) => r.status === "processed" || r.status === "approved")
             .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
-        return { all, pending, paid };
+        const rejected = requests
+            .filter((r) => r.status === "rejected" || r.status === "cancelled")
+            .reduce((s, r) => s + (r.amount_type === "cash" ? r.amount : 0), 0);
+        return { all, pending, paid, rejected };
     }, [requests]);
 
     const updateStatus = async (id: string, newStatus: string, extras?: { transaction_reference?: string; admin_notes?: string }) => {
@@ -120,12 +125,41 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
         setDetailsOpen(true);
     };
 
+    const getPaymentMethodIcon = (r: Request) => {
+        const type = (r.payout_method_type_snapshot || "").toLowerCase();
+        if (type === "phantom") return Wallet;
+        if (type === "crypto") return CreditCard;
+        if (type === "upi") return CreditCard;
+        if (type === "bank_transfer") return CreditCard;
+        return CreditCard;
+    };
+
+    const getPaymentMethodColor = (r: Request) => {
+        const type = (r.payout_method_type_snapshot || "").toLowerCase();
+        if (type === "phantom") return "text-purple-600 dark:text-purple-400";
+        return "text-orange-600 dark:text-orange-400";
+    };
+
     const formatPayoutSummary = (r: Request) => {
         const type = (r.payout_method_type_snapshot || "").toLowerCase();
         const d: any = r.payout_method_details_snapshot || {};
         if (type === "upi") return `UPI: ${d?.upi_id || ""} (${d?.account_holder_name || ""})`;
-        if (type === "crypto") return `${(d?.network || "").toUpperCase()} Wallet: ${d?.wallet_address || ""}`;
+        if (type === "crypto") {
+            const network = d?.network || "";
+            const currency = d?.currency || "";
+            const address = d?.wallet_address || "";
+            const addressShort = address ? `${address.slice(0, 8)}...${address.slice(-8)}` : "";
+            return `${network} ${currency ? `(${currency})` : ""} • ${addressShort}`;
+        }
         if (type === "bank_transfer") return `Bank • ${d?.account_holder_name || ""} • ****${String(d?.account_number || "").slice(-4)} • ${d?.ifsc_code || d?.swift_bic_code || ""}`;
+        if (type === "phantom") {
+            const friendlyName = d?.friendly_name || "";
+            const token = d?.preferred_token || "USDC";
+            const network = d?.network || (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta' || process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet' ? 'mainnet' : 'devnet');
+            const address = d?.wallet_address || "";
+            const addressShort = address ? `${address.slice(0, 8)}...${address.slice(-8)}` : "";
+            return `Phantom${friendlyName ? ` (${friendlyName})` : ""} • ${token} • ${network} • ${addressShort}`;
+        }
         return type ? `${type}: ${JSON.stringify(d)}` : "Unknown method";
     };
 
@@ -237,9 +271,64 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                                 {getStatusBadge(r.status)}
                             </td>
                             <td className="px-4 py-4">
-                                <div className="text-sm max-w-xs truncate" title={formatPayoutSummary(r)}>
-                                    {formatPayoutSummary(r)}
-                                </div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="text-sm max-w-xs truncate cursor-help">
+                                            {formatPayoutSummary(r)}
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="z-50 max-w-md">
+                                        <div className="space-y-1 text-xs">
+                                            {(() => {
+                                                const type = (r.payout_method_type_snapshot || "").toLowerCase();
+                                                const d: any = r.payout_method_details_snapshot || {};
+
+                                                if (type === "phantom") {
+                                                    return (
+                                                        <div className="space-y-1">
+                                                            <div><strong>Friendly Name:</strong> {d?.friendly_name || "N/A"}</div>
+                                                            <div><strong>Network:</strong> {d?.network || (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta' || process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet' ? 'mainnet' : 'devnet')}</div>
+                                                            <div><strong>Token:</strong> {d?.preferred_token || "USDC"}</div>
+                                                            <div><strong>Wallet Address:</strong> {d?.wallet_address || "N/A"}</div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                if (type === "crypto") {
+                                                    return (
+                                                        <div className="space-y-1">
+                                                            <div><strong>Network:</strong> {d?.network || "N/A"}</div>
+                                                            <div><strong>Currency:</strong> {d?.currency || "N/A"}</div>
+                                                            <div><strong>Wallet Address:</strong> {d?.wallet_address || "N/A"}</div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                if (type === "upi") {
+                                                    return (
+                                                        <div className="space-y-1">
+                                                            <div><strong>UPI ID:</strong> {d?.upi_id || "N/A"}</div>
+                                                            <div><strong>Account Holder:</strong> {d?.account_holder_name || "N/A"}</div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                if (type === "bank_transfer") {
+                                                    return (
+                                                        <div className="space-y-1">
+                                                            <div><strong>Account Holder:</strong> {d?.account_holder_name || "N/A"}</div>
+                                                            <div><strong>Account Number:</strong> {d?.account_number ? `****${String(d.account_number).slice(-4)}` : "N/A"}</div>
+                                                            <div><strong>IFSC/SWIFT:</strong> {d?.ifsc_code || d?.swift_bic_code || "N/A"}</div>
+                                                            <div><strong>Bank Name:</strong> {d?.bank_name || "N/A"}</div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return <div>{JSON.stringify(d, null, 2)}</div>;
+                                            })()}
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
                             </td>
                             <td className="px-4 py-4">
                                 <div className="flex flex-wrap gap-1">
@@ -379,11 +468,12 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
     const allRows = requests;
     const pendingRows = requests.filter((r) => r.status === "pending" || r.status === "in_review");
     const paidRows = requests.filter((r) => r.status === "processed" || r.status === "approved");
+    const rejectedRows = requests.filter((r) => r.status === "rejected" || r.status === "cancelled");
 
     return (
         <TooltipProvider>
             <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-4">
                     <Card>
                         <CardHeader>
                             <CardTitle>Total</CardTitle>
@@ -408,6 +498,26 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                             <div className="text-2xl font-bold">{formatCurrencyFromCents(totals.paid)}</div>
                         </CardContent>
                     </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Rejected</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold text-red-600">{formatCurrencyFromCents(totals.rejected)}</div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Refund Old Withdrawals Button - Minimized */}
+                <div className="flex justify-end">
+                    <details className="group">
+                        <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                            Additional Controls
+                        </summary>
+                        <div className="mt-2 p-3 border rounded-lg bg-muted/30">
+                            <RefundOldWithdrawalsButton />
+                        </div>
+                    </details>
                 </div>
 
                 <Tabs defaultValue="all">
@@ -415,10 +525,12 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                         <TabsTrigger value="all">All</TabsTrigger>
                         <TabsTrigger value="pending">Pending</TabsTrigger>
                         <TabsTrigger value="paid">Paid</TabsTrigger>
+                        <TabsTrigger value="rejected">Rejected</TabsTrigger>
                     </TabsList>
                     <TabsContent value="all">{renderTable(allRows)}</TabsContent>
                     <TabsContent value="pending">{renderTable(pendingRows)}</TabsContent>
                     <TabsContent value="paid">{renderTable(paidRows)}</TabsContent>
+                    <TabsContent value="rejected">{renderTable(rejectedRows)}</TabsContent>
                 </Tabs>
 
                 {/* Enhanced Details Modal */}
@@ -519,13 +631,136 @@ export default function WithdrawalsClient({ initialRequests }: { initialRequests
                                     <CardContent className="pt-0">
                                         <div className="flex items-center gap-3">
                                             <div className="p-2 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
-                                                <CreditCard className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                                {(() => {
+                                                    const IconComponent = getPaymentMethodIcon(active);
+                                                    const colorClass = getPaymentMethodColor(active);
+                                                    return <IconComponent className={`h-4 w-4 ${colorClass}`} />;
+                                                })()}
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <p className="text-xs font-medium text-muted-foreground">Payment Method</p>
-                                                <p className="text-sm font-mono bg-muted/50 px-2 py-1 rounded mt-1 break-all">
-                                                    {formatPayoutSummary(active)}
-                                                </p>
+                                                <div className="text-sm bg-muted/50 px-2 py-1 rounded mt-1">
+                                                    {(() => {
+                                                        const type = (active.payout_method_type_snapshot || "").toLowerCase();
+                                                        const d: any = active.payout_method_details_snapshot || {};
+
+                                                        if (type === "phantom") {
+                                                            return (
+                                                                <div className="space-y-2">
+                                                                    <div className="font-medium">Phantom Wallet</div>
+                                                                    {d?.friendly_name && (
+                                                                        <div className="text-sm">
+                                                                            <span className="text-muted-foreground">Friendly Name:</span>{" "}
+                                                                            <span className="font-medium">{d.friendly_name}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Network:</span>{" "}
+                                                                            <span className="font-medium">{d?.network || (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet-beta' || process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'mainnet' ? 'mainnet' : 'devnet')}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Token:</span>{" "}
+                                                                            <span className="font-medium">{d?.preferred_token || "USDC"}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-xs text-muted-foreground mb-1">Wallet Address:</div>
+                                                                        <div className="font-mono text-xs break-all bg-background/50 p-2 rounded border">
+                                                                            {d?.wallet_address || "No address"}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        if (type === "crypto") {
+                                                            return (
+                                                                <div className="space-y-2">
+                                                                    <div className="font-medium">Crypto Wallet</div>
+                                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Network:</span>{" "}
+                                                                            <span className="font-medium">{d?.network || "N/A"}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Currency:</span>{" "}
+                                                                            <span className="font-medium">{d?.currency || "N/A"}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="text-xs text-muted-foreground mb-1">Wallet Address:</div>
+                                                                        <div className="font-mono text-xs break-all bg-background/50 p-2 rounded border">
+                                                                            {d?.wallet_address || "No address"}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        if (type === "upi") {
+                                                            return (
+                                                                <div className="space-y-2">
+                                                                    <div className="font-medium">UPI Payment</div>
+                                                                    <div className="space-y-1 text-xs">
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">UPI ID:</span>{" "}
+                                                                            <span className="font-medium">{d?.upi_id || "N/A"}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Account Holder:</span>{" "}
+                                                                            <span className="font-medium">{d?.account_holder_name || "N/A"}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        if (type === "bank_transfer") {
+                                                            return (
+                                                                <div className="space-y-2">
+                                                                    <div className="font-medium">Bank Transfer</div>
+                                                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Account Holder:</span>{" "}
+                                                                            <span className="font-medium">{d?.account_holder_name || "N/A"}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Account Number:</span>{" "}
+                                                                            <span className="font-medium">{d?.account_number ? `****${String(d.account_number).slice(-4)}` : "N/A"}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">IFSC/SWIFT:</span>{" "}
+                                                                            <span className="font-medium">{d?.ifsc_code || d?.swift_bic_code || "N/A"}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <span className="text-muted-foreground">Bank Name:</span>{" "}
+                                                                            <span className="font-medium">{d?.bank_name || "N/A"}</span>
+                                                                        </div>
+                                                                        {d?.branch_name && (
+                                                                            <div>
+                                                                                <span className="text-muted-foreground">Branch:</span>{" "}
+                                                                                <span className="font-medium">{d.branch_name}</span>
+                                                                            </div>
+                                                                        )}
+                                                                        {d?.country && (
+                                                                            <div>
+                                                                                <span className="text-muted-foreground">Country:</span>{" "}
+                                                                                <span className="font-medium">{d.country}</span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }
+
+                                                        return (
+                                                            <p className="font-mono break-all">
+                                                                {formatPayoutSummary(active)}
+                                                            </p>
+                                                        );
+                                                    })()}
+                                                </div>
                                             </div>
                                         </div>
                                     </CardContent>
