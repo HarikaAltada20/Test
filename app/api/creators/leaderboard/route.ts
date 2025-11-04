@@ -12,7 +12,6 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 60; // Revalidate every 60 seconds
 
-
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -486,14 +485,6 @@ export async function GET(request: NextRequest) {
       instagramCreators: instagramCreatorsCount,
       youtubeCreators: youtubeCreatorsCount,
       // creator-only aggregates
-      totalWinnings: creatorsAll.reduce(
-        (sum: number, entry: any) => sum + entry.metrics.winnings,
-        0
-      ),
-      totalViews: creatorsAll.reduce(
-        (sum: number, entry: any) => sum + entry.metrics.verified_views,
-        0
-      ),
       totalContestsWon: creatorsAll.reduce(
         (sum: number, entry: any) => sum + entry.metrics.contests_won,
         0
@@ -511,10 +502,6 @@ export async function GET(request: NextRequest) {
         0
       ),
       // mixed metrics include both creators and advertisers
-      totalAffiliateEarnings: leaders.reduce(
-        (sum, entry) => sum + entry.metrics.affiliate_earnings,
-        0
-      ),
       totalReferrals: leaders.reduce(
         (sum, entry) => sum + entry.metrics.referrals,
         0
@@ -527,29 +514,6 @@ export async function GET(request: NextRequest) {
         (sum, entry) => sum + (entry.metrics.creators_referred || 0),
         0
       ),
-      totalCoins: leaders.reduce(
-        (sum, entry) => sum + entry.metrics.total_coins,
-        0
-      ),
-      // averages over creators only
-      averageWinnings:
-        creatorsAll.length > 0
-          ? Math.round(
-              creatorsAll.reduce(
-                (sum: number, entry: any) => sum + entry.metrics.winnings,
-                0
-              ) / creatorsAll.length
-            )
-          : 0,
-      averageViews:
-        creatorsAll.length > 0
-          ? Math.round(
-              creatorsAll.reduce(
-                (sum: number, entry: any) => sum + entry.metrics.verified_views,
-                0
-              ) / creatorsAll.length
-            )
-          : 0,
     };
 
     // Calculate pagination
