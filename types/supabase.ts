@@ -26,7 +26,7 @@ export interface Database {
           email_confirmed_at: string | null;
           created_at: string;
           updated_at: string;
-          total_other_earnings: number;
+          affiliate_earnings: number;
           total_lifetime_coins_earned: number;
           registration_ip?: string | null;
           login_history?: Array<{
@@ -51,7 +51,7 @@ export interface Database {
           email_confirmed_at?: string | null;
           created_at?: string;
           updated_at?: string;
-          total_other_earnings?: number;
+          affiliate_earnings?: number;
           total_lifetime_coins_earned?: number;
           registration_ip?: string | null;
           login_history?: Array<{
@@ -76,7 +76,7 @@ export interface Database {
           email_confirmed_at?: string | null;
           created_at?: string;
           updated_at?: string;
-          total_other_earnings?: number;
+          affiliate_earnings?: number;
           total_lifetime_coins_earned?: number;
           registration_ip?: string | null;
           login_history?: Array<{

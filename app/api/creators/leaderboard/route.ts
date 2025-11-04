@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         total_lifetime_coins_earned,
         advertisers_referred,
         creators_referred,
-        total_other_earnings,
+        affiliate_earnings,
         user_type,
         creator_profiles (
           id,
@@ -173,8 +173,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-   
-
     // Process users to calculate metrics
     const leaders = await Promise.all(
       creators.map(async (creator: any) => {
@@ -242,8 +240,8 @@ export async function GET(request: NextRequest) {
             profile?.instagram_account !== undefined
           : false;
 
-        // Calculate affiliate earnings from total_other_earnings in users table
-        const affiliateEarnings = creator.total_other_earnings || 0;
+        // Calculate affiliate earnings from affiliate_earnings in users table
+        const affiliateEarnings = creator.affiliate_earnings || 0;
 
         // Calculate platform-specific contests_won
         let contestsWon = isCreator ? profile?.total_contests_won || 0 : 0;
