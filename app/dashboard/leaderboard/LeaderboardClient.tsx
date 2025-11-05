@@ -56,6 +56,7 @@ type LeaderboardEntry = {
   metrics: {
     winnings: number;
     affiliate_earnings: number;
+    other_earnings: number;
     contests_won: number;
     verified_views: number;
     submissions_won: number;
@@ -247,7 +248,11 @@ export default function LeaderboardClient({
       case "winnings":
         return formatMoney(entry.metrics.winnings);
       case "affiliate_earnings":
-        return formatMoney(entry.metrics.affiliate_earnings);
+        // Return combined value for sorting/display purposes
+        return formatMoney(
+          (entry.metrics.affiliate_earnings || 0) +
+            (entry.metrics.other_earnings || 0)
+        );
       case "contests_won":
         return entry.metrics.contests_won.toString();
       case "verified_views":
@@ -675,6 +680,30 @@ export default function LeaderboardClient({
                               {/* <span className="text-xs font-medium text-purple-600 sm:hidden">
                               c
                             </span> */}
+                            </div>
+                          </div>
+                        )}
+                        {sortBy === "affiliate_earnings" && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-green-50/80 border border-green-200/60 hover:bg-green-100/80 transition-colors">
+                              <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-green-600 flex-shrink-0" />
+                              <span className="text-xs font-bold text-green-700">
+                                {formatMoney(
+                                  entry.metrics.affiliate_earnings || 0
+                                )}
+                              </span>
+                              <span className="text-xs font-medium text-green-600">
+                                Affiliate
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80 transition-colors">
+                              <DollarSign className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-600 flex-shrink-0" />
+                              <span className="text-xs font-bold text-teal-700">
+                                {formatMoney(entry.metrics.other_earnings || 0)}
+                              </span>
+                              <span className="text-xs font-medium text-teal-600">
+                                Other Earnings
+                              </span>
                             </div>
                           </div>
                         )}

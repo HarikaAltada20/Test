@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
         advertisers_referred,
         creators_referred,
         affiliate_earnings,
+        other_earnings,
         user_type,
         creator_profiles (
           id,
@@ -327,8 +328,10 @@ export async function GET(request: NextRequest) {
             profile?.instagram_account !== undefined
           : false;
 
-        // Calculate affiliate earnings from affiliate_earnings in users table
+        // Get affiliate_earnings and other_earnings directly from users table (separate fields)
+        // These are NOT combined - they remain separate throughout
         const affiliateEarnings = creator.affiliate_earnings || 0;
+        const otherEarnings = creator.other_earnings || 0;
 
         // Calculate platform-specific contests_won
         let contestsWon = isCreator ? profile?.total_contests_won || 0 : 0;
@@ -375,7 +378,9 @@ export async function GET(request: NextRequest) {
           is_creator: isCreator,
           metrics: {
             winnings: totalWinnings,
+            // affiliate_earnings and other_earnings are separate fields from users table
             affiliate_earnings: affiliateEarnings,
+            other_earnings: otherEarnings,
             contests_won: contestsWon,
             verified_views: safeVerifiedViews,
             submissions_won: submissionsWon,
@@ -431,6 +436,15 @@ export async function GET(request: NextRequest) {
         if (t1 !== 0) return t1;
         // Second tie-breaker: higher submissions_made
         return b.metrics.submissions_made - a.metrics.submissions_made;
+      }
+
+      // Sort by combined affiliate_earnings + other_earnings
+      if (sortBy === "affiliate_earnings") {
+        const aTotal =
+          (a.metrics.affiliate_earnings || 0) + (a.metrics.other_earnings || 0);
+        const bTotal =
+          (b.metrics.affiliate_earnings || 0) + (b.metrics.other_earnings || 0);
+        return bTotal - aTotal;
       }
 
       // Custom tie-breakers when ranking by contests_won
