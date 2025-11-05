@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   EnhancedTabs as Tabs,
   EnhancedTabsList as TabsList,
@@ -478,9 +479,70 @@ export default function LeaderboardClient({
           </div>
           <div className="p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50/30 to-white">
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-20">
-                <Loader2 className="w-12 h-12 animate-spin text-violet-600 mb-4" />
-                <p className="text-muted-foreground">Loading leaderboard...</p>
+              <div className="space-y-2 sm:space-y-3">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="group relative flex flex-row items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white"
+                  >
+                    {/* Left Section: Rank, Avatar, and User Info */}
+                    <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
+                      {/* Rank Badge Skeleton */}
+                      <div className="flex items-center justify-center w-8 h-8 sm:w-12 sm:h-12 md:w-14 md:h-14 flex-shrink-0">
+                        <Skeleton className="w-full h-full rounded-full" />
+                      </div>
+
+                      {/* Avatar Skeleton */}
+                      <Skeleton className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full flex-shrink-0" />
+
+                      {/* User Info Skeleton */}
+                      <div className="flex-1 min-w-0">
+                        <Skeleton className="h-4 sm:h-5 w-32 sm:w-48 rounded-md" />
+                      </div>
+                    </div>
+
+                    {/* Right Section: Metric Value Skeleton */}
+                    <div className="text-right flex-shrink-0">
+                      <Skeleton className="h-6 sm:h-8 w-20 sm:w-28 rounded-md ml-auto" />
+                      {/* Additional badges skeleton - conditionally shown based on sortBy */}
+                      {(sortBy === "winnings" ||
+                        sortBy === "contests_won" ||
+                        sortBy === "submissions_won" ||
+                        sortBy === "referrals" ||
+                        sortBy === "affiliate_earnings") && (
+                        <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          {sortBy === "winnings" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
+                            </>
+                          )}
+                          {sortBy === "contests_won" && (
+                            <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
+                          )}
+                          {sortBy === "submissions_won" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                            </>
+                          )}
+                          {sortBy === "referrals" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-14 sm:w-16 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                            </>
+                          )}
+                          {sortBy === "affiliate_earnings" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : error ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
