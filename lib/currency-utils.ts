@@ -57,3 +57,25 @@ export function isValidAmount(amount: number): boolean {
 export function roundToTwoDecimals(amount: number): number {
   return Math.round(amount * 100) / 100;
 }
+
+/**
+ * Formats error messages that contain amounts in cents to display as dollars
+ * @param errorMessage - Error message that may contain amounts in cents
+ * @returns Formatted error message with dollar amounts
+ */
+export function formatErrorWithCurrency(errorMessage: string): string {
+  // Check if this is an "Insufficient cash balance" error
+  const insufficientCashBalanceMatch = errorMessage.match(
+    /Insufficient cash balance\. Requested: (\d+), Available: (\d+)/
+  );
+  
+  if (insufficientCashBalanceMatch) {
+    const requestedCents = parseInt(insufficientCashBalanceMatch[1], 10);
+    const availableCents = parseInt(insufficientCashBalanceMatch[2], 10);
+    
+    return `Insufficient cash balance. Requested: ${formatCurrencyFromCents(requestedCents)}, Available: ${formatCurrencyFromCents(availableCents)}`;
+  }
+  
+  // Return original message if no formatting needed
+  return errorMessage;
+}
