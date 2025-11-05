@@ -677,7 +677,7 @@ export default function LeaderboardClient({
                                 {entry.metrics.contests_participated || 0}
                               </span>
                               <span className="text-[10px] sm:text-xs font-medium text-blue-600 sm:inline">
-                                participated
+                                contests
                               </span>
                               {/* <span className="text-[10px] font-medium text-blue-600 sm:hidden">
                                 p
