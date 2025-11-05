@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/solana/webhook-monitor",
-      "schedule": "* * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 } 
