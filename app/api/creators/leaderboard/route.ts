@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  leaderboardCache,
+  adminLeaderboardCache,
+  getLeaderboardCacheKey,
+  getUsersCacheKey,
+  getPlatformContestsCacheKey,
+  getPlatformSubmissionsCacheKey,
+} from "@/lib/cache-utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 60; // Revalidate every 60 seconds
@@ -15,11 +23,36 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "25");
     const isAdmin = searchParams.get("admin") === "1";
 
-    // Fetch all active users (creators and advertisers); include creator_profiles when present
-    let usersQuery = supabase
-      .from("users")
-      .select(
-        `
+    // Use appropriate cache instance based on admin status
+    const cache = isAdmin ? adminLeaderboardCache : leaderboardCache;
+
+    // Check cache for full response first (most efficient)
+    const cacheKey = getLeaderboardCacheKey({
+      sortBy,
+      platform,
+      page,
+      limit,
+      isAdmin,
+    });
+    const cachedResponse = cache.get<any>(cacheKey);
+    if (cachedResponse) {
+      // Return cached response with cached timestamp
+      return NextResponse.json({
+        ...cachedResponse,
+        cached: true,
+      });
+    }
+
+    // Check cache for users query (expensive operation)
+    const usersCacheKey = getUsersCacheKey();
+    let creators = cache.get<any[]>(usersCacheKey);
+
+    if (!creators) {
+      // Fetch all active users (creators and advertisers); include creator_profiles when present
+      let usersQuery = supabase
+        .from("users")
+        .select(
+          `
         id,
         username,
         full_name,
@@ -28,6 +61,7 @@ export async function GET(request: NextRequest) {
         advertisers_referred,
         creators_referred,
         affiliate_earnings,
+        other_earnings,
         user_type,
         creator_profiles (
           id,
@@ -41,22 +75,28 @@ export async function GET(request: NextRequest) {
           total_submissions_won
         )
       `
-      )
-      .in("user_type", ["creator", "advertiser"]) // include both creators and advertisers
-      .eq("is_active", true);
+        )
+        .in("user_type", ["creator", "advertiser"]) // include both creators and advertisers
+        .eq("is_active", true);
 
-    const { data: creators, error: creatorsError } = await usersQuery;
+      const { data: fetchedCreators, error: creatorsError } = await usersQuery;
 
-    if (creatorsError) {
-      console.error("Error fetching creators:", creatorsError);
-      return NextResponse.json(
-        { error: "Failed to fetch creators" },
-        { status: 500 }
-      );
-    }
+      if (creatorsError) {
+        console.error("Error fetching creators:", creatorsError);
+        return NextResponse.json(
+          { error: "Failed to fetch creators" },
+          { status: 500 }
+        );
+      }
 
-    if (!creators || creators.length === 0) {
-      return NextResponse.json({ leaders: [] });
+      if (!fetchedCreators || fetchedCreators.length === 0) {
+        return NextResponse.json({ leaders: [] });
+      }
+
+      creators = fetchedCreators;
+
+      // Cache users data for 60 seconds (shared across all queries)
+      cache.set(usersCacheKey, creators, 60000);
     }
 
     // Fetch platform-specific contest wins, participations, submissions, and winnings if platform filter is applied
@@ -67,108 +107,156 @@ export async function GET(request: NextRequest) {
     let platformSubmissionsMade: Map<string, number> = new Map();
     let platformWinnings: Map<string, number> = new Map();
     let platformViews: Map<string, number> = new Map();
+
     if (platform !== "all") {
       const platformValue = platform === "youtube" ? "youtube" : "instagram";
 
-      // First, get all contest IDs for the specified platform
-      const { data: platformContests, error: contestsError } = await supabase
-        .from("contests")
-        .select("id")
-        .eq("platform", platformValue);
+      // Check cache for platform-specific contest IDs
+      const platformContestsCacheKey =
+        getPlatformContestsCacheKey(platformValue);
+      const cachedPlatformContests = cache.get<any>(platformContestsCacheKey);
 
-      if (!contestsError && platformContests && platformContests.length > 0) {
-        const contestIds = platformContests.map((c) => c.id);
+      let contestIds: string[] = [];
 
-        // Get all contest wins for these contests
-        const { data: contestWinsData, error: contestWinsError } =
-          await supabase
-            .from("creator_contest_wins")
-            .select("creator_id")
-            .in("contest_id", contestIds);
+      if (cachedPlatformContests?.contestIds) {
+        contestIds = cachedPlatformContests.contestIds;
+      } else {
+        // First, get all contest IDs for the specified platform
+        const { data: platformContests, error: contestsError } = await supabase
+          .from("contests")
+          .select("id")
+          .eq("platform", platformValue);
 
-        if (!contestWinsError && contestWinsData) {
-          contestWinsData.forEach((win: any) => {
-            const creatorId = win.creator_id;
-            const currentCount = platformContestWins.get(creatorId) || 0;
-            platformContestWins.set(creatorId, currentCount + 1);
-          });
+        if (!contestsError && platformContests && platformContests.length > 0) {
+          contestIds = platformContests.map((c) => c.id);
+          // Cache contest IDs for 60 seconds
+          cache.set(platformContestsCacheKey, { contestIds }, 60000);
         }
+      }
 
-        // Get all submissions for these contests
-        const { data: submissionsData, error: submissionsError } =
-          await supabase
-            .from("submissions")
-            .select("creator_id, contest_id, status, earnings, views")
-            .in("contest_id", contestIds);
+      if (contestIds.length > 0) {
+        // Check cache for platform-specific submissions data
+        const platformSubmissionsCacheKey =
+          getPlatformSubmissionsCacheKey(platformValue);
+        const cachedPlatformData = cache.get<any>(platformSubmissionsCacheKey);
 
-        if (!submissionsError && submissionsData) {
-          // Count distinct contests per creator for participations
-          const creatorContestMap = new Map<string, Set<string>>();
-          // Count submissions won (status = 'paid') per creator
-          const creatorSubmissionsWonMap = new Map<string, number>();
-          // Count total submissions made per creator
-          const creatorSubmissionsMadeMap = new Map<string, number>();
-          // Sum earnings from paid submissions per creator
-          const creatorWinningsMap = new Map<string, number>();
-          // Sum views per creator (platform-scoped since submissions filtered by contestIds)
-          const creatorViewsMap = new Map<string, number>();
+        if (cachedPlatformData) {
+          platformContestWins = new Map(cachedPlatformData.contestWins);
+          platformContestParticipations = new Map(
+            cachedPlatformData.contestParticipations
+          );
+          platformSubmissionsWon = new Map(cachedPlatformData.submissionsWon);
+          platformSubmissionsMade = new Map(cachedPlatformData.submissionsMade);
+          platformWinnings = new Map(cachedPlatformData.winnings);
+          platformViews = new Map(cachedPlatformData.views);
+        } else {
+          // Get all contest wins for these contests
+          const { data: contestWinsData, error: contestWinsError } =
+            await supabase
+              .from("creator_contest_wins")
+              .select("creator_id")
+              .in("contest_id", contestIds);
 
-          submissionsData.forEach((sub: any) => {
-            const creatorId = sub.creator_id;
-            const contestId = sub.contest_id;
-            const status = sub.status;
-            const earnings = sub.earnings || 0;
-            const views = sub.views || 0;
+          if (!contestWinsError && contestWinsData) {
+            contestWinsData.forEach((win: any) => {
+              const creatorId = win.creator_id;
+              const currentCount = platformContestWins.get(creatorId) || 0;
+              platformContestWins.set(creatorId, currentCount + 1);
+            });
+          }
 
-            // Count participations (distinct contests)
-            if (!creatorContestMap.has(creatorId)) {
-              creatorContestMap.set(creatorId, new Set());
-            }
-            creatorContestMap.get(creatorId)?.add(contestId);
+          // Get all submissions for these contests
+          const { data: submissionsData, error: submissionsError } =
+            await supabase
+              .from("submissions")
+              .select("creator_id, contest_id, status, earnings, views")
+              .in("contest_id", contestIds);
 
-            // Count submissions won (status = 'paid')
-            if (status === "paid") {
-              const currentWon = creatorSubmissionsWonMap.get(creatorId) || 0;
-              creatorSubmissionsWonMap.set(creatorId, currentWon + 1);
+          if (!submissionsError && submissionsData) {
+            // Count distinct contests per creator for participations
+            const creatorContestMap = new Map<string, Set<string>>();
+            // Count submissions won (status = 'paid') per creator
+            const creatorSubmissionsWonMap = new Map<string, number>();
+            // Count total submissions made per creator
+            const creatorSubmissionsMadeMap = new Map<string, number>();
+            // Sum earnings from paid submissions per creator
+            const creatorWinningsMap = new Map<string, number>();
+            // Sum views per creator (platform-scoped since submissions filtered by contestIds)
+            const creatorViewsMap = new Map<string, number>();
 
-              // Sum earnings from paid submissions (winnings)
-              const currentWinnings = creatorWinningsMap.get(creatorId) || 0;
-              creatorWinningsMap.set(creatorId, currentWinnings + earnings);
-            }
+            submissionsData.forEach((sub: any) => {
+              const creatorId = sub.creator_id;
+              const contestId = sub.contest_id;
+              const status = sub.status;
+              const earnings = sub.earnings || 0;
+              const views = sub.views || 0;
 
-            // Count total submissions made
-            const currentMade = creatorSubmissionsMadeMap.get(creatorId) || 0;
-            creatorSubmissionsMadeMap.set(creatorId, currentMade + 1);
+              // Count participations (distinct contests)
+              if (!creatorContestMap.has(creatorId)) {
+                creatorContestMap.set(creatorId, new Set());
+              }
+              creatorContestMap.get(creatorId)?.add(contestId);
 
-            // Sum views per creator
-            const currentViews = creatorViewsMap.get(creatorId) || 0;
-            creatorViewsMap.set(creatorId, currentViews + views);
-          });
+              // Count submissions won (status = 'paid')
+              if (status === "paid") {
+                const currentWon = creatorSubmissionsWonMap.get(creatorId) || 0;
+                creatorSubmissionsWonMap.set(creatorId, currentWon + 1);
 
-          // Set participations (distinct contests)
-          creatorContestMap.forEach((contestSet, creatorId) => {
-            platformContestParticipations.set(creatorId, contestSet.size);
-          });
+                // Sum earnings from paid submissions (winnings)
+                const currentWinnings = creatorWinningsMap.get(creatorId) || 0;
+                creatorWinningsMap.set(creatorId, currentWinnings + earnings);
+              }
 
-          // Set submissions won
-          creatorSubmissionsWonMap.forEach((count, creatorId) => {
-            platformSubmissionsWon.set(creatorId, count);
-          });
+              // Count total submissions made
+              const currentMade = creatorSubmissionsMadeMap.get(creatorId) || 0;
+              creatorSubmissionsMadeMap.set(creatorId, currentMade + 1);
 
-          // Set submissions made
-          creatorSubmissionsMadeMap.forEach((count, creatorId) => {
-            platformSubmissionsMade.set(creatorId, count);
-          });
+              // Sum views per creator
+              const currentViews = creatorViewsMap.get(creatorId) || 0;
+              creatorViewsMap.set(creatorId, currentViews + views);
+            });
 
-          // Set winnings (sum of earnings from paid submissions)
-          creatorWinningsMap.forEach((total, creatorId) => {
-            platformWinnings.set(creatorId, total);
-          });
+            // Set participations (distinct contests)
+            creatorContestMap.forEach((contestSet, creatorId) => {
+              platformContestParticipations.set(creatorId, contestSet.size);
+            });
 
-          // Set views (sum of submission views for contests on selected platform)
-          creatorViewsMap.forEach((total, creatorId) => {
-            platformViews.set(creatorId, total);
-          });
+            // Set submissions won
+            creatorSubmissionsWonMap.forEach((count, creatorId) => {
+              platformSubmissionsWon.set(creatorId, count);
+            });
+
+            // Set submissions made
+            creatorSubmissionsMadeMap.forEach((count, creatorId) => {
+              platformSubmissionsMade.set(creatorId, count);
+            });
+
+            // Set winnings (sum of earnings from paid submissions)
+            creatorWinningsMap.forEach((total, creatorId) => {
+              platformWinnings.set(creatorId, total);
+            });
+
+            // Set views (sum of submission views for contests on selected platform)
+            creatorViewsMap.forEach((total, creatorId) => {
+              platformViews.set(creatorId, total);
+            });
+          }
+
+          // Cache platform-specific data for 60 seconds
+          cache.set(
+            platformSubmissionsCacheKey,
+            {
+              contestWins: Array.from(platformContestWins.entries()),
+              contestParticipations: Array.from(
+                platformContestParticipations.entries()
+              ),
+              submissionsWon: Array.from(platformSubmissionsWon.entries()),
+              submissionsMade: Array.from(platformSubmissionsMade.entries()),
+              winnings: Array.from(platformWinnings.entries()),
+              views: Array.from(platformViews.entries()),
+            },
+            60000
+          );
         }
       }
     }
@@ -240,8 +328,10 @@ export async function GET(request: NextRequest) {
             profile?.instagram_account !== undefined
           : false;
 
-        // Calculate affiliate earnings from affiliate_earnings in users table
+        // Get affiliate_earnings and other_earnings directly from users table (separate fields)
+        // These are NOT combined - they remain separate throughout
         const affiliateEarnings = creator.affiliate_earnings || 0;
+        const otherEarnings = creator.other_earnings || 0;
 
         // Calculate platform-specific contests_won
         let contestsWon = isCreator ? profile?.total_contests_won || 0 : 0;
@@ -288,7 +378,9 @@ export async function GET(request: NextRequest) {
           is_creator: isCreator,
           metrics: {
             winnings: totalWinnings,
+            // affiliate_earnings and other_earnings are separate fields from users table
             affiliate_earnings: affiliateEarnings,
+            other_earnings: otherEarnings,
             contests_won: contestsWon,
             verified_views: safeVerifiedViews,
             submissions_won: submissionsWon,
@@ -346,6 +438,15 @@ export async function GET(request: NextRequest) {
         return b.metrics.submissions_made - a.metrics.submissions_made;
       }
 
+      // Sort by combined affiliate_earnings + other_earnings
+      if (sortBy === "affiliate_earnings") {
+        const aTotal =
+          (a.metrics.affiliate_earnings || 0) + (a.metrics.other_earnings || 0);
+        const bTotal =
+          (b.metrics.affiliate_earnings || 0) + (b.metrics.other_earnings || 0);
+        return bTotal - aTotal;
+      }
+
       // Custom tie-breakers when ranking by contests_won
       if (sortBy === "contests_won") {
         const primary = b.metrics.contests_won - a.metrics.contests_won;
@@ -398,14 +499,6 @@ export async function GET(request: NextRequest) {
       instagramCreators: instagramCreatorsCount,
       youtubeCreators: youtubeCreatorsCount,
       // creator-only aggregates
-      totalWinnings: creatorsAll.reduce(
-        (sum: number, entry: any) => sum + entry.metrics.winnings,
-        0
-      ),
-      totalViews: creatorsAll.reduce(
-        (sum: number, entry: any) => sum + entry.metrics.verified_views,
-        0
-      ),
       totalContestsWon: creatorsAll.reduce(
         (sum: number, entry: any) => sum + entry.metrics.contests_won,
         0
@@ -423,10 +516,6 @@ export async function GET(request: NextRequest) {
         0
       ),
       // mixed metrics include both creators and advertisers
-      totalAffiliateEarnings: leaders.reduce(
-        (sum, entry) => sum + entry.metrics.affiliate_earnings,
-        0
-      ),
       totalReferrals: leaders.reduce(
         (sum, entry) => sum + entry.metrics.referrals,
         0
@@ -439,29 +528,6 @@ export async function GET(request: NextRequest) {
         (sum, entry) => sum + (entry.metrics.creators_referred || 0),
         0
       ),
-      totalCoins: leaders.reduce(
-        (sum, entry) => sum + entry.metrics.total_coins,
-        0
-      ),
-      // averages over creators only
-      averageWinnings:
-        creatorsAll.length > 0
-          ? Math.round(
-              creatorsAll.reduce(
-                (sum: number, entry: any) => sum + entry.metrics.winnings,
-                0
-              ) / creatorsAll.length
-            )
-          : 0,
-      averageViews:
-        creatorsAll.length > 0
-          ? Math.round(
-              creatorsAll.reduce(
-                (sum: number, entry: any) => sum + entry.metrics.verified_views,
-                0
-              ) / creatorsAll.length
-            )
-          : 0,
     };
 
     // Calculate pagination
@@ -469,6 +535,23 @@ export async function GET(request: NextRequest) {
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
     const paginatedLeaders = cappedLeaders.slice(startIndex, endIndex);
+
+    // Cache the full response
+    cache.set(
+      cacheKey,
+      {
+        leaders: paginatedLeaders,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems: cappedLeaders.length,
+          itemsPerPage: limit,
+        },
+        summary,
+        lastUpdated: new Date().toISOString(),
+      },
+      60000
+    );
 
     return NextResponse.json({
       leaders: paginatedLeaders,

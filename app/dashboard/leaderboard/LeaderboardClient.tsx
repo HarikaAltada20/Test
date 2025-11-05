@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   EnhancedTabs as Tabs,
   EnhancedTabsList as TabsList,
@@ -56,6 +57,7 @@ type LeaderboardEntry = {
   metrics: {
     winnings: number;
     affiliate_earnings: number;
+    other_earnings: number;
     contests_won: number;
     verified_views: number;
     submissions_won: number;
@@ -247,7 +249,11 @@ export default function LeaderboardClient({
       case "winnings":
         return formatMoney(entry.metrics.winnings);
       case "affiliate_earnings":
-        return formatMoney(entry.metrics.affiliate_earnings);
+        // Return combined value for sorting/display purposes
+        return formatMoney(
+          (entry.metrics.affiliate_earnings || 0) +
+            (entry.metrics.other_earnings || 0)
+        );
       case "contests_won":
         return entry.metrics.contests_won.toString();
       case "verified_views":
@@ -264,7 +270,7 @@ export default function LeaderboardClient({
   };
 
   return (
-    <div className="px-2 sm:px-4 py-4 sm:py-6 md:py-8">
+    <div className="sm:px-2 py-4 sm:py-6 md:py-8">
       {/* Hero Header */}
       {!summaryOnly && !hideHeroHeader && (
         <div className="mb-4 sm:mb-6 md:mb-8">
@@ -412,30 +418,24 @@ export default function LeaderboardClient({
       {/* Leaderboard */}
       {!summaryOnly && (
         <div className="rounded-xl sm:rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-            <div className="w-full md:w-auto">
-              <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent truncate">
-                {getMetricLabel(sortBy)}
-              </h2>
-              {/* <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-              <Users className="w-3 h-3" />
-              Showing top 100 creators • {limit} per page
-            </p> */}
-            </div>
+          <div className="flex flex-row items-center justify-between gap-2 sm:gap-3 md:gap-4 px-3 sm:px-4 md:px-6 py-3 sm:py-4 md:py-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white overflow-hidden">
+            <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent truncate min-w-0 flex-1">
+              {getMetricLabel(sortBy)}
+            </h2>
             {sortBy !== "referrals" &&
               sortBy !== "total_coins" &&
               sortBy !== "affiliate_earnings" &&
               sortBy !== "verified_views" && (
-                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
-                  <div className="inline-flex items-center gap-1 rounded-lg sm:rounded-xl border-2 border-gray-200 p-0.5 sm:p-1 bg-white overflow-x-auto whitespace-nowrap shadow-inner">
+                <div className="flex items-center gap-1 sm:gap-1.5 sm:gap-2 flex-shrink-0">
+                  <div className="inline-flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl border-2 border-gray-200 p-0.5 sm:p-1 bg-white overflow-x-auto whitespace-nowrap shadow-inner">
                     <Button
                       type="button"
                       size="sm"
                       variant={platform === "all" ? "default" : "ghost"}
                       className={
                         platform === "all"
-                          ? "shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-violet-300/50 font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                          : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          ? "shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-violet-300/50 font-bold bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          : "text-gray-600 hover:text-violet-600 hover:bg-violet-50/50 transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
                       }
                       onClick={() => setPlatform("all")}
                     >
@@ -447,14 +447,15 @@ export default function LeaderboardClient({
                       variant={platform === "youtube" ? "default" : "ghost"}
                       className={
                         platform === "youtube"
-                          ? "bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-red-700/30 font-bold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                          : "text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          ? "bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-red-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          : "text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
                       }
                       onClick={() => setPlatform("youtube")}
                     >
-                      <Youtube className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 flex-shrink-0" />
-                      <span>YouTube</span>
-                      {/* <span className="sm:hidden">YT</span> */}
+                      <Youtube className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden sm:inline ml-1 sm:ml-1.5">
+                        YouTube
+                      </span>
                     </Button>
                     <Button
                       type="button"
@@ -462,14 +463,15 @@ export default function LeaderboardClient({
                       variant={platform === "instagram" ? "default" : "ghost"}
                       className={
                         platform === "instagram"
-                          ? "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-purple-700/30 font-bold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
-                          : "text-pink-600 hover:text-pink-700 hover:bg-pink-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          ? "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-purple-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          : "text-pink-600 hover:text-pink-700 hover:bg-pink-50 transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
                       }
                       onClick={() => setPlatform("instagram")}
                     >
-                      <Instagram className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-1.5 flex-shrink-0" />
-                      <span>Instagram</span>
-                      {/* <span className="sm:hidden">IG</span> */}
+                      <Instagram className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden sm:inline ml-1 sm:ml-1.5">
+                        Instagram
+                      </span>
                     </Button>
                   </div>
                 </div>
@@ -477,9 +479,70 @@ export default function LeaderboardClient({
           </div>
           <div className="p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50/30 to-white">
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-20">
-                <Loader2 className="w-12 h-12 animate-spin text-violet-600 mb-4" />
-                <p className="text-muted-foreground">Loading leaderboard...</p>
+              <div className="space-y-2 sm:space-y-3">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="group relative flex flex-row items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border-2 border-gray-200 bg-white"
+                  >
+                    {/* Left Section: Rank, Avatar, and User Info */}
+                    <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
+                      {/* Rank Badge Skeleton */}
+                      <div className="flex items-center justify-center w-8 h-8 sm:w-12 sm:h-12 md:w-14 md:h-14 flex-shrink-0">
+                        <Skeleton className="w-full h-full rounded-full" />
+                      </div>
+
+                      {/* Avatar Skeleton */}
+                      <Skeleton className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full flex-shrink-0" />
+
+                      {/* User Info Skeleton */}
+                      <div className="flex-1 min-w-0">
+                        <Skeleton className="h-4 sm:h-5 w-32 sm:w-48 rounded-md" />
+                      </div>
+                    </div>
+
+                    {/* Right Section: Metric Value Skeleton */}
+                    <div className="text-right flex-shrink-0">
+                      <Skeleton className="h-6 sm:h-8 w-20 sm:w-28 rounded-md ml-auto" />
+                      {/* Additional badges skeleton - conditionally shown based on sortBy */}
+                      {(sortBy === "winnings" ||
+                        sortBy === "contests_won" ||
+                        sortBy === "submissions_won" ||
+                        sortBy === "referrals" ||
+                        sortBy === "affiliate_earnings") && (
+                        <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          {sortBy === "winnings" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
+                            </>
+                          )}
+                          {sortBy === "contests_won" && (
+                            <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
+                          )}
+                          {sortBy === "submissions_won" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                            </>
+                          )}
+                          {sortBy === "referrals" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-14 sm:w-16 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                            </>
+                          )}
+                          {sortBy === "affiliate_earnings" && (
+                            <>
+                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
+                              <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : error ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -518,32 +581,32 @@ export default function LeaderboardClient({
                   return (
                     <div
                       key={entry.user_id}
-                      className="group relative flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border-2 transition-all duration-300 bg-white border-gray-200 hover:border-violet-300 hover:shadow-lg sm:hover:scale-[1.01]"
+                      className="group relative flex flex-row items-center gap-2 sm:gap-3 md:gap-4 p-3 sm:p-4 md:p-5 rounded-lg sm:rounded-xl border-2 transition-all duration-300 bg-white border-gray-200 hover:border-violet-300 hover:shadow-lg sm:hover:scale-[1.01]"
                     >
                       {/* Left Section: Rank, Avatar, and User Info */}
-                      <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0 w-full sm:w-auto">
+                      <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
                         {/* Rank Badge */}
-                        <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 flex-shrink-0">
+                        <div className="flex items-center justify-center w-8 h-8 sm:w-12 sm:h-12 md:w-14 md:h-14 flex-shrink-0">
                           <div className="flex items-center justify-center w-full h-full rounded-full bg-gradient-to-br from-gray-100 to-gray-200 border-2 border-gray-300 group-hover:border-violet-400 transition-colors">
-                            <span className="text-base sm:text-lg md:text-xl font-bold text-gray-700 group-hover:text-violet-600">
+                            <span className="text-sm sm:text-lg md:text-xl font-bold text-gray-700 group-hover:text-violet-600">
                               {rank}
                             </span>
                           </div>
                         </div>
 
                         {/* Avatar */}
-                        <Avatar className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 ring-2 sm:ring-4 ring-offset-1 sm:ring-offset-2 transition-all duration-300 ring-gray-100 group-hover:ring-violet-100 group-hover:shadow-lg flex-shrink-0">
+                        <Avatar className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 ring-2 sm:ring-4 ring-offset-1 sm:ring-offset-2 transition-all duration-300 ring-gray-100 group-hover:ring-violet-100 group-hover:shadow-lg flex-shrink-0">
                           <AvatarImage
                             src={entry.profile_picture_url || undefined}
                           />
-                          <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-sm sm:text-base">
+                          <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                             {displayName.charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
 
                         {/* User Info */}
                         <div className="flex-1 min-w-0">
-                          <div className="font-bold text-base sm:text-lg truncate text-gray-900 group-hover:text-violet-600">
+                          <div className="font-bold text-sm sm:text-lg truncate text-gray-900 group-hover:text-violet-600">
                             {displayName}
                           </div>
                           {/* <div className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
@@ -574,107 +637,137 @@ export default function LeaderboardClient({
                       </div>
 
                       {/* Right Section: Metric Value */}
-                      <div className="text-left sm:text-right flex-shrink-0 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 mt-2 sm:mt-0">
-                        <div className="text-xl sm:text-2xl text-gray-700 font-bold">
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-lg sm:text-2xl text-gray-700 font-bold">
                           {metricValue}
                         </div>
                         {sortBy === "winnings" && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80 transition-colors">
-                              <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-emerald-700">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80 transition-colors">
+                              <Award className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-emerald-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-emerald-700">
                                 {entry.metrics.contests_participated || 0}
                               </span>
-                              <span className="text-xs font-medium text-emerald-600">
+                              <span className="text-[10px] sm:text-xs font-medium text-emerald-600 hidden sm:inline">
                                 contests
                               </span>
-                              {/* <span className="text-xs font-medium text-emerald-600 sm:hidden">
-                              c
-                            </span> */}
+                              <span className="text-[10px] font-medium text-emerald-600 sm:hidden">
+                                c
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-blue-50/80 border border-blue-200/60 hover:bg-teal-100/80 transition-colors">
-                              <Target className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-blue-700">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-blue-50/80 border border-blue-200/60 hover:bg-teal-100/80 transition-colors">
+                              <Target className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-blue-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-blue-700">
                                 {entry.metrics.submissions_made || 0}
                               </span>
-                              <span className="text-xs font-medium text-blue-600">
+                              <span className="text-[10px] sm:text-xs font-medium text-blue-600 hidden sm:inline">
                                 submissions
                               </span>
-                              {/* <span className="text-xs font-medium text-blue-600 sm:hidden">
-                              s
-                            </span> */}
+                              <span className="text-[10px] font-medium text-blue-600 sm:hidden">
+                                s
+                              </span>
                             </div>
                           </div>
                         )}
                         {sortBy === "contests_won" && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80 transition-colors">
-                              <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-blue-700">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80 transition-colors">
+                              <Award className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-blue-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-blue-700">
                                 {entry.metrics.contests_participated || 0}
                               </span>
-                              <span className="text-xs font-medium text-blue-600">
-                                participated
+                              <span className="text-[10px] sm:text-xs font-medium text-blue-600 sm:inline">
+                                contests
                               </span>
-                              {/* <span className="text-xs font-medium text-blue-600 sm:hidden">
-                              p
-                            </span> */}
+                              {/* <span className="text-[10px] font-medium text-blue-600 sm:hidden">
+                                p
+                              </span> */}
                             </div>
                           </div>
                         )}
                         {sortBy === "submissions_won" && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-indigo-50/80 border border-indigo-200/60 hover:bg-indigo-100/80 transition-colors">
-                              <Target className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-indigo-700">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-indigo-50/80 border border-indigo-200/60 hover:bg-indigo-100/80 transition-colors">
+                              <Target className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-indigo-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-indigo-700">
                                 {entry.metrics.submissions_made || 0}
                               </span>
-                              <span className="text-xs font-medium text-indigo-600">
+                              <span className="text-[10px] sm:text-xs font-medium text-indigo-600 hidden sm:inline">
                                 submitted
                               </span>
-                              {/* <span className="text-xs font-medium text-indigo-600 sm:hidden">
-                              s
-                            </span> */}
+                              <span className="text-[10px] font-medium text-indigo-600 sm:hidden">
+                                s
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80 transition-colors">
-                              <Award className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-emerald-700">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-emerald-50/80 border border-emerald-200/60 hover:bg-emerald-100/80 transition-colors">
+                              <Award className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-emerald-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-emerald-700">
                                 {entry.metrics.contests_participated || 0}
                               </span>
-                              <span className="text-xs font-medium text-emerald-600">
+                              <span className="text-[10px] sm:text-xs font-medium text-emerald-600 hidden sm:inline">
                                 contests
                               </span>
-                              {/* <span className="text-xs font-medium text-emerald-600 sm:hidden">
-                            contests
-                            </span> */}
+                              <span className="text-[10px] font-medium text-emerald-600 sm:hidden">
+                                c
+                              </span>
                             </div>
                           </div>
                         )}
                         {sortBy === "referrals" && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80 transition-colors">
-                              <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-blue-700">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-blue-50/80 border border-blue-200/60 hover:bg-blue-100/80 transition-colors">
+                              <Building2 className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-blue-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-blue-700">
                                 {entry.metrics.advertisers_referred || 0}
                               </span>
-                              <span className="text-xs font-medium text-blue-600">
+                              <span className="text-[10px] sm:text-xs font-medium text-blue-600 hidden sm:inline">
                                 brands
                               </span>
-                              {/* <span className="text-xs font-medium text-blue-600 sm:hidden">
-                              b
-                            </span> */}
+                              <span className="text-[10px] font-medium text-blue-600 sm:hidden">
+                                b
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg bg-purple-50/80 border border-purple-200/60 hover:bg-purple-100/80 transition-colors">
-                              <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-600 flex-shrink-0" />
-                              <span className="text-xs font-bold text-purple-700">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-purple-50/80 border border-purple-200/60 hover:bg-purple-100/80 transition-colors">
+                              <Users className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-purple-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-purple-700">
                                 {entry.metrics.creators_referred || 0}
                               </span>
-                              <span className="text-xs font-medium text-purple-600">
+                              <span className="text-[10px] sm:text-xs font-medium text-purple-600 hidden sm:inline">
                                 creators
                               </span>
-                              {/* <span className="text-xs font-medium text-purple-600 sm:hidden">
-                              c
-                            </span> */}
+                              <span className="text-[10px] font-medium text-purple-600 sm:hidden">
+                                c
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {sortBy === "affiliate_earnings" && (
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-green-50/80 border border-green-200/60 hover:bg-green-100/80 transition-colors">
+                              <TrendingUp className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-green-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-green-700">
+                                {formatMoney(
+                                  entry.metrics.affiliate_earnings || 0
+                                )}
+                              </span>
+                              <span className="text-[10px] sm:text-xs font-medium text-green-600 hidden sm:inline">
+                                Affiliate
+                              </span>
+                              <span className="text-[10px] font-medium text-green-600 sm:hidden">
+                                A
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80 transition-colors">
+                              <DollarSign className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 text-teal-600 flex-shrink-0" />
+                              <span className="text-[10px] sm:text-xs font-bold text-teal-700">
+                                {formatMoney(entry.metrics.other_earnings || 0)}
+                              </span>
+                              <span className="text-[10px] sm:text-xs font-medium text-teal-600 hidden sm:inline">
+                                Other Earnings
+                              </span>
+                              <span className="text-[10px] font-medium text-teal-600 sm:hidden">
+                                E
+                              </span>
                             </div>
                           </div>
                         )}
