@@ -86,9 +86,10 @@ export async function getAdvertiserDepositBalance(
 
 // Add funds to advertiser's deposit balance (amount in cents)
 export async function addToDepositBalance(
-  userId: string,
-  amountInCents: number,
-  paymentIntentId: string
+  userId: string, 
+  amountInCents: number, 
+  paymentIntentId: string,
+  paymentMethod: 'stripe' | 'solana' | 'phantom' = 'stripe'
 ): Promise<DepositBalanceResponse> {
   try {
     const supabase = await getSupabaseClient();
@@ -117,8 +118,13 @@ export async function addToDepositBalance(
       };
     }
 
-    // Create meaningful deposit description
-    const depositDescription = `Wallet top-up via Stripe payment`;
+    // Create meaningful deposit description based on payment method
+    const depositDescription = paymentMethod === 'stripe' 
+      ? `Wallet top-up via Stripe payment`
+      : paymentMethod === 'solana' 
+      ? `Wallet top-up via Solana payment`
+      : `Wallet top-up via Phantom Wallet`;
+    
     const depositRemarks = `Deposit added to wallet balance`;
 
     // Log the deposit transaction in cents
@@ -130,7 +136,7 @@ export async function addToDepositBalance(
       depositDescription,
       paymentIntentId,
       depositRemarks,
-      "stripe"
+      paymentMethod === 'phantom' ? 'solana' : paymentMethod
     );
 
     return {
@@ -590,7 +596,7 @@ export async function logTransaction(
   description: string,
   paymentIntentId?: string, // Optional payment intent ID for fast lookups
   remarks?: string, // User-friendly status message
-  paymentMethod?: "wallet" | "stripe" | "split" | "refund", // NEW: Payment method for clarity
+  paymentMethod?: 'wallet' | 'stripe' | 'split' | 'refund' | 'solana', // NEW: Payment method for clarity
   metadata?: any, // NEW: Flexible metadata for subscription payments
   stripeInvoiceId?: string, // NEW: Stripe invoice ID for subscription payments
   stripeSubscriptionId?: string, // NEW: Stripe subscription ID for subscription payments

@@ -14,11 +14,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Loader2, CreditCard, DollarSign } from 'lucide-react';
+import { Loader2, CreditCard, DollarSign, Wallet } from 'lucide-react';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { PaymentAnimation } from '@/components/ui/payment-success-animation';
 import { WALLET_TOP_UP_MAX_AMOUNT } from '@/constants/subscriptionPlans';
+import { SolanaPaymentModal } from './SolanaPaymentModal';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -215,7 +217,7 @@ const CheckoutForm = ({
                 </div>
 
                 {/* Expiry and CVV in a row */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <Label className="text-xs text-gray-600 mb-2 block">
                             Expiry Date
@@ -237,7 +239,7 @@ const CheckoutForm = ({
                 </div>
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-4 bg-blue-50 rounded-lg">
                 <div className="flex items-center gap-2">
                     <DollarSign className="h-5 w-5 text-blue-600" />
                     <span className="font-medium text-blue-900">
@@ -283,6 +285,8 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
     const [animationType, setAnimationType] = useState<'success' | 'failure'>('success');
     const [animationAmount, setAnimationAmount] = useState<number>(0);
     const [errorMessage, setErrorMessage] = useState<string>('');
+    const [showSolanaModal, setShowSolanaModal] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<'stripe' | 'solana'>('stripe');
 
     const handleSuccess = async () => {
         console.log('🎉 WalletTopUp: Payment success callback triggered');
@@ -355,95 +359,159 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
 
     const predefinedAmounts = [25, 50, 100, 200, 500];
 
+    const handleSolanaSuccess = (newBalance: number) => {
+        toast.success('Solana payment received! Your balance has been updated.');
+        onBalanceUpdate(newBalance);
+        setShowSolanaModal(false);
+
+        // Refresh transaction history
+        if (onTransactionUpdate) {
+            onTransactionUpdate();
+        }
+    };
+
     return (
         <>
-            <div>
+            <div className="px-3 sm:px-0">
                 <div className="mb-6">
                     <CardTitle className="flex items-center gap-2">
-                        {/* <DollarSign className="h-5 w-5" /> */}
                         Top Up Wallet
                     </CardTitle>
                 </div>
-                <div className="space-y-6">
-                    <div className="p-4 rounded-lg border border-gray-400">
-                        <div className="flex items-center justify-between">
-                            <span className="text-md font-medium text-gray-500">
-                                Current Balance
-                            </span>
-                            <span className="text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out">
-                                {formatCurrencyFromCents(currentBalance)}
-                            </span>
+
+                <Tabs value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as 'stripe' | 'solana')} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 gap-2 mb-6">
+                        <TabsTrigger value="stripe" className="flex items-center gap-2 text-xs sm:text-sm leading-tight px-3 py-2 whitespace-normal">
+                            <CreditCard className="h-4 w-4" />
+                            Credit Card
+                        </TabsTrigger>
+                        <TabsTrigger value="solana" className="flex items-center gap-2 text-xs sm:text-sm leading-tight px-3 py-2 whitespace-normal">
+                            <Wallet className="h-4 w-4" />
+                            Solana (USDC/USDT)
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <div className="space-y-6">
+                        <div className="p-4 rounded-lg border border-gray-400">
+                            <div className="flex items-start sm:items-center justify-between gap-2">
+                                <span className="text-md font-medium text-gray-500">
+                                    Current Balance
+                                </span>
+                                <span className="text-lg sm:text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out">
+                                    {formatCurrencyFromCents(currentBalance)}
+                                </span>
+                            </div>
                         </div>
-                    </div>
 
-                    {!showPaymentForm ? (
-                        <div className="space-y-4">
-                            <div className="space-y-4">
-                                <Label className="text-sm font-medium">Quick amounts</Label>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {predefinedAmounts.map((presetAmount) => (
-                                        <Button
-                                        className="border-[#4A00BE]"
-                                            key={presetAmount}
-                                            variant={amount === presetAmount ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setAmount(presetAmount)}
-                                        >
-                                            ${presetAmount}
-                                        </Button>
-                                    ))}
+                        <TabsContent value="stripe" className="mt-0 space-y-4">
+                            {!showPaymentForm ? (
+                                    <div className="space-y-4">
+                                    <div className="space-y-4">
+                                        <Label className="text-sm font-medium">Quick amounts</Label>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                            {predefinedAmounts.map((presetAmount) => (
+                                                <Button
+                                                    className="border-[#4A00BE]"
+                                                    key={presetAmount}
+                                                    variant={amount === presetAmount ? "default" : "outline"}
+                                                    size="sm"
+                                                    onClick={() => setAmount(presetAmount)}
+                                                >
+                                                    ${presetAmount}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 mb-4">
+                                        <Label htmlFor="custom-amount">Or enter custom amount</Label>
+                                        <Input
+                                            id="custom-amount"
+                                            type="number"
+                                            min="1"
+                                            max={WALLET_TOP_UP_MAX_AMOUNT}
+                                            value={amount}
+                                            onChange={(e) => setAmount(Number(e.target.value))}
+                                            placeholder="Enter amount"
+                                        />
+                                    </div>
+
+                                    <button
+                                        onClick={() => setShowPaymentForm(true)}
+                                        className="w-full bg-[#D9C0FF61] text-[#7F39EC] py-4 rounded-full"
+                                        disabled={!amount || amount < 1}
+                                    >
+                                        Proceed to Payment
+                                    </button>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="font-medium">Complete Payment</h3>
+                                        <Button
+                                            className="text-[#4A00BE] border border-[#4A00BE]"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setShowPaymentForm(false)}
+                                        >
+                                            Back
+                                        </Button>
+                                    </div>
 
-                            <div className="space-y-2 mb-4">
-                                <Label htmlFor="custom-amount">Or enter custom amount</Label>
-                                <Input
-                                    id="custom-amount"
-                                    type="number"
-                                    min="1"
-                                    max={WALLET_TOP_UP_MAX_AMOUNT}
-                                    value={amount}
-                                    onChange={(e) => setAmount(Number(e.target.value))}
-                                    placeholder="Enter amount"
-                                />
-                            </div>
-                            
-                            <button
-                                onClick={() => setShowPaymentForm(true)}
-                                className="w-full bg-[#D9C0FF61] text-[#7F39EC] py-4 rounded-full"
-                             
-                                disabled={!amount || amount < 1}
-                            >
-                                Proceed to Payment
-                            </button>
-                            </div>
-                      
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <h3 className="font-medium">Complete Payment</h3>
+                                    <Elements stripe={stripePromise}>
+                                        <CheckoutForm
+                                            amount={amount}
+                                            onSuccess={handleSuccess}
+                                            onError={handleError}
+                                            onProcessingChange={onProcessingChange}
+                                        />
+                                    </Elements>
+                                </div>
+                            )}
+                        </TabsContent>
+
+                        <TabsContent value="solana" className="mt-0 space-y-4">
+                            <div className="text-center py-6 sm:py-8 px-2 space-y-4">
+                                <div className="text-4xl sm:text-5xl mb-4">💳</div>
+                                <h3 className="text-lg font-semibold">Pay with Solana</h3>
+                                <p className="text-gray-600 text-sm max-w-md mx-auto">
+                                    Top up your wallet instantly using USDC or USDT on the Solana blockchain.
+                                    Fast, secure, and with low transaction fees.
+                                </p>
+                                <div className="flex flex-col gap-2 max-w-xs mx-auto">
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <span className="text-green-500">✓</span>
+                                        <span>Instant processing (1-2 minutes)</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <span className="text-green-500">✓</span>
+                                        <span>Low transaction fees</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <span className="text-green-500">✓</span>
+                                        <span>Support for USDC & USDT</span>
+                                    </div>
+                                </div>
                                 <Button
-                                className="text-[#4A00BE] border border-[#4A00BE]"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowPaymentForm(false)}
+                                    onClick={() => setShowSolanaModal(true)}
+                                    className="bg-[#7F39EC] hover:bg-[#6929D1] mt-4"
+                                    size="lg"
                                 >
-                                    Back
+                                    <Wallet className="mr-2 h-4 w-4" />
+                                    Pay with Phantom Wallet
                                 </Button>
                             </div>
-
-                            <Elements stripe={stripePromise}>
-                                <CheckoutForm
-                                    amount={amount}
-                                    onSuccess={handleSuccess}
-                                    onError={handleError}
-                                    onProcessingChange={onProcessingChange}
-                                />
-                            </Elements>
-                        </div>
-                    )}
-                </div>
+                        </TabsContent>
+                    </div>
+                </Tabs>
             </div>
+
+            {/* Solana Payment Modal */}
+            <SolanaPaymentModal
+                isOpen={showSolanaModal}
+                onClose={() => setShowSolanaModal(false)}
+                onSuccess={handleSolanaSuccess}
+            />
 
             {/* Payment Animation Overlay */}
             <PaymentAnimation
