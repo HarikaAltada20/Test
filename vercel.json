@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/update-instagram-insights",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/solana/webhook-monitor",
-      "schedule": "* * * * *"
     }
   ]
 } 
