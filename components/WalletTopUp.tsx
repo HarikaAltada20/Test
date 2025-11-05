@@ -217,7 +217,7 @@ const CheckoutForm = ({
                 </div>
 
                 {/* Expiry and CVV in a row */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                         <Label className="text-xs text-gray-600 mb-2 block">
                             Expiry Date
@@ -239,7 +239,7 @@ const CheckoutForm = ({
                 </div>
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-4 bg-blue-50 rounded-lg">
                 <div className="flex items-center gap-2">
                     <DollarSign className="h-5 w-5 text-blue-600" />
                     <span className="font-medium text-blue-900">
@@ -372,7 +372,7 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
 
     return (
         <>
-            <div>
+            <div className="px-3 sm:px-0">
                 <div className="mb-6">
                     <CardTitle className="flex items-center gap-2">
                         Top Up Wallet
@@ -380,12 +380,12 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                 </div>
 
                 <Tabs value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as 'stripe' | 'solana')} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-6">
-                        <TabsTrigger value="stripe" className="flex items-center gap-2">
+                    <TabsList className="grid w-full grid-cols-2 gap-2 mb-6">
+                        <TabsTrigger value="stripe" className="flex items-center gap-2 text-xs sm:text-sm leading-tight px-3 py-2 whitespace-normal">
                             <CreditCard className="h-4 w-4" />
                             Credit Card
                         </TabsTrigger>
-                        <TabsTrigger value="solana" className="flex items-center gap-2">
+                        <TabsTrigger value="solana" className="flex items-center gap-2 text-xs sm:text-sm leading-tight px-3 py-2 whitespace-normal">
                             <Wallet className="h-4 w-4" />
                             Solana (USDC/USDT)
                         </TabsTrigger>
@@ -393,11 +393,11 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
 
                     <div className="space-y-6">
                         <div className="p-4 rounded-lg border border-gray-400">
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-start sm:items-center justify-between gap-2">
                                 <span className="text-md font-medium text-gray-500">
                                     Current Balance
                                 </span>
-                                <span className="text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out">
+                                <span className="text-lg sm:text-xl font-bold text-gray-500 transition-all duration-300 ease-in-out">
                                     {formatCurrencyFromCents(currentBalance)}
                                 </span>
                             </div>
@@ -405,10 +405,10 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
 
                         <TabsContent value="stripe" className="mt-0 space-y-4">
                             {!showPaymentForm ? (
-                                <div className="space-y-4">
+                                    <div className="space-y-4">
                                     <div className="space-y-4">
                                         <Label className="text-sm font-medium">Quick amounts</Label>
-                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                             {predefinedAmounts.map((presetAmount) => (
                                                 <Button
                                                     className="border-[#4A00BE]"
@@ -471,8 +471,8 @@ export function WalletTopUp({ currentBalance, onBalanceUpdate, onClose, onTransa
                         </TabsContent>
 
                         <TabsContent value="solana" className="mt-0 space-y-4">
-                            <div className="text-center py-8 space-y-4">
-                                <div className="text-5xl mb-4">💳</div>
+                            <div className="text-center py-6 sm:py-8 px-2 space-y-4">
+                                <div className="text-4xl sm:text-5xl mb-4">💳</div>
                                 <h3 className="text-lg font-semibold">Pay with Solana</h3>
                                 <p className="text-gray-600 text-sm max-w-md mx-auto">
                                     Top up your wallet instantly using USDC or USDT on the Solana blockchain.

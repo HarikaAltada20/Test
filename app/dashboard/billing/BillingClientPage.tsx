@@ -1928,9 +1928,9 @@ export default function BillingClientPage({
           setIsTopUpModalOpen(open);
         }}
       >
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="w-[92vw] max-w-md sm:max-w-lg md:max-w-xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
               Top Up Your Wallet
               {isProcessingPayment && (
                 <span className="text-sm text-orange-600 font-normal">

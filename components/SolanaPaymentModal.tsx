@@ -158,7 +158,7 @@ export function SolanaPaymentModal({
                     Choose the token you have in your Phantom Wallet. Both USDC and USDT are supported.
                 </p>
                 <RadioGroup value={tokenType} onValueChange={(value) => setTokenType(value as 'USDC' | 'USDT')}>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="flex items-center space-x-2 border-2 border-gray-200 rounded-lg p-4 cursor-pointer hover:border-[#7F39EC] transition-all"
                             onClick={() => setTokenType('USDC')}>
                             <RadioGroupItem value="USDC" id="usdc" />
@@ -181,7 +181,7 @@ export function SolanaPaymentModal({
 
             <div>
                 <Label className="text-base font-semibold mb-3 block">Quick Amounts</Label>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                     {predefinedAmounts.map((amt) => (
                         <Button
                             key={amt}
@@ -249,10 +249,10 @@ export function SolanaPaymentModal({
 
         return (
             <div className="space-y-6">
-                <div className="bg-gradient-to-r from-[#7F39EC] to-[#4A00BE] text-white rounded-lg p-6 text-center">
+                <div className="bg-gradient-to-r from-[#7F39EC] to-[#4A00BE] text-white rounded-lg p-4 sm:p-6 text-center">
                     <div className="text-sm opacity-90 mb-2">Amount to Send</div>
-                    <div className="text-4xl font-bold">${paymentRequest.amount.toFixed(2)}</div>
-                    <div className="text-lg mt-1">{paymentRequest.tokenType}</div>
+                    <div className="text-3xl sm:text-4xl font-bold">${paymentRequest.amount.toFixed(2)}</div>
+                    <div className="text-base sm:text-lg mt-1">{paymentRequest.tokenType}</div>
                 </div>
 
                 <div className="space-y-4">
@@ -337,7 +337,7 @@ export function SolanaPaymentModal({
     const renderVerifyStep = () => (
         <div className="space-y-6">
             <div className="text-center">
-                <div className="text-6xl mb-4">✅</div>
+                <div className="text-4xl sm:text-6xl mb-4">✅</div>
                 <h3 className="text-lg font-semibold mb-2">Verify Your Payment</h3>
                 <p className="text-gray-600 text-sm">
                     Enter your transaction signature from Phantom Wallet to verify your payment instantly.
@@ -405,9 +405,9 @@ export function SolanaPaymentModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={handleClose}>
-            <DialogContent className="max-w-md">
+            <DialogContent className="w-[92vw] max-w-md sm:max-w-lg md:max-w-xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle className="text-2xl flex items-center gap-2">
+                    <DialogTitle className="text-xl sm:text-2xl flex items-center gap-2">
                         <span>💳</span>
                         {step === 'amount' && 'Top Up with Solana'}
                         {step === 'instructions' && 'Payment Instructions'}
