@@ -12,11 +12,11 @@ class MemoryCache {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private readonly defaultTTL: number;
 
-  constructor(defaultTTL: number = 60000) {
-    // Default TTL: 60 seconds
+  constructor(defaultTTL: number = 600000) {
+    // Default TTL: 10 minutes
     this.defaultTTL = defaultTTL;
 
-    // Clean up expired entries every 5 minutes
+    // Clean up expired entries
     setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
@@ -112,8 +112,8 @@ class MemoryCache {
 }
 
 // Create singleton instances for different cache buckets
-export const leaderboardCache = new MemoryCache(60000); // 60 seconds TTL
-export const adminLeaderboardCache = new MemoryCache(30000); // 30 seconds TTL for admin (more frequent updates)
+export const leaderboardCache = new MemoryCache(600000); // 10 minutes TTL
+export const adminLeaderboardCache = new MemoryCache(600000); // 10 minutes TTL
 
 /**
  * Generate cache key for leaderboard queries

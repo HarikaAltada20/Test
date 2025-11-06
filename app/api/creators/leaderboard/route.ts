@@ -10,7 +10,6 @@ import {
 } from "@/lib/cache-utils";
 
 export const dynamic = "force-dynamic";
-export const revalidate = 60; // Revalidate every 60 seconds
 
 export async function GET(request: NextRequest) {
   try {
@@ -95,8 +94,8 @@ export async function GET(request: NextRequest) {
 
       creators = fetchedCreators;
 
-      // Cache users data for 60 seconds (shared across all queries)
-      cache.set(usersCacheKey, creators, 60000);
+      // Cache users data for 10 minutes (shared across all queries)
+      cache.set(usersCacheKey, creators, 600000);
     }
 
     // Fetch platform-specific contest wins, participations, submissions, and winnings if platform filter is applied
@@ -129,8 +128,8 @@ export async function GET(request: NextRequest) {
 
         if (!contestsError && platformContests && platformContests.length > 0) {
           contestIds = platformContests.map((c) => c.id);
-          // Cache contest IDs for 60 seconds
-          cache.set(platformContestsCacheKey, { contestIds }, 60000);
+          // Cache contest IDs for 10 minutes
+          cache.set(platformContestsCacheKey, { contestIds }, 600000);
         }
       }
 
@@ -242,7 +241,7 @@ export async function GET(request: NextRequest) {
             });
           }
 
-          // Cache platform-specific data for 60 seconds
+          // Cache platform-specific data for 10 minutes
           cache.set(
             platformSubmissionsCacheKey,
             {
@@ -255,7 +254,7 @@ export async function GET(request: NextRequest) {
               winnings: Array.from(platformWinnings.entries()),
               views: Array.from(platformViews.entries()),
             },
-            60000
+            600000
           );
         }
       }
@@ -550,7 +549,7 @@ export async function GET(request: NextRequest) {
         summary,
         lastUpdated: new Date().toISOString(),
       },
-      60000
+      600000
     );
 
     return NextResponse.json({
