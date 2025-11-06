@@ -3,7 +3,7 @@
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-
+import { VisuallyHidden } from "./visually-hidden"
 import { cn } from "@/lib/utils";
 
 export type DialogProps = React.ComponentPropsWithoutRef<
@@ -51,6 +51,10 @@ const DialogContent = React.forwardRef<
     hideCloseButton?: boolean;
   }
 >(({ className, children, hideCloseButton = false, ...props }, ref) => {
+    // Check if children contains a DialogTitle
+    const hasDialogTitle = React.Children.toArray(children).some(
+      (child) => React.isValidElement(child) && child.type === DialogTitle
+    );
   const isdark = React.useContext(DialogIsDarkContext);
   return (
     <DialogPortal>
@@ -64,6 +68,11 @@ const DialogContent = React.forwardRef<
         )}
         {...props}
       >
+         {!hasDialogTitle && (
+          <VisuallyHidden>
+            <DialogPrimitive.Title>Dialog</DialogPrimitive.Title>
+          </VisuallyHidden>
+        )}
         {children}
         {!hideCloseButton && (
         <DialogPrimitive.Close className="absolute right-3 top-3 sm:right-4 sm:top-4 rounded-sm opacity-60 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">

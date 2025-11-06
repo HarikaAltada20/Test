@@ -474,9 +474,6 @@ export default function SettingsPage({
         description: hasPassword
           ? "Password updated successfully"
           : "Password set successfully! You can now sign in with email and password.",
-        description: hasPassword
-          ? "Password updated successfully"
-          : "Password set successfully! You can now sign in with email and password.",
         variant: "default",
       });
       setCurrentPassword("");
@@ -490,18 +487,13 @@ export default function SettingsPage({
           (hasPassword
             ? "Failed to update password"
             : "Failed to set password"),
-        description:
-          err.message ||
-          (hasPassword
-            ? "Failed to update password"
-            : "Failed to set password"),
         variant: "destructive",
       });
     } finally {
       setPasswordChangeLoading(false);
     }
   };
-
+  
   const buildReferralLinks = () => {
     const base =
       typeof window !== "undefined"
@@ -1104,84 +1096,95 @@ export default function SettingsPage({
       )}
 
       {/* Connected Accounts - Only for Creators */}
-      {userType === "creator" && (
+       {/* Connected Accounts - Only for Creators */}
+       {userType === "creator" && (
         <div>
-          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-         <CardTitle className="text-2xl text-[#7F39EC]">Manage Your Account</CardTitle>
-       </div>
-       <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg" >
-          <CardHeader>
-            <CardTitle className="text-lg">Social Accounts</CardTitle>
-            <CardDescription>
-              Connect your social media accounts to participate in campaigns.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* YouTube Connection */}
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center space-x-3">
-                <SiYoutube className="text-2xl text-red-600" />
-                <div>
-                  <h3 className="font-medium">YouTube</h3>
-                  {youtubeConnected ? (
-                    <div>
+          <div 
+           className={cn("rounded-t-2xl border-b px-6 py-4 shadow-lg",
+           isDark ? "bg-[#180438]" : "bg-white")}>
+            <CardTitle className={cn("text-2xl",
+           isDark ? "text-white" : "text-[#7F39EC]")}>
+              Manage Your Account
+            </CardTitle>
+          </div>
+          <div 
+           className={cn("rounded-b-2xl pb-4 shadow-lg",
+           isDark ? "bg-[#180438]" : "bg-white")}>
+            <CardHeader>
+              <CardTitle className="text-lg">Social Accounts</CardTitle>
+              <CardDescription>
+                Connect your social media accounts to participate in campaigns.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* YouTube Connection */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <SiYoutube className="text-2xl text-red-600" />
+                  <div>
+                    <h3 className="font-medium">YouTube</h3>
+                    {youtubeConnected ? (
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Connected as{" "}
+                          {youtubeAccount?.channel_title ||
+                            "your YouTube account"}
+                          <span className="ml-2 text-green-600 text-xs">
+                            ✓ Active
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
                       <p className="text-sm text-muted-foreground">
-                        Connected as{" "}
-                        {youtubeAccount?.channel_title ||
-                          "your YouTube account"}
-                        <span className="ml-2 text-green-600 text-xs">
-                          ✓ Active
-                        </span>
+                        Not connected
                       </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Not connected
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
+                {youtubeConnected ? (
+                  <Button
+                    className="bg-[#C90808] text-white"
+                    onClick={handleYouTubeDisconnect}
+                    disabled={isLoadingYouTubeDisconnect}
+                  >
+                    {isLoadingYouTubeDisconnect && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleYouTubeConnect}
+                    disabled={isLoadingYouTube}
+                  >
+                    {isLoadingYouTube && (
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Connect YouTube
+                  </Button>
+                )}
               </div>
-              {youtubeConnected ? (
-                <Button
-                 
-                  className="bg-[#C90808] text-white"
-                  onClick={handleYouTubeDisconnect}
-                  disabled={isLoadingYouTubeDisconnect}
+              {/* YouTube Connection Information - Display if not connected */}
+              {!youtubeConnected && (
+                <Alert
+                  variant="default"
+                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
                 >
-                  {isLoadingYouTubeDisconnect && (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Disconnect
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleYouTubeConnect}
-                  disabled={isLoadingYouTube}
-                >
-                  {isLoadingYouTube && (
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Connect YouTube
-                </Button>
+                  <Bell className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    Connect your YouTube account to allow Game Of Creators to
+                    view basic channel information (e.g., name, subscriber
+                    count, username). This also enables us to display your
+                    videos on the campaign submission page, allowing you to
+                    easily select them for opportunities. Please note that we
+                    will only have{" "}
+                    <span className="font-medium">read-only access</span> and{" "}
+                    <span className="font-medium">will not</span> be able to
+                    upload videos, modify content, or change any of your channel
+                    settings.
+                  </AlertDescription>
+                </Alert>
               )}
-            </div>
-            {/* YouTube Connection Information - Display if not connected */}
-            {!youtubeConnected && (
-              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
-                <Bell className="h-4 w-4" />
-                <AlertDescription className="text-sm leading-relaxed">
-                  Connect your YouTube account to allow Game Of Creators to view
-                  basic channel information (e.g., name, subscriber count,
-                  username). This also enables us to display your videos on the
-                  campaign submission page, allowing you to easily select them
-                  for opportunities. Please note that we will only have{" "}
-                  <span className="font-medium">read-only access</span> and{" "}
-                  <span className="font-medium">will not</span> be able to
-                  upload videos, modify content, or change any of your channel
-                  settings.
-                </AlertDescription>
-              </Alert>
-            )}
 
               {/* Instagram Connection */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -1235,8 +1238,9 @@ export default function SettingsPage({
                   </Button>
                 )}
               </div>
-              {/* Instagram Connection Information - Display if not connected */}
-              {!instagramConnected && (
+
+               {/* Instagram Connection Information - Display if not connected */}
+               {!instagramConnected && (
                 <Alert
                   variant="default"
                   className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
@@ -1306,44 +1310,75 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* Company Profile - Only for Advertisers */}
-      {userType === "advertiser" && (
+       {/* Company Profile - Only for Advertisers */}
+       {userType === "advertiser" && (
         <div>
-         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-              <CardTitle className="text-2xl text-[#7F39EC]">Profile</CardTitle>
-            </div>
-        <div className="bg-white rounded-b-2xl shadow-lg px-2 pb-3">
-          <div className="px-6 py-4">
-            <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
-            <CardDescription>Update your company information</CardDescription>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Profile
+            </CardTitle>
           </div>
-          <CardContent>
-            <form onSubmit={updateCompanyProfile} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="company_name">Company Name</Label>
-                <Input
-                  id="company_name"
-                  name="company_name"
-                  defaultValue={(profile as AdvertiserProfile)?.company_name}
-                />
-              </div>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-3",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <div className="px-6 py-4">
+              <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
+              <CardDescription>Update your company information</CardDescription>
+            </div>
+            <CardContent>
+              <form onSubmit={updateCompanyProfile} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="company_name">Company Name</Label>
+                  <Input
+                    id="company_name"
+                    name="company_name"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
+                    defaultValue={(profile as AdvertiserProfile)?.company_name}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="website_url">Website URL</Label>
-                <Input
-                  id="website_url"
-                  name="website_url"
-                  type="url"
-                  defaultValue={(profile as AdvertiserProfile)?.website_url}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="website_url">Website URL</Label>
+                  <Input
+                    id="website_url"
+                    name="website_url"
+                    type="url"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
+                    defaultValue={(profile as AdvertiserProfile)?.website_url}
+                  />
+                </div>
 
-              <Button type="submit" className="w-full bg-[#6C43D0] text-md" disabled={companyProfileLoading}>
-                {companyProfileLoading ? "Updating..." : "Update Profile"}
-              </Button>
-            </form>
-          </CardContent>
-        </div>
+                <button
+                  type="submit"
+                  className="w-full rounded-xl py-2.5 bg-[#6C43D0] text-white text-md"
+                  disabled={companyProfileLoading}
+                >
+                  {companyProfileLoading ? "Updating..." : "Update Profile"}
+                </button>
+              </form>
+            </CardContent>
+          </div>
         </div>
       )}
 
@@ -1400,14 +1435,31 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
 
-      {/* Security - Only show for users with email authentication */}
-      {hasPassword && (
+  {/* Security - Only show for users with email authentication */}
+  {hasPassword && (
         <div>
-         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-         <CardTitle className="text-2xl text-[#7F39EC]">Security</CardTitle>
-       </div>
-        <div className="bg-white rounded-b-2xl shadow-lg px-2 py-5">
-          {/* <CardHeader>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Security
+            </CardTitle>
+          </div>
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 py-5",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            {/* <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>
               Update your password and security settings
@@ -1421,58 +1473,70 @@ export default function SettingsPage({
                 </AlertDescription>
               </Alert>
 
-            <form onSubmit={handlePasswordChange} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="current-password">Current Password</Label>
-                <div className="relative">
-                  <Input
-                    id="current-password"
-                    type={showCurrentPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showCurrentPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="current-password">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="current-password"
+                      type={showCurrentPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowCurrentPassword(!showCurrentPassword)
+                      }
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showCurrentPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <div className="relative">
-                  <Input
-                    id="new-password"
-                    type={showNewPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimum 8 characters"
-                    className="pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPassword(!showNewPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showNewPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-password"
+                      type={showNewPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 8 characters"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showNewPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
 
                   {/* Real-time Password Strength Meter */}
                   <PasswordStrengthMeter
@@ -1482,50 +1546,56 @@ export default function SettingsPage({
                   />
                 </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <div className="relative">
-                  <Input
-                    id="confirm-password"
-                    type={showConfirmPassword ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
-                    className="pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirm-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowConfirmPassword(!showConfirmPassword)
+                      }
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <Button
-              className="w-full bg-[#6C43D0] text-md"
-                type="submit"
-                disabled={
-                  passwordChangeLoading || !newPassword || !confirmPassword
-                }
-              >
-                {passwordChangeLoading
-                  ? "Updating Password..."
-                  : "Update Password"}
-              </Button>
-            </form>
-          </CardContent>
-        </div>
+                <button
+                  className="w-full py-2.5 text-white rounded-xl bg-[#6C43D0] text-md"
+                  type="submit"
+                  disabled={
+                    passwordChangeLoading || !newPassword || !confirmPassword
+                  }
+                >
+                  {passwordChangeLoading
+                    ? "Updating Password..."
+                    : "Update Password"}
+                </button>
+              </form>
+            </CardContent>
+          </div>
         </div>
       )}
-
       {/* Survey Section - Only for Creators who have completed the survey */}
       {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
         <div className="bg-white rounded-xl shadow-lg border border-purple-100 overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5">
@@ -1576,7 +1646,12 @@ export default function SettingsPage({
 
        {/* Referral Links */}
        {username && (
-        <div className="bg-white rounded-xl shadow-xl">
+        <div
+          className={cn(
+            "rounded-xl shadow-xl",
+            isDark ? "bg-[#180438]" : "bg-white "
+          )}
+        >
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
             <CardDescription>
@@ -1590,21 +1665,63 @@ export default function SettingsPage({
               return (
                 <div className="space-y-4">
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.general} className="border-gray-400 w-full"/>
-                    <Button type="button" className="bg-[#4A00BE] text-white" variant="outline" onClick={() => copyToClipboard(links.general)}>
-                      <Copy className="h-4 w-4 mr-1" />Copy General
+                    <Input
+                      readOnly
+                      value={links.general}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      className="bg-[#4A00BE] text-white"
+                      variant="outline"
+                      onClick={() => copyToClipboard(links.general)}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy General
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.creators}  className="border-gray-400" />
-                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white" onClick={() => copyToClipboard(links.creators)}>
-                      <Copy className="h-4 w-4" />Copy Creators
+                    <Input
+                      readOnly
+                      value={links.creators}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-[#4A00BE] text-white"
+                      onClick={() => copyToClipboard(links.creators)}
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy Creators
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input readOnly value={links.brands} className="border-gray-400"/>
-                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white"  onClick={() => copyToClipboard(links.brands)}>
-                      <Copy className="h-4 w-4 mr-2" />Copy Brands
+                    <Input
+                      readOnly
+                      value={links.brands}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="bg-[#4A00BE] text-white"
+                      onClick={() => copyToClipboard(links.brands)}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Brands
                     </Button>
                   </div>
                 </div>

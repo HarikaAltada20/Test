@@ -13,6 +13,7 @@ import { MessageSquare, Gift, Loader2 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { hasSubmitted } from "@/lib/form-submissions";
 import { useClientAuth } from "@/hooks/use-client-auth";
+import { cn } from "@/lib/utils";
 
 interface SurveyModalProps {
   isOpen: boolean;
@@ -29,9 +30,41 @@ export function SurveyModal({ isOpen, onClose }: SurveyModalProps) {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSurveyTaken, setIsSurveyTaken] = useState(false);
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const [isRewardClaimed, setIsRewardClaimed] = useState(false);
   const { user, isAuthenticated } = useClientAuth();
   const supabase = createClient();
+
+
+  
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Google Form URL
   const GOOGLE_FORM_URL =
@@ -257,15 +290,17 @@ export function SurveyModal({ isOpen, onClose }: SurveyModalProps) {
       "border border-gray-900 bg-white text-gray-900 font-semibold cursor-not-allowed";
   }
 
+  const isDark = mode === "dark";
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className={cn("flex items-center gap-2", isDark ? "text-white" : "text-gray-900")}>
             {/* <MessageSquare className="h-5 w-5 text-purple-600" /> */}
             Take Our Survey
           </DialogTitle>
-          <DialogDescription className="text-gray-700">
+          <DialogDescription className={cn( isDark ? "text-white" : "text-gray-700")}>
             Share your valuable feedback and help us improve the platform.
           </DialogDescription>
         </DialogHeader>
@@ -287,7 +322,7 @@ export function SurveyModal({ isOpen, onClose }: SurveyModalProps) {
               {/* <h3 className="font-semibold text-lg text-gray-900">
                 Take Our Survey
               </h3> */}
-              <p className="text-md text-gray-900 leading-relaxed">
+              <p className={cn("text-md leading-relaxed", isDark ? "text-white" : "text-gray-900")}>
                 We really value honest and thoughtful feedback. By filling out
                 this survey form, you get a guaranteed $0.40 reward.
                 Additionally, we will give an extra $5 bonus to the most genuine

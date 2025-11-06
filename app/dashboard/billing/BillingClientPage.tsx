@@ -86,6 +86,9 @@ import { usePagination } from "@/hooks/use-pagination";
 import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { cn } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -471,6 +474,7 @@ export default function BillingClientPage({
     return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
   };
 
+
   // Handle save payout method
   const handleSavePayoutMethod = async () => {
     if (!authUser) {
@@ -484,38 +488,25 @@ export default function BillingClientPage({
 
     let details: PayoutMethodDetails;
 
-    if (selectedPayoutType === "crypto") {
+    if (selectedPayoutType === 'crypto') {
       if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
         toast.error("Crypto wallet address and network are required.");
         return;
       }
-      if (cryptoNetwork !== 'BNB_BEP20') {
-        toast.error("Only BNB Smart Chain (BEP20) is supported.");
+      if (walletValidationStatus !== 'valid') {
+        toast.error("Please validate your wallet address first.");
         return;
       }
-      if (!isValidBep20Address(cryptoAddress)) {
-        toast.error("Enter a valid BNB Smart Chain (BEP20) address (starts with 0x, 42 chars).");
-        return;
-      }
-      details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim() };
+      details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim(), currency: cryptoCurrency.trim() };
     } else if (selectedPayoutType === 'upi') {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
         return;
       }
-      details = {
-        account_holder_name: bankAccountHolder.trim(),
-        upi_id: upiId.trim(),
-      };
-    } else if (selectedPayoutType === "bank_transfer") {
-      if (
-        !bankAccountHolder.trim() ||
-        !bankAccountNumber.trim() ||
-        !bankIfscCode.trim()
-      ) {
-        toast.error(
-          "Account holder name, account number, and IFSC code are required for bank transfer."
-        );
+      details = { account_holder_name: bankAccountHolder.trim(), upi_id: upiId.trim() };
+    } else if (selectedPayoutType === 'bank_transfer') {
+      if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankIfscCode.trim()) {
+        toast.error("Account holder name, account number, and IFSC code are required for bank transfer.");
         return;
       }
       const bankDetails: any = {
@@ -524,11 +515,9 @@ export default function BillingClientPage({
         ifsc_code: bankIfscCode.trim(),
         country: bankCountry.trim(),
       };
-      if (bankRoutingNumber.trim())
-        bankDetails.swift_bic_code = bankRoutingNumber.trim();
+      if (bankRoutingNumber.trim()) bankDetails.swift_bic_code = bankRoutingNumber.trim();
       if (bankName.trim()) bankDetails.bank_name = bankName.trim();
-      if (bankBranchName.trim())
-        bankDetails.branch_name = bankBranchName.trim();
+      if (bankBranchName.trim()) bankDetails.branch_name = bankBranchName.trim();
       details = bankDetails;
     } else {
       toast.error("Invalid payout method type selected.");
@@ -546,7 +535,7 @@ export default function BillingClientPage({
 
     try {
       const { data, error } = await supabase
-        .from("payout_methods")
+        .from('payout_methods')
         .upsert(methodToSave)
         .select()
         .single();
@@ -554,8 +543,8 @@ export default function BillingClientPage({
       if (error) throw error;
 
       if (data) {
-        setPayoutMethods((prevMethods) => {
-          const index = prevMethods.findIndex((m) => m.id === data.id);
+        setPayoutMethods(prevMethods => {
+          const index = prevMethods.findIndex(m => m.id === data.id);
           if (index !== -1) {
             const newMethods = [...prevMethods];
             newMethods[index] = data as PayoutMethod;
@@ -564,24 +553,20 @@ export default function BillingClientPage({
             return [...prevMethods, data as PayoutMethod];
           }
         });
-        toast.success(
-          `Payout method ${
-            currentPayoutMethod ? "updated" : "added"
-          } successfully!`
-        );
+        toast.success(`Payout method ${currentPayoutMethod ? 'updated' : 'added'} successfully!`);
         setIsPayoutModalOpen(false);
         resetPayoutForm();
       } else {
-        throw new Error("No data returned after saving payout method.");
+        throw new Error("No data returned after saving payout method.")
       }
     } catch (error: any) {
       console.error("Error saving payout method:", error);
-      toast.error(
-        `Failed to save payout method: ${error.message || "Unknown error"}`
-      );
+      toast.error(`Failed to save payout method: ${error.message || 'Unknown error'}`);
     }
     setIsLoading(false);
   };
+
+
 
   const handleEditPayoutMethod = (method: PayoutMethod) => {
     setCurrentPayoutMethod(method);
@@ -1893,7 +1878,7 @@ export default function BillingClientPage({
                 </TabsList>
               )}
 
-              <TabsContent value="crypto" className="pt-4 space-y-2">
+<TabsContent value="crypto" className="pt-4 space-y-2">
                 <div className="space-y-1">
                   <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
                   <Input
@@ -2014,7 +1999,7 @@ export default function BillingClientPage({
                     <>We only support Solana network. Do not enter other chain addresses. Wrong address = funds lost.</>
                   )}
                 </div>
-                <p className="text-[12px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Crypto payouts are optional digital rewards. By choosing this
                   method, you accept responsibility for declaring and paying
                   taxes as per your country's laws.
@@ -2024,11 +2009,10 @@ export default function BillingClientPage({
                   Please double-check that you've entered the correct address for your selected network,
                   as sending to the wrong address will result in permanent loss of funds.
                 </p>
-              </div>
-            )}
+              </TabsContent>
 
-              {/* Bank Transfer Form (India) */}
-              <TabsContent value="bank_transfer" className="pt-4 space-y-2">
+            {/* Bank Transfer Form (India) */}
+            <TabsContent value="bank_transfer" className="pt-4 space-y-2">
                 <div className="space-y-1">
                   <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                   <Input
@@ -2041,12 +2025,7 @@ export default function BillingClientPage({
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
+                  <div className="space-y-1">
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -2055,68 +2034,33 @@ export default function BillingClientPage({
                       value={bankAccountHolder}
                       onChange={(e) => setBankAccountHolder(e.target.value)}
                       disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
                     />
                   </div>
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
+                  <div className="space-y-1">
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
                       disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
                     />
                   </div>
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
+                  <div className="space-y-1">
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
                       value={bankIfscCode}
                       onChange={(e) => setBankIfscCode(e.target.value)}
                       disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
                     />
                   </div>
-                  <div
-                    className={cn(
-                      "space-y-1",
-                      isDark ? "text-white" : "text-gray-800"
-                    )}
-                  >
+                  <div className="space-y-1">
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
                       disabled={isLoading}
-                      className={cn(
-                        isDark
-                          ? "bg-[#06021D] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
                     />
                   </div>
                 </div>
@@ -2125,8 +2069,7 @@ export default function BillingClientPage({
                   small fee. You are responsible for declaring your earnings and
                   paying any taxes as per Indian law.
                 </p>
-              </div>
-            )}
+              </TabsContent>
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
@@ -2207,7 +2150,7 @@ export default function BillingClientPage({
                 : currentPayoutMethod?.id
                 ? "Save Changes"
                 : "Add Method"}
-            </button>
+            </Button>
             <DialogClose asChild>
               <button
                 disabled={isLoading}
@@ -2471,7 +2414,7 @@ export default function BillingClientPage({
           <DialogFooter>
             <Button
               className="w-full py-6 rounded-full text-md"
-              className="w-full py-6 rounded-full text-md"
+             
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
               loadingText="Processing..."
