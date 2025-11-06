@@ -337,7 +337,8 @@ export default function ChooseUsernamePage() {
           duration: 3000,
         });
         // Only show Discord onboarding for creators
-        const welcomeFlag = profileData.user_type === 'creator' ? '?welcome=1' : '';
+        const welcomeFlag =
+          profileData.user_type === "creator" ? "?welcome=1" : "";
         router.push(`/dashboard/getting-started${welcomeFlag}`);
         router.refresh();
         return;
@@ -599,7 +600,8 @@ export default function ChooseUsernamePage() {
         is_active: true,
         email_confirmed_at: new Date().toISOString(),
         registration_info,
-        total_other_earnings: 0, // Initialize to 0
+        affiliate_earnings: 0, // Initialize to 0
+        other_earnings: 0, // Initialize to 0
       };
 
       // Add full name if provided
@@ -653,20 +655,20 @@ export default function ChooseUsernamePage() {
       const profileTableData =
         userType === "advertiser"
           ? {
-            id: userData.id,
-            subscription_info: {
-              product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free) plan
-              price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
-              subscription_id: null,
-              last_synced: new Date().toISOString(),
-            },
-          }
+              id: userData.id,
+              subscription_info: {
+                product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free) plan
+                price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
+                subscription_id: null,
+                last_synced: new Date().toISOString(),
+              },
+            }
           : {
-            id: userData.id,
-            bio: null, // Explicitly set to null instead of undefined
-            youtube_account: null,
-            instagram_account: null
-          };
+              id: userData.id,
+              bio: null, // Explicitly set to null instead of undefined
+              youtube_account: null,
+              instagram_account: null,
+            };
 
       const { error: specificProfileError } = await supabase
         .from(profileTable)
@@ -834,7 +836,7 @@ export default function ChooseUsernamePage() {
       setIsRedirecting(true);
 
       // Redirect new users to getting-started page with welcome flag for creators
-      const welcomeFlag = userType === 'creator' ? '?welcome=1' : '';
+      const welcomeFlag = userType === "creator" ? "?welcome=1" : "";
       router.push(`/dashboard/getting-started${welcomeFlag}`);
       router.refresh();
     } catch (err: any) {
@@ -1017,8 +1019,8 @@ export default function ChooseUsernamePage() {
                       ? "Almost there! Complete your gaming profile to unlock all features."
                       : userData?.needsUserTypeSelection ||
                         userData?.needsReferralCodeInput
-                        ? "Final setup - choose your identity and claim your unique username."
-                        : "Claim your unique username and join the Game Of Creators arena."}
+                      ? "Final setup - choose your identity and claim your unique username."
+                      : "Claim your unique username and join the Game Of Creators arena."}
                   </p>
                 </div>
 
@@ -1044,16 +1046,18 @@ export default function ChooseUsernamePage() {
                           onChange={(e) =>
                             handleFirstNameChange(e.target.value)
                           }
-                          className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${firstNameError
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                            : ""
-                            } ${isApproachingLimit(
+                          className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${
+                            firstNameError
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : ""
+                          } ${
+                            isApproachingLimit(
                               firstName.length,
                               NAME_CONSTRAINTS.FIRST_NAME_MAX
                             )
                               ? "border-yellow-500"
                               : ""
-                            }`}
+                          }`}
                           placeholder="First name"
                           autoComplete="given-name"
                           required={userData?.needsFullName}
@@ -1081,16 +1085,18 @@ export default function ChooseUsernamePage() {
                           type="text"
                           value={lastName}
                           onChange={(e) => handleLastNameChange(e.target.value)}
-                          className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${lastNameError
-                            ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                            : ""
-                            } ${isApproachingLimit(
+                          className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${
+                            lastNameError
+                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                              : ""
+                          } ${
+                            isApproachingLimit(
                               lastName.length,
                               NAME_CONSTRAINTS.LAST_NAME_MAX
                             )
                               ? "border-yellow-500"
                               : ""
-                            }`}
+                          }`}
                           placeholder="Last name"
                           autoComplete="family-name"
                           required={userData?.needsFullName}
@@ -1197,12 +1203,13 @@ export default function ChooseUsernamePage() {
                         required
                         minLength={3}
                         maxLength={20}
-                        className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 pr-10 ${usernameAvailable === true
-                          ? "border-green-500"
-                          : usernameAvailable === false
+                        className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 pr-10 ${
+                          usernameAvailable === true
+                            ? "border-green-500"
+                            : usernameAvailable === false
                             ? "border-red-500"
                             : "border-slate-700"
-                          }`}
+                        }`}
                         autoCapitalize="none"
                         autoCorrect="off"
                         autoComplete="off"
@@ -1327,11 +1334,13 @@ export default function ChooseUsernamePage() {
                         onChange={(e) =>
                           handleReferralCodeChange(e.target.value)
                         }
-                        className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${referralCodeError
-                          ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                          : ""
-                          } ${referralCode.length >= 16 ? "border-yellow-500" : ""
-                          }`}
+                        className={`h-11 bg-[#000825] border-slate-700 placeholder:text-slate-400 text-white focus:border-amber-500 focus:ring-amber-500 ${
+                          referralCodeError
+                            ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+                            : ""
+                        } ${
+                          referralCode.length >= 16 ? "border-yellow-500" : ""
+                        }`}
                         placeholder="Enter referral code"
                         maxLength={20}
                       />
@@ -1352,7 +1361,8 @@ export default function ChooseUsernamePage() {
                           className="mt-2 bg-emerald-950/40 border-emerald-700 text-emerald-300"
                         >
                           <AlertDescription>
-                            Use a valid referral code to get $0.50 cash bonus (50 cents) added to your withdrawable balance.
+                            Use a valid referral code to get $0.50 cash bonus
+                            (50 cents) added to your withdrawable balance.
                           </AlertDescription>
                         </Alert>
                       )}

@@ -26,7 +26,8 @@ export interface Database {
           email_confirmed_at: string | null;
           created_at: string;
           updated_at: string;
-          total_other_earnings: number;
+          affiliate_earnings: number;
+          total_lifetime_coins_earned: number;
           registration_ip?: string | null;
           login_history?: Array<{
             ip_address: string;
@@ -50,7 +51,8 @@ export interface Database {
           email_confirmed_at?: string | null;
           created_at?: string;
           updated_at?: string;
-          total_other_earnings?: number;
+          affiliate_earnings?: number;
+          total_lifetime_coins_earned?: number;
           registration_ip?: string | null;
           login_history?: Array<{
             ip_address: string;
@@ -74,7 +76,8 @@ export interface Database {
           email_confirmed_at?: string | null;
           created_at?: string;
           updated_at?: string;
-          total_other_earnings?: number;
+          affiliate_earnings?: number;
+          total_lifetime_coins_earned?: number;
           registration_ip?: string | null;
           login_history?: Array<{
             ip_address: string;
@@ -368,81 +371,81 @@ export interface Database {
           published_at?: string | null;
           rejection_reason?: string | null;
           // New features
-          multiple_submissions_enabled?: boolean
-          max_submissions_per_creator?: number
-          content_type?: 'ugc' | 'clipping' | 'other' | null
-          bonus_details?: Json | null
-          max_earnings_per_creator?: number | null
-        }
-      }
+          multiple_submissions_enabled?: boolean;
+          max_submissions_per_creator?: number;
+          content_type?: "ugc" | "clipping" | "other" | null;
+          bonus_details?: Json | null;
+          max_earnings_per_creator?: number | null;
+        };
+      };
       submissions: {
         Row: {
-          id: string
-          contest_id: string
-          creator_id: string
-          content_link: string
-          views: number
-          metadata: Json | null
-          other_stats: Json | null
-          created_at: string
-          status: 'pending' | 'verified' | 'rejected' | 'paid'
-          earnings: number | null
-          last_insights_update: string | null
-          platform: string | null
-          video_id: string | null
-          video_title: string | null
-          video_thumbnail_url: string | null
-          paid: boolean
-          paid_at: string | null
-          bonus_paid: boolean
-          bonus_paid_at: string | null
-          bonus_amount: number
-        }
+          id: string;
+          contest_id: string;
+          creator_id: string;
+          content_link: string;
+          views: number;
+          metadata: Json | null;
+          other_stats: Json | null;
+          created_at: string;
+          status: "pending" | "verified" | "rejected" | "paid";
+          earnings: number | null;
+          last_insights_update: string | null;
+          platform: string | null;
+          video_id: string | null;
+          video_title: string | null;
+          video_thumbnail_url: string | null;
+          paid: boolean;
+          paid_at: string | null;
+          bonus_paid: boolean;
+          bonus_paid_at: string | null;
+          bonus_amount: number;
+        };
         Insert: {
-          id?: string
-          contest_id: string
-          creator_id: string
-          content_link: string
-          views?: number
-          metadata?: Json | null
-          other_stats?: Json | null
-          created_at?: string
-          status?: 'pending' | 'verified' | 'rejected' | 'paid'
-          earnings?: number | null
-          last_insights_update?: string | null
-          platform?: string | null
-          video_id?: string | null
-          video_title?: string | null
-          video_thumbnail_url?: string | null
-          paid?: boolean
-          paid_at?: string | null
-          bonus_paid?: boolean
-          bonus_paid_at?: string | null
-          bonus_amount?: number
-        }
+          id?: string;
+          contest_id: string;
+          creator_id: string;
+          content_link: string;
+          views?: number;
+          metadata?: Json | null;
+          other_stats?: Json | null;
+          created_at?: string;
+          status?: "pending" | "verified" | "rejected" | "paid";
+          earnings?: number | null;
+          last_insights_update?: string | null;
+          platform?: string | null;
+          video_id?: string | null;
+          video_title?: string | null;
+          video_thumbnail_url?: string | null;
+          paid?: boolean;
+          paid_at?: string | null;
+          bonus_paid?: boolean;
+          bonus_paid_at?: string | null;
+          bonus_amount?: number;
+        };
         Update: {
-          id?: string
-          contest_id?: string
-          creator_id?: string
-          content_link?: string
-          views?: number
-          metadata?: Json | null
-          other_stats?: Json | null
-          created_at?: string
-          status?: 'pending' | 'verified' | 'rejected' | 'paid'
-          earnings?: number | null
-          last_insights_update?: string | null
-          platform?: string | null
-          video_id?: string | null
-          video_title?: string | null
-          video_thumbnail_url?: string | null
-          paid?: boolean
-          paid_at?: string | null
-          bonus_paid?: boolean
-          bonus_paid_at?: string | null
-          bonus_amount?: number
-        }
-      }
+          id?: string;
+          contest_id?: string;
+          creator_id?: string;
+          content_link?: string;
+          views?: number;
+          metadata?: Json | null;
+          other_stats?: Json | null;
+          created_at?: string;
+          status?: "pending" | "verified" | "rejected" | "paid";
+          earnings?: number | null;
+          last_insights_update?: string | null;
+          platform?: string | null;
+          video_id?: string | null;
+          video_title?: string | null;
+          video_thumbnail_url?: string | null;
+          paid?: boolean;
+          paid_at?: string | null;
+          bonus_paid?: boolean;
+          bonus_paid_at?: string | null;
+          bonus_amount?: number;
+        };
+      };
       money_transactions: {
         Row: {
           id: string;

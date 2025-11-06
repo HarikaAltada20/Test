@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   Copy,
+  Gift,
 } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { SiInstagram, SiYoutube } from "react-icons/si";
@@ -39,6 +40,8 @@ import {
   API_TIMEOUT_SHORT,
 } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import { SurveyButton } from "@/components/SurveyButton";
+import { hasSubmitted } from "@/lib/form-submissions";
 import { cn } from "@/lib/utils";
 dayjs.extend(isSameOrAfter);
 
@@ -126,6 +129,8 @@ export default function SettingsPage({
     details?: string;
     code?: "no_channel" | "generic";
   } | null>(null);
+  const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
+  const [isSurveyLoading, setIsSurveyLoading] = useState(true);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -469,6 +474,9 @@ export default function SettingsPage({
         description: hasPassword
           ? "Password updated successfully"
           : "Password set successfully! You can now sign in with email and password.",
+        description: hasPassword
+          ? "Password updated successfully"
+          : "Password set successfully! You can now sign in with email and password.",
         variant: "default",
       });
       setCurrentPassword("");
@@ -477,6 +485,11 @@ export default function SettingsPage({
     } catch (err: any) {
       toast({
         title: "Error",
+        description:
+          err.message ||
+          (hasPassword
+            ? "Failed to update password"
+            : "Failed to set password"),
         description:
           err.message ||
           (hasPassword
@@ -915,6 +928,28 @@ export default function SettingsPage({
     checkAndRefreshYouTubeToken();
   }, [checkAndRefreshInstagramToken, checkAndRefreshYouTubeToken]);
 
+  // Check survey completion status
+  useEffect(() => {
+    const checkSurveyCompletion = async () => {
+      if (!user?.email) {
+        setIsSurveyLoading(false);
+        return;
+      }
+
+      try {
+        const completed = await hasSubmitted(user.email);
+        setIsSurveyCompleted(completed);
+      } catch (error) {
+        console.error("Error checking survey completion:", error);
+        setIsSurveyCompleted(false);
+      } finally {
+        setIsSurveyLoading(false);
+      }
+    };
+
+    checkSurveyCompletion();
+  }, [user?.email]);
+
   if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
@@ -1071,92 +1106,82 @@ export default function SettingsPage({
       {/* Connected Accounts - Only for Creators */}
       {userType === "creator" && (
         <div>
-          <div 
-           className={cn("rounded-t-2xl border-b px-6 py-4 shadow-lg",
-           isDark ? "bg-[#180438]" : "bg-white")}>
-            <CardTitle className={cn("text-2xl",
-           isDark ? "text-white" : "text-[#7F39EC]")}>
-              Manage Your Account
-            </CardTitle>
-          </div>
-          <div 
-           className={cn("rounded-b-2xl pb-4 shadow-lg",
-           isDark ? "bg-[#180438]" : "bg-white")}>
-            <CardHeader>
-              <CardTitle className="text-lg">Social Accounts</CardTitle>
-              <CardDescription>
-                Connect your social media accounts to participate in campaigns.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* YouTube Connection */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <SiYoutube className="text-2xl text-red-600" />
-                  <div>
-                    <h3 className="font-medium">YouTube</h3>
-                    {youtubeConnected ? (
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Connected as{" "}
-                          {youtubeAccount?.channel_title ||
-                            "your YouTube account"}
-                          <span className="ml-2 text-green-600 text-xs">
-                            ✓ Active
-                          </span>
-                        </p>
-                      </div>
-                    ) : (
+          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+         <CardTitle className="text-2xl text-[#7F39EC]">Manage Your Account</CardTitle>
+       </div>
+       <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg" >
+          <CardHeader>
+            <CardTitle className="text-lg">Social Accounts</CardTitle>
+            <CardDescription>
+              Connect your social media accounts to participate in campaigns.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* YouTube Connection */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center space-x-3">
+                <SiYoutube className="text-2xl text-red-600" />
+                <div>
+                  <h3 className="font-medium">YouTube</h3>
+                  {youtubeConnected ? (
+                    <div>
                       <p className="text-sm text-muted-foreground">
-                        Not connected
+                        Connected as{" "}
+                        {youtubeAccount?.channel_title ||
+                          "your YouTube account"}
+                        <span className="ml-2 text-green-600 text-xs">
+                          ✓ Active
+                        </span>
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Not connected
+                    </p>
+                  )}
                 </div>
-                {youtubeConnected ? (
-                  <Button
-                    className="bg-[#C90808] text-white"
-                    onClick={handleYouTubeDisconnect}
-                    disabled={isLoadingYouTubeDisconnect}
-                  >
-                    {isLoadingYouTubeDisconnect && (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Disconnect
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleYouTubeConnect}
-                    disabled={isLoadingYouTube}
-                  >
-                    {isLoadingYouTube && (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Connect YouTube
-                  </Button>
-                )}
               </div>
-              {/* YouTube Connection Information - Display if not connected */}
-              {!youtubeConnected && (
-                <Alert
-                  variant="default"
-                  className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
+              {youtubeConnected ? (
+                <Button
+                 
+                  className="bg-[#C90808] text-white"
+                  onClick={handleYouTubeDisconnect}
+                  disabled={isLoadingYouTubeDisconnect}
                 >
-                  <Bell className="h-4 w-4" />
-                  <AlertDescription className="text-sm leading-relaxed">
-                    Connect your YouTube account to allow Game Of Creators to
-                    view basic channel information (e.g., name, subscriber
-                    count, username). This also enables us to display your
-                    videos on the campaign submission page, allowing you to
-                    easily select them for opportunities. Please note that we
-                    will only have{" "}
-                    <span className="font-medium">read-only access</span> and{" "}
-                    <span className="font-medium">will not</span> be able to
-                    upload videos, modify content, or change any of your channel
-                    settings.
-                  </AlertDescription>
-                </Alert>
+                  {isLoadingYouTubeDisconnect && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Disconnect
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleYouTubeConnect}
+                  disabled={isLoadingYouTube}
+                >
+                  {isLoadingYouTube && (
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Connect YouTube
+                </Button>
               )}
+            </div>
+            {/* YouTube Connection Information - Display if not connected */}
+            {!youtubeConnected && (
+              <Alert variant="default" className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]">
+                <Bell className="h-4 w-4" />
+                <AlertDescription className="text-sm leading-relaxed">
+                  Connect your YouTube account to allow Game Of Creators to view
+                  basic channel information (e.g., name, subscriber count,
+                  username). This also enables us to display your videos on the
+                  campaign submission page, allowing you to easily select them
+                  for opportunities. Please note that we will only have{" "}
+                  <span className="font-medium">read-only access</span> and{" "}
+                  <span className="font-medium">will not</span> be able to
+                  upload videos, modify content, or change any of your channel
+                  settings.
+                </AlertDescription>
+              </Alert>
+            )}
 
               {/* Instagram Connection */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
@@ -1284,72 +1309,41 @@ export default function SettingsPage({
       {/* Company Profile - Only for Advertisers */}
       {userType === "advertiser" && (
         <div>
-          <div
-            className={cn(
-              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
-          >
-            <CardTitle
-              className={cn(
-                "text-2xl",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Profile
-            </CardTitle>
-          </div>
-          <div
-            className={cn(
-              "rounded-b-2xl shadow-lg px-2 pb-3",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
-          >
-            <div className="px-6 py-4">
-              <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
-              <CardDescription>Update your company information</CardDescription>
+         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+              <CardTitle className="text-2xl text-[#7F39EC]">Profile</CardTitle>
             </div>
-            <CardContent>
-              <form onSubmit={updateCompanyProfile} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="company_name">Company Name</Label>
-                  <Input
-                    id="company_name"
-                    name="company_name"
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
-                    )}
-                    defaultValue={(profile as AdvertiserProfile)?.company_name}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="website_url">Website URL</Label>
-                  <Input
-                    id="website_url"
-                    name="website_url"
-                    type="url"
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
-                    )}
-                    defaultValue={(profile as AdvertiserProfile)?.website_url}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full rounded-xl py-2.5 bg-[#6C43D0] text-white text-md"
-                  disabled={companyProfileLoading}
-                >
-                  {companyProfileLoading ? "Updating..." : "Update Profile"}
-                </button>
-              </form>
-            </CardContent>
+        <div className="bg-white rounded-b-2xl shadow-lg px-2 pb-3">
+          <div className="px-6 py-4">
+            <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
+            <CardDescription>Update your company information</CardDescription>
           </div>
+          <CardContent>
+            <form onSubmit={updateCompanyProfile} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="company_name">Company Name</Label>
+                <Input
+                  id="company_name"
+                  name="company_name"
+                  defaultValue={(profile as AdvertiserProfile)?.company_name}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="website_url">Website URL</Label>
+                <Input
+                  id="website_url"
+                  name="website_url"
+                  type="url"
+                  defaultValue={(profile as AdvertiserProfile)?.website_url}
+                />
+              </div>
+
+              <Button type="submit" className="w-full bg-[#6C43D0] text-md" disabled={companyProfileLoading}>
+                {companyProfileLoading ? "Updating..." : "Update Profile"}
+              </Button>
+            </form>
+          </CardContent>
+        </div>
         </div>
       )}
 
@@ -1409,28 +1403,11 @@ export default function SettingsPage({
       {/* Security - Only show for users with email authentication */}
       {hasPassword && (
         <div>
-          <div
-            className={cn(
-              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
-          >
-            <CardTitle
-              className={cn(
-                "text-2xl",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Security
-            </CardTitle>
-          </div>
-          <div
-            className={cn(
-              "rounded-b-2xl shadow-lg px-2 py-5",
-              isDark ? "bg-[#180438]" : "bg-white "
-            )}
-          >
-            {/* <CardHeader>
+         <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
+         <CardTitle className="text-2xl text-[#7F39EC]">Security</CardTitle>
+       </div>
+        <div className="bg-white rounded-b-2xl shadow-lg px-2 py-5">
+          {/* <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>
               Update your password and security settings
@@ -1444,70 +1421,58 @@ export default function SettingsPage({
                 </AlertDescription>
               </Alert>
 
-              <form onSubmit={handlePasswordChange} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="current-password">Current Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="current-password"
-                      type={showCurrentPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className={cn(
-                        "pr-10",
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowCurrentPassword(!showCurrentPassword)
-                      }
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showCurrentPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="current-password">Current Password</Label>
+                <div className="relative">
+                  <Input
+                    id="current-password"
+                    type={showCurrentPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="new-password">New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="new-password"
-                      type={showNewPassword ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimum 8 characters"
-                      className={cn(
-                        "pr-10",
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showNewPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <div className="relative">
+                  <Input
+                    id="new-password"
+                    type={showNewPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Minimum 8 characters"
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showNewPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
 
                   {/* Real-time Password Strength Meter */}
                   <PasswordStrengthMeter
@@ -1517,65 +1482,101 @@ export default function SettingsPage({
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirm-password"
-                      type={showConfirmPassword ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm new password"
-                      className={cn(
-                        "pr-10",
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowConfirmPassword(!showConfirmPassword)
-                      }
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <div className="relative">
+                  <Input
+                    id="confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
+              </div>
 
-                <button
-                  className="w-full py-2.5 text-white rounded-xl bg-[#6C43D0] text-md"
-                  type="submit"
-                  disabled={
-                    passwordChangeLoading || !newPassword || !confirmPassword
-                  }
-                >
-                  {passwordChangeLoading
-                    ? "Updating Password..."
-                    : "Update Password"}
-                </button>
-              </form>
-            </CardContent>
+              <Button
+              className="w-full bg-[#6C43D0] text-md"
+                type="submit"
+                disabled={
+                  passwordChangeLoading || !newPassword || !confirmPassword
+                }
+              >
+                {passwordChangeLoading
+                  ? "Updating Password..."
+                  : "Update Password"}
+              </Button>
+            </form>
+          </CardContent>
+        </div>
+        </div>
+      )}
+
+      {/* Survey Section - Only for Creators who have completed the survey */}
+      {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
+        <div className="bg-white rounded-xl shadow-lg border border-purple-100 overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
+            {/* Content Section */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start flex-1 w-full">
+              {/* Image */}
+              <div className="relative flex-shrink-0 flex justify-center sm:justify-start">
+                <img
+                  src="/images/360_F_1018050560_kQHuMNjN5tHrhUKxnT9dBbOoxjCEe9cu-removebg-preview.avif"
+                  alt="Survey illustration"
+                  className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
+                />
+              </div>
+              {/* Text Content */}
+              <div className="flex-1 space-y-4 w-full sm:w-auto text-center pt-7 sm:text-left">
+                <div>
+                  <h3 className="font-semibold text-base sm:text-lg mb-1 text-gray-900">
+                    Survey Completed
+                  </h3>
+                  <p className="text-xs sm:text-[12.5px] text-gray-600 leading-relaxed">
+                    Thank you for completing our survey! Your feedback is
+                    valuable to us and helps improve the platform. We appreciate
+                    your time and thoughtful responses.
+                  </p>
+                </div>
+                {/* Reward Badge */}
+                {/* <div className="flex items-center justify-center sm:justify-start gap-2 bg-gradient-to-r from-purple-100 to-pink-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-purple-200 w-full sm:w-fit shadow-sm">
+                  <Gift className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 animate-pulse flex-shrink-0" />
+                  <span className="text-xs sm:text-sm font-semibold text-purple-700 whitespace-nowrap">
+                    Survey completed - Thank you!
+                  </span>
+                </div> */}
+              </div>
+            </div>
+            {/* Button Section */}
+            {/* <div className="w-full sm:w-auto lg:pr-2 lg:flex-shrink-0 mt-3 md:mt-0">
+              <div className="flex items-center justify-center sm:justify-start gap-2 bg-green-100 px-4 py-2 rounded-lg border border-green-200">
+                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                <span className="text-sm font-medium text-green-700">
+                  Completed
+                </span>
+              </div>
+            </div> */}
           </div>
         </div>
       )}
 
-      {/* Referral Links */}
-      {username && (
-        <div
-          className={cn(
-            "rounded-xl shadow-xl",
-            isDark ? "bg-[#180438]" : "bg-white "
-          )}
-        >
+       {/* Referral Links */}
+       {username && (
+        <div className="bg-white rounded-xl shadow-xl">
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
             <CardDescription>
@@ -1589,63 +1590,21 @@ export default function SettingsPage({
               return (
                 <div className="space-y-4">
                   <div className="flex gap-2 items-center">
-                    <Input
-                      readOnly
-                      value={links.general}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      className="bg-[#4A00BE] text-white"
-                      variant="outline"
-                      onClick={() => copyToClipboard(links.general)}
-                    >
-                      <Copy className="h-4 w-4 mr-1" />
-                      Copy General
+                    <Input readOnly value={links.general} className="border-gray-400 w-full"/>
+                    <Button type="button" className="bg-[#4A00BE] text-white" variant="outline" onClick={() => copyToClipboard(links.general)}>
+                      <Copy className="h-4 w-4 mr-1" />Copy General
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input
-                      readOnly
-                      value={links.creators}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-[#4A00BE] text-white"
-                      onClick={() => copyToClipboard(links.creators)}
-                    >
-                      <Copy className="h-4 w-4" />
-                      Copy Creators
+                    <Input readOnly value={links.creators}  className="border-gray-400" />
+                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white" onClick={() => copyToClipboard(links.creators)}>
+                      <Copy className="h-4 w-4" />Copy Creators
                     </Button>
                   </div>
                   <div className="flex gap-2 items-center">
-                    <Input
-                      readOnly
-                      value={links.brands}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="bg-[#4A00BE] text-white"
-                      onClick={() => copyToClipboard(links.brands)}
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy Brands
+                    <Input readOnly value={links.brands} className="border-gray-400"/>
+                    <Button type="button" variant="outline" className="bg-[#4A00BE] text-white"  onClick={() => copyToClipboard(links.brands)}>
+                      <Copy className="h-4 w-4 mr-2" />Copy Brands
                     </Button>
                   </div>
                 </div>

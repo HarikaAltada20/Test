@@ -22,6 +22,7 @@ import {
   User,
   Phone,
   HelpCircle,
+  Award,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -117,12 +118,6 @@ export function DashboardSidebar({
       description: "Admin overview",
     },
     {
-      name: "Withdrawal Requests",
-      href: "/dashboard/admin/withdrawals",
-      icon: DollarSign,
-      description: "Manage payout withdrawals",
-    },
-    {
       name: "All Contests",
       href: "/dashboard/admin/contests",
       icon: Trophy,
@@ -133,6 +128,18 @@ export function DashboardSidebar({
       href: "/dashboard/admin/contest-moderation",
       icon: Shield,
       description: "Review & approve contests",
+    },
+    {
+      name: "Leaderboard",
+      href: "/dashboard/admin/leaderboard",
+      icon: Award,
+      description: "Top creators",
+    },
+    {
+      name: "Withdrawal Requests",
+      href: "/dashboard/admin/withdrawals",
+      icon: DollarSign,
+      description: "Manage payout withdrawals",
     },
     {
       name: "Affiliate",
@@ -172,6 +179,12 @@ export function DashboardSidebar({
       href: "/dashboard/opportunities",
       icon: Trophy,
       description: "Available contests",
+    },
+    {
+      name: "Leaderboard",
+      href: "/dashboard/leaderboard",
+      icon: Award,
+      description: "Top creators",
     },
     {
       name: "Wallet",

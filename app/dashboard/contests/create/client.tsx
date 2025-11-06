@@ -5172,15 +5172,24 @@ export default function CreateContestPage({
   //   setShowBackModal(true);
   // };
 
+ 
   useEffect(() => {
-    // Push dummy state so we can trap the back button
-    window.history.pushState(null, "", window.location.pathname);
+    // Push dummy state so we can trap the back button (preserve query string)
+    window.history.pushState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`
+    );
 
     const handlePopState = (e: PopStateEvent) => {
       e.preventDefault();
       setShowBackModal(true); // ✅ Show modal instead of navigating
       // Push dummy state again to cancel the back navigation
-      window.history.pushState(null, "", window.location.pathname);
+      window.history.pushState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`
+      );
     };
 
     window.addEventListener("popstate", handlePopState);

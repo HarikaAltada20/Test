@@ -21,6 +21,7 @@ import {
   Eye,
   Coins,
   Loader2,
+  MessageSquare,
 } from "lucide-react";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,6 +34,8 @@ import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
+import { SurveyModal } from "@/components/SurveyModal";
+import { hasSubmitted } from "@/lib/form-submissions";
 
 function DashboardPage() {
   const router = useRouter();
@@ -52,11 +55,18 @@ function DashboardPage() {
   const [userCoins, setUserCoins] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
+  const [userDetails, setUserDetails] = useState<{
+    email: string;
+    username: string;
+    fullName: string;
+  } | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
   const [showPopup, setShowPopup] = useState(false);
+  const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
+  const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
 
   // Read mode from data attribute
@@ -147,6 +157,21 @@ function DashboardPage() {
     }
   }, [profile]);
 
+  // Check survey completion status
+  useEffect(() => {
+    const checkSurveyStatus = async () => {
+      if (userDetails?.email) {
+        try {
+          const submitted = await hasSubmitted(userDetails.email);
+          setIsSurveyCompleted(submitted);
+        } catch (error) {
+          console.error("Error checking survey status:", error);
+        }
+      }
+    };
+    checkSurveyStatus();
+  }, [userDetails?.email]);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -166,7 +191,7 @@ function DashboardPage() {
       try {
         const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("user_type, coins")
+          .select("user_type, coins, email, username, full_name")
           .eq("id", user.id)
           .single();
 
@@ -180,6 +205,13 @@ function DashboardPage() {
 
         const userType = userData?.user_type;
         setUserCoins(userData?.coins || 0);
+
+        // Set user details for survey
+        setUserDetails({
+          email: userData?.email || user?.email || "",
+          username: userData?.username || "",
+          fullName: userData?.full_name || user?.user_metadata?.full_name || "",
+        });
 
         if (userType === "advertiser") {
           // Fetch advertiser profile
@@ -293,12 +325,15 @@ function DashboardPage() {
               .filter(Boolean);
 
             // Remove duplicate contests by keeping only unique contest IDs
-            const uniqueContests = contests.reduce((acc: any[], contest: any) => {
-              if (!acc.find(c => c.id === contest.id)) {
-                acc.push(contest);
-              }
-              return acc;
-            }, []);
+            const uniqueContests = contests.reduce(
+              (acc: any[], contest: any) => {
+                if (!acc.find((c) => c.id === contest.id)) {
+                  acc.push(contest);
+                }
+                return acc;
+              },
+              []
+            );
 
             setRecentContests(uniqueContests || []);
           }
@@ -368,23 +403,32 @@ function DashboardPage() {
         >
           Dashboard
         </h2>
-        {isAdvertiser && (
-          <button
-            onClick={handleCreateContestClick}
-            disabled={loading}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl text-white font-medium",
-              isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-            )}
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Create Contest
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Survey Button - Only show for creators and if survey not completed */}
+          {!isAdvertiser && !isSurveyCompleted && (
+            <button
+              onClick={() => setIsSurveyModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Fill survey and earn upto $5
+            </button>
+          )}
+          {isAdvertiser && (
+            <button
+              onClick={handleCreateContestClick}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Create Contest
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -852,6 +896,11 @@ function DashboardPage() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         userId={user?.id || ""}
+      />
+      {/* Survey Modal */}
+      <SurveyModal
+        isOpen={isSurveyModalOpen}
+        onClose={() => setIsSurveyModalOpen(false)}
       />
     </div>
   );

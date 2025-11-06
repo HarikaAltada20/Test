@@ -9,7 +9,11 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
-import { subscriptionPlans, PRODUCT_IDS, PRICE_IDS } from '@/constants/subscriptionPlans';
+import {
+  subscriptionPlans,
+  PRODUCT_IDS,
+  PRICE_IDS,
+} from "@/constants/subscriptionPlans";
 
 export function VerifyOtpForm() {
   const [otp, setOtp] = useState(Array(6).fill(""));
@@ -102,8 +106,11 @@ export function VerifyOtpForm() {
     }
   };
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+  const handleKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
   };
@@ -161,7 +168,8 @@ export function VerifyOtpForm() {
       toast({
         variant: "destructive",
         title: "Resend Failed",
-        description: err.message || "Could not send a new code. Please try again.",
+        description:
+          err.message || "Could not send a new code. Please try again.",
         duration: 5000,
       });
     } finally {
@@ -190,10 +198,15 @@ export function VerifyOtpForm() {
       });
 
       if (verifyError) {
-        let friendlyMessage = "Invalid or expired verification code. Please try again.";
+        let friendlyMessage =
+          "Invalid or expired verification code. Please try again.";
         if (verifyError.message.includes("already confirmed")) {
           friendlyMessage = "This email address has already been verified.";
-          toast({ title: "Already Verified", description: friendlyMessage, duration: 4000 });
+          toast({
+            title: "Already Verified",
+            description: friendlyMessage,
+            duration: 4000,
+          });
           router.push("/auth/signin");
           setIsLoading(false);
           return;
@@ -202,19 +215,24 @@ export function VerifyOtpForm() {
       }
 
       if (!data.session || !data.user) {
-        throw new Error("Verification successful, but no session created. Please try signing in.");
+        throw new Error(
+          "Verification successful, but no session created. Please try signing in."
+        );
       }
 
       localStorage.setItem("verificationSuccess", "true");
-      toast({ title: "Email Verified Successfully!", description: "Proceeding to account setup...", duration: 3000 });
+      toast({
+        title: "Email Verified Successfully!",
+        description: "Proceeding to account setup...",
+        duration: 3000,
+      });
 
       const authUser = data.user;
       const userMetaData = authUser.user_metadata;
 
       try {
-        const { error: upsertUserError } = await supabase
-          .from('users')
-          .upsert({
+        const { error: upsertUserError } = await supabase.from("users").upsert(
+          {
             id: authUser.id,
             email: authUser.email,
             full_name: userMetaData?.full_name || "",
@@ -222,39 +240,61 @@ export function VerifyOtpForm() {
             referral_code: null,
             referred_by: userMetaData?.referral_code || null,
             is_active: true,
-            email_confirmed_at: authUser.email_confirmed_at || new Date().toISOString(),
-            total_other_earnings: 0, // Initialize to 0
-          }, { onConflict: 'id' });
+            email_confirmed_at:
+              authUser.email_confirmed_at || new Date().toISOString(),
+            affiliate_earnings: 0, // Initialize to 0
+            other_earnings: 0, // Initialize to 0
+          },
+          { onConflict: "id" }
+        );
 
-        if (upsertUserError) throw new Error(`Failed to save user profile: ${upsertUserError.message}`);
+        if (upsertUserError)
+          throw new Error(
+            `Failed to save user profile: ${upsertUserError.message}`
+          );
 
-        const profileTable = userMetaData?.user_type === 'advertiser' ? 'advertiser_profiles' : 'creator_profiles';
-        const profileData = userMetaData?.user_type === 'advertiser' ?
-          {
-            id: authUser.id,
-            subscription_info: {
-              product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free) plan
-              price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
-              subscription_id: null,
-              last_synced: new Date().toISOString()
-            }
-          } :
-          { id: authUser.id };
-        await supabase.from(profileTable).upsert(profileData, { onConflict: 'id' });
-
+        const profileTable =
+          userMetaData?.user_type === "advertiser"
+            ? "advertiser_profiles"
+            : "creator_profiles";
+        const profileData =
+          userMetaData?.user_type === "advertiser"
+            ? {
+                id: authUser.id,
+                subscription_info: {
+                  product_id: PRODUCT_IDS.EXPLORER, // EXPLORER (free) plan
+                  price_id: PRICE_IDS.EXPLORER_MONTHLY, // Free price
+                  subscription_id: null,
+                  last_synced: new Date().toISOString(),
+                },
+              }
+            : { id: authUser.id };
+        await supabase
+          .from(profileTable)
+          .upsert(profileData, { onConflict: "id" });
       } catch (profileError: any) {
-        console.error("Error during post-verification profile setup:", profileError);
-        toast({ variant: "destructive", title: "Setup Incomplete", description: `Your email is verified, but there was an issue setting up your profile. Please contact support. Details: ${profileError.message}`, duration: 8000 });
+        console.error(
+          "Error during post-verification profile setup:",
+          profileError
+        );
+        toast({
+          variant: "destructive",
+          title: "Setup Incomplete",
+          description: `Your email is verified, but there was an issue setting up your profile. Please contact support. Details: ${profileError.message}`,
+          duration: 8000,
+        });
       }
 
       router.push("/choose-username");
-
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred during verification.");
+      setError(
+        err.message || "An unexpected error occurred during verification."
+      );
       toast({
         variant: "destructive",
         title: "Verification Failed",
-        description: err.message || "An unexpected error occurred. Please try again.",
+        description:
+          err.message || "An unexpected error occurred. Please try again.",
         duration: 5000,
       });
     } finally {
@@ -277,13 +317,22 @@ export function VerifyOtpForm() {
           }
         }
         .animate-border-flow {
-          background-image: linear-gradient(to right, #FBBF24, #F59E0B, #D97706, #F59E0B, #FBBF24);
+          background-image: linear-gradient(
+            to right,
+            #fbbf24,
+            #f59e0b,
+            #d97706,
+            #f59e0b,
+            #fbbf24
+          );
           background-size: 300% auto;
           animation: border-flow 5s linear infinite;
         }
       `}</style>
       <div className="text-center">
-        <h2 className="text-2xl font-semibold text-white mb-3">Check Your Email</h2>
+        <h2 className="text-2xl font-semibold text-white mb-3">
+          Check Your Email
+        </h2>
         <p className="text-slate-400 mb-1">
           We&apos;ve sent a 6-digit verification code to:
         </p>
@@ -296,7 +345,9 @@ export function VerifyOtpForm() {
             {otp.map((digit, index) => (
               <Input
                 key={index}
-                ref={(el) => { inputRefs.current[index] = el; }}
+                ref={(el) => {
+                  inputRefs.current[index] = el;
+                }}
                 type="text"
                 maxLength={1}
                 value={digit}
@@ -323,7 +374,10 @@ export function VerifyOtpForm() {
             disabled={isLoading || isResending}
           >
             {isLoading ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</>
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Verifying...
+              </>
             ) : (
               "Verify Email"
             )}
@@ -345,7 +399,10 @@ export function VerifyOtpForm() {
                 className="p-0 h-auto font-medium text-amber-500 hover:text-amber-400 disabled:text-slate-500 disabled:no-underline"
               >
                 {isResending ? (
-                  <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Resending...</>
+                  <>
+                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    Resending...
+                  </>
                 ) : (
                   "Resend Code"
                 )}
