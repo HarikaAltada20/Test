@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, DollarSign, Trophy, Info, Share2, Users, Clock, CheckCheck, Gift, Tag, Star } from "lucide-react";
+import { Calendar, DollarSign, Trophy, Info, Share2, Users, Clock, CheckCheck, Gift, Tag, Star, Play, GraduationCap } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
@@ -19,6 +19,7 @@ import { EnhancedTabs as Tabs, EnhancedTabsContent as TabsContent, EnhancedTabsL
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import Link from "next/link";
 
 // Define types for filters and sorting
 type StatusFilterType = 'all' | 'live' | 'upcoming' | 'completed';
@@ -353,9 +354,26 @@ export default function OpportunitiesPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-6">
         <h1 className="text-2xl font-bold">Opportunities</h1>
-        {/* Filters and Sorters will go here - Old filter button removed */}
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href="https://youtu.be/KrtpC2DB9zk?si=2OOUFF1803HDiC6N"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 bg-[#D9C0FF26] border border-[#7F39EC] px-3 py-1.5 text-[#7F39EC] rounded-full hover:bg-[#D9C0FF61] transition-colors text-sm"
+          >
+            <Play className="h-3.5 w-3.5" />
+            How it works
+          </a>
+          <Link
+            href="/dashboard/getting-started"
+            className="inline-flex items-center justify-center gap-2 bg-[#D9C0FF26] border border-[#7F39EC] px-3 py-1.5 text-[#7F39EC] rounded-full hover:bg-[#D9C0FF61] transition-colors text-sm"
+          >
+            <GraduationCap className="h-3.5 w-3.5" />
+            Learn how to participate
+          </Link>
+        </div>
       </div>
 
 

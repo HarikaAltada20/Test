@@ -1180,63 +1180,11 @@ function DashboardContent({
                     {isCompactMode ? "85%" : "100%"}
                   </div>
 
-                  {/* Settings Panel Trigger - Premium Style */}
+                  {/* Settings Panel (opened via Profile sidebar; header icon removed) */}
                   <Sheet
                     open={settingsPanelOpen}
                     onOpenChange={setSettingsPanelOpen}
                   >
-                    <SheetTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
-                        // style={{
-                        //   backgroundColor:
-                        //     currentMode === "light"
-                        //       ? `rgba(${mode.background.tertiary}, 1)`
-                        //       : `rgba(${mode.background.secondary}, 0.5)`,
-                        //   borderColor: `rgba(${theme.primary}, ${currentMode === "light" ? "0.3" : "0.2"
-                        //     })`,
-                        //   color: `rgba(${mode.text.muted}, 1)`,
-                        //   boxShadow:
-                        //     currentMode === "light"
-                        //       ? "0 1px 2px 0 rgba(0, 0, 0, 0.05)"
-                        //       : "none",
-                        // }}
-                        // onMouseEnter={(e) => {
-                        //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.4)`;
-                        //   e.currentTarget.style.backgroundColor = `rgba(${theme.primary}, 0.1)`;
-                        //   e.currentTarget.style.color = `rgba(${mode.text.primary}, 1)`;
-                        // }}
-                        // onMouseLeave={(e) => {
-                        //   e.currentTarget.style.borderColor = `rgba(${theme.primary}, 0.2)`;
-                        //   e.currentTarget.style.backgroundColor = `rgba(${mode.background.secondary}, 0.5)`;
-                        //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
-                        // }}
-                      >
-                        <svg
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        <span className="sr-only">Dashboard Customization</span>
-                      </Button>
-                    </SheetTrigger>
-
                     {/* Settings Panel Content */}
                     <SheetContent
                       side="right"
