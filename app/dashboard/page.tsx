@@ -394,21 +394,24 @@ function DashboardPage() {
 
   return (
     <div className="space-y-8 bg-background text-foreground transition-colors duration-300">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2
           className={cn(
-            "pl-2 text-2xl md:text-3xl font-bold tracking-tight",
+            "w-full pl-2 text-2xl font-bold tracking-tight sm:w-auto text-left md:text-3xl",
             isDark ? "text-white" : "text-slate-900"
           )}
         >
           Dashboard
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
           {/* Survey Button - Only show for creators and if survey not completed */}
           {!isAdvertiser && !isSurveyCompleted && (
             <button
               onClick={() => setIsSurveyModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-md font-medium text-white sm:w-auto",
+                isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+              )}
             >
               <MessageSquare className="h-4 w-4" />
               Fill survey and earn upto $5
@@ -418,7 +421,10 @@ function DashboardPage() {
             <button
               onClick={handleCreateContestClick}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-md font-medium text-white sm:w-auto",
+                isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+              )}
             >
               {loading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

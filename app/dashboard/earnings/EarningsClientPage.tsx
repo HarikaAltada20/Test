@@ -1369,6 +1369,7 @@ export default function EarningsClientPage({
                   onPageChange={setCashPage}
                   onLimitChange={setCashLimit}
                   loading={cashTransactionsLoading}
+                  isDark={isDark}
                 />
               )}
             </CardContent>
@@ -2449,13 +2450,14 @@ export default function EarningsClientPage({
           if (isSubmittingWithdrawal && isOpen) return;
           setIsWithdrawModalOpen(isOpen);
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className={cn(isDark ? "text-white" : "text-gray-800")}>
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className={cn(isDark ? "text-white" : "text-gray-800")}>
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
             </DialogDescription>
@@ -2463,7 +2465,7 @@ export default function EarningsClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className="text-lg">
+                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
                   Available:{" "}
                   <span className="font-semibold">
                     {profile
@@ -2471,7 +2473,7 @@ export default function EarningsClientPage({
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
-                <div>
+                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
                   <Label htmlFor="withdrawAmountDollars">
                     Amount to Withdraw (USD)
                   </Label>
@@ -2488,13 +2490,18 @@ export default function EarningsClientPage({
                     step="0.01"
                     placeholder="e.g., 50.00"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className="text-lg">
+                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
@@ -2511,42 +2518,52 @@ export default function EarningsClientPage({
                     }
                     placeholder="e.g., 1000"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             <div>
-              <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
+              <Label htmlFor="withdrawalUserNotes" className={cn(isDark ? "text-white" : "text-gray-800")}>Notes (Optional)</Label>
               <Input
                 id="withdrawalUserNotes"
                 value={withdrawalUserNotes}
                 onChange={(e) => setWithdrawalUserNotes(e.target.value)}
                 placeholder="Optional notes for your withdrawal request"
                 disabled={isLoading}
+                 className={cn(
+                  isDark
+                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    : "bg-white text-black"
+                )}
               />
             </div>
             <div>
-              <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
+              <Label htmlFor="payoutMethodSelect" className={cn(isDark ? "text-white" : "text-gray-800")}>Select Payout Method</Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
                 onValueChange={setSelectedWithdrawMethodId}
                 disabled={isLoading || payoutMethods.length === 0}
               >
-                <SelectTrigger id="payoutMethodSelect">
+                <SelectTrigger id="payoutMethodSelect" className={cn(isDark ? "border-gray-600" : "border-slate-300")}>
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent isDark={isDark}>
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}

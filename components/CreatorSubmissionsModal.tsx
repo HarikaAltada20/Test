@@ -541,7 +541,11 @@ export function CreatorSubmissionsModal({
                   statusFilter === "all"
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : "",
-                  isDark ? "text-white border-gray-600" : "text-gray-600"
+                  isDark
+                    ? "text-white border-gray-600"
+                    : statusFilter === "all"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 All{" "}
@@ -559,7 +563,11 @@ export function CreatorSubmissionsModal({
                   statusFilter === "verified_or_paid"
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : "",
-                  isDark ? "text-white border-gray-600" : "text-gray-600"
+                  isDark
+                    ? "text-white border-gray-600"
+                    : statusFilter === "verified_or_paid"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Verified + Paid{" "}
@@ -575,7 +583,11 @@ export function CreatorSubmissionsModal({
                   statusFilter === "pending"
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : "",
-                  isDark ? "text-white border-gray-600" : "text-gray-600"
+                  isDark
+                    ? "text-white border-gray-600"
+                    : statusFilter === "pending"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Pending{" "}
@@ -591,7 +603,11 @@ export function CreatorSubmissionsModal({
                   statusFilter === "verified"
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : "",
-                  isDark ? "text-white border-gray-600" : "text-gray-600"
+                  isDark
+                    ? "text-white border-gray-600"
+                    : statusFilter === "verified"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Verified{" "}
@@ -607,7 +623,11 @@ export function CreatorSubmissionsModal({
                   statusFilter === "rejected"
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : "",
-                  isDark ? "text-white border-gray-600" : "text-gray-600"
+                  isDark
+                    ? "text-white border-gray-600"
+                    : statusFilter === "rejected"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Rejected{" "}
@@ -623,7 +643,11 @@ export function CreatorSubmissionsModal({
                   statusFilter === "paid"
                     ? "bg-purple-600 hover:bg-purple-700 text-white"
                     : "",
-                  isDark ? "text-white border-gray-600" : "text-gray-600"
+                  isDark
+                    ? "text-white border-gray-600"
+                    : statusFilter === "paid"
+                    ? "text-white"
+                    : "text-gray-600"
                 )}
               >
                 Paid{" "}
@@ -712,7 +736,9 @@ export function CreatorSubmissionsModal({
                           onClick={() => handleBulkAction("verify")}
                           className={cn(
                             "whitespace-nowrap rounded-md",
-                            isDark ? "border bg-green-900/30 text-green-400 border-green-500" : "bg-green-600 text-white hover:bg-green-700 "
+                            isDark
+                              ? "border bg-green-900/30 text-green-400 border-green-500"
+                              : "bg-green-600 text-white hover:bg-green-700 "
                           )}
                         >
                           <CheckCircle className="h-4 w-4 mr-1" />
@@ -723,7 +749,9 @@ export function CreatorSubmissionsModal({
                           onClick={() => handleBulkAction("reject")}
                           className={cn(
                             "whitespace-nowrap rounded-md",
-                            isDark ? "border bg-red-900/30 text-red-400 border-red-500" : "bg-red-600 text-white hover:bg-red-700 "
+                            isDark
+                              ? "border bg-red-900/30 text-red-400 border-red-500"
+                              : "bg-red-600 text-white hover:bg-red-700 "
                           )}
                         >
                           <XCircle className="h-4 w-4 mr-1" />
@@ -734,7 +762,9 @@ export function CreatorSubmissionsModal({
                           onClick={() => handleBulkAction("pending")}
                           className={cn(
                             "whitespace-nowrap rounded-md",
-                            isDark ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500" : "bg-yellow-600 text-white hover:bg-yellow-700 "
+                            isDark
+                              ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
+                              : "bg-yellow-600 text-white hover:bg-yellow-700 "
                           )}
                         >
                           <Clock className="h-4 w-4 mr-1" />
@@ -826,7 +856,6 @@ export function CreatorSubmissionsModal({
                       checked={selectAll}
                       onCheckedChange={handleSelectAll}
                       aria-label="Select all submissions"
-                     
                     />
                   </TableHead>
                   <TableHead

@@ -1364,6 +1364,7 @@ export default function BillingClientPage({
                   onPageChange={setCashPage}
                   onLimitChange={setCashLimit}
                   loading={cashTransactionsLoading}
+                  isDark={isDark}
                 />
               )}
             </CardContent>

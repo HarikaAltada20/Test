@@ -1266,13 +1266,14 @@ export default function LeaderboardClient({
                 <PaginationControls
                   page={currentPage}
                   limit={limit}
+                  isDark={isDark}
                   total={totalItems}
                   totalPages={totalPages}
                   hasNextPage={currentPage < totalPages}
                   hasPreviousPage={currentPage > 1}
                   onPageChange={setCurrentPage}
                   onLimitChange={setLimit}
-                  loading={loading}
+                  loading={loading}        
                   hide200Option
                 />
               </div>
