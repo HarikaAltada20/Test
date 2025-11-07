@@ -1283,7 +1283,7 @@ function DashboardContent({
                   </Button>
 
                   {/* Theme Toggle - Quick Access */}
-                  <Button
+                  {/* <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
@@ -1299,7 +1299,7 @@ function DashboardContent({
                     ) : (
                       <Sun className="h-4 w-4" />
                     )}
-                  </Button>
+                  </Button> */}
 
                   {/* Settings Panel (opened via Profile sidebar; header icon removed) */}
                   <Sheet
