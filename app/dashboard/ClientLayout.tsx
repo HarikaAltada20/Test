@@ -1259,6 +1259,44 @@ function DashboardContent({
                     {isCompactMode ? "85%" : "100%"}
                   </div>
 
+                  {/* Theme Toggle - Quick Access */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
+                    title={`Switch to ${
+                      currentMode === "light" ? "dark" : "light"
+                    } theme`}
+                    onClick={() =>
+                      switchMode(currentMode === "light" ? "dark" : "light")
+                    }
+                  >
+                    {currentMode === "light" ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4" />
+                    )}
+                  </Button>
+
+                  {/* Theme Toggle - Quick Access */}
+                  {/* <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 border border-gray-400 backdrop-blur-sm transition-all duration-300"
+                    title={`Switch to ${
+                      currentMode === "light" ? "dark" : "light"
+                    } theme`}
+                    onClick={() =>
+                      switchMode(currentMode === "light" ? "dark" : "light")
+                    }
+                  >
+                    {currentMode === "light" ? (
+                      <Moon className="h-4 w-4" />
+                    ) : (
+                      <Sun className="h-4 w-4" />
+                    )}
+                  </Button> */}
+
                   {/* Settings Panel (opened via Profile sidebar; header icon removed) */}
                   <Sheet
                     open={settingsPanelOpen}

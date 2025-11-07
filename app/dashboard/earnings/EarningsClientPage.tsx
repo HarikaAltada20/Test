@@ -2383,13 +2383,24 @@ export default function EarningsClientPage({
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
-            <div className="mt-6 pt-4 border-t">
+            <div 
+            className={cn(
+              "mt-6 pt-4 border-t",
+              isDark
+                ? "border-gray-700 text-white"
+                : "border-gray-200 text-gray-800"
+            )}>
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {payoutMethods.map((method) => (
                   <div
                     key={method.id}
-                    className="flex items-center justify-between p-3 border rounded-md bg-slate-50 dark:bg-slate-800"
+                    className={cn(
+                      "flex items-center justify-between p-3 border rounded-md",
+                      isDark
+                        ? "border-[#C9A7FF]"
+                        : "border-[#7F39EC] bg-[#D9C0FF26]"
+                    )}
                   >
                     <div className="flex items-center">
                       <PayoutMethodIcon type={method.method_type} />
@@ -2409,6 +2420,12 @@ export default function EarningsClientPage({
                         <Button
                           variant="ghost"
                           size="sm"
+                          className={cn(
+                            "rounded-lg text-white hover:text-white",
+                            isDark
+                              ? "bg-[#5B1BD6] hover:bg-[#7240DE]"
+                              : "bg-[#4A00BE] hover:bg-[#5B1BD6]"
+                          )}
                           onClick={() =>
                             handleSetDefaultPayoutMethod(method.id)
                           }
@@ -2422,13 +2439,24 @@ export default function EarningsClientPage({
                         size="icon"
                         onClick={() => handleEditPayoutMethod(method)}
                         disabled={isLoading}
+                        className={cn(
+                          "rounded-full",
+                          isDark
+                            ? "text-white bg-[#2A0A5E] hover:bg-[#3A1390]"
+                            : "text-[#4A00BE] bg-[#D8C3FF] hover:bg-[#C8ABFF]"
+                        )}
                       >
                         <Edit3 className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-red-500 hover:text-red-600"
+                        className={cn(
+                          "rounded-full",
+                          isDark
+                            ? "text-[#FF6F6F] bg-[#3A1212] hover:bg-[#4D1818]"
+                            : "text-[#4A00BE] bg-[#D8C3FF] hover:bg-[#C8ABFF]"
+                        )}
                         onClick={() => handleDeletePayoutMethod(method.id)}
                         disabled={isLoading}
                       >
@@ -2578,7 +2606,7 @@ export default function EarningsClientPage({
           </div>
 
           <DialogFooter>
-            <DialogClose asChild></DialogClose>
+            
             <Button
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
@@ -2608,17 +2636,19 @@ export default function EarningsClientPage({
             >
               Request Withdrawal
             </Button>
-            <button
+            <DialogClose asChild>
+            <Button
               disabled={isLoading}
               className={cn(
                 "w-full text-md rounded-full",
                 isDark
-                  ? "py-2 border border-[#FF5353] text-[#FF5353]"
+                  ? "py-2 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
                   : "bg-[#FF323224] text-[#E50000] py-2"
               )}
             >
               Cancel
-            </button>
+            </Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -79,7 +79,10 @@ import {
   PayoutMethodDetails,
   BillingClientPageProps,
 } from "@/types/earnings";
-import { formatCurrencyFromCents, formatErrorWithCurrency } from "@/lib/currency-utils";
+import {
+  formatCurrencyFromCents,
+  formatErrorWithCurrency,
+} from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
@@ -1870,10 +1873,12 @@ export default function BillingClientPage({
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Country selector controls which payout methods show */}
-            <div className={cn(
-              "space-y-1",
-              isDark ? "text-white" : "text-gray-800"
-            )}>
+            <div
+              className={cn(
+                "space-y-1",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <Label htmlFor="payoutCountry">Country</Label>
               <Select
                 value={payoutCountry}
@@ -1884,9 +1889,12 @@ export default function BillingClientPage({
                 }}
                 disabled={isLoading}
               >
-                <SelectTrigger id="payoutCountry" className={cn(
-                  isDark ? "border-gray-600" : "border-slate-300"
-                )}>
+                <SelectTrigger
+                  id="payoutCountry"
+                  className={cn(
+                    isDark ? "border-gray-600" : "border-slate-300"
+                  )}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
@@ -1982,10 +1990,12 @@ export default function BillingClientPage({
               )}
 
               <TabsContent value="crypto" className="pt-4 space-y-2">
-                <div  className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameCrypto">
                     Friendly Name
                   </Label>
@@ -2002,10 +2012,12 @@ export default function BillingClientPage({
                     )}
                   />
                 </div>
-                <div  className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="cryptoNetwork">Network</Label>
                   <Select
                     value={cryptoNetwork}
@@ -2020,54 +2032,74 @@ export default function BillingClientPage({
                     }}
                     disabled={isLoading}
                   >
-                    <SelectTrigger  className={cn(
+                    <SelectTrigger
+                      className={cn(
                         isDark ? "border-gray-600" : "border-slate-300"
-                      )}>
+                      )}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent isDark={isDark}>
                       <SelectItem isDark={isDark} value="BNB_SMART_CHAIN">
                         BNB Smart Chain (BEP20)
                       </SelectItem>
-                      <SelectItem isDark={isDark} value="SOLANA">Solana</SelectItem>
+                      <SelectItem isDark={isDark} value="SOLANA">
+                        Solana
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div  className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="cryptoCurrency">Cryptocurrency</Label>
                   <Select
                     value={cryptoCurrency}
                     onValueChange={(val) => setCryptoCurrency(val)}
                     disabled={isLoading}
                   >
-                    <SelectTrigger  className={cn(
+                    <SelectTrigger
+                      className={cn(
                         isDark ? "border-gray-600" : "border-slate-300"
-                      )}>
+                      )}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent isDark={isDark}>
                       {cryptoNetwork === "BNB_SMART_CHAIN" ? (
                         <>
-                          <SelectItem isDark={isDark} value="BNB">BNB</SelectItem>
-                          <SelectItem isDark={isDark} value="USDT">USDT (BEP20)</SelectItem>
+                          <SelectItem isDark={isDark} value="BNB">
+                            BNB
+                          </SelectItem>
+                          <SelectItem isDark={isDark} value="USDT">
+                            USDT (BEP20)
+                          </SelectItem>
                         </>
                       ) : (
                         <>
-                          <SelectItem isDark={isDark} value="SOL">SOL</SelectItem>
-                          <SelectItem isDark={isDark} value="USDT">USDT</SelectItem>
-                          <SelectItem isDark={isDark} value="USDC">USDC</SelectItem>
+                          <SelectItem isDark={isDark} value="SOL">
+                            SOL
+                          </SelectItem>
+                          <SelectItem isDark={isDark} value="USDT">
+                            USDT
+                          </SelectItem>
+                          <SelectItem isDark={isDark} value="USDC">
+                            USDC
+                          </SelectItem>
                         </>
                       )}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label
                     htmlFor="cryptoAddress"
                     className="flex items-center gap-2"
@@ -2100,7 +2132,6 @@ export default function BillingClientPage({
                           ? "bg-[#06021D] border border-gray-600 text-white"
                           : "bg-white text-black"
                       )}
-                      
                     />
                     <Button
                       type="button"
@@ -2109,7 +2140,6 @@ export default function BillingClientPage({
                       disabled={
                         !cryptoAddress.trim() || isValidatingWallet || isLoading
                       }
-                      
                       className={cn(
                         "text-md text-white",
                         isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
@@ -2159,12 +2189,14 @@ export default function BillingClientPage({
                   method, you accept responsibility for declaring and paying
                   taxes as per your country's laws.
                 </p>
-                <p className={cn(
+                <p
+                  className={cn(
                     "text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200",
                     isDark
                       ? "border-amber-200 bg-amber-500/10 text-amber-300"
                       : "border-amber-200 bg-amber-50 text-amber-600"
-                  )}>
+                  )}
+                >
                   <strong>Note:</strong> We only validate the format of your
                   wallet address. Please double-check that you've entered the
                   correct address for your selected network, as sending to the
@@ -2174,10 +2206,12 @@ export default function BillingClientPage({
 
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-                <div className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameBank"
@@ -2186,7 +2220,6 @@ export default function BillingClientPage({
                     placeholder="e.g., Primary Savings"
                     disabled={isLoading}
                     className={cn(
-                      
                       isDark
                         ? "bg-[#06021D] border border-gray-600 text-white"
                         : "bg-white text-black"
@@ -2194,10 +2227,12 @@ export default function BillingClientPage({
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -2213,10 +2248,12 @@ export default function BillingClientPage({
                       )}
                     />
                   </div>
-                  <div className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
@@ -2230,10 +2267,12 @@ export default function BillingClientPage({
                       )}
                     />
                   </div>
-                  <div className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
@@ -2247,10 +2286,12 @@ export default function BillingClientPage({
                       )}
                     />
                   </div>
-                  <div className={cn(
-                    "space-y-1",
-                    isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
@@ -2274,10 +2315,12 @@ export default function BillingClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
-                <div className={cn(
+                <div
+                  className={cn(
                     "space-y-1",
                     isDark ? "text-white" : "text-gray-800"
-                  )}>
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameUpi"
@@ -2313,10 +2356,11 @@ export default function BillingClientPage({
                   />
                 </div>
                 <div
-                 className={cn(
-                  "space-y-1",
-                  isDark ? "text-white" : "text-gray-800"
-                )}>
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiId">UPI ID</Label>
                   <Input
                     id="upiId"
@@ -2341,10 +2385,14 @@ export default function BillingClientPage({
               <TabsContent value="phantom" className="space-y-4">
                 <div className="text-center py-8">
                   <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-                  <h3 className={cn(
-                    "text-lg font-semibold mb-2",
-                    isDark ? "text-white" : "text-black"
-                  )}>Phantom Wallet</h3>
+                  <h3
+                    className={cn(
+                      "text-lg font-semibold mb-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
+                    Phantom Wallet
+                  </h3>
                   <p className="text-sm text-muted-foreground mb-4">
                     Add your Phantom Wallet to receive USDC or USDT payouts via
                     Solana network directly to your wallet.
@@ -2400,7 +2448,9 @@ export default function BillingClientPage({
             <div
               className={cn(
                 "mt-6 pt-4 border-t",
-                isDark ? "text-white" : "text-gray-800"
+                isDark
+                  ? "border-gray-700 text-white"
+                  : "border-gray-200 text-gray-800"
               )}
             >
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
@@ -2408,7 +2458,13 @@ export default function BillingClientPage({
                 {payoutMethods.map((method) => (
                   <div
                     key={method.id}
-                    className="flex items-center justify-between p-3 border border-[#7F39EC] bg-[#D9C0FF26] rounded-lg"
+                   
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border transition-colors",
+                      isDark
+                        ? "border-[#C9A7FF]"
+                        : "border-[#7F39EC] bg-[#D9C0FF26]"
+                    )}
                   >
                     <div className="flex items-center">
                       <PayoutMethodIcon type={method.method_type} />
@@ -2428,7 +2484,12 @@ export default function BillingClientPage({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-white hover:text-white bg-[#4A00BE] rounded-lg"
+                          className={cn(
+                            "rounded-lg text-white hover:text-white",
+                            isDark
+                              ? "bg-[#5B1BD6] hover:bg-[#7240DE]"
+                              : "bg-[#4A00BE] hover:bg-[#5B1BD6]"
+                          )}
                           onClick={() =>
                             handleSetDefaultPayoutMethod(method.id)
                           }
@@ -2442,14 +2503,24 @@ export default function BillingClientPage({
                         size="icon"
                         onClick={() => handleEditPayoutMethod(method)}
                         disabled={isLoading}
-                        className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
+                        className={cn(
+                          "rounded-full",
+                          isDark
+                            ? "text-white bg-[#2A0A5E] hover:bg-[#3A1390]"
+                            : "text-[#4A00BE] bg-[#D8C3FF] hover:bg-[#C8ABFF]"
+                        )}
                       >
                         <Edit3 className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-[#4A00BE] bg-[#D8C3FF] rounded-full"
+                        className={cn(
+                          "rounded-full",
+                          isDark
+                            ? "text-[#FF6F6F] bg-[#3A1212] hover:bg-[#4D1818]"
+                            : "text-[#4A00BE] bg-[#D8C3FF] hover:bg-[#C8ABFF]"
+                        )}
                         onClick={() => handleDeletePayoutMethod(method.id)}
                         disabled={isLoading}
                       >
@@ -2743,11 +2814,11 @@ export default function BillingClientPage({
         isdark={isDark}
       >
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogTitle 
-            className={cn(
-              "sr-only",
-              isDark ? "text-white" : "text-gray-800"
-            )}>Add Phantom Wallet</DialogTitle>
+          <DialogTitle
+            className={cn("sr-only", isDark ? "text-white" : "text-gray-800")}
+          >
+            Add Phantom Wallet
+          </DialogTitle>
           <PhantomPayoutForm
             onSave={async (details) => {
               // Save Phantom Wallet payout method
