@@ -491,12 +491,12 @@ export default function OpportunitiesPage({
         case "cpm_rate_asc":
           const rateA =
             a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1; // Use -1 to sort contests without CPM rate last
           const rateB =
             b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -786,9 +786,9 @@ export default function OpportunitiesPage({
                       className={cn(
                         "capitalize text-sm px-3 py-1 font-medium border",
                         contest.status === "active" &&
-                          "bg-[#7F39EC] text-white",
+                        "bg-[#7F39EC] text-white",
                         contest.status === "upcoming" &&
-                          "bg-[#7F39EC] text-white",
+                        "bg-[#7F39EC] text-white",
                         contest.status === "ended" && "bg-[#7F39EC] text-white",
                         !["active", "upcoming", "ended"].includes(
                           contest.status
@@ -845,26 +845,26 @@ export default function OpportunitiesPage({
                         ?.flat_fee_bonus ||
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus) && (
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[12px]",
-                            isDark
-                              ? "bg-green-900/30 text-green-300 border-green-700/50"
-                              : "bg-green-50 text-green-700 border-green-200"
-                          )}
-                        >
-                          <Gift className="h-3 w-3 mr-1" />
-                          {formatMoney(
-                            contest.contest_based_details?.cpm_contest
-                              ?.flat_fee_bonus ||
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[12px]",
+                              isDark
+                                ? "bg-green-900/30 text-green-300 border-green-700/50"
+                                : "bg-green-50 text-green-700 border-green-200"
+                            )}
+                          >
+                            <Gift className="h-3 w-3 mr-1" />
+                            {formatMoney(
+                              contest.contest_based_details?.cpm_contest
+                                ?.flat_fee_bonus ||
                               contest.contest_based_details?.leaderboard_contest
                                 ?.flat_fee_bonus ||
                               0
-                          )}
-                          /submission
-                        </Badge>
-                      )}
+                            )}
+                            /submission
+                          </Badge>
+                        )}
                       {contest.content_type && (
                         <Badge
                           variant="outline"
@@ -983,11 +983,11 @@ export default function OpportunitiesPage({
                           {contest.contest_type === "cpm"
                             ? "CPM Based"
                             : contest.contest_type === "leaderboard"
-                            ? "Leaderboard"
-                            : contest.contest_type
-                            ? contest.contest_type.charAt(0).toUpperCase() +
-                              contest.contest_type.slice(1)
-                            : "N/A"}
+                              ? "Leaderboard"
+                              : contest.contest_type
+                                ? contest.contest_type.charAt(0).toUpperCase() +
+                                contest.contest_type.slice(1)
+                                : "N/A"}
                         </span>
                       </span>
                     </div>
@@ -1017,7 +1017,7 @@ export default function OpportunitiesPage({
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
-                        0 && (
+                      0 && (
                         <div className="flex items-center">
                           <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                           <span>
@@ -1087,9 +1087,9 @@ export default function OpportunitiesPage({
                   {/* Budget Spent Progress Bar for CPM contests */}
                   {contest.contest_type === "cpm" &&
                     contest.contest_based_details?.cpm_contest?.total_budget !=
-                      null &&
+                    null &&
                     contest.contest_based_details.cpm_contest.total_budget >
-                      0 &&
+                    0 &&
                     (() => {
                       const totalBudget =
                         contest.contest_based_details.cpm_contest.total_budget;
