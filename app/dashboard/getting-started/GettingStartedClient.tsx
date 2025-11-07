@@ -143,6 +143,28 @@ export default function GettingStartedClient({
         </p>
       </div>
 
+      {/* How it works video */}
+      <div className="mb-8">
+        <div className="rounded-2xl overflow-hidden shadow-[0px_5px_20px_0px_#0000000D] bg-white">
+          <div className="aspect-video w-full">
+            <iframe
+              src={
+                (userType === "advertiser"
+                  ? "https://www.youtube.com/embed/hlQ1kXSmNvQ"
+                  : "https://www.youtube.com/embed/KrtpC2DB9zk") + "?rel=0"
+              }
+              title="How it works"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="w-full h-full border-0"
+            />
+          </div>
+        </div>
+        <div className="text-center text-sm text-gray-600 mt-2">
+          Watch a quick video overview of how it works
+        </div>
+      </div>
+
       {userType === "advertiser" ? (
         // BRAND/ADVERTISER CONTENT
 
