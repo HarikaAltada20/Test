@@ -1,11 +1,12 @@
 "use client";
 
-import React, { Suspense, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { ContestListClient } from "./ContestListClient";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
+import { cn } from "@/lib/utils";
 
 interface ContestsPageClientProps {
   initialContests: any[];
@@ -20,6 +21,35 @@ export function ContestsPageClient({
   const { handleCreateContest } = useContestCreation(userId);
   const [selectedTab, setSelectedTab] = useState("all");
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<"light" | "dark">("light");
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   const handleCreateContestClick = async () => {
     setLoading(true);
@@ -33,6 +63,8 @@ export function ContestsPageClient({
   const handleViewAllDrafts = () => {
     setSelectedTab("draft");
   };
+  
+  const isDark = mode === "dark";
 
   return (
     <div className="space-y-6">
@@ -45,7 +77,10 @@ export function ContestsPageClient({
         <button
           onClick={handleCreateContestClick}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2.5 text-md rounded-xl bg-[#4A00BE] text-white font-medium"
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 text-md rounded-xl text-white font-medium",
+            isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+          )}
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />

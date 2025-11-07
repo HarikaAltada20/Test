@@ -42,6 +42,7 @@ import {
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { SurveyButton } from "@/components/SurveyButton";
 import { hasSubmitted } from "@/lib/form-submissions";
+import { cn } from "@/lib/utils";
 dayjs.extend(isSameOrAfter);
 
 interface SocialAccount {
@@ -121,6 +122,7 @@ export default function SettingsPage({
     useState(false);
   const [youtubeConnected, setYoutubeConnected] = useState(false);
   const [instagramConnected, setInstagramConnected] = useState(false);
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const [connectionError, setConnectionError] = useState<{
     type: "youtube" | "instagram";
     message: string;
@@ -129,6 +131,35 @@ export default function SettingsPage({
   } | null>(null);
   const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
   const [isSurveyLoading, setIsSurveyLoading] = useState(true);
+
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   // Handle URL error parameters
   useEffect(() => {
@@ -462,7 +493,7 @@ export default function SettingsPage({
       setPasswordChangeLoading(false);
     }
   };
-
+  
   const buildReferralLinks = () => {
     const base =
       typeof window !== "undefined"
@@ -927,19 +958,41 @@ export default function SettingsPage({
     );
   }
 
+  const isDark = mode === "dark";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-background text-foreground transition-colors duration-300">
       <div className="flex flex-col items-center justify-center text-center">
-        <h1 className="text-4xl font-bold">Settings</h1>
-        <p className="mt-3 text-lg text-muted-foreground">
+        <h1
+          className={cn(
+            "text-4xl font-bold",
+            isDark ? "text-white" : "text-slate-900"
+          )}
+        >
+          Settings
+        </h1>
+        <p
+          className={cn(
+            "mt-3 text-lg",
+            isDark ? "text-gray-300" : "text-muted-foreground"
+          )}
+        >
           Manage your account settings and preferences
         </p>
       </div>
 
       {/* Connection Error Alert */}
       {connectionError && (
-        <Alert variant="destructive" className="border-red-500 bg-red-50">
-          <AlertDescription className="text-red-800">
+        <Alert
+          variant="destructive"
+          className={cn(
+            "border",
+            isDark ? "border-[#FF5353] bg-red-900/20" : "bg-red-50 border-red-500"
+          )}
+        >
+          <AlertDescription
+            className={cn(isDark ? "text-[#FF5353]" : "text-red-800")}
+          >
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
                 {connectionError.type === "youtube" ? (
@@ -956,7 +1009,11 @@ export default function SettingsPage({
                     variant="outline"
                     size="sm"
                     onClick={clearConnectionError}
-                    className="text-red-700 border-red-300 hover:bg-red-100"
+                    className={cn(
+                      "border",
+                      isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                    )}
+                    
                   >
                     Dismiss
                   </Button>
@@ -977,7 +1034,10 @@ export default function SettingsPage({
                                 "_blank"
                               )
                             }
-                            className="text-red-700 border-red-300 hover:bg-red-100"
+                            className={cn(
+                              "border",
+                              isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                            )}
                           >
                             Create YouTube Channel
                           </Button>
@@ -990,17 +1050,26 @@ export default function SettingsPage({
                                 "_blank"
                               )
                             }
-                            className="text-red-700 border-red-300 hover:bg-red-100"
+                            className={cn(
+                              "border",
+                              isDark ? "text-[#FF5353] border-[#FF5353]" : "text-red-700 border-red-300"
+                            )}
                           >
                             Learn How
                           </Button>
                         </div>
-                        <p className="text-xs text-red-600 mt-2">
+                        <p className={cn(
+                          "text-xs",
+                          isDark ? "text-[#FF5353]" : "text-red-600"
+                        )}>
                           💡 Tip: You can also create a channel by uploading
                           your first video to YouTube. After creating your
                           channel, return here to connect it.
                         </p>
-                        <div className="text-xs text-red-600">
+                        <div className={cn(
+                          "text-xs",
+                          isDark ? "text-[#FF5353]" : "text-red-600"
+                        )}>
                           <p className="mb-1">Additional Resources:</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
                             <li>
@@ -1027,14 +1096,20 @@ export default function SettingsPage({
       )}
 
       {/* Connected Accounts - Only for Creators */}
-      {userType === "creator" && (
+       {/* Connected Accounts - Only for Creators */}
+       {userType === "creator" && (
         <div>
-          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-            <CardTitle className="text-2xl text-[#7F39EC]">
+          <div 
+           className={cn("rounded-t-2xl border-b px-6 py-4 shadow-lg",
+           isDark ? "bg-[#180438]" : "bg-white")}>
+            <CardTitle className={cn("text-2xl",
+           isDark ? "text-white" : "text-[#7F39EC]")}>
               Manage Your Account
             </CardTitle>
           </div>
-          <div className="bg-white rounded-b-2xl border-b pb-4 shadow-lg">
+          <div 
+           className={cn("rounded-b-2xl pb-4 shadow-lg",
+           isDark ? "bg-[#180438]" : "bg-white")}>
             <CardHeader>
               <CardTitle className="text-lg">Social Accounts</CardTitle>
               <CardDescription>
@@ -1163,8 +1238,9 @@ export default function SettingsPage({
                   </Button>
                 )}
               </div>
-              {/* Instagram Connection Information - Display if not connected */}
-              {!instagramConnected && (
+
+               {/* Instagram Connection Information - Display if not connected */}
+               {!instagramConnected && (
                 <Alert
                   variant="default"
                   className="mt-2 border border-[#7F39EC] bg-[#D9C0FF26]"
@@ -1234,13 +1310,30 @@ export default function SettingsPage({
         </div>
       )}
 
-      {/* Company Profile - Only for Advertisers */}
-      {userType === "advertiser" && (
+       {/* Company Profile - Only for Advertisers */}
+       {userType === "advertiser" && (
         <div>
-          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-            <CardTitle className="text-2xl text-[#7F39EC]">Profile</CardTitle>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Profile
+            </CardTitle>
           </div>
-          <div className="bg-white rounded-b-2xl shadow-lg px-2 pb-3">
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 pb-3",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
             <div className="px-6 py-4">
               <h1 className="mb-2 text-2xl font-semibold">Company Profile</h1>
               <CardDescription>Update your company information</CardDescription>
@@ -1252,6 +1345,11 @@ export default function SettingsPage({
                   <Input
                     id="company_name"
                     name="company_name"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
                     defaultValue={(profile as AdvertiserProfile)?.company_name}
                   />
                 </div>
@@ -1262,17 +1360,22 @@ export default function SettingsPage({
                     id="website_url"
                     name="website_url"
                     type="url"
+                    className={cn(
+                      isDark
+                        ? "bg-[#180438] border border-gray-600"
+                        : "bg-white"
+                    )}
                     defaultValue={(profile as AdvertiserProfile)?.website_url}
                   />
                 </div>
 
-                <Button
+                <button
                   type="submit"
-                  className="w-full bg-[#6C43D0] text-md"
+                  className="w-full rounded-xl py-2.5 bg-[#6C43D0] text-white text-md"
                   disabled={companyProfileLoading}
                 >
                   {companyProfileLoading ? "Updating..." : "Update Profile"}
-                </Button>
+                </button>
               </form>
             </CardContent>
           </div>
@@ -1332,13 +1435,30 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
 
-      {/* Security - Only show for users with email authentication */}
-      {hasPassword && (
+  {/* Security - Only show for users with email authentication */}
+  {hasPassword && (
         <div>
-          <div className="bg-white rounded-t-2xl border-b px-6 py-4 shadow-lg">
-            <CardTitle className="text-2xl text-[#7F39EC]">Security</CardTitle>
+          <div
+            className={cn(
+              "rounded-t-2xl border-b px-6 py-4 shadow-lg",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
+            <CardTitle
+              className={cn(
+                "text-2xl",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Security
+            </CardTitle>
           </div>
-          <div className="bg-white rounded-b-2xl shadow-lg px-2 py-5">
+          <div
+            className={cn(
+              "rounded-b-2xl shadow-lg px-2 py-5",
+              isDark ? "bg-[#180438]" : "bg-white "
+            )}
+          >
             {/* <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>
@@ -1363,7 +1483,12 @@ export default function SettingsPage({
                       autoComplete="current-password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="pr-10"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                       required
                     />
                     <button
@@ -1392,7 +1517,12 @@ export default function SettingsPage({
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Minimum 8 characters"
-                      className="pr-10"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                       required
                     />
                     <button
@@ -1426,7 +1556,12 @@ export default function SettingsPage({
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm new password"
-                      className="pr-10"
+                      className={cn(
+                        "pr-10",
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                       required
                     />
                     <button
@@ -1445,8 +1580,8 @@ export default function SettingsPage({
                   </div>
                 </div>
 
-                <Button
-                  className="w-full bg-[#6C43D0] text-md"
+                <button
+                  className="w-full py-2.5 text-white rounded-xl bg-[#6C43D0] text-md"
                   type="submit"
                   disabled={
                     passwordChangeLoading || !newPassword || !confirmPassword
@@ -1455,23 +1590,25 @@ export default function SettingsPage({
                   {passwordChangeLoading
                     ? "Updating Password..."
                     : "Update Password"}
-                </Button>
+                </button>
               </form>
             </CardContent>
           </div>
         </div>
       )}
-
       {/* Survey Section - Only for Creators who have completed the survey */}
       {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
-        <div className="bg-white rounded-xl shadow-lg border border-purple-100 overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5">
+        <div className={cn(
+          "rounded-xl shadow-lg overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5",
+          isDark ? "bg-[#180438]" : "bg-white border border-purple-100"
+        )}>
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
             {/* Content Section */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start flex-1 w-full">
               {/* Image */}
               <div className="relative flex-shrink-0 flex justify-center sm:justify-start">
                 <img
-                  src="/images/360_F_1018050560_kQHuMNjN5tHrhUKxnT9dBbOoxjCEe9cu-removebg-preview.avif"
+                  src="/images/survey-form.avif"
                   alt="Survey illustration"
                   className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
                 />
@@ -1479,40 +1616,37 @@ export default function SettingsPage({
               {/* Text Content */}
               <div className="flex-1 space-y-4 w-full sm:w-auto text-center pt-7 sm:text-left">
                 <div>
-                  <h3 className="font-semibold text-base sm:text-lg mb-1 text-gray-900">
+                  <h3 className={cn(
+                    "font-semibold text-base sm:text-lg mb-1",
+                    isDark ? "text-white" : "text-gray-900"
+                  )}>
                     Survey Completed
                   </h3>
-                  <p className="text-xs sm:text-[12.5px] text-gray-600 leading-relaxed">
+                  <p className={cn(
+                    "text-xs sm:text-[12.5px] leading-relaxed",
+                    isDark ? "text-gray-300" : "text-gray-600"
+                  )}>
                     Thank you for completing our survey! Your feedback is
                     valuable to us and helps improve the platform. We appreciate
                     your time and thoughtful responses.
                   </p>
                 </div>
-                {/* Reward Badge */}
-                {/* <div className="flex items-center justify-center sm:justify-start gap-2 bg-gradient-to-r from-purple-100 to-pink-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-purple-200 w-full sm:w-fit shadow-sm">
-                  <Gift className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 animate-pulse flex-shrink-0" />
-                  <span className="text-xs sm:text-sm font-semibold text-purple-700 whitespace-nowrap">
-                    Survey completed - Thank you!
-                  </span>
-                </div> */}
+                
               </div>
             </div>
-            {/* Button Section */}
-            {/* <div className="w-full sm:w-auto lg:pr-2 lg:flex-shrink-0 mt-3 md:mt-0">
-              <div className="flex items-center justify-center sm:justify-start gap-2 bg-green-100 px-4 py-2 rounded-lg border border-green-200">
-                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium text-green-700">
-                  Completed
-                </span>
-              </div>
-            </div> */}
+            
           </div>
         </div>
-      )}
+      )} 
 
-      {/* Referral Links */}
-      {username && (
-        <div className="bg-white rounded-xl shadow-xl">
+       {/* Referral Links */}
+       {username && (
+        <div
+          className={cn(
+            "rounded-xl shadow-xl",
+            isDark ? "bg-[#180438]" : "bg-white "
+          )}
+        >
           <CardHeader>
             <CardTitle>Share Your Referral Links</CardTitle>
             <CardDescription>
@@ -1529,7 +1663,11 @@ export default function SettingsPage({
                     <Input
                       readOnly
                       value={links.general}
-                      className="border-gray-400 w-full"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                     <Button
                       type="button"
@@ -1545,7 +1683,11 @@ export default function SettingsPage({
                     <Input
                       readOnly
                       value={links.creators}
-                      className="border-gray-400"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                     <Button
                       type="button"
@@ -1561,7 +1703,11 @@ export default function SettingsPage({
                     <Input
                       readOnly
                       value={links.brands}
-                      className="border-gray-400"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600"
+                          : "bg-white"
+                      )}
                     />
                     <Button
                       type="button"

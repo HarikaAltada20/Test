@@ -10,6 +10,7 @@ import { createClient } from "@/utils/supabase/server";
 import { ConditionalFooter } from "./conditional-footer";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
+import { cookies } from "next/headers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -134,8 +135,72 @@ export default async function RootLayout({
     }
   }
 
+  // Determine initial theme mode on the server from cookies to avoid white flash
+  const cookieStore = await cookies();
+  const presetCookie = cookieStore.get("dashboard-preset")?.value as
+    | "game-of-creators"
+    | "clean-professional"
+    | "dark-professional"
+    | undefined;
+  const modeCookie = cookieStore.get("dashboard-mode")?.value as
+    | "light"
+    | "dark"
+    | undefined;
+  const presetToMode: Record<string, "light" | "dark"> = {
+    "game-of-creators": "dark",
+    "clean-professional": "light",
+    "dark-professional": "dark",
+  };
+  const initialMode: "light" | "dark" = presetCookie
+    ? presetToMode[presetCookie] || "light"
+    : modeCookie === "dark" || modeCookie === "light"
+    ? modeCookie
+    : "light";
+
   return (
-    <html lang="en">
+    <html lang="en" data-theme={initialMode} suppressHydrationWarning>
+      <head>
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              html{background:${
+                initialMode === "dark" ? "#07031E" : "#ffffff"
+              };color:${
+              initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
+            }}
+              body{background:inherit;color:inherit}
+            `,
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                try {
+                  var d = document.documentElement;
+                  var get = function(k){
+                    try { return window.localStorage.getItem(k); } catch(e) { return null; }
+                  };
+                  var mode = 'light';
+                  var preset = get('dashboard-preset');
+                  var presetToMode = { 'game-of-creators': 'dark', 'clean-professional': 'light', 'dark-professional': 'dark' };
+                  if (preset && presetToMode[preset]) {
+                    mode = presetToMode[preset];
+                  } else {
+                    var savedMode = get('dashboard-mode');
+                    if (savedMode === 'dark' || savedMode === 'light') mode = savedMode;
+                  }
+                  d.setAttribute('data-theme', mode);
+                  if (mode === 'dark') {
+                    d.style.backgroundColor = '#07031E';
+                    d.style.color = 'rgb(248, 250, 252)';
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={inter.className} suppressHydrationWarning>
         <div className="relative flex min-h-screen flex-col">
           {/* Capture referral codes from landing links and store in localStorage */}

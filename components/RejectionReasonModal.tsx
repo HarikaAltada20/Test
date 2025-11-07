@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Dialog,
     DialogContent,
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { AlertCircle, XCircle, CheckCircle2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 // Predefined rejection reasons with improved descriptions
 const PREDEFINED_REASONS = [
@@ -90,6 +91,60 @@ export default function RejectionReasonModal({
     const [selectedReason, setSelectedReason] = useState<string>('');
     const [customReason, setCustomReason] = useState<string>('');
     const [additionalNotes, setAdditionalNotes] = useState<string>('');
+    const getInitialMode = (): "light" | "dark" => {
+        if (typeof document === "undefined") return "light";
+        const dataMode = document
+          .querySelector("[data-mode]")
+          ?.getAttribute("data-mode");
+        if (dataMode === "dark" || dataMode === "light") {
+          return dataMode;
+        }
+        if (document.documentElement.classList.contains("dark")) {
+          return "dark";
+        }
+        if (
+          typeof window !== "undefined" &&
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        ) {
+          return "dark";
+        }
+        return "light";
+      };
+    
+      const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
+      // Read mode from data attribute and html class, respond to changes
+      useEffect(() => {
+        const readMode = (): "light" | "dark" => {
+          const el = document.querySelector("[data-mode]");
+          const attr = el?.getAttribute("data-mode");
+          if (attr === "dark" || attr === "light") return attr;
+          return document.documentElement.classList.contains("dark")
+            ? "dark"
+            : "light";
+        };
+    
+        // Set immediately on mount to avoid any flicker
+        setMode(readMode());
+    
+        // Watch for changes on either data-mode or html class
+        const observer = new MutationObserver(() => {
+          setMode(readMode());
+        });
+        const dataModeTarget = document.querySelector("[data-mode]");
+        if (dataModeTarget) {
+          observer.observe(dataModeTarget, {
+            attributes: true,
+            attributeFilter: ["data-mode"],
+          });
+        }
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+    
+        return () => observer.disconnect();
+      }, []);
 
     const handleConfirm = () => {
         const finalReason = selectedReason === 'other' ? customReason : selectedReason;
@@ -130,9 +185,9 @@ export default function RejectionReasonModal({
         }
         return '';
     };
-
+    const isDark = mode === "dark";
     return (
-        <Dialog open={isOpen} onOpenChange={handleClose}>
+        <Dialog open={isOpen} onOpenChange={handleClose} isdark={isDark}>
             <style jsx>{`
                 .select-content {
                     width: 100% !important;
@@ -183,7 +238,7 @@ export default function RejectionReasonModal({
                     width: 100% !important;
                 }
             `}</style>
-            <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
+            <DialogContent className={cn("max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto", isDark ? "text-white" : "text-gray-800")}>
                 <DialogHeader className="space-y-3">
                     <div className="flex items-center gap-3">
                         {/* <div className="p-2 bg-red-100 rounded-full">
@@ -214,9 +269,10 @@ export default function RejectionReasonModal({
                                 align="start"
                                 position="popper"
                                 side="bottom"
+                                isDark={isDark}
                             >
                                 {PREDEFINED_REASONS.map((reason) => (
-                                    <SelectItem key={reason.value} value={reason.value} className="select-item">
+                                    <SelectItem key={reason.value} value={reason.value} className="select-item" isDark={isDark}>
                                         <div className="select-item-content">
                                             <span className="font-medium text-sm">{reason.label}</span>
                                             <span className="text-xs text-muted-foreground leading-relaxed">{reason.description}</span>
@@ -230,7 +286,7 @@ export default function RejectionReasonModal({
                     {/* Selected Reason Preview */}
                     {selectedReason && selectedReason !== 'other' && (
                         <Alert className="border-[#7F39EC17] bg-[#7F39EC17]">
-                            <CheckCircle2 className="h-4 w-4 text-[#7F39EC]]" />
+                            {/* <CheckCircle2 className="h-4 w-4 text-[#7F39EC]]" /> */}
                             <AlertDescription className="text-[#7F39EC]">
                                 <div className="space-y-1">
                                     <div className="font-medium">Selected Reason: {getSelectedReasonLabel()}</div>
@@ -307,19 +363,29 @@ export default function RejectionReasonModal({
                     )}
 
                     {/* Warning Alert */}
-                    <Alert className="border-orange-200 bg-orange-50">
-                        <AlertCircle className="h-4 w-4 text-orange-600" />
-                        <AlertDescription className="text-orange-800">
+                    <Alert 
+                      className={cn(
+                        isDark
+                          ? "bg-[#FDD36F5C] text-[#FDD36F]"
+                          : "border-orange-200 bg-orange-50 text-orange-800"
+                      )}>
+                        {/* <AlertCircle className="h-4 w-4"/> */}
+                        <AlertDescription>
                             <span className="font-medium">Note:</span> Once rejected, this submission will be hidden from the public leaderboard and the creator will be notified of the rejection reason.
                         </AlertDescription>
                     </Alert>
                 </div>
 
                 <DialogFooter className="gap-3 pt-6 border-t mt-6">
-                <Button
+                <button
                         onClick={handleConfirm}
                         disabled={isConfirmDisabled() || isLoading}
-                        className="bg-[#D9C0FF61] text-[#7F39EC] text-md rounded-full py-6 flex-1 sm:flex-none"
+                        className={cn(
+                            "w-full text-md rounded-full flex-1 sm:flex-none",
+                            isDark
+                              ? "bg-[#7F39EC] py-3 text-white"
+                              : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                          )}
                     >
                         {isLoading ? (
                             <>
@@ -332,16 +398,21 @@ export default function RejectionReasonModal({
                                 Reject Submission
                             </>
                         )}
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       
                         onClick={handleClose}
-                        className="bg-[#FF323224] text-[#E50000] rounded-full py-6 text-md flex-1 sm:flex-none"
+
                         disabled={isLoading}
-                        
+                        className={cn(
+                            "w-full text-md rounded-full flex-1 sm:flex-none",
+                            isDark
+                              ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                              : "bg-[#FF323224] text-[#E50000] py-4"
+                          )}
                     >
                         Cancel
-                    </Button>
+                    </button>
                   
                 </DialogFooter>
             </DialogContent>

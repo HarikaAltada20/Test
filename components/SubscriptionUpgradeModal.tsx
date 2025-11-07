@@ -60,6 +60,8 @@ export function SubscriptionUpgradeModal({
   const [isProcessing, setIsProcessing] = useState(false);
   const [scheduledDate, setScheduledDate] = useState<string>("");
   const pathname = usePathname();
+  const [mode, setMode] = useState<"light" | "dark">("light");
+  const isDark = mode === "dark";
 
   const isUpgrade = targetPlan.price > currentPlan.price;
   const priceDifference = targetPlan.price - currentPlan.price;
@@ -68,6 +70,34 @@ export function SubscriptionUpgradeModal({
   // Calculate next billing date (approximate - 30 days from now)
   const nextBillingDate = new Date();
   nextBillingDate.setDate(nextBillingDate.getDate() + 30);
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -185,18 +215,20 @@ export function SubscriptionUpgradeModal({
     return differences;
   };
 
-  // 👇 conditional color based on route
+  // 👇 conditional color based on route and dark mode
   const dialogBg =
-    pathname === "/pricing"
-      ? "bg-[#000825] border-purple-600 text-white shadow-lg shadow-purple-200"
+    pathname === "/pricing" || isDark
+      ? "bg-[#06021D] border-gray-600 text-white"
       : "bg-white border-gray-200 text-black";
 
+
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
       <DialogContent
         className={`max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto ${dialogBg} ${
-            pathname === "/pricing" ? "pricing-scroll" : ""
-          }`}
+          pathname === "/pricing" || isDark ? "pricing-scroll" : ""
+        }`}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
@@ -209,7 +241,9 @@ export function SubscriptionUpgradeModal({
           </DialogTitle>
           <DialogDescription
             className={`text-sm sm:text-base ${
-              pathname === "/pricing" ? "text-white" : "text-gray-600"
+              pathname === "/pricing" || isDark || isDark
+                ? "text-white"
+                : "text-gray-600"
             }`}
           >
             Choose how you'd like to {isUpgrade ? "upgrade" : "downgrade"} from{" "}
@@ -225,7 +259,11 @@ export function SubscriptionUpgradeModal({
           {/* Plan Comparison */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             {/* Current Plan */}
-            <div className="border rounded-2xl border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]">
+            <div className={`border rounded-2xl ${
+              pathname === "/pricing" || isDark
+                ? "border-gray-600 text-white bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
+                : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
+            }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div
@@ -248,11 +286,13 @@ export function SubscriptionUpgradeModal({
               <CardContent>
                 <div className="text-xl sm:text-2xl font-bold">
                   {formatCurrencyFromCents(currentPlan.price)}
-                  <span className={`text-sm font-normal ${
-                    pathname === "/pricing"
-                      ? "text-white"
-                      : "text-gray-600"
-                  }`}>
+                  <span
+                    className={`text-sm font-normal ${
+                      pathname === "/pricing" || isDark
+                        ? "text-white"
+                        : "text-gray-600"
+                    }`}
+                  >
                     /month
                   </span>
                 </div>
@@ -260,7 +300,12 @@ export function SubscriptionUpgradeModal({
             </div>
 
             {/* Target Plan */}
-            <div className="border rounded-2xl border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]">
+            <div
+             className={`border rounded-2xl ${
+              pathname === "/pricing" || isDark
+                ? "border-gray-600 text-white bg-[linear-gradient(180deg,rgba(201,167,255,0.1225)_2%,rgba(201,167,255,0.03)_100%)]"
+                : "border-gray-300 bg-[linear-gradient(180deg,rgba(127,57,236,0.1225)_2%,rgba(127,57,236,0.03)_100%)]"
+            }`}>
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <div
@@ -281,20 +326,24 @@ export function SubscriptionUpgradeModal({
               <CardContent>
                 <div className="text-xl sm:text-2xl font-bold text-green-600">
                   {formatCurrencyFromCents(targetPlan.price)}
-                  <span className={`text-sm font-normal ${
-                    pathname === "/pricing"
-                      ? "text-white"
-                      : "text-gray-600"
-                  }`}>
+                  <span
+                    className={`text-sm font-normal ${
+                      pathname === "/pricing" || isDark
+                        ? "text-white"
+                        : "text-gray-600"
+                    }`}
+                  >
                     /month
                   </span>
                 </div>
                 {priceDifference !== 0 && (
-                  <div className={`text-sm ${
-                    pathname === "/pricing"
-                      ? "text-white"
-                      : "text-gray-600"
-                  } mt-1`}>
+                  <div
+                    className={`text-sm ${
+                      pathname === "/pricing" || isDark
+                        ? "text-white"
+                        : "text-gray-600"
+                    } mt-1`}
+                  >
                     {priceDifference > 0 ? "+" : ""}
                     {formatCurrencyFromCents(priceDifference)} difference
                   </div>
@@ -360,8 +409,8 @@ export function SubscriptionUpgradeModal({
                 {upgradeType === "scheduled" && (
                   <Alert
                     className={`ml-2 ${
-                      pathname === "/pricing"
-                        ? "bg-[#B16FF43D] border-2 border-[#7F39EC] text-white"
+                      pathname === "/pricing" || isDark
+                        ? "bg-[#B16FF43D] border text-white"
                         : "bg-white text-black border border-gray-200"
                     }`}
                   >
@@ -427,8 +476,8 @@ export function SubscriptionUpgradeModal({
                 {upgradeType === "immediate" && (
                   <Alert
                     className={`ml-2 ${
-                      pathname === "/pricing"
-                        ? "bg-[#B16FF43D] border-2 border-[#7F39EC] text-white"
+                      pathname === "/pricing" || isDark
+                        ? "bg-[#B16FF43D] text-white"
                         : "bg-white text-black border border-gray-200"
                     }`}
                   >
@@ -535,11 +584,11 @@ export function SubscriptionUpgradeModal({
             {/* <CheckCircle2
                className={`h-4 w-4 ${
                 isUpgrade ? "text-green-600" : "text-[#7F39EC]"
-              } ${pathname === "/pricing" ? "text-white" : "text-black"}`}
+              } ${pathname === "/pricing" || isDark ? "text-white" : "text-black"}`}
             /> */}
             <AlertDescription
               className={`${isUpgrade ? "text-green-800" : "text-black"} ${
-                pathname === "/pricing" ? "text-white" : "text-black"
+                pathname === "/pricing" || isDark ? "text-white" : "text-black"
               }`}
             >
               {upgradeType === "scheduled"
@@ -562,8 +611,8 @@ export function SubscriptionUpgradeModal({
             loadingText="Processing..."
             className={`w-full py-6 rounded-full text-md 
                 ${
-                  pathname === "/pricing"
-                    ? "bg-[#7F39EC] text-white hover:bg-[#6A29D9]" 
+                  pathname === "/pricing" || isDark
+                    ? "bg-[#7F39EC] text-white hover:bg-[#6A29D9]"
                     : "bg-[#D9C0FF61] text-[#7F39EC] hover:bg-[#D9C0FF61]"
                 }`}
           >
@@ -586,9 +635,9 @@ export function SubscriptionUpgradeModal({
             disabled={isProcessing}
             className={`py-6 rounded-full text-md 
                 ${
-                  pathname === "/pricing"
-                    ? "text-md border-2 border-red-500 text-red-500 bg-[#FF323224]" 
-                    : "bg-[#FF323224] text-[#E50000]" 
+                  pathname === "/pricing" || isDark
+                    ? "text-md border-2 border-red-500 text-red-500 bg-[#06021D]"
+                    : "bg-[#FF323224] text-[#E50000]"
                 }`}
           >
             Cancel

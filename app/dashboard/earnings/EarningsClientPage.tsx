@@ -71,7 +71,10 @@ import {
   WithdrawalRequest,
   PayoutMethodDetails,
 } from "@/types/earnings"; // Centralized types
-import { formatCurrencyFromCents, formatErrorWithCurrency } from "@/lib/currency-utils";
+import {
+  formatCurrencyFromCents,
+  formatErrorWithCurrency,
+} from "@/lib/currency-utils";
 import { MIN_WITHDRAWAL_AMOUNT } from "@/constants/subscriptionPlans";
 import { toast } from "sonner"; // Import toast
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -79,6 +82,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
+import { cn } from "@/lib/utils";
 import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
 
 const formatCoins = (coins: number | bigint = 0): string => {
@@ -181,12 +185,39 @@ export default function EarningsClientPage({
 
   // Wallet validation states
   const [isValidatingWallet, setIsValidatingWallet] = useState<boolean>(false);
-  const [walletValidationStatus, setWalletValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
-  const [walletValidationError, setWalletValidationError] = useState<string>('');
+  const [walletValidationStatus, setWalletValidationStatus] = useState<
+    "idle" | "validating" | "valid" | "invalid"
+  >("idle");
+  const [walletValidationError, setWalletValidationError] =
+    useState<string>("");
 
   // Coupon/code redemption
   const [redeemCode, setRedeemCode] = useState<string>("");
   const [isRedeeming, setIsRedeeming] = useState<boolean>(false);
+
+  const getInitialMode = (): "light" | "dark" => {
+    if (typeof document === "undefined") return "light";
+    const dataMode = document
+      .querySelector("[data-mode]")
+      ?.getAttribute("data-mode");
+    if (dataMode === "dark" || dataMode === "light") {
+      return dataMode;
+    }
+    if (document.documentElement.classList.contains("dark")) {
+      return "dark";
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    ) {
+      return "dark";
+    }
+    return "light";
+  };
+
+  const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
+  const [isCompact, setIsCompact] = useState<boolean>(false);
 
   // Pagination for cash transactions
   const {
@@ -202,21 +233,68 @@ export default function EarningsClientPage({
     initialLimit: 25,
   });
 
+  // Read mode from data attribute and html class, respond to changes
+  useEffect(() => {
+    const readMode = (): "light" | "dark" => {
+      const el = document.querySelector("[data-mode]");
+      const attr = el?.getAttribute("data-mode");
+      if (attr === "dark" || attr === "light") return attr;
+      return document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light";
+    };
+
+    const readCompact = (): boolean => {
+      const compactElement = document.querySelector("[data-compact]");
+      return compactElement?.getAttribute("data-compact") === "true";
+    };
+
+    // Set immediately on mount to avoid any flicker
+    setMode(readMode());
+    setIsCompact(readCompact());
+
+    // Watch for changes on either data-mode or html class
+    const observer = new MutationObserver(() => {
+      setMode(readMode());
+      setIsCompact(readCompact());
+    });
+    const dataModeTarget = document.querySelector("[data-mode]");
+    if (dataModeTarget) {
+      observer.observe(dataModeTarget, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const isDark = mode === "dark";
+
   const getPayoutMethodSummary = (method: PayoutMethod): string => {
     switch (method.method_type) {
       case "crypto":
-        return `${method.details?.network?.toUpperCase() || "Crypto"
-          } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${method.friendly_name || "Crypto"
-          })`;
+        return `${
+          method.details?.network?.toUpperCase() || "Crypto"
+        } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${
+          method.friendly_name || "Crypto"
+        })`;
       case "upi":
-        return `UPI: ${method.details?.upi_id || "N/A"} (${method.friendly_name || "UPI"
-          })`;
+        return `UPI: ${method.details?.upi_id || "N/A"} (${
+          method.friendly_name || "UPI"
+        })`;
       case "bank_transfer":
-        return `Bank: ...${method.details?.account_number?.slice(-4) || "XXXX"
-          } (${method.friendly_name || "Bank"})`;
+        return `Bank: ...${
+          method.details?.account_number?.slice(-4) || "XXXX"
+        } (${method.friendly_name || "Bank"})`;
       case "phantom":
-        return `Phantom: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${method.friendly_name || "Phantom Wallet"
-          })`;
+        return `Phantom: ...${
+          method.details?.wallet_address?.slice(-4) || "XXXX"
+        } (${method.friendly_name || "Phantom Wallet"})`;
       default:
         const exhaustiveCheck: never = method.method_type;
         return "Unknown Method Type";
@@ -262,13 +340,13 @@ export default function EarningsClientPage({
   // Wallet format validation functions
   const validateWalletAddress = async () => {
     if (!cryptoAddress.trim()) {
-      setWalletValidationStatus('idle');
+      setWalletValidationStatus("idle");
       return;
     }
 
     setIsValidatingWallet(true);
-    setWalletValidationStatus('validating');
-    setWalletValidationError('');
+    setWalletValidationStatus("validating");
+    setWalletValidationError("");
 
     try {
       let isValid = false;
@@ -277,27 +355,33 @@ export default function EarningsClientPage({
         // BNB Smart Chain (BEP20) validation: 0x + 40 hex characters
         isValid = /^0x[a-fA-F0-9]{40}$/.test(cryptoAddress.trim());
         if (!isValid) {
-          setWalletValidationError('Invalid BNB Smart Chain (BEP20) address format. Must start with 0x and be 42 characters total.');
+          setWalletValidationError(
+            "Invalid BNB Smart Chain (BEP20) address format. Must start with 0x and be 42 characters total."
+          );
         }
       } else if (cryptoNetwork === "SOLANA") {
         // Solana validation: 32-44 base58 characters
         isValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cryptoAddress.trim());
         if (!isValid) {
-          setWalletValidationError('Invalid Solana wallet address format. Must be 32-44 base58 characters.');
+          setWalletValidationError(
+            "Invalid Solana wallet address format. Must be 32-44 base58 characters."
+          );
         }
       }
 
       if (isValid) {
-        setWalletValidationStatus('valid');
-        toast.success('Wallet address format is correct!');
+        setWalletValidationStatus("valid");
+        toast.success("Wallet address format is correct!");
       } else {
-        setWalletValidationStatus('invalid');
-        toast.error('Invalid wallet address format');
+        setWalletValidationStatus("invalid");
+        toast.error("Invalid wallet address format");
       }
     } catch (error: any) {
-      setWalletValidationStatus('invalid');
-      setWalletValidationError(error.message || 'Failed to validate wallet address');
-      toast.error('Wallet validation failed');
+      setWalletValidationStatus("invalid");
+      setWalletValidationError(
+        error.message || "Failed to validate wallet address"
+      );
+      toast.error("Wallet validation failed");
     } finally {
       setIsValidatingWallet(false);
     }
@@ -320,7 +404,7 @@ export default function EarningsClientPage({
         toast.error("Crypto wallet address and network are required.");
         return;
       }
-      if (walletValidationStatus !== 'valid') {
+      if (walletValidationStatus !== "valid") {
         toast.error("Please validate your wallet address first.");
         return;
       }
@@ -363,7 +447,9 @@ export default function EarningsClientPage({
       details = bankDetails;
     } else if (selectedPayoutType === "phantom") {
       // For Phantom Wallet, we'll use a separate form component
-      toast.error("Please use the dedicated Phantom Wallet form to add your wallet.");
+      toast.error(
+        "Please use the dedicated Phantom Wallet form to add your wallet."
+      );
       return;
     } else {
       const exhaustiveCheck: never = selectedPayoutType;
@@ -406,7 +492,8 @@ export default function EarningsClientPage({
           }
         });
         toast.success(
-          `Payout method ${currentPayoutMethod ? "updated" : "added"
+          `Payout method ${
+            currentPayoutMethod ? "updated" : "added"
           } successfully!`
         );
         setIsPayoutModalOpen(false);
@@ -487,8 +574,8 @@ export default function EarningsClientPage({
     setCryptoAddress("");
     setCryptoNetwork("BNB_SMART_CHAIN");
     setCryptoCurrency("BNB");
-    setWalletValidationStatus('idle');
-    setWalletValidationError('');
+    setWalletValidationStatus("idle");
+    setWalletValidationError("");
     setUpiId("");
     setBankAccountHolder("");
     setBankAccountNumber("");
@@ -649,7 +736,9 @@ export default function EarningsClientPage({
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
-      const formattedError = formatErrorWithCurrency(rpcError.message || "Unknown error");
+      const formattedError = formatErrorWithCurrency(
+        rpcError.message || "Unknown error"
+      );
       toast.error(`Withdrawal request failed: ${formattedError}`);
     } else if (
       rpcResponse &&
@@ -658,9 +747,10 @@ export default function EarningsClientPage({
     ) {
       const createdRequest = rpcResponse[0] as WithdrawalRequest;
       toast.success(
-        `Withdrawal request for ${activeTabModal === "cash"
-          ? formatCurrencyFromCents(createdRequest.amount)
-          : formatCoins(createdRequest.amount) + " coins"
+        `Withdrawal request for ${
+          activeTabModal === "cash"
+            ? formatCurrencyFromCents(createdRequest.amount)
+            : formatCoins(createdRequest.amount) + " coins"
         } submitted successfully!`
       );
       setWithdrawalRequests((prev) => [
@@ -678,10 +768,10 @@ export default function EarningsClientPage({
         setProfile((prev) =>
           prev
             ? {
-              ...prev,
-              withdrawable_balance:
-                (prev.withdrawable_balance || 0) - createdRequest.amount,
-            }
+                ...prev,
+                withdrawable_balance:
+                  (prev.withdrawable_balance || 0) - createdRequest.amount,
+              }
             : null
         );
       } else {
@@ -741,10 +831,10 @@ export default function EarningsClientPage({
         setProfile((prev) =>
           prev
             ? {
-              ...prev,
-              withdrawable_balance:
-                (prev.withdrawable_balance || 0) + amountToRestore,
-            }
+                ...prev,
+                withdrawable_balance:
+                  (prev.withdrawable_balance || 0) + amountToRestore,
+              }
             : null
         );
       } else {
@@ -757,16 +847,16 @@ export default function EarningsClientPage({
         prevReqs.map((req) =>
           req.id === requestId
             ? {
-              ...req,
-              status: "cancelled",
-              payout_method_summary: getPayoutMethodSummaryById(
-                req.payout_method_id === undefined
-                  ? null
-                  : req.payout_method_id
-              ),
-              cancelled_at: new Date().toISOString(),
-              cancellation_reason: "Cancelled by user",
-            }
+                ...req,
+                status: "cancelled",
+                payout_method_summary: getPayoutMethodSummaryById(
+                  req.payout_method_id === undefined
+                    ? null
+                    : req.payout_method_id
+                ),
+                cancelled_at: new Date().toISOString(),
+                cancellation_reason: "Cancelled by user",
+              }
             : req
         )
       );
@@ -788,7 +878,8 @@ export default function EarningsClientPage({
     if (type === "crypto") return <CryptoWalletIcon className="mr-2 h-5 w-5" />;
     if (type === "bank_transfer") return <Landmark className="mr-2 h-5 w-5" />;
     if (type === "upi") return <Sparkles className="mr-2 h-5 w-5" />;
-    if (type === "phantom") return <Wallet className="mr-2 h-5 w-5 text-purple-600" />;
+    if (type === "phantom")
+      return <Wallet className="mr-2 h-5 w-5 text-purple-600" />;
     return <CreditCard className="mr-2 h-5 w-5" />;
   };
 
@@ -827,6 +918,8 @@ export default function EarningsClientPage({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         className="md:mx-16 mt-10 mb-10"
+        isDark={isDark}
+        light={!isDark}
       />
       {/* <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
                 <TabsList className="grid w-full grid-cols-2 mb-6">
@@ -842,16 +935,33 @@ export default function EarningsClientPage({
       <TabContent activeTab={activeTab}>
         <TabPanel value="cash" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Total Cash Won</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.total_money_won)}
                   </p>
                   <p className="text-md">Lifetime cash earnings</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <DollarSign className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -866,9 +976,19 @@ export default function EarningsClientPage({
                                 <p className="text-xs text-muted-foreground">Lifetime cash earnings</p>
                             </CardContent>
                         </Card> */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">
                     Available for Withdrawal
                   </p>
@@ -880,7 +1000,14 @@ export default function EarningsClientPage({
                     {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}
                   </p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <ArrowDownToLine className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -895,16 +1022,33 @@ export default function EarningsClientPage({
                                 <p className="text-xs text-muted-foreground">Minimum withdrawal: {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}</p>
                             </CardContent>
                         </Card> */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Cash Contests Won</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_won}
                   </p>
                   <p className="text-md">Total cash contest victories</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Trophy className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -922,12 +1066,24 @@ export default function EarningsClientPage({
           </div>
 
           {/* Code Redemption */}
-          <div className="mb-6 p-4 border bg-white rounded-md">
+          <div
+            className={cn(
+              "mb-6 p-4 rounded-md",
+              isDark ? "bg-[#170337]" : "border bg-white"
+            )}
+          >
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
               <div className="flex-1 space-y-1">
-                <Label className="text-md" htmlFor="redeemCode">Redeem a Code</Label>
+                <Label className="text-md" htmlFor="redeemCode">
+                  Redeem a Code
+                </Label>
                 <Input
                   id="redeemCode"
+                  className={cn(
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 text-white"
+                      : "bg-white text-black"
+                  )}
                   placeholder="Enter coupon or promo code"
                   value={redeemCode}
                   onChange={(e) => setRedeemCode(e.target.value)}
@@ -964,11 +1120,11 @@ export default function EarningsClientPage({
                         setProfile((prev) =>
                           prev
                             ? {
-                              ...prev,
-                              withdrawable_balance:
-                                (prev.withdrawable_balance || 0) +
-                                data.cash_cents,
-                            }
+                                ...prev,
+                                withdrawable_balance:
+                                  (prev.withdrawable_balance || 0) +
+                                  data.cash_cents,
+                              }
                             : prev
                         );
                         creditedParts.push(
@@ -981,12 +1137,12 @@ export default function EarningsClientPage({
                         setUserData((prev) =>
                           prev
                             ? {
-                              ...prev,
-                              coins: (prev.coins || 0) + data.coins,
-                              total_lifetime_coins_earned:
-                                (prev.total_lifetime_coins_earned || 0) +
-                                data.coins,
-                            }
+                                ...prev,
+                                coins: (prev.coins || 0) + data.coins,
+                                total_lifetime_coins_earned:
+                                  (prev.total_lifetime_coins_earned || 0) +
+                                  data.coins,
+                              }
                             : prev
                         );
                         creditedParts.push(`${data.coins} coins`);
@@ -1050,12 +1206,16 @@ export default function EarningsClientPage({
                 !profile || isLoading
                   ? "Loading account..."
                   : balance < MIN_WITHDRAWAL_AMOUNT
-                    ? `Minimum withdrawal: ${formatCurrencyFromCents(
+                  ? `Minimum withdrawal: ${formatCurrencyFromCents(
                       MIN_WITHDRAWAL_AMOUNT
                     )}`
-                    : "Withdraw Balance";
+                  : "Withdraw Balance";
               return (
-                <Button size="lg" className="bg-[#6C43D0] py-3 flex-1 text-md text-white" disabled>
+                <Button
+                  size="lg"
+                  className="bg-[#6C43D0] py-3 flex-1 text-md text-white"
+                  disabled
+                >
                   <ArrowDownToLine className="h-4 w-4 mr-2" /> {reason}
                 </Button>
               );
@@ -1081,7 +1241,12 @@ export default function EarningsClientPage({
               </p>
             )}
 
-          <div className="bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Transaction History</CardTitle>
             </CardHeader>
@@ -1093,7 +1258,14 @@ export default function EarningsClientPage({
               )}
 
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1142,25 +1314,34 @@ export default function EarningsClientPage({
                           <Badge
                             variant={
                               transaction.status === "completed" ||
-                                transaction.status === "credited" ||
-                                transaction.status === "success"
+                              transaction.status === "credited" ||
+                              transaction.status === "success"
                                 ? "default"
                                 : transaction.status === "pending"
-                                  ? "secondary"
-                                  : transaction.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
+                                ? "secondary"
+                                : transaction.status === "failed"
+                                ? "destructive"
+                                : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
-                              ${transaction.status === "completed" ||
+                              ${
+                                transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                ? "bg-green-100 text-green-700 border-green-300"
-                                : transaction.status === "pending"
-                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                    ? "bg-red-100 text-red-700 border-red-300"
-                                    : "bg-gray-100 text-gray-700 border-gray-300"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
                           >
@@ -1188,19 +1369,32 @@ export default function EarningsClientPage({
                   onPageChange={setCashPage}
                   onLimitChange={setCashLimit}
                   loading={cashTransactionsLoading}
+                  isDark={isDark}
                 />
               )}
             </CardContent>
           </div>
 
           {/* Cash Withdrawal Requests Section - Moved inside cash tab */}
-          <div className="mt-8 bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Withdrawal Request History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Amount</TableHead>
@@ -1226,10 +1420,10 @@ export default function EarningsClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                  ? "secondary"
-                                  : req.status === "cancelled"
-                                    ? "outline"
-                                    : "destructive"
+                                ? "secondary"
+                                : req.status === "cancelled"
+                                ? "outline"
+                                : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1282,16 +1476,33 @@ export default function EarningsClientPage({
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Total Coins Earned</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.total_lifetime_coins_earned)}
                   </p>
                   <p className="text-md">Lifetime coin earnings</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Coins className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1312,16 +1523,33 @@ export default function EarningsClientPage({
                 </p>
               </CardContent>
             </Card> */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Coins Available</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.coins)}
                   </p>
                   <p className="text-md">Your current coin balance</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <CryptoWalletIcon className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1343,16 +1571,31 @@ export default function EarningsClientPage({
                 </p>
               </CardContent>
             </Card> */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337]" : "bg-white"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div
+                  className={cn(
+                    "flex-1 space-y-3",
+                    isDark ? "text-white" : "text-black"
+                  )}
+                >
                   <p className="text-lg font-medium">Total Referrals</p>
-                  <p className="text-xl font-bold">
-                    {totalReferrals}
-                  </p>
+                  <p className="text-xl font-bold">{totalReferrals}</p>
                   <p className="text-md">Successful referrals</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Users className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1382,13 +1625,25 @@ export default function EarningsClientPage({
             </Button>
           </div>
 
-          <div className="bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Transaction History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1419,15 +1674,35 @@ export default function EarningsClientPage({
                           <Badge
                             variant={
                               tx.status === "completed" ||
-                                tx.status === "credited"
+                              tx.status === "credited"
                                 ? "default"
                                 : tx.status === "pending"
-                                  ? "secondary"
-                                  : tx.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
+                                ? "secondary"
+                                : tx.status === "failed"
+                                ? "destructive"
+                                : "outline"
                             }
-                            className="capitalize"
+                            className={`capitalize px-3 py-1 rounded-full text-sm font-medium
+                              ${
+                                tx.status === "completed" ||
+                                tx.status === "credited" ||
+                                tx.status === "success"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
+                                  : tx.status === "pending"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  : tx.status === "failed"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                              }
+                            `}
                           >
                             {tx.status?.replace(/_/g, " ") || "N/A"}
                           </Badge>
@@ -1453,13 +1728,25 @@ export default function EarningsClientPage({
           </div>
 
           {/* Coin Redemption Requests Section - Stays inside coin tab */}
-          <div className="mt-8 bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white"
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Redemption History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Coins</TableHead>
@@ -1480,7 +1767,7 @@ export default function EarningsClientPage({
                             ? typeof req.redeemed_item_description === "string"
                               ? req.redeemed_item_description
                               : (req.redeemed_item_description as any)?.name ||
-                              JSON.stringify(req.redeemed_item_description)
+                                JSON.stringify(req.redeemed_item_description)
                             : "N/A"}
                         </TableCell>
                         <TableCell className="max-w-xs truncate">
@@ -1493,10 +1780,10 @@ export default function EarningsClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                  ? "secondary"
-                                  : req.status === "cancelled"
-                                    ? "outline"
-                                    : "destructive"
+                                ? "secondary"
+                                : req.status === "cancelled"
+                                ? "outline"
+                                : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1552,22 +1839,27 @@ export default function EarningsClientPage({
           setIsPayoutModalOpen(isOpen);
           if (!isOpen) resetPayoutForm();
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[625px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription
+              className={cn(isDark ? "text-white" : "text-gray-800")}
+            >
               Manage your payout methods. Your default method will be
               pre-selected for withdrawals.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="py-4 space-y-4 text-gray-700">
             {/* Country selector controls which payout methods show */}
-            <div>
+            <div className={cn(isDark ? "text-white" : "text-gray-800")}>
               <Label htmlFor="payoutCountry">Country</Label>
               <Select
                 value={payoutCountry}
@@ -1578,12 +1870,16 @@ export default function EarningsClientPage({
                 }}
                 disabled={isLoading}
               >
-                <SelectTrigger id="payoutCountry">
+                <SelectTrigger id="payoutCountry" className={cn("border",isDark ? "border-gray-600" : "border-gray-300")}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="IN">India</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
+                <SelectContent isDark={isDark}>
+                  <SelectItem isDark={isDark} value="IN">
+                    India
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="OTHER">
+                    Other
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1597,30 +1893,65 @@ export default function EarningsClientPage({
             >
               {payoutCountry === "IN" ? (
                 <TabsList className="grid w-full grid-cols-4 gap-2">
-                  <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="crypto">Crypto</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="phantom">Phantom Wallet</TabsTrigger>
+                  <TabsTrigger value="upi"
+                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}>
+                    UPI
+                  </TabsTrigger>
+                  <TabsTrigger
+                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}
+                    value="bank_transfer"
+                  >
+                    Bank Transfer
+                  </TabsTrigger>
+                  <TabsTrigger
+                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}
+                    value="crypto"
+                  >
+                    Crypto
+                  </TabsTrigger>
+                  <TabsTrigger
+                    className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}
+                    value="phantom"
+                  >
+                    Phantom Wallet
+                  </TabsTrigger>
                 </TabsList>
               ) : (
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="crypto">Crypto</TabsTrigger>
-                  <TabsTrigger value="phantom">Phantom Wallet</TabsTrigger>
+                  <TabsTrigger value="crypto"  className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}>Crypto</TabsTrigger>
+                  <TabsTrigger value="phantom"  className={cn("border",isDark ? "border-gray-400 text-gray-300" : "border-gray-500 text-gray-800")}>Phantom Wallet</TabsTrigger>
                 </TabsList>
               )}
               {/* Content for each payout type */}
               <TabsContent value="crypto" className="space-y-2">
-                <div className="space-y-1">
-                  <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
+                  <Label htmlFor="payoutFriendlyNameCrypto">
+                    Friendly Name
+                  </Label>
                   <Input
                     id="payoutFriendlyNameCrypto"
                     value={payoutFriendlyName}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., My Binance USDT"
                     disabled={isLoading}
                   />
                 </div>
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="cryptoNetwork">Network</Label>
                   <Select
                     value={cryptoNetwork}
@@ -1635,50 +1966,81 @@ export default function EarningsClientPage({
                     }}
                     disabled={isLoading}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger
+                      className={cn(
+                        isDark ? "border-gray-600" : "border-slate-300"
+                      )}
+                    >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BNB_SMART_CHAIN">
+                    <SelectContent isDark={isDark}>
+                      <SelectItem value="BNB_SMART_CHAIN" isDark={isDark}>
                         BNB Smart Chain (BEP20)
                       </SelectItem>
-                      <SelectItem value="SOLANA">
+                      <SelectItem isDark={isDark} value="SOLANA">
                         Solana
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="cryptoCurrency">Cryptocurrency</Label>
                   <Select
                     value={cryptoCurrency}
                     onValueChange={(val) => setCryptoCurrency(val)}
                     disabled={isLoading}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger
+                      className={cn(
+                        isDark ? "border-gray-600" : "border-slate-300"
+                      )}
+                    >
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent isDark={isDark}>
                       {cryptoNetwork === "BNB_SMART_CHAIN" ? (
                         <>
-                          <SelectItem value="BNB">BNB</SelectItem>
-                          <SelectItem value="USDT">USDT (BEP20)</SelectItem>
+                          <SelectItem isDark={isDark} value="BNB">
+                            BNB
+                          </SelectItem>
+                          <SelectItem isDark={isDark} value="USDT">
+                            USDT (BEP20)
+                          </SelectItem>
                         </>
                       ) : (
                         <>
-                          <SelectItem value="SOL">SOL</SelectItem>
-                          <SelectItem value="USDT">USDT</SelectItem>
-                          <SelectItem value="USDC">USDC</SelectItem>
+                          <SelectItem isDark={isDark} value="SOL">
+                            SOL
+                          </SelectItem>
+                          <SelectItem isDark={isDark} value="USDT">
+                            USDT
+                          </SelectItem>
+                          <SelectItem isDark={isDark} value="USDC">
+                            USDC
+                          </SelectItem>
                         </>
                       )}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
+                <div
+                  className="rounded-md border p-2 text-xs border-red-500/40 bg-red-500/10 text-red-500"                  
+                >
                   {cryptoNetwork === "BNB_SMART_CHAIN" ? (
-                    <>We only support BNB Smart Chain (BEP20). Do not enter ERC20/other chain addresses. Wrong address = funds lost.</>
+                    <>
+                      We only support BNB Smart Chain (BEP20). Do not enter
+                      ERC20/other chain addresses. Wrong address = funds lost.
+                    </>
                   ) : (
-                    <>We only support Solana network. Do not enter other chain addresses. Wrong address = funds lost.</>
+                    <>
+                      We only support Solana network. Do not enter other chain
+                      addresses. Wrong address = funds lost.
+                    </>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
@@ -1686,64 +2048,108 @@ export default function EarningsClientPage({
                   method, you accept responsibility for declaring and paying
                   taxes as per your country's laws.
                 </p>
-                <p className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                  <strong>Note:</strong> We only validate the format of your wallet address.
-                  Please double-check that you've entered the correct address for your selected network,
-                  as sending to the wrong address will result in permanent loss of funds.
+                <p
+                  className={cn(
+                    "text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200",
+                    isDark
+                      ? "border-amber-200 bg-amber-500/10 text-amber-300"
+                      : "border-amber-200 bg-amber-50 text-amber-600"
+                  )}
+                >
+                  <strong>Note:</strong> We only validate the format of your
+                  wallet address. Please double-check that you've entered the
+                  correct address for your selected network, as sending to the
+                  wrong address will result in permanent loss of funds.
                 </p>
-                <div className="space-y-1">
-                  <Label htmlFor="cryptoAddress" className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "space-y-2",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
+                  <Label
+                    htmlFor="cryptoAddress"
+                    className={cn(
+                      "flex items-center gap-2",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     Your Wallet Address
-                    {walletValidationStatus === 'valid' && <CheckCircle className="h-4 w-4 text-green-600" />}
-                    {walletValidationStatus === 'invalid' && <AlertCircle className="h-4 w-4 text-red-600" />}
+                    {walletValidationStatus === "valid" && (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    )}
+                    {walletValidationStatus === "invalid" && (
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                    )}
                   </Label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <Input
                       id="cryptoAddress"
                       value={cryptoAddress}
                       onChange={(e) => {
                         setCryptoAddress(e.target.value);
                         // Reset validation status when address changes
-                        if (walletValidationStatus !== 'idle') {
-                          setWalletValidationStatus('idle');
-                          setWalletValidationError('');
+                        if (walletValidationStatus !== "idle") {
+                          setWalletValidationStatus("idle");
+                          setWalletValidationError("");
                         }
                       }}
                       placeholder={`Enter your ${cryptoCurrency} wallet address`}
                       disabled={isLoading}
-                      className="flex-1"
+                      className={cn(
+                        "flex-1",
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                     <Button
                       type="button"
                       variant="outline"
                       onClick={validateWalletAddress}
-                      disabled={!cryptoAddress.trim() || isValidatingWallet || isLoading}
-                      className="px-4"
+                      disabled={
+                        !cryptoAddress.trim() || isValidatingWallet || isLoading
+                      }
+                      className={cn(
+                        "text-md text-white",
+                        isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                      )}
                     >
                       {isValidatingWallet ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        'Validate'
+                        "Validate"
                       )}
                     </Button>
                   </div>
 
-                  {walletValidationStatus === 'validating' && (
-                    <p className="text-sm text-blue-600">Validating wallet address...</p>
+                  {walletValidationStatus === "validating" && (
+                    <p className="text-sm text-blue-600">
+                      Validating wallet address...
+                    </p>
                   )}
 
-                  {walletValidationStatus === 'invalid' && (
-                    <p className="text-sm text-red-600">{walletValidationError}</p>
+                  {walletValidationStatus === "invalid" && (
+                    <p className="text-sm text-red-600">
+                      {walletValidationError}
+                    </p>
                   )}
 
-                  {walletValidationStatus === 'valid' && (
-                    <p className="text-sm text-green-600">Wallet address format is correct!</p>
+                  {walletValidationStatus === "valid" && (
+                    <p className="text-sm text-green-600">
+                      Wallet address format is correct!
+                    </p>
                   )}
                 </div>
               </TabsContent>
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameBank"
@@ -1751,10 +2157,20 @@ export default function EarningsClientPage({
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., Primary Savings"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1763,33 +2179,68 @@ export default function EarningsClientPage({
                       value={bankAccountHolder}
                       onChange={(e) => setBankAccountHolder(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
                       value={bankIfscCode}
                       onChange={(e) => setBankIfscCode(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div
+                    className={cn(
+                      "space-y-1",
+                      isDark ? "text-white" : "text-gray-800"
+                    )}
+                  >
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
                 </div>
@@ -1802,17 +2253,32 @@ export default function EarningsClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-2">
-
-                <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
-                <Input
-                  id="payoutFriendlyNameUpi"
-                  value={payoutFriendlyName}
-                  onChange={(e) => setPayoutFriendlyName(e.target.value)}
-                  placeholder="e.g., My UPI"
-                  disabled={isLoading}
-                />
-
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
+                  <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
+                  <Input
+                    id="payoutFriendlyNameUpi"
+                    value={payoutFriendlyName}
+                    onChange={(e) => setPayoutFriendlyName(e.target.value)}
+                    placeholder="e.g., My UPI"
+                    disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
+                  />
+                </div>
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiHolder">Account Holder Name</Label>
                   <Input
                     id="upiHolder"
@@ -1820,9 +2286,19 @@ export default function EarningsClientPage({
                     onChange={(e) => setBankAccountHolder(e.target.value)}
                     placeholder="e.g., Rahul Kumar"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiId">UPI ID</Label>
                   <Input
                     id="upiId"
@@ -1830,6 +2306,11 @@ export default function EarningsClientPage({
                     onChange={(e) => setUpiId(e.target.value)}
                     placeholder="yourname@bank"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -1842,9 +2323,17 @@ export default function EarningsClientPage({
               <TabsContent value="phantom" className="space-y-4">
                 <div className="text-center py-8">
                   <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Phantom Wallet</h3>
+                  <h3
+                    className={cn(
+                      "text-lg font-semibold mb-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
+                    Phantom Wallet
+                  </h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Add your Phantom Wallet to receive USDC or USDT payouts via Solana network directly to your wallet.
+                    Add your Phantom Wallet to receive USDC or USDT payouts via
+                    Solana network directly to your wallet.
                   </p>
                   <Button
                     onClick={() => {
@@ -1863,17 +2352,34 @@ export default function EarningsClientPage({
           </div>
           <DialogFooter className="sm:justify-between">
             <DialogClose asChild>
-              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <button
+                disabled={isLoading}
+                className={cn(
+                  "w-full text-md rounded-full",
+                  isDark
+                    ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                    : "bg-[#FF323224] text-[#E50000] py-3.5"
+                )}
+              >
                 Cancel
-              </Button>
+              </button>
             </DialogClose>
-            <Button onClick={handleSavePayoutMethod} disabled={isLoading} className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
+            <button
+              onClick={handleSavePayoutMethod}
+              disabled={isLoading}
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "bg-[#7F39EC]  py-3 text-white"
+                  : " bg-[#D9C0FF61]  py-3.5text-[#7F39EC] "
+              )}
+            >
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
-                  ? "Save Changes"
-                  : "Add Method"}
-            </Button>
+                ? "Save Changes"
+                : "Add Method"}
+            </button>
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
@@ -1944,13 +2450,14 @@ export default function EarningsClientPage({
           if (isSubmittingWithdrawal && isOpen) return;
           setIsWithdrawModalOpen(isOpen);
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className={cn(isDark ? "text-white" : "text-gray-800")}>
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className={cn(isDark ? "text-white" : "text-gray-800")}>
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
             </DialogDescription>
@@ -1958,7 +2465,7 @@ export default function EarningsClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className="text-lg">
+                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
                   Available:{" "}
                   <span className="font-semibold">
                     {profile
@@ -1966,7 +2473,7 @@ export default function EarningsClientPage({
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
-                <div>
+                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
                   <Label htmlFor="withdrawAmountDollars">
                     Amount to Withdraw (USD)
                   </Label>
@@ -1983,13 +2490,18 @@ export default function EarningsClientPage({
                     step="0.01"
                     placeholder="e.g., 50.00"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className="text-lg">
+                <div className={cn("text-lg", isDark ? "text-white" : "text-gray-800")}>
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
@@ -2006,42 +2518,52 @@ export default function EarningsClientPage({
                     }
                     placeholder="e.g., 1000"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             <div>
-              <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
+              <Label htmlFor="withdrawalUserNotes" className={cn(isDark ? "text-white" : "text-gray-800")}>Notes (Optional)</Label>
               <Input
                 id="withdrawalUserNotes"
                 value={withdrawalUserNotes}
                 onChange={(e) => setWithdrawalUserNotes(e.target.value)}
                 placeholder="Optional notes for your withdrawal request"
                 disabled={isLoading}
+                 className={cn(
+                  isDark
+                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    : "bg-white text-black"
+                )}
               />
             </div>
             <div>
-              <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
+              <Label htmlFor="payoutMethodSelect" className={cn(isDark ? "text-white" : "text-gray-800")}>Select Payout Method</Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
                 onValueChange={setSelectedWithdrawMethodId}
                 disabled={isLoading || payoutMethods.length === 0}
               >
-                <SelectTrigger id="payoutMethodSelect">
+                <SelectTrigger id="payoutMethodSelect" className={cn(isDark ? "border-gray-600" : "border-slate-300")}>
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent isDark={isDark}>
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem key={method.id} value={method.id} isDark={isDark}>
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
@@ -2054,12 +2576,9 @@ export default function EarningsClientPage({
               </p>
             )}
           </div>
+
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline" disabled={isLoading}>
-                Cancel
-              </Button>
-            </DialogClose>
+            <DialogClose asChild></DialogClose>
             <Button
               onClick={handleWithdraw}
               loading={isSubmittingWithdrawal}
@@ -2071,7 +2590,7 @@ export default function EarningsClientPage({
                 (activeTabModal === "cash" &&
                   (!profile ||
                     withdrawAmountDollars * 100 >
-                    (profile.withdrawable_balance || 0))) ||
+                      (profile.withdrawable_balance || 0))) ||
                 (activeTabModal === "coins" &&
                   (!userData ||
                     withdrawAmountCoins > (userData.coins || 0) ||
@@ -2080,51 +2599,71 @@ export default function EarningsClientPage({
                 (activeTabModal === "cash" && !selectedWithdrawMethodId) ||
                 (activeTabModal === "cash" && payoutMethods.length === 0)
               }
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "bg-[#7F39EC] py-3 text-white"
+                  : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+              )}
             >
               Request Withdrawal
             </Button>
+            <button
+              disabled={isLoading}
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "py-2 border border-[#FF5353] text-[#FF5353]"
+                  : "bg-[#FF323224] text-[#E50000] py-2"
+              )}
+            >
+              Cancel
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Phantom Wallet Modal */}
-      <Dialog open={isPhantomModalOpen} onOpenChange={setIsPhantomModalOpen}>
+      <Dialog
+        open={isPhantomModalOpen}
+        onOpenChange={setIsPhantomModalOpen}
+        isdark={isDark}
+      >
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <PhantomPayoutForm
             onSave={async (details) => {
               // Save Phantom Wallet payout method
               setIsLoading(true);
               try {
-                const { error } = await supabase
-                  .from('payout_methods')
-                  .insert({
-                    user_id: authUser.id,
-                    method_type: 'phantom',
-                    details,
-                    is_default: payoutMethods.length === 0, // Set as default if first method
-                    friendly_name: details.friendly_name || 'Phantom Wallet'
-                  });
+                const { error } = await supabase.from("payout_methods").insert({
+                  user_id: authUser.id,
+                  method_type: "phantom",
+                  details,
+                  is_default: payoutMethods.length === 0, // Set as default if first method
+                  friendly_name: details.friendly_name || "Phantom Wallet",
+                });
 
                 if (error) throw error;
 
                 // Refresh payout methods
                 const { data: newMethods } = await supabase
-                  .from('payout_methods')
-                  .select('*')
-                  .eq('user_id', authUser.id)
-                  .order('created_at', { ascending: false });
+                  .from("payout_methods")
+                  .select("*")
+                  .eq("user_id", authUser.id)
+                  .order("created_at", { ascending: false });
 
                 setPayoutMethods(newMethods || []);
                 setIsPhantomModalOpen(false);
-                toast.success('Phantom Wallet added successfully!');
+                toast.success("Phantom Wallet added successfully!");
               } catch (error: any) {
-                toast.error(error.message || 'Failed to add Phantom Wallet');
+                toast.error(error.message || "Failed to add Phantom Wallet");
               } finally {
                 setIsLoading(false);
               }
             }}
             onCancel={() => setIsPhantomModalOpen(false)}
             isLoading={isLoading}
+            isDark={isDark}
           />
         </DialogContent>
       </Dialog>

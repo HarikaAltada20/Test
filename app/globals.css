@@ -3,6 +3,15 @@
 @tailwind utilities;
 @import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
 
+/* Disable transitions for immediate theme changes */
+.no-theme-transition {
+  transition: none !important;
+}
+
+.no-theme-transition * {
+  transition: none !important;
+}
+
 .font-poppins {
   font-family: "Poppins", sans-serif;
 }
@@ -13,7 +22,6 @@ body {
 /* Only affect elements with .pricing-scroll */
 .pricing-scroll::-webkit-scrollbar {
   width: 8px;
-  
 }
 
 .pricing-scroll::-webkit-scrollbar-track {
@@ -21,17 +29,17 @@ body {
 }
 
 .pricing-scroll::-webkit-scrollbar-thumb {
-  background-color: #7F39EC; /* Purple */
+  background-color: rgba(156, 163, 175, 0.5); /* Purple */
   border-radius: 9999px;
 }
 
 .pricing-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: #6A29D9; /* Darker purple */
+  background-color: rgba(156, 163, 175, 0.5); /* Darker purple */
 }
 
 /* For Firefox */
 .pricing-scroll {
-  scrollbar-color: #7F39EC transparent;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
   scrollbar-width: thin;
 }
 
@@ -200,6 +208,9 @@ body {
   background-color: rgba(139, 92, 246, 0.6);
 }
 
+/* Dashboard sidebar dark mode overrides without changing light mode colors */
+/* component-driven dark styles handled via Tailwind in components */
+
 @keyframes spin-slow {
   from {
     transform: rotate(0deg);
@@ -335,7 +346,6 @@ body {
     display: none;
   }
 }
-
 
 @layer base {
   :root {
@@ -475,5 +485,3 @@ body {
     max-width: 950px !important;
   }
 }
-
-

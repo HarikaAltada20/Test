@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { formatCurrencyFromCents } from '@/lib/currency-utils';
 import { PaymentAnimation } from '@/components/ui/payment-success-animation';
+import { cn } from '@/lib/utils';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -195,7 +196,61 @@ const WalletOnlyPayment = ({
     onError: (error: string) => void;
 }) => {
     const [isProcessing, setIsProcessing] = useState(false);
-
+    const getInitialMode = (): "light" | "dark" => {
+        if (typeof document === "undefined") return "light";
+        const dataMode = document
+          .querySelector("[data-mode]")
+          ?.getAttribute("data-mode");
+        if (dataMode === "dark" || dataMode === "light") {
+          return dataMode;
+        }
+        if (document.documentElement.classList.contains("dark")) {
+          return "dark";
+        }
+        if (
+          typeof window !== "undefined" &&
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        ) {
+          return "dark";
+        }
+        return "light";
+      };
+    
+      const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
+      // Read mode from data attribute and html class, respond to changes
+      useEffect(() => {
+        const readMode = (): "light" | "dark" => {
+          const el = document.querySelector("[data-mode]");
+          const attr = el?.getAttribute("data-mode");
+          if (attr === "dark" || attr === "light") return attr;
+          return document.documentElement.classList.contains("dark")
+            ? "dark"
+            : "light";
+        };
+    
+        // Set immediately on mount to avoid any flicker
+        setMode(readMode());
+    
+        // Watch for changes on either data-mode or html class
+        const observer = new MutationObserver(() => {
+          setMode(readMode());
+        });
+        const dataModeTarget = document.querySelector("[data-mode]");
+        if (dataModeTarget) {
+          observer.observe(dataModeTarget, {
+            attributes: true,
+            attributeFilter: ["data-mode"],
+          });
+        }
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+    
+        return () => observer.disconnect();
+      }, []);
+      const isDark=mode==="dark";
     const handleWalletPayment = async () => {
         setIsProcessing(true);
 
@@ -231,12 +286,24 @@ const WalletOnlyPayment = ({
 
     return (
         <div className="space-y-4">
-            <div className="p-4 border rounded-lg bg-green-50 border-green-200">
-                <div className="flex items-center gap-2 text-green-700 mb-2">
+            <div 
+             className={cn(
+                "p-4 border rounded-lg",
+                isDark
+                  ? "text-white border-gray-500"
+                  : "border-gray-500 text-gray-800"
+              )}>
+                <div className="flex items-center gap-2 mb-2">
                     <Wallet className="h-5 w-5" />
                     <span className="font-medium">Wallet Payment</span>
                 </div>
-                <p className="text-sm text-green-600">
+                <p 
+                 className={cn(
+                    "text-sm",
+                    isDark
+                      ? "text-white"
+                      : "text-gray-900"
+                  )}>
                     Your payment of {formatCurrencyFromCents(Math.round(amount * 100))} will be deducted from your wallet balance instantly.
                 </p>
             </div>
@@ -245,7 +312,13 @@ const WalletOnlyPayment = ({
                 onClick={handleWalletPayment}
                 loading={isProcessing}
                 loadingText="Processing Payment..."
-                className="w-full bg-[#D9C0FF61] text-[#7F39EC] rounded-full text-md py-6"
+               
+                className={cn(
+                    "w-full text-md rounded-full",
+                    isDark
+                      ? "bg-[#7F39EC] py-3"
+                      : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                  )}
                 size="lg"
             >
                 <Wallet className="h-4 w-4" />
@@ -282,7 +355,60 @@ export function ContestPaymentSelection({
     const [animationAmount, setAnimationAmount] = useState<number>(0);
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [defaultMethodSet, setDefaultMethodSet] = useState(false);
-
+    const getInitialMode = (): "light" | "dark" => {
+        if (typeof document === "undefined") return "light";
+        const dataMode = document
+          .querySelector("[data-mode]")
+          ?.getAttribute("data-mode");
+        if (dataMode === "dark" || dataMode === "light") {
+          return dataMode;
+        }
+        if (document.documentElement.classList.contains("dark")) {
+          return "dark";
+        }
+        if (
+          typeof window !== "undefined" &&
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches
+        ) {
+          return "dark";
+        }
+        return "light";
+      };
+    
+      const [mode, setMode] = useState<"light" | "dark">(getInitialMode);
+      // Read mode from data attribute and html class, respond to changes
+      useEffect(() => {
+        const readMode = (): "light" | "dark" => {
+          const el = document.querySelector("[data-mode]");
+          const attr = el?.getAttribute("data-mode");
+          if (attr === "dark" || attr === "light") return attr;
+          return document.documentElement.classList.contains("dark")
+            ? "dark"
+            : "light";
+        };
+    
+        // Set immediately on mount to avoid any flicker
+        setMode(readMode());
+    
+        // Watch for changes on either data-mode or html class
+        const observer = new MutationObserver(() => {
+          setMode(readMode());
+        });
+        const dataModeTarget = document.querySelector("[data-mode]");
+        if (dataModeTarget) {
+          observer.observe(dataModeTarget, {
+            attributes: true,
+            attributeFilter: ["data-mode"],
+          });
+        }
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["class"],
+        });
+    
+        return () => observer.disconnect();
+      }, []);
     // Fetch wallet balance on component mount
     useEffect(() => {
         const fetchBalance = async () => {
@@ -383,7 +509,7 @@ export function ContestPaymentSelection({
     const canUseWallet = walletBalance >= totalAmountInCents;
     const needsStripe = paymentMethod === 'stripe' || paymentMethod === 'split';
     const stripeAmount = needsStripe ? totalAmountInCents - (paymentMethod === 'split' ? walletAmount : 0) : 0;
-
+    const isDark = mode === "dark";
     return (
         <Elements stripe={stripePromise}>
             <div className="w-full max-w-2xl mx-auto">
@@ -396,8 +522,8 @@ export function ContestPaymentSelection({
                 <div className="mt-3 space-y-4">
                     {/* Contest Summary */}
                     <div className="px-1">
-                        <h3 className="font-semibold text-black mb-2">Contest: {contestTitle}</h3>
-                        <div className="space-y-1 text-sm text-black">
+                        <h3 className="font-semibold mb-2">Contest: {contestTitle}</h3>
+                        <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                                 <span>{isIncrease ? "Prize Pool Increased:" : "Prize Pool:"}</span>
                                 <span className="font-medium">{formatCurrencyFromCents(prizePoolInCents)}</span>
@@ -416,7 +542,7 @@ export function ContestPaymentSelection({
                             {(paymentMethod === 'stripe' || paymentMethod === 'split') && (
                                 <>
                                     <Separator className="my-2" />
-                                    <div className="text-sm font-medium text-black mb-1">Payment Breakdown:</div>
+                                    <div className="text-sm font-medium mb-1">Payment Breakdown:</div>
 
                                     {paymentMethod === 'split' && walletAmount > 0 && (
                                         <div className="flex justify-between text-sm">
@@ -434,7 +560,11 @@ export function ContestPaymentSelection({
                                                 <CreditCard className="h-3 w-3" />
                                                 {paymentMethod === 'split' ? 'From Card:' : 'Card Payment:'}
                                             </span>
-                                            <span className="font-medium text-blue-900">{formatCurrencyFromCents(stripeAmount)}</span>
+                                            <span 
+                                             className={cn(
+                                                "font-medium",
+                                                isDark ? "text-white" : "text-gray-900"
+                                              )}>{formatCurrencyFromCents(stripeAmount)}</span>
                                         </div>
                                     )}
                                 </>
@@ -443,9 +573,13 @@ export function ContestPaymentSelection({
                     </div>
 
                     {/* Wallet Balance Display */}
-                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-lg border border-green-200">
+                    <div className="p-4 rounded-lg border border-gray-500">
                         <div className="flex justify-between items-center">
-                            <span className="text-green-700 flex items-center gap-2">
+                            <span 
+                             className={cn(
+                                "flex items-center gap-2",
+                                isDark ? "text-white" : "text-gray-800"
+                              )}>
                                 <Wallet className="h-4 w-4" />
                                 Available Wallet Balance:
                             </span>
@@ -455,7 +589,11 @@ export function ContestPaymentSelection({
                                     <span className="text-sm">Fetching balance...</span>
                                 </div>
                             ) : (
-                                <span className="text-lg font-semibold text-green-900">
+                                <span 
+                                 className={cn(
+                                    "text-lg font-semibold",
+                                    isDark ? "text-white" : "text-gray-900"
+                                  )}>
                                     {formatCurrencyFromCents(walletBalance)}
                                 </span>
                             )}
@@ -499,7 +637,7 @@ export function ContestPaymentSelection({
                                                     </Badge>
                                                 )}
                                             </Label>
-                                            <p className="text-sm text-gray-600 mt-1">
+                                            <p className="text-sm text-gray-500 mt-1">
                                                 {canUseWallet
                                                     ? `Pay ${formatCurrencyFromCents(totalAmountInCents)} from your wallet balance`
                                                     : `Insufficient balance. Need ${formatCurrencyFromCents(totalAmountInCents - walletBalance)} more.`
@@ -537,7 +675,7 @@ export function ContestPaymentSelection({
                                                         Recommended
                                                     </Badge>
                                                 </Label>
-                                                <p className="text-sm text-gray-600 mt-1">
+                                                <p className="text-sm text-gray-500 mt-1">
                                                     Pay {formatCurrencyFromCents(walletAmount)} from wallet + {formatCurrencyFromCents(stripeAmount)} from card
                                                 </p>
 
@@ -565,8 +703,12 @@ export function ContestPaymentSelection({
                             </div>
 
                             {/* Payment Summary */}
-                            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                                <h4 className="font-medium text-gray-900">Payment Summary</h4>
+                            <div
+                            className={cn(
+                                " p-4 rounded-lg space-y-2",
+                                isDark ? "bg-[#100A33]" : "bg-gray-50"
+                              )}>
+                                <h4 className="font-medium">Payment Summary</h4>
                                 <Separator />
 
                                 {walletAmount > 0 && (
@@ -599,8 +741,12 @@ export function ContestPaymentSelection({
                             {/* Action Button */}
                             <button
                                 onClick={() => setShowPaymentForm(true)}
-                                className="w-full bg-[#D9C0FF61] text-[#7F39EC] rounded-full text-md py-3"
-
+                                className={cn(
+                                    "w-full rounded-full text-md py-3",
+                                    isDark
+                                      ? "bg-[#7F39EC] py-3"
+                                      : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                                  )}
                                 disabled={disabled || isLoadingBalance}
                             >
                                 {isLoadingBalance ? 'Loading...' : (needsStripe ? 'Proceed to Payment' : 'Complete Payment')}
@@ -624,6 +770,12 @@ export function ContestPaymentSelection({
                                     size="sm"
                                     onClick={() => setShowPaymentForm(false)}
                                     disabled={disabled}
+                                    className={cn(
+                                        "border",
+                                        isDark
+                                          ? "text-white border-gray-400"
+                                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                                      )}
                                 >
                                     Back
                                 </Button>

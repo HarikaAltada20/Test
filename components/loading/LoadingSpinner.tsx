@@ -1,65 +1,91 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import lightLogo from "@/public/images/Group (2).avif";
 import darkLogo from "@/public/images/Group (3).avif";
 
 interface LoadingSpinnerProps {
-    mode?: "light" | "dark"; 
-  }
-  
-  const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ mode = "light" }) => {
-    const logo = mode === "dark" ? darkLogo : lightLogo;
-  
-    return (
-      <div className="flex items-center justify-center">
-        <div className="relative">
-          {/* Outermost Rotating Square Border - Clockwise - Blue */}
-          <div className="w-32 h-32 border-4 border-purple-200 rounded-2xl animate-spin"></div>
-  
-          {/* Second Square Border - Counter-clockwise - Purple */}
-          {/* <div
+  mode?: "light" | "dark";
+}
+
+const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ mode = "light" }) => {
+  const [theme, setTheme] = useState<"light" | "dark">(mode);
+  const logo = theme === "dark" ? darkLogo : lightLogo;
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setTheme(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div className="flex items-center justify-center">
+      <div className="relative">
+        {/* Outermost Rotating Square Border - Clockwise - Blue */}
+        <div className="w-32 h-32 border-4 border-purple-200 rounded-2xl animate-spin"></div>
+
+        {/* Second Square Border - Counter-clockwise - Purple */}
+        {/* <div
             className="absolute inset-2 w-28 h-28 border-2 border-purple-400 rounded-2xl animate-spin"
             style={{ animationDirection: "reverse" }}
           ></div> */}
-  
-          
-          {/* <div className="absolute inset-4 w-24 h-24 border-2 border-purple-300 rounded-xl animate-spin"></div> */}
-  
-        
-          <div
-            className="absolute inset-6 w-20 h-20 border-2 border-purple-600 rounded-xl animate-spin"
-            style={{ animationDirection: "reverse" }}
-          ></div>
-  
-          {/* Center Logo/Icon */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-20 h-20 flex items-center justify-center">
-              <Image
-                src={logo}
-                alt="Game Of Creators"
-                width={100}
-                height={100}
-                className="h-[50px] w-auto transition-all duration-300"
-              />
-            </div>
+
+        {/* <div className="absolute inset-4 w-24 h-24 border-2 border-purple-300 rounded-xl animate-spin"></div> */}
+
+        <div
+          className="absolute inset-6 w-20 h-20 border-2 border-purple-600 rounded-xl animate-spin"
+          style={{ animationDirection: "reverse" }}
+        ></div>
+
+        {/* Center Logo/Icon */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-20 h-20 flex items-center justify-center">
+            <Image
+              src={logo}
+              alt="Game Of Creators"
+              width={100}
+              height={100}
+              className="h-[50px] w-auto transition-all duration-300"
+            />
           </div>
         </div>
       </div>
-    );
-  };
-  
-  export default LoadingSpinner;
-  
-  // Page-level loading component
-  export function PageLoadingSpinner({ mode = "light" }: LoadingSpinnerProps) {
-    return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <LoadingSpinner mode={mode} />
-      </div>
-    );
-  }
+    </div>
+  );
+};
+
+export default LoadingSpinner;
+
+// Page-level loading component
+export function PageLoadingSpinner({ mode = "light" }: LoadingSpinnerProps) {
+  return (
+    <div className="flex items-center justify-center min-h-[200px]">
+      <LoadingSpinner mode={mode} />
+    </div>
+  );
+}
 
 // Inline loading for buttons
 export function ButtonLoadingSpinner() {

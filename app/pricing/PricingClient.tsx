@@ -853,7 +853,7 @@ export default function PricingClient() {
 
             {/* Display Plans only if not loading and no error */}
             {!isLoading && !error && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
+              <div className="max-w-[1350px] mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12 justify-items-center">
                 {dbSubscriptionPlans.map((plan) => {
                   const isMostPopular = plan.name.toUpperCase() === "BUILDER";
                   const isFree = plan.price === 0;
@@ -891,11 +891,11 @@ export default function PricingClient() {
                               ? plan.price
                               : getDiscountedPrice(plan.price)
                           )}
-                          <span className="text-sm font-normal text-gray-600">
+                          <span className="text-sm font-normal text-gray-300">
                             /{billingCycle === "monthly" ? "month" : "year"}
                           </span>
                         </div>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-300">
                           {plan.features.description}
                         </p>
                       </CardHeader>

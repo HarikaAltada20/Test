@@ -1,5 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -26,6 +27,7 @@ interface PaginationControlsProps {
   loading?: boolean;
   // When true, hide the 200 items per-page option (useful for specific pages like leaderboard)
   hide200Option?: boolean;
+  isDark?: boolean;
 }
 
 const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
@@ -41,6 +43,7 @@ export function PaginationControls({
   onLimitChange,
   loading = false,
   hide200Option = false,
+  isDark = false,
 }: PaginationControlsProps) {
   const startItem = Math.min((page - 1) * limit + 1, total);
   const endItem = Math.min(page * limit, total);
@@ -97,32 +100,71 @@ export function PaginationControls({
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Results info and page size selector */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <div className="text-sm text-muted-foreground">
+        <div
+          className={cn(
+            "text-sm text-muted-foreground",
+            isDark && "text-slate-300"
+          )}
+        >
           Showing {total > 0 ? startItem : 0} to {endItem} of {total} results
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Show:</span>
+          <span
+            className={cn(
+              "text-sm text-muted-foreground",
+              isDark && "text-slate-300"
+            )}
+          >
+            Show:
+          </span>
           <Select
             value={limit.toString()}
             onValueChange={handlePageSizeChange}
             disabled={loading}
           >
-            <SelectTrigger className="w-20">
+            <SelectTrigger
+              
+              className={cn(
+                "w-20",
+                isDark && "border border-gray-600"
+              )}
+               
+            >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent
+              isDark={isDark}
+              className={cn(
+                isDark && "border-gray-600 bg-[#07031D] text-white"
+              )}
+            >
               {(hide200Option
                 ? PAGE_SIZE_OPTIONS.filter((size) => size !== 200)
                 : PAGE_SIZE_OPTIONS
               ).map((size) => (
-                <SelectItem key={size} value={size.toString()}>
+                <SelectItem
+                  isDark={isDark}
+                  key={size}
+                  value={size.toString()}
+                  className={cn(
+                    isDark &&
+                      "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700"
+                  )}
+                >
                   {size}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <span className="text-sm text-muted-foreground">per page</span>
+          <span
+            className={cn(
+              "text-sm text-muted-foreground",
+              isDark && "text-slate-300"
+            )}
+          >
+            per page
+          </span>
         </div>
       </div>
 
@@ -135,7 +177,11 @@ export function PaginationControls({
             size="sm"
             onClick={() => onPageChange(1)}
             disabled={!hasPreviousPage || loading}
-            className="h-8 w-8 p-0"
+            className={cn(
+              "h-8 w-8 p-0",
+              isDark &&
+                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+            )}
           >
             <ChevronsLeft className="h-4 w-4" />
           </Button>
@@ -146,7 +192,11 @@ export function PaginationControls({
             size="sm"
             onClick={() => onPageChange(page - 1)}
             disabled={!hasPreviousPage || loading}
-            className="h-8 w-8 p-0"
+            className={cn(
+              "h-8 w-8 p-0",
+              isDark &&
+                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+            )}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -156,7 +206,12 @@ export function PaginationControls({
             {getPageNumbers().map((pageNum, index) => (
               <React.Fragment key={index}>
                 {pageNum === "..." ? (
-                  <span className="px-2 text-sm text-muted-foreground">
+                  <span
+                    className={cn(
+                      "px-2 text-sm text-muted-foreground",
+                      isDark && "text-slate-400"
+                    )}
+                  >
                     ...
                   </span>
                 ) : (
@@ -165,7 +220,13 @@ export function PaginationControls({
                     size="sm"
                     onClick={() => onPageChange(pageNum as number)}
                     disabled={loading}
-                    className="h-8 w-8 p-0"
+                    className={cn(
+                      "h-8 w-8 p-0",
+                      isDark &&
+                        (pageNum === page
+                          ? "border-slate-700 bg-[#7F39EC] text-slate-100 hover:bg-slate-700"
+                          : "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800")
+                    )}
                   >
                     {pageNum}
                   </Button>
@@ -180,7 +241,11 @@ export function PaginationControls({
             size="sm"
             onClick={() => onPageChange(page + 1)}
             disabled={!hasNextPage || loading}
-            className="h-8 w-8 p-0"
+            className={cn(
+              "h-8 w-8 p-0",
+              isDark &&
+                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+            )}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -191,7 +256,11 @@ export function PaginationControls({
             size="sm"
             onClick={() => onPageChange(totalPages)}
             disabled={!hasNextPage || loading}
-            className="h-8 w-8 p-0"
+            className={cn(
+              "h-8 w-8 p-0",
+              isDark &&
+                "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800 disabled:border-slate-800 disabled:bg-slate-900"
+            )}
           >
             <ChevronsRight className="h-4 w-4" />
           </Button>

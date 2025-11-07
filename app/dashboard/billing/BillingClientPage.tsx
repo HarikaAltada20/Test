@@ -92,6 +92,7 @@ import { SubscriptionManagement } from "@/components/SubscriptionManagement";
 import { SubscriptionManagementBilling } from "@/components/SubscriptionManagementBilling";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
+import { cn } from "@/lib/utils";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -121,8 +122,10 @@ export default function BillingClientPage({
   const searchParams = useSearchParams();
 
   // Get initial tab from URL parameter, fallback to "cash"
-  const initialTab = searchParams.get('tab') || "cash";
-  const { activeTab, setActiveTab } = useTabState(tabs, { defaultTab: initialTab });
+  const initialTab = searchParams.get("tab") || "cash";
+  const { activeTab, setActiveTab } = useTabState(tabs, {
+    defaultTab: initialTab,
+  });
 
   // States derived from props, allowing client-side updates
   const [authUser, setAuthUser] = useState<User | null>(initialAuthUser);
@@ -169,8 +172,11 @@ export default function BillingClientPage({
 
   // Wallet validation states
   const [isValidatingWallet, setIsValidatingWallet] = useState<boolean>(false);
-  const [walletValidationStatus, setWalletValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
-  const [walletValidationError, setWalletValidationError] = useState<string>('');
+  const [walletValidationStatus, setWalletValidationStatus] = useState<
+    "idle" | "validating" | "valid" | "invalid"
+  >("idle");
+  const [walletValidationError, setWalletValidationError] =
+    useState<string>("");
   const [cryptoAddress, setCryptoAddress] = useState("");
   const [upiId, setUpiId] = useState("");
   const [bankAccountHolder, setBankAccountHolder] = useState("");
@@ -181,7 +187,45 @@ export default function BillingClientPage({
   const [bankCountry, setBankCountry] = useState("IN");
   const [bankSortCode, setBankSortCode] = useState("");
   const [bankRoutingNumber, setBankRoutingNumber] = useState("");
+  // Initialize mode state with proper detection to prevent flash
+  const [mode, setMode] = useState<"light" | "dark">(() => {
+    // Check if we're in browser environment
+    if (typeof window !== "undefined") {
+      // Try to get theme from data-theme attribute first
+      const themeElement = document.documentElement;
+      const dataTheme = themeElement.getAttribute("data-theme") as
+        | "light"
+        | "dark";
+      if (dataTheme) return dataTheme;
 
+      // Fallback to data-mode attribute
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const dataMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (dataMode) return dataMode;
+      }
+
+      // Check localStorage as last resort
+      try {
+        const savedMode = localStorage.getItem("dashboard-mode") as
+          | "light"
+          | "dark";
+        if (savedMode) return savedMode;
+
+        const preset = localStorage.getItem("dashboard-preset");
+        if (preset === "game-of-creators" || preset === "dark-professional") {
+          return "dark";
+        }
+      } catch (e) {
+        // Ignore localStorage errors
+      }
+    }
+    return "light";
+  });
+
+  const [isCompact, setIsCompact] = useState<boolean>(false);
   // Withdrawal form states
   const [withdrawAmountDollars, setWithdrawAmountDollars] = useState<number>(0);
   const [withdrawAmountCoins, setWithdrawAmountCoins] = useState<number>(0);
@@ -190,6 +234,114 @@ export default function BillingClientPage({
   >(null);
   const [withdrawalUserNotes, setWithdrawalUserNotes] = useState("");
 
+  // Read mode/compact flags from data attributes with immediate updates
+  useEffect(() => {
+    const checkFlags = () => {
+      const container = document.querySelector("[data-mode][data-compact]");
+      const modeElement = container || document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
+      }
+      const compactElement =
+        container || document.querySelector("[data-compact]");
+      if (compactElement) {
+        const compactValue =
+          compactElement.getAttribute("data-compact") === "true";
+        if (compactValue !== isCompact) {
+          setIsCompact(compactValue);
+        }
+      }
+    };
+
+    // Check immediately
+    checkFlags();
+
+    // Watch for changes in the data attributes with immediate callback
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          (mutation.attributeName === "data-mode" ||
+            mutation.attributeName === "data-compact")
+        ) {
+          checkFlags();
+        }
+      });
+    });
+
+    const targetNode =
+      document.querySelector("[data-mode][data-compact]") ||
+      document.querySelector("[data-mode]") ||
+      document.querySelector("[data-compact]");
+
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode", "data-compact"],
+      });
+    }
+
+    // Also listen for storage events to catch theme changes from other tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "dashboard-mode" && e.newValue) {
+        const newMode = e.newValue as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+        }
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, [mode, isCompact]);
+
+  // Additional effect to catch theme changes more immediately
+  useEffect(() => {
+    // Listen for custom theme change events that might be dispatched by the theme system
+    const handleThemeChange = (event: CustomEvent) => {
+      if (event.detail && event.detail.mode) {
+        const newMode = event.detail.mode as "light" | "dark";
+        if (newMode !== mode) {
+          setMode(newMode);
+          // Force a re-render by updating a dummy state
+          setMode(newMode);
+        }
+      }
+    };
+
+    // Listen for the custom event
+    window.addEventListener("theme-change", handleThemeChange as EventListener);
+
+    // Also check for changes on a more frequent interval as a fallback
+    const intervalId = setInterval(() => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode && currentMode !== mode) {
+          setMode(currentMode);
+        }
+      }
+    }, 50); // Check every 50ms for faster response
+
+    return () => {
+      window.removeEventListener(
+        "theme-change",
+        handleThemeChange as EventListener
+      );
+      clearInterval(intervalId);
+    };
+  }, [mode]);
 
   // Pagination for cash transactions
   const {
@@ -201,7 +353,7 @@ export default function BillingClientPage({
     setLimit: setCashLimit,
     refresh: refreshCashTransactions,
   } = usePagination<CashTransaction>({
-    apiEndpoint: '/api/money-transactions',
+    apiEndpoint: "/api/money-transactions",
     initialLimit: 25,
   });
 
@@ -209,13 +361,19 @@ export default function BillingClientPage({
   const getPayoutMethodSummary = (method: PayoutMethod): string => {
     switch (method.method_type) {
       case "crypto":
-        return `${method.details?.network?.toUpperCase() || 'Crypto'} Wallet: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Crypto'})`;
+        return `${
+          method.details?.network?.toUpperCase() || "Crypto"
+        } Wallet: ...${method.details?.wallet_address?.slice(-4) || "XXXX"} (${
+          method.friendly_name || "Crypto"
+        })`;
       case "upi":
-        return `UPI: ${method.details?.upi_id || 'N/A'} (${method.friendly_name || 'UPI'})`;
+        return `UPI: ${method.details?.upi_id || "N/A"} (${
+          method.friendly_name || "UPI"
+        })`;
       case "bank_transfer":
-        return `Bank: ...${method.details?.account_number?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Bank'})`;
-      case "phantom":
-        return `Phantom: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Phantom Wallet'})`;
+        return `Bank: ...${
+          method.details?.account_number?.slice(-4) || "XXXX"
+        } (${method.friendly_name || "Bank"})`;
       default:
         return "Unknown Method Type";
     }
@@ -223,7 +381,7 @@ export default function BillingClientPage({
 
   const getPayoutMethodSummaryById = (methodId: string | null): string => {
     if (!methodId) return "Payout method deleted or N/A";
-    const method = payoutMethods.find(p => p.id === methodId);
+    const method = payoutMethods.find((p) => p.id === methodId);
     return method ? getPayoutMethodSummary(method) : "Unknown Method";
   };
 
@@ -240,45 +398,52 @@ export default function BillingClientPage({
     setCoinTransactionsState(initialCoinTransactions);
     setPayoutMethods(initialPayoutMethods);
     setWithdrawalRequests(
-      initialWithdrawalRequests.map(wr => ({
+      initialWithdrawalRequests.map((wr) => ({
         ...wr,
-        payout_method_summary: getPayoutMethodSummaryById(wr.payout_method_id === undefined ? null : wr.payout_method_id)
+        payout_method_summary: getPayoutMethodSummaryById(
+          wr.payout_method_id === undefined ? null : wr.payout_method_id
+        ),
       }))
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialAuthUser, initialProfile, initialUserData, initialCoinTransactions, initialPayoutMethods, initialWithdrawalRequests, router]);
+  }, [
+    initialAuthUser,
+    initialProfile,
+    initialUserData,
+    initialCoinTransactions,
+    initialPayoutMethods,
+    initialWithdrawalRequests,
+    router,
+  ]);
 
   // Reset form function
   const resetPayoutForm = () => {
     setCurrentPayoutMethod(null);
     setSelectedPayoutType("crypto");
-    setCryptoAddress('');
-    setCryptoNetwork('BNB_SMART_CHAIN');
-    setCryptoCurrency('BNB');
-    setWalletValidationStatus('idle');
-    setWalletValidationError('');
-    setUpiId('');
-    setBankAccountHolder('');
-    setBankAccountNumber('');
-    setBankIfscCode('');
-    setBankRoutingNumber('');
-    setBankName('');
-    setBankBranchName('');
-    setBankCountry('IN');
-    setPayoutFriendlyName('');
-    setPayoutCountry('IN');
+    setCryptoAddress("");
+    setCryptoNetwork("BNB_BEP20");
+    setUpiId("");
+    setBankAccountHolder("");
+    setBankAccountNumber("");
+    setBankIfscCode("");
+    setBankRoutingNumber("");
+    setBankName("");
+    setBankBranchName("");
+    setBankCountry("IN");
+    setPayoutFriendlyName("");
+    setPayoutCountry("IN");
   };
 
   // Wallet format validation functions
   const validateWalletAddress = async () => {
     if (!cryptoAddress.trim()) {
-      setWalletValidationStatus('idle');
+      setWalletValidationStatus("idle");
       return;
     }
 
     setIsValidatingWallet(true);
-    setWalletValidationStatus('validating');
-    setWalletValidationError('');
+    setWalletValidationStatus("validating");
+    setWalletValidationError("");
 
     try {
       let isValid = false;
@@ -287,27 +452,33 @@ export default function BillingClientPage({
         // BNB Smart Chain (BEP20) validation: 0x + 40 hex characters
         isValid = /^0x[a-fA-F0-9]{40}$/.test(cryptoAddress.trim());
         if (!isValid) {
-          setWalletValidationError('Invalid BNB Smart Chain (BEP20) address format. Must start with 0x and be 42 characters total.');
+          setWalletValidationError(
+            "Invalid BNB Smart Chain (BEP20) address format. Must start with 0x and be 42 characters total."
+          );
         }
       } else if (cryptoNetwork === "SOLANA") {
         // Solana validation: 32-44 base58 characters
         isValid = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(cryptoAddress.trim());
         if (!isValid) {
-          setWalletValidationError('Invalid Solana wallet address format. Must be 32-44 base58 characters.');
+          setWalletValidationError(
+            "Invalid Solana wallet address format. Must be 32-44 base58 characters."
+          );
         }
       }
 
       if (isValid) {
-        setWalletValidationStatus('valid');
-        toast.success('Wallet address format is correct!');
+        setWalletValidationStatus("valid");
+        toast.success("Wallet address format is correct!");
       } else {
-        setWalletValidationStatus('invalid');
-        toast.error('Invalid wallet address format');
+        setWalletValidationStatus("invalid");
+        toast.error("Invalid wallet address format");
       }
     } catch (error: any) {
-      setWalletValidationStatus('invalid');
-      setWalletValidationError(error.message || 'Failed to validate wallet address');
-      toast.error('Wallet validation failed');
+      setWalletValidationStatus("invalid");
+      setWalletValidationError(
+        error.message || "Failed to validate wallet address"
+      );
+      toast.error("Wallet validation failed");
     } finally {
       setIsValidatingWallet(false);
     }
@@ -331,25 +502,38 @@ export default function BillingClientPage({
 
     let details: PayoutMethodDetails;
 
-    if (selectedPayoutType === 'crypto') {
+    if (selectedPayoutType === "crypto") {
       if (!cryptoAddress.trim() || !cryptoNetwork.trim()) {
         toast.error("Crypto wallet address and network are required.");
         return;
       }
-      if (walletValidationStatus !== 'valid') {
+      if (walletValidationStatus !== "valid") {
         toast.error("Please validate your wallet address first.");
         return;
       }
-      details = { wallet_address: cryptoAddress.trim(), network: cryptoNetwork.trim(), currency: cryptoCurrency.trim() };
-    } else if (selectedPayoutType === 'upi') {
+      details = {
+        wallet_address: cryptoAddress.trim(),
+        network: cryptoNetwork.trim(),
+        currency: cryptoCurrency.trim(),
+      };
+    } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
         return;
       }
-      details = { account_holder_name: bankAccountHolder.trim(), upi_id: upiId.trim() };
-    } else if (selectedPayoutType === 'bank_transfer') {
-      if (!bankAccountHolder.trim() || !bankAccountNumber.trim() || !bankIfscCode.trim()) {
-        toast.error("Account holder name, account number, and IFSC code are required for bank transfer.");
+      details = {
+        account_holder_name: bankAccountHolder.trim(),
+        upi_id: upiId.trim(),
+      };
+    } else if (selectedPayoutType === "bank_transfer") {
+      if (
+        !bankAccountHolder.trim() ||
+        !bankAccountNumber.trim() ||
+        !bankIfscCode.trim()
+      ) {
+        toast.error(
+          "Account holder name, account number, and IFSC code are required for bank transfer."
+        );
         return;
       }
       const bankDetails: any = {
@@ -358,9 +542,11 @@ export default function BillingClientPage({
         ifsc_code: bankIfscCode.trim(),
         country: bankCountry.trim(),
       };
-      if (bankRoutingNumber.trim()) bankDetails.swift_bic_code = bankRoutingNumber.trim();
+      if (bankRoutingNumber.trim())
+        bankDetails.swift_bic_code = bankRoutingNumber.trim();
       if (bankName.trim()) bankDetails.bank_name = bankName.trim();
-      if (bankBranchName.trim()) bankDetails.branch_name = bankBranchName.trim();
+      if (bankBranchName.trim())
+        bankDetails.branch_name = bankBranchName.trim();
       details = bankDetails;
     } else {
       toast.error("Invalid payout method type selected.");
@@ -378,7 +564,7 @@ export default function BillingClientPage({
 
     try {
       const { data, error } = await supabase
-        .from('payout_methods')
+        .from("payout_methods")
         .upsert(methodToSave)
         .select()
         .single();
@@ -386,8 +572,8 @@ export default function BillingClientPage({
       if (error) throw error;
 
       if (data) {
-        setPayoutMethods(prevMethods => {
-          const index = prevMethods.findIndex(m => m.id === data.id);
+        setPayoutMethods((prevMethods) => {
+          const index = prevMethods.findIndex((m) => m.id === data.id);
           if (index !== -1) {
             const newMethods = [...prevMethods];
             newMethods[index] = data as PayoutMethod;
@@ -396,15 +582,21 @@ export default function BillingClientPage({
             return [...prevMethods, data as PayoutMethod];
           }
         });
-        toast.success(`Payout method ${currentPayoutMethod ? 'updated' : 'added'} successfully!`);
+        toast.success(
+          `Payout method ${
+            currentPayoutMethod ? "updated" : "added"
+          } successfully!`
+        );
         setIsPayoutModalOpen(false);
         resetPayoutForm();
       } else {
-        throw new Error("No data returned after saving payout method.")
+        throw new Error("No data returned after saving payout method.");
       }
     } catch (error: any) {
       console.error("Error saving payout method:", error);
-      toast.error(`Failed to save payout method: ${error.message || 'Unknown error'}`);
+      toast.error(
+        `Failed to save payout method: ${error.message || "Unknown error"}`
+      );
     }
     setIsLoading(false);
   };
@@ -412,22 +604,21 @@ export default function BillingClientPage({
   const handleEditPayoutMethod = (method: PayoutMethod) => {
     setCurrentPayoutMethod(method);
     setSelectedPayoutType(method.method_type);
-    setPayoutFriendlyName(method.friendly_name || '');
+    setPayoutFriendlyName(method.friendly_name || "");
 
-    if (method.method_type === 'crypto' && method.details) {
-      setCryptoAddress(method.details.wallet_address || '');
-      setCryptoNetwork(method.details.network || 'BNB_SMART_CHAIN');
-      setCryptoCurrency(method.details.currency || 'BNB');
-    } else if (method.method_type === 'upi' && method.details) {
-      setUpiId(method.details.upi_id || '');
-    } else if (method.method_type === 'bank_transfer' && method.details) {
-      setBankAccountHolder(method.details.account_holder_name || '');
-      setBankAccountNumber(method.details.account_number || '');
-      setBankIfscCode(method.details.ifsc_code || '');
-      setBankRoutingNumber(method.details.swift_bic_code || '');
-      setBankName(method.details.bank_name || '');
-      setBankBranchName(method.details.branch_name || '');
-      setBankCountry(method.details.country || 'IN');
+    if (method.method_type === "crypto" && method.details) {
+      setCryptoAddress(method.details.wallet_address || "");
+      setCryptoNetwork(method.details.network || "BNB_BEP20");
+    } else if (method.method_type === "upi" && method.details) {
+      setUpiId(method.details.upi_id || "");
+    } else if (method.method_type === "bank_transfer" && method.details) {
+      setBankAccountHolder(method.details.account_holder_name || "");
+      setBankAccountNumber(method.details.account_number || "");
+      setBankIfscCode(method.details.ifsc_code || "");
+      setBankRoutingNumber(method.details.swift_bic_code || "");
+      setBankName(method.details.bank_name || "");
+      setBankBranchName(method.details.branch_name || "");
+      setBankCountry(method.details.country || "IN");
     }
     setIsPayoutModalOpen(true);
   };
@@ -435,13 +626,16 @@ export default function BillingClientPage({
   const handleDeletePayoutMethod = async (methodId: string) => {
     if (!confirm("Are you sure you want to delete this payout method?")) return;
     setIsLoading(true);
-    const { error } = await supabase.from("payout_methods").delete().eq("id", methodId);
+    const { error } = await supabase
+      .from("payout_methods")
+      .delete()
+      .eq("id", methodId);
     setIsLoading(false);
     if (error) {
       console.error("Error deleting payout method:", error);
       toast.error(`Failed to delete method: ${error.message}`);
     } else {
-      setPayoutMethods(payoutMethods.filter(p => p.id !== methodId));
+      setPayoutMethods(payoutMethods.filter((p) => p.id !== methodId));
       toast.success("Payout method deleted.");
     }
   };
@@ -472,7 +666,9 @@ export default function BillingClientPage({
       console.error("Error setting default payout method:", error);
       toast.error(`Failed to set default method: ${error.message}`);
     } else if (data) {
-      setPayoutMethods(payoutMethods.map(p => ({ ...p, is_default: p.id === data.id })));
+      setPayoutMethods(
+        payoutMethods.map((p) => ({ ...p, is_default: p.id === data.id }))
+      );
       toast.success("Default payout method updated.");
     }
   };
@@ -489,17 +685,21 @@ export default function BillingClientPage({
 
     const minWithdrawalDollars = MIN_WITHDRAWAL_AMOUNT / 100;
     let amountToWithdraw = 0;
-    let currencyForRpc = 'USD';
-    let amountTypeForRpc: 'cash' | 'coins' = activeTabModal;
+    let currencyForRpc = "USD";
+    let amountTypeForRpc: "cash" | "coins" = activeTabModal;
     let redeemedItemDescForRpc: any | null = null;
 
-    if (activeTabModal === 'cash') {
+    if (activeTabModal === "cash") {
       if (withdrawAmountDollars <= 0) {
         toast.error("Please enter a valid withdrawal amount.");
         return;
       }
       if (withdrawAmountDollars < minWithdrawalDollars) {
-        toast.error(`Minimum cash withdrawal amount is ${formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.`);
+        toast.error(
+          `Minimum cash withdrawal amount is ${formatCurrencyFromCents(
+            MIN_WITHDRAWAL_AMOUNT
+          )}.`
+        );
         return;
       }
       amountToWithdraw = Math.round(withdrawAmountDollars * 100); // Convert to cents
@@ -507,13 +707,14 @@ export default function BillingClientPage({
         toast.error("Insufficient cash balance.");
         return;
       }
-    } else { // activeTabModal === 'coins'
+    } else {
+      // activeTabModal === 'coins'
       if (withdrawAmountCoins <= 0) {
         toast.error("Please enter a valid coin amount to redeem.");
         return;
       }
       amountToWithdraw = withdrawAmountCoins;
-      currencyForRpc = 'COIN';
+      currencyForRpc = "COIN";
       redeemedItemDescForRpc = { placeholder: "Item to be redeemed" };
       if (amountToWithdraw > (userData.coins || 0)) {
         toast.error("Insufficient coin balance.");
@@ -528,30 +729,64 @@ export default function BillingClientPage({
       p_currency: currencyForRpc,
       p_amount_type: amountTypeForRpc,
       p_user_notes: withdrawalUserNotes,
-      p_redeemed_item_description: redeemedItemDescForRpc
+      p_redeemed_item_description: redeemedItemDescForRpc,
     };
 
-    console.log("Calling create_advertiser_withdrawal_request with args:", JSON.stringify(rpcArgs, null, 2));
+    console.log(
+      "Calling create_advertiser_withdrawal_request with args:",
+      JSON.stringify(rpcArgs, null, 2)
+    );
 
     setIsSubmittingWithdrawal(true);
-    const { data: rpcResponse, error: rpcError } = await supabase.rpc('create_advertiser_withdrawal_request', rpcArgs);
+    const { data: rpcResponse, error: rpcError } = await supabase.rpc(
+      "create_advertiser_withdrawal_request",
+      rpcArgs
+    );
     setIsSubmittingWithdrawal(false);
 
     if (rpcError) {
       console.error("Error creating withdrawal request via RPC:", rpcError);
-      const formattedError = formatErrorWithCurrency(rpcError.message || "Unknown error");
-      toast.error(`Withdrawal request failed: ${formattedError}`);
-    } else if (rpcResponse && Array.isArray(rpcResponse) && rpcResponse.length > 0) {
+      toast.error(`Withdrawal request failed: ${rpcError.message}`);
+    } else if (
+      rpcResponse &&
+      Array.isArray(rpcResponse) &&
+      rpcResponse.length > 0
+    ) {
       const createdRequest = rpcResponse[0] as WithdrawalRequest;
-      toast.success(`Withdrawal request for ${activeTab === 'cash' ? formatCurrencyFromCents(createdRequest.amount) : formatCoins(createdRequest.amount) + ' coins'} submitted successfully!`);
-      setWithdrawalRequests(prev => [{
-        ...createdRequest,
-        payout_method_summary: getPayoutMethodSummaryById(createdRequest.payout_method_id === undefined ? null : createdRequest.payout_method_id)
-      }, ...prev]);
-      if (activeTab === 'cash') {
-        setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) - (createdRequest.amount) }) : null);
+      toast.success(
+        `Withdrawal request for ${
+          activeTab === "cash"
+            ? formatCurrencyFromCents(createdRequest.amount)
+            : formatCoins(createdRequest.amount) + " coins"
+        } submitted successfully!`
+      );
+      setWithdrawalRequests((prev) => [
+        {
+          ...createdRequest,
+          payout_method_summary: getPayoutMethodSummaryById(
+            createdRequest.payout_method_id === undefined
+              ? null
+              : createdRequest.payout_method_id
+          ),
+        },
+        ...prev,
+      ]);
+      if (activeTab === "cash") {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                withdrawable_balance:
+                  (prev.withdrawable_balance || 0) - createdRequest.amount,
+              }
+            : null
+        );
       } else {
-        setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) - createdRequest.amount }) : null);
+        setUserData((prev) =>
+          prev
+            ? { ...prev, coins: (prev.coins || 0) - createdRequest.amount }
+            : null
+        );
       }
       setIsWithdrawModalOpen(false);
       setWithdrawAmountDollars(0);
@@ -559,38 +794,59 @@ export default function BillingClientPage({
       setSelectedWithdrawMethodId(null);
       setWithdrawalUserNotes("");
     } else {
-      console.error("Withdrawal request RPC returned unexpected data:", rpcResponse);
-      toast.error("Withdrawal request submitted, but couldn't confirm details. Please check your requests.");
+      console.error(
+        "Withdrawal request RPC returned unexpected data:",
+        rpcResponse
+      );
+      toast.error(
+        "Withdrawal request submitted, but couldn't confirm details. Please check your requests."
+      );
     }
   };
 
   // Handle balance update after successful top-up
   const handleBalanceUpdate = (newBalanceInCents: number) => {
-    console.log('💰 BillingPage: Balance update received:', newBalanceInCents);
-    console.log('💰 BillingPage: Previous balance was:', profile?.available_deposit_balance);
+    console.log("💰 BillingPage: Balance update received:", newBalanceInCents);
+    console.log(
+      "💰 BillingPage: Previous balance was:",
+      profile?.available_deposit_balance
+    );
 
-    setProfile(prev => {
-      const updated = prev ? { ...prev, available_deposit_balance: newBalanceInCents } : null;
-      console.log('💰 BillingPage: Profile updated:', updated);
+    setProfile((prev) => {
+      const updated = prev
+        ? { ...prev, available_deposit_balance: newBalanceInCents }
+        : null;
+      console.log("💰 BillingPage: Profile updated:", updated);
       return updated;
     });
 
     // Refresh paginated transactions to show the new deposit
-    console.log('🔄 BillingPage: Refreshing transaction history...');
+    console.log("🔄 BillingPage: Refreshing transaction history...");
     refreshCashTransactions();
   };
 
-  const handleCancelWithdrawal = async (requestId: string, amountToRestore: number, amountType: 'cash' | 'coins') => {
+  const handleCancelWithdrawal = async (
+    requestId: string,
+    amountToRestore: number,
+    amountType: "cash" | "coins"
+  ) => {
     if (!authUser || !profile || !userData) return;
-    if (!confirm("Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance.")) {
+    if (
+      !confirm(
+        "Are you sure you want to cancel this withdrawal request? The funds will be returned to your balance."
+      )
+    ) {
       return;
     }
     setIsCancellingWithdrawal(requestId);
 
-    const { data: rpcSuccess, error: rpcError } = await supabase.rpc('cancel_advertiser_withdrawal_request_by_user', {
-      p_request_id: requestId,
-      p_user_id: authUser.id
-    });
+    const { data: rpcSuccess, error: rpcError } = await supabase.rpc(
+      "cancel_advertiser_withdrawal_request_by_user",
+      {
+        p_request_id: requestId,
+        p_user_id: authUser.id,
+      }
+    );
 
     setIsCancellingWithdrawal(null);
 
@@ -598,28 +854,49 @@ export default function BillingClientPage({
       console.error("Error cancelling withdrawal request via RPC:", rpcError);
       toast.error(`Failed to cancel request: ${rpcError.message}`);
     } else if (rpcSuccess === true) {
-      if (amountType === 'cash') {
-        setProfile(prev => prev ? ({ ...prev, withdrawable_balance: (prev.withdrawable_balance || 0) + (amountToRestore) }) : null);
+      if (amountType === "cash") {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                withdrawable_balance:
+                  (prev.withdrawable_balance || 0) + amountToRestore,
+              }
+            : null
+        );
       } else {
-        setUserData(prev => prev ? ({ ...prev, coins: (prev.coins || 0) + amountToRestore }) : null);
+        setUserData((prev) =>
+          prev ? { ...prev, coins: (prev.coins || 0) + amountToRestore } : null
+        );
       }
-      setWithdrawalRequests(prevReqs =>
-        prevReqs.map(req =>
+      setWithdrawalRequests((prevReqs) =>
+        prevReqs.map((req) =>
           req.id === requestId
             ? {
-              ...req,
-              status: 'cancelled',
-              payout_method_summary: getPayoutMethodSummaryById(req.payout_method_id === undefined ? null : req.payout_method_id),
-              cancelled_at: new Date().toISOString(),
-              cancellation_reason: 'Cancelled by user'
-            }
+                ...req,
+                status: "cancelled",
+                payout_method_summary: getPayoutMethodSummaryById(
+                  req.payout_method_id === undefined
+                    ? null
+                    : req.payout_method_id
+                ),
+                cancelled_at: new Date().toISOString(),
+                cancellation_reason: "Cancelled by user",
+              }
             : req
         )
       );
-      toast.success("Withdrawal Cancelled: The funds have been returned to your balance.");
+      toast.success(
+        "Withdrawal Cancelled: The funds have been returned to your balance."
+      );
     } else {
-      console.error("RPC call to cancel withdrawal did not return true. Response:", rpcSuccess);
-      toast.error("Failed to cancel the withdrawal request. Please try again or contact support.");
+      console.error(
+        "RPC call to cancel withdrawal did not return true. Response:",
+        rpcSuccess
+      );
+      toast.error(
+        "Failed to cancel the withdrawal request. Please try again or contact support."
+      );
     }
   };
 
@@ -641,28 +918,28 @@ export default function BillingClientPage({
 
   // Handle checkout success - with protection against infinite loops
   useEffect(() => {
-    const success = searchParams.get('success');
-    const sessionId = searchParams.get('session_id');
+    const success = searchParams.get("success");
+    const sessionId = searchParams.get("session_id");
 
-    if (success === 'true' && sessionId && !hasProcessedSuccess) {
-      console.log('🎉 Payment successful, refreshing subscription data...');
+    if (success === "true" && sessionId && !hasProcessedSuccess) {
+      console.log("🎉 Payment successful, refreshing subscription data...");
       setHasProcessedSuccess(true);
-      toast.success('Payment successful! Your subscription has been updated.');
+      toast.success("Payment successful! Your subscription has been updated.");
 
       // Clear URL parameters to prevent refresh loops
       const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+      window.history.replaceState({}, "", newUrl);
 
       // Refresh the page data to get updated subscription info
       const refreshData = async () => {
         try {
           // Give the webhook a moment to process
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
 
           // Refresh the current page to get updated data
           window.location.reload();
         } catch (error) {
-          console.error('Error refreshing data:', error);
+          console.error("Error refreshing data:", error);
         }
       };
 
@@ -682,17 +959,37 @@ export default function BillingClientPage({
   }
 
   // Derived state for total referrals
-  const totalReferrals = (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
+  const totalReferrals =
+    (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
 
   // Filter withdrawal requests for display
-  const cashWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'cash');
-  const coinWithdrawalRequests = withdrawalRequests.filter(req => req.amount_type === 'coins');
+  const cashWithdrawalRequests = withdrawalRequests.filter(
+    (req) => req.amount_type === "cash"
+  );
+  const coinWithdrawalRequests = withdrawalRequests.filter(
+    (req) => req.amount_type === "coins"
+  );
 
+  const isDark = mode === "dark";
 
   return (
-    <div className="max-w-[1200px] mx-auto py-8">
+    <div
+      className={cn(
+        "mx-auto py-8 no-theme-transition",
+        // Full width in compact (85% zoom) mode, else constrain width
+        isCompact ? "max-w-none px-4 md:px-6" : "max-w-[1200px]"
+      )}
+    >
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">Billing & Account</h1>
+        <h1
+          className="text-2xl font-bold"
+          style={{
+            color: isDark ? "white" : "black",
+            transition: "none",
+          }}
+        >
+          Billing & Account
+        </h1>
       </div>
 
       {/* <Tabs defaultValue="cash" className="w-full" onValueChange={(value) => setActiveTab(value as 'cash' | 'coins')}>
@@ -713,6 +1010,8 @@ export default function BillingClientPage({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         className="mt-12 mb-10"
+        isDark={isDark}
+        light={!isDark}
       />
 
       {/* Cash Account Tab */}
@@ -720,16 +1019,28 @@ export default function BillingClientPage({
         <TabPanel value="cash" activeTab={activeTab}>
           <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 [@media(min-width:1000px)]:grid-cols-2 [@media(min-width:1101px)]:grid-cols-4 mb-10">
             {/*Total Spent*/}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1  space-y-3">
                   <p className="text-lg font-medium">Total Spent</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.total_money_spent)}
                   </p>
                   <p className="text-md">Lifetime contest spending</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <TrendingDown className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -750,16 +1061,28 @@ export default function BillingClientPage({
                 </p>
               </CardContent>
             </Card> */}
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Contests Run</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_run}
                   </p>
                   <p className="text-md">Total contests created</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <BarChart3 className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -781,16 +1104,28 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1  space-y-3">
                   <p className="text-lg font-medium">Available Balance</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.available_deposit_balance)}
                   </p>
                   <p className="text-md">Ready for contests</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Banknote className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -812,16 +1147,28 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Withdrawable Balance</p>
                   <p className="text-xl font-bold">
                     {formatCurrencyFromCents(profile.withdrawable_balance)}
                   </p>
                   <p className="text-md">From referrals & bonuses</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Banknote className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -887,7 +1234,12 @@ export default function BillingClientPage({
             </p>
           )}
 
-          <div className="bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Transaction History</CardTitle>
             </CardHeader>
@@ -900,7 +1252,14 @@ export default function BillingClientPage({
 
               <Table>
                 <TableHeader>
-                  <TableRow className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                  <TableRow
+                    className={cn(
+                      "text-left border-b",
+                      isDark
+                        ? "bg-[#391A6A] text-white"
+                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                    )}
+                  >
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Type</TableHead>
@@ -950,25 +1309,34 @@ export default function BillingClientPage({
                           <Badge
                             variant={
                               transaction.status === "completed" ||
-                                transaction.status === "credited" ||
-                                transaction.status === "success"
+                              transaction.status === "credited" ||
+                              transaction.status === "success"
                                 ? "default"
                                 : transaction.status === "pending"
-                                  ? "secondary"
-                                  : transaction.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
+                                ? "secondary"
+                                : transaction.status === "failed"
+                                ? "destructive"
+                                : "outline"
                             }
                             className={`capitalize px-3 py-1 rounded-full text-sm font-medium
-                              ${transaction.status === "completed" ||
+                              ${
+                                transaction.status === "completed" ||
                                 transaction.status === "credited" ||
                                 transaction.status === "success"
-                                ? "bg-green-100 text-green-700 border-green-300"
-                                : transaction.status === "pending"
-                                  ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                   : transaction.status === "failed"
-                                    ? "bg-red-100 text-red-700 border-red-300"
-                                    : "bg-gray-100 text-gray-700 border-gray-300"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
                               }
                             `}
                           >
@@ -996,20 +1364,33 @@ export default function BillingClientPage({
                   onPageChange={setCashPage}
                   onLimitChange={setCashLimit}
                   loading={cashTransactionsLoading}
+                  isDark={isDark}
                 />
               )}
             </CardContent>
           </div>
 
           {/* Cash Withdrawal Requests */}
-          <div className="mt-8 bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Cash Withdrawal Request History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                  <TableRow
+                    className={cn(
+                      "text-left border-b",
+                      isDark
+                        ? "bg-[#391A6A] text-white"
+                        : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                    )}
+                  >
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Method</TableHead>
@@ -1034,10 +1415,10 @@ export default function BillingClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                  ? "secondary"
-                                  : req.status === "cancelled"
-                                    ? "outline"
-                                    : "destructive"
+                                ? "secondary"
+                                : req.status === "cancelled"
+                                ? "outline"
+                                : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1090,16 +1471,28 @@ export default function BillingClientPage({
         {/* Coin Wallet Tab */}
         <TabPanel value="coins" activeTab={activeTab}>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Total Coins Earned</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.total_lifetime_coins_earned)}
                   </p>
                   <p className="text-md">Lifetime coin earnings</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Banknote className="h-5 w-5" />
                 </div>
               </CardContent>
@@ -1121,16 +1514,28 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Coins Available</p>
                   <p className="text-xl font-bold">
                     {formatCoins(userData.coins)}
                   </p>
                   <p className="text-md">Your current coin balance</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <CryptoWalletIcon className="h-4 w-4" />
                 </div>
               </CardContent>
@@ -1152,14 +1557,26 @@ export default function BillingClientPage({
               </CardContent>
             </Card> */}
 
-            <div className="bg-white rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2">
+            <div
+              className={cn(
+                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
+                isDark ? "bg-[#170337] text-white" : "bg-white text-black"
+              )}
+            >
               <CardContent className="p-4 flex justify-between">
-                <div className="flex-1 text-black space-y-3">
+                <div className="flex-1 space-y-3">
                   <p className="text-lg font-medium">Total Referrals</p>
                   <p className="text-xl font-bold">{totalReferrals}</p>
                   <p className="text-md">Successful referrals</p>
                 </div>
-                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#D8C3FF] text-[#4A00BE]">
+                <div
+                  className={cn(
+                    "w-10 h-10 flex items-center justify-center rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF36] text-white"
+                      : "bg-[#D8C3FF] text-[#4A00BE]"
+                  )}
+                >
                   <Users className="h-4 w-4" />
                 </div>
               </CardContent>
@@ -1181,18 +1598,33 @@ export default function BillingClientPage({
           </div>
 
           <div className="mb-6">
-            <Button className="w-full md:w-auto bg-[#6C43D0] text-md text-white" disabled={true}>
+            <Button
+              className="w-full md:w-auto bg-[#6C43D0] text-md text-white"
+              disabled={true}
+            >
               <Gift className="h-4 w-4 mr-2" /> Redeem Coins (Coming Soon)
             </Button>
           </div>
 
-          <div className="bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Transaction History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Description</TableHead>
@@ -1237,15 +1669,35 @@ export default function BillingClientPage({
                           <Badge
                             variant={
                               transaction.status === "completed" ||
-                                transaction.status === "credited"
+                              transaction.status === "credited"
                                 ? "default"
                                 : transaction.status === "pending"
-                                  ? "secondary"
-                                  : transaction.status === "failed"
-                                    ? "destructive"
-                                    : "outline"
+                                ? "secondary"
+                                : transaction.status === "failed"
+                                ? "destructive"
+                                : "outline"
                             }
-                            className="capitalize"
+                            className={`capitalize px-3 py-1 rounded-full text-sm font-medium
+                              ${
+                                transaction.status === "completed" ||
+                                transaction.status === "credited" ||
+                                transaction.status === "success"
+                                  ? isDark
+                                    ? "bg-[#57D3034F] text-[#57D303]"
+                                    : "bg-green-100 text-green-700 border-green-300"
+                                  : transaction.status === "pending"
+                                  ? isDark
+                                    ? "bg-[#FDD36F61] text-[#FDD36F]"
+                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  : transaction.status === "failed"
+                                  ? isDark
+                                    ? "bg-red-900 text-red-300"
+                                    : "bg-red-100 text-red-700 border-red-300"
+                                  : isDark
+                                  ? "bg-gray-800 text-gray-300"
+                                  : "bg-gray-100 text-gray-700 border-gray-300"
+                              }
+                            `}
                           >
                             {transaction.status?.replace(/_/g, " ") || "N/A"}
                           </Badge>
@@ -1259,13 +1711,25 @@ export default function BillingClientPage({
           </div>
 
           {/* Coin Withdrawal Requests */}
-          <div className="mt-8 bg-white rounded-xl shadow">
+          <div
+            className={cn(
+              "mt-8 rounded-xl shadow",
+              isDark ? "bg-[#170337]" : "bg-white "
+            )}
+          >
             <CardHeader>
               <CardTitle>Coin Redemption History</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader className="text-left bg-[#F9FAFB] text-gray-500 border-b">
+                <TableHeader
+                  className={cn(
+                    "text-left border-b",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500"
+                  )}
+                >
                   <TableRow>
                     <TableHead>Date Submitted</TableHead>
                     <TableHead>Coins</TableHead>
@@ -1286,7 +1750,7 @@ export default function BillingClientPage({
                             ? typeof req.redeemed_item_description === "string"
                               ? req.redeemed_item_description
                               : (req.redeemed_item_description as any)?.name ||
-                              JSON.stringify(req.redeemed_item_description)
+                                JSON.stringify(req.redeemed_item_description)
                             : "N/A"}
                         </TableCell>
                         <TableCell className="max-w-xs truncate">
@@ -1299,10 +1763,10 @@ export default function BillingClientPage({
                                 ? "default"
                                 : req.status === "pending" ||
                                   req.status === "approved"
-                                  ? "secondary"
-                                  : req.status === "cancelled"
-                                    ? "outline"
-                                    : "destructive"
+                                ? "secondary"
+                                : req.status === "cancelled"
+                                ? "outline"
+                                : "destructive"
                             }
                             className="capitalize"
                           >
@@ -1352,7 +1816,12 @@ export default function BillingClientPage({
         {/* Subscription Tab */}
         <TabPanel value="subscription" activeTab={activeTab}>
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-xl">
+            <div
+              className={cn(
+                "rounded-xl shadow-xl",
+                isDark ? "bg-[#170337]" : "bg-white "
+              )}
+            >
               <CardHeader>
                 <CardTitle>Subscription Management</CardTitle>
                 <CardDescription className="text-md">
@@ -1375,22 +1844,36 @@ export default function BillingClientPage({
           setIsPayoutModalOpen(isOpen);
           if (!isOpen) resetPayoutForm();
         }}
+        isdark={isDark}
       >
         <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
+            >
               {currentPayoutMethod?.id
                 ? "Edit Payout Method"
                 : "Add New Payout Method"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
+            >
               Manage your payout methods. Your default method will be
               pre-selected for withdrawals.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Country selector controls which payout methods show */}
-            <div>
+            <div className={cn(
+              "space-y-1",
+              isDark ? "text-white" : "text-gray-800"
+            )}>
               <Label htmlFor="payoutCountry">Country</Label>
               <Select
                 value={payoutCountry}
@@ -1401,12 +1884,18 @@ export default function BillingClientPage({
                 }}
                 disabled={isLoading}
               >
-                <SelectTrigger id="payoutCountry">
+                <SelectTrigger id="payoutCountry" className={cn(
+                  isDark ? "border-gray-600" : "border-slate-300"
+                )}>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="IN">India</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
+                <SelectContent isDark={isDark}>
+                  <SelectItem isDark={isDark} value="IN">
+                    India
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="OTHER">
+                    Other
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1420,30 +1909,103 @@ export default function BillingClientPage({
             >
               {payoutCountry === "IN" ? (
                 <TabsList className="grid w-full grid-cols-4 gap-2">
-                  <TabsTrigger className="border border-gray-500" value="upi">UPI</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="bank_transfer">Bank Transfer</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="crypto">Crypto</TabsTrigger>
-                  <TabsTrigger className="border border-gray-500" value="phantom">Phantom Wallet</TabsTrigger>
+                  <TabsTrigger
+                    value="upi"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    UPI
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="bank_transfer"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Bank Transfer
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="crypto"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Crypto
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="phantom"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Phantom Wallet
+                  </TabsTrigger>
                 </TabsList>
               ) : (
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="crypto">Crypto</TabsTrigger>
-                  <TabsTrigger value="phantom">Phantom Wallet</TabsTrigger>
+                  <TabsTrigger
+                    value="crypto"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Crypto
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="phantom"
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "border-gray-400 text-gray-300"
+                        : "border-gray-500 text-gray-800"
+                    )}
+                  >
+                    Phantom Wallet
+                  </TabsTrigger>
                 </TabsList>
               )}
 
               <TabsContent value="crypto" className="pt-4 space-y-2">
-                <div className="space-y-1">
-                  <Label htmlFor="payoutFriendlyNameCrypto">Friendly Name</Label>
+                <div  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
+                  <Label htmlFor="payoutFriendlyNameCrypto">
+                    Friendly Name
+                  </Label>
                   <Input
                     id="payoutFriendlyNameCrypto"
                     value={payoutFriendlyName}
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., My Binance USDT"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
-                <div className="space-y-1">
+                <div  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                   <Label htmlFor="cryptoNetwork">Network</Label>
                   <Select
                     value={cryptoNetwork}
@@ -1458,99 +2020,138 @@ export default function BillingClientPage({
                     }}
                     disabled={isLoading}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger  className={cn(
+                        isDark ? "border-gray-600" : "border-slate-300"
+                      )}>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="BNB_SMART_CHAIN">
+                    <SelectContent isDark={isDark}>
+                      <SelectItem isDark={isDark} value="BNB_SMART_CHAIN">
                         BNB Smart Chain (BEP20)
                       </SelectItem>
-                      <SelectItem value="SOLANA">
-                        Solana
-                      </SelectItem>
+                      <SelectItem isDark={isDark} value="SOLANA">Solana</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
+                <div  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                   <Label htmlFor="cryptoCurrency">Cryptocurrency</Label>
                   <Select
                     value={cryptoCurrency}
                     onValueChange={(val) => setCryptoCurrency(val)}
                     disabled={isLoading}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger  className={cn(
+                        isDark ? "border-gray-600" : "border-slate-300"
+                      )}>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent isDark={isDark}>
                       {cryptoNetwork === "BNB_SMART_CHAIN" ? (
                         <>
-                          <SelectItem value="BNB">BNB</SelectItem>
-                          <SelectItem value="USDT">USDT (BEP20)</SelectItem>
+                          <SelectItem isDark={isDark} value="BNB">BNB</SelectItem>
+                          <SelectItem isDark={isDark} value="USDT">USDT (BEP20)</SelectItem>
                         </>
                       ) : (
                         <>
-                          <SelectItem value="SOL">SOL</SelectItem>
-                          <SelectItem value="USDT">USDT</SelectItem>
-                          <SelectItem value="USDC">USDC</SelectItem>
+                          <SelectItem isDark={isDark} value="SOL">SOL</SelectItem>
+                          <SelectItem isDark={isDark} value="USDT">USDT</SelectItem>
+                          <SelectItem isDark={isDark} value="USDC">USDC</SelectItem>
                         </>
                       )}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor="cryptoAddress" className="flex items-center gap-2">
+                <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
+                  <Label
+                    htmlFor="cryptoAddress"
+                    className="flex items-center gap-2"
+                  >
                     Your Wallet Address
-                    {walletValidationStatus === 'valid' && <CheckCircle className="h-4 w-4 text-green-600" />}
-                    {walletValidationStatus === 'invalid' && <AlertCircle className="h-4 w-4 text-red-600" />}
+                    {walletValidationStatus === "valid" && (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    )}
+                    {walletValidationStatus === "invalid" && (
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                    )}
                   </Label>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <Input
                       id="cryptoAddress"
                       value={cryptoAddress}
                       onChange={(e) => {
                         setCryptoAddress(e.target.value);
                         // Reset validation status when address changes
-                        if (walletValidationStatus !== 'idle') {
-                          setWalletValidationStatus('idle');
-                          setWalletValidationError('');
+                        if (walletValidationStatus !== "idle") {
+                          setWalletValidationStatus("idle");
+                          setWalletValidationError("");
                         }
                       }}
                       placeholder={`Enter your ${cryptoCurrency} wallet address`}
                       disabled={isLoading}
-                      className="flex-1"
+                      className={cn(
+                        "flex-1",
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
+                      
                     />
                     <Button
                       type="button"
                       variant="outline"
                       onClick={validateWalletAddress}
-                      disabled={!cryptoAddress.trim() || isValidatingWallet || isLoading}
-                      className="px-4"
+                      disabled={
+                        !cryptoAddress.trim() || isValidatingWallet || isLoading
+                      }
+                      
+                      className={cn(
+                        "text-md text-white",
+                        isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                      )}
                     >
                       {isValidatingWallet ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        'Validate'
+                        "Validate"
                       )}
                     </Button>
                   </div>
 
-                  {walletValidationStatus === 'validating' && (
-                    <p className="text-sm text-blue-600">Validating wallet address...</p>
+                  {walletValidationStatus === "validating" && (
+                    <p className="text-sm text-blue-600">
+                      Validating wallet address...
+                    </p>
                   )}
 
-                  {walletValidationStatus === 'invalid' && (
-                    <p className="text-sm text-red-600">{walletValidationError}</p>
+                  {walletValidationStatus === "invalid" && (
+                    <p className="text-sm text-red-600">
+                      {walletValidationError}
+                    </p>
                   )}
 
-                  {walletValidationStatus === 'valid' && (
-                    <p className="text-sm text-green-600">Wallet address format is correct!</p>
+                  {walletValidationStatus === "valid" && (
+                    <p className="text-sm text-green-600">
+                      Wallet address format is correct!
+                    </p>
                   )}
                 </div>
-                <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-300 p-2 text-xs">
+                <div className="rounded-md border border-red-500/40 bg-red-500/10 text-red-500 p-2 text-xs">
                   {cryptoNetwork === "BNB_SMART_CHAIN" ? (
-                    <>We only support BNB Smart Chain (BEP20). Do not enter ERC20/other chain addresses. Wrong address = funds lost.</>
+                    <>
+                      We only support BNB Smart Chain (BEP20). Do not enter
+                      ERC20/other chain addresses. Wrong address = funds lost.
+                    </>
                   ) : (
-                    <>We only support Solana network. Do not enter other chain addresses. Wrong address = funds lost.</>
+                    <>
+                      We only support Solana network. Do not enter other chain
+                      addresses. Wrong address = funds lost.
+                    </>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
@@ -1558,28 +2159,45 @@ export default function BillingClientPage({
                   method, you accept responsibility for declaring and paying
                   taxes as per your country's laws.
                 </p>
-                <p className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
-                  <strong>Note:</strong> We only validate the format of your wallet address.
-                  Please double-check that you've entered the correct address for your selected network,
-                  as sending to the wrong address will result in permanent loss of funds.
+                <p className={cn(
+                    "text-[10px] text-amber-600 bg-amber-50 p-2 rounded border border-amber-200",
+                    isDark
+                      ? "border-amber-200 bg-amber-500/10 text-amber-300"
+                      : "border-amber-200 bg-amber-50 text-amber-600"
+                  )}>
+                  <strong>Note:</strong> We only validate the format of your
+                  wallet address. Please double-check that you've entered the
+                  correct address for your selected network, as sending to the
+                  wrong address will result in permanent loss of funds.
                 </p>
               </TabsContent>
 
               {/* Bank Transfer Form (India) */}
               <TabsContent value="bank_transfer" className="pt-4 space-y-2">
-                <div className="space-y-1">
+                <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                   <Label htmlFor="payoutFriendlyNameBank">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameBank"
-
                     value={payoutFriendlyName}
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., Primary Savings"
                     disabled={isLoading}
+                    className={cn(
+                      
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
+                  <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                     <Label htmlFor="bankAccountHolder">
                       Account Holder Name
                     </Label>
@@ -1588,33 +2206,62 @@ export default function BillingClientPage({
                       value={bankAccountHolder}
                       onChange={(e) => setBankAccountHolder(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                     <Label htmlFor="bankAccountNumber">Account Number</Label>
                     <Input
                       id="bankAccountNumber"
                       value={bankAccountNumber}
                       onChange={(e) => setBankAccountNumber(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                     <Label htmlFor="bankIfscCode">IFSC Code</Label>
                     <Input
                       id="bankIfscCode"
                       value={bankIfscCode}
                       onChange={(e) => setBankIfscCode(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                     <Label htmlFor="bankName">Bank Name (Optional)</Label>
                     <Input
                       id="bankName"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
                       disabled={isLoading}
+                      className={cn(
+                        isDark
+                          ? "bg-[#06021D] border border-gray-600 text-white"
+                          : "bg-white text-black"
+                      )}
                     />
                   </div>
                 </div>
@@ -1627,7 +2274,10 @@ export default function BillingClientPage({
 
               {/* UPI Form (India, default) */}
               <TabsContent value="upi" className="pt-4 space-y-3">
-                <div className="space-y-1">
+                <div className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}>
                   <Label htmlFor="payoutFriendlyNameUpi">Friendly Name</Label>
                   <Input
                     id="payoutFriendlyNameUpi"
@@ -1635,9 +2285,19 @@ export default function BillingClientPage({
                     onChange={(e) => setPayoutFriendlyName(e.target.value)}
                     placeholder="e.g., My UPI"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
-                <div className="space-y-1">
+                <div
+                  className={cn(
+                    "space-y-1",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="upiHolder">Account Holder Name</Label>
                   <Input
                     id="upiHolder"
@@ -1645,9 +2305,18 @@ export default function BillingClientPage({
                     onChange={(e) => setBankAccountHolder(e.target.value)}
                     placeholder="e.g., Rahul Kumar"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
-                <div className="space-y-1">
+                <div
+                 className={cn(
+                  "space-y-1",
+                  isDark ? "text-white" : "text-gray-800"
+                )}>
                   <Label htmlFor="upiId">UPI ID</Label>
                   <Input
                     id="upiId"
@@ -1655,6 +2324,11 @@ export default function BillingClientPage({
                     onChange={(e) => setUpiId(e.target.value)}
                     placeholder="yourname@bank"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -1667,9 +2341,13 @@ export default function BillingClientPage({
               <TabsContent value="phantom" className="space-y-4">
                 <div className="text-center py-8">
                   <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Phantom Wallet</h3>
+                  <h3 className={cn(
+                    "text-lg font-semibold mb-2",
+                    isDark ? "text-white" : "text-black"
+                  )}>Phantom Wallet</h3>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Add your Phantom Wallet to receive USDC or USDT payouts via Solana network directly to your wallet.
+                    Add your Phantom Wallet to receive USDC or USDT payouts via
+                    Solana network directly to your wallet.
                   </p>
                   <Button
                     onClick={() => {
@@ -1687,24 +2365,44 @@ export default function BillingClientPage({
             </Tabs>
           </div>
           <DialogFooter>
-            <Button onClick={handleSavePayoutMethod} disabled={isLoading}
-              className="bg-[#D9C0FF61] text-md text-[#7F39EC] py-6 rounded-full">
+            <button
+              onClick={handleSavePayoutMethod}
+              disabled={isLoading}
+              className={cn(
+                "w-full text-md rounded-full",
+                isDark
+                  ? "bg-[#7F39EC] py-3 text-white"
+                  : " bg-[#D9C0FF61] py-3.5 text-[#7F39EC] "
+              )}
+            >
               {isLoading
                 ? "Saving..."
                 : currentPayoutMethod?.id
-                  ? "Save Changes"
-                  : "Add Method"}
-            </Button>
+                ? "Save Changes"
+                : "Add Method"}
+            </button>
             <DialogClose asChild>
-              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <button
+                disabled={isLoading}
+                className={cn(
+                  "w-full text-md rounded-full",
+                  isDark
+                    ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                    : "bg-[#FF323224] text-[#E50000] py-3.5"
+                )}
+              >
                 Cancel
-              </Button>
+              </button>
             </DialogClose>
-
           </DialogFooter>
 
           {payoutMethods.length > 0 && (
-            <div className="mt-6 pt-4 border-t">
+            <div
+              className={cn(
+                "mt-6 pt-4 border-t",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <h3 className="text-lg font-medium mb-3">Your Saved Methods</h3>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {payoutMethods.map((method) => (
@@ -1773,13 +2471,24 @@ export default function BillingClientPage({
           if (isSubmittingWithdrawal && isOpen) return;
           setIsWithdrawModalOpen(isOpen);
         }}
+        isdark={isDark}
       >
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
+            >
               Withdraw {activeTabModal === "cash" ? "Balance" : "Coins"}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription
+              style={{
+                color: isDark ? "white" : "#1f2937",
+                transition: "none",
+              }}
+            >
               Withdraw funds to your preferred payout method. Minimum withdrawal
               is {formatCurrencyFromCents(MIN_WITHDRAWAL_AMOUNT)}.
             </DialogDescription>
@@ -1787,7 +2496,12 @@ export default function BillingClientPage({
           <div className="py-4 space-y-4">
             {activeTabModal === "cash" && (
               <>
-                <div className="text-lg">
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available:{" "}
                   <span className="font-semibold">
                     {profile
@@ -1795,7 +2509,12 @@ export default function BillingClientPage({
                       : formatCurrencyFromCents(0)}
                   </span>
                 </div>
-                <div>
+                <div
+                  className={cn(
+                    "space-y-2",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   <Label htmlFor="withdrawAmountDollars">
                     Amount to Withdraw (USD)
                   </Label>
@@ -1812,19 +2531,29 @@ export default function BillingClientPage({
                     step="0.01"
                     placeholder="e.g., 50.00"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
             {activeTabModal === "coins" && (
               <>
-                <div className="text-lg">
+                <div
+                  className={cn(
+                    "text-lg",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
                   Available Coins:{" "}
                   <span className="font-semibold">
                     {formatCoins(userData?.coins || 0)}
                   </span>
                 </div>
-                <div>
+                <div className={cn(isDark ? "text-white" : "text-gray-800")}>
                   <Label htmlFor="withdrawAmountCoins">Coins to Redeem</Label>
                   <Input
                     id="withdrawAmountCoins"
@@ -1835,11 +2564,21 @@ export default function BillingClientPage({
                     }
                     placeholder="e.g., 1000"
                     disabled={isLoading}
+                    className={cn(
+                      isDark
+                        ? "bg-[#06021D] border border-gray-600 text-white"
+                        : "bg-white text-black"
+                    )}
                   />
                 </div>
               </>
             )}
-            <div>
+            <div
+              className={cn(
+                "space-y-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <Label htmlFor="withdrawalUserNotes">Notes (Optional)</Label>
               <Input
                 id="withdrawalUserNotes"
@@ -1847,9 +2586,19 @@ export default function BillingClientPage({
                 onChange={(e) => setWithdrawalUserNotes(e.target.value)}
                 placeholder="Optional notes for your withdrawal request"
                 disabled={isLoading}
+                className={cn(
+                  isDark
+                    ? "bg-[#06021D] border border-gray-600 text-white"
+                    : "bg-white text-black"
+                )}
               />
             </div>
-            <div>
+            <div
+              className={cn(
+                "space-y-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               <Label htmlFor="payoutMethodSelect">Select Payout Method</Label>
               <Select
                 value={selectedWithdrawMethodId || ""}
@@ -1859,18 +2608,26 @@ export default function BillingClientPage({
                 <SelectTrigger id="payoutMethodSelect">
                   <SelectValue placeholder="Choose a method..." />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent isDark={isDark}>
                   {payoutMethods
                     .filter((m) => m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)} (Default)
                       </SelectItem>
                     ))}
                   {payoutMethods
                     .filter((m) => !m.is_default)
                     .map((method) => (
-                      <SelectItem key={method.id} value={method.id}>
+                      <SelectItem
+                        key={method.id}
+                        value={method.id}
+                        isDark={isDark}
+                      >
                         {getPayoutMethodSummary(method)}
                       </SelectItem>
                     ))}
@@ -1884,7 +2641,6 @@ export default function BillingClientPage({
             )}
           </div>
           <DialogFooter>
-
             <Button
               className="w-full py-6 rounded-full text-md"
               onClick={handleWithdraw}
@@ -1897,7 +2653,7 @@ export default function BillingClientPage({
                 (activeTabModal === "cash" &&
                   (!profile ||
                     withdrawAmountDollars * 100 >
-                    (profile.withdrawable_balance || 0))) ||
+                      (profile.withdrawable_balance || 0))) ||
                 (activeTabModal === "coins" &&
                   (!userData ||
                     withdrawAmountCoins > (userData.coins || 0) ||
@@ -1909,7 +2665,10 @@ export default function BillingClientPage({
               Request Withdrawal
             </Button>
             <DialogClose asChild>
-              <Button disabled={isLoading} className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full">
+              <Button
+                disabled={isLoading}
+                className="bg-[#FF323224] text-md text-[#E50000] py-6 rounded-full"
+              >
                 Cancel
               </Button>
             </DialogClose>
@@ -1927,10 +2686,16 @@ export default function BillingClientPage({
           }
           setIsTopUpModalOpen(open);
         }}
+        isdark={isDark}
       >
-        <DialogContent className="w-[92vw] max-w-md sm:max-w-lg md:max-w-xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="sm:max-w-[500px] w-[95vw] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+            <DialogTitle
+              className={cn(
+                "flex items-center gap-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               Top Up Your Wallet
               {isProcessingPayment && (
                 <span className="text-sm text-orange-600 font-normal">
@@ -1938,7 +2703,12 @@ export default function BillingClientPage({
                 </span>
               )}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription
+              className={cn(
+                "flex flex-col gap-2",
+                isDark ? "text-white" : "text-gray-800"
+              )}
+            >
               Add funds to your wallet balance for contest payments. Your wallet
               balance can be used for all contest fees.
               {isProcessingPayment && (
@@ -1967,44 +2737,51 @@ export default function BillingClientPage({
       </Dialog>
 
       {/* Phantom Wallet Modal */}
-      <Dialog open={isPhantomModalOpen} onOpenChange={setIsPhantomModalOpen}>
+      <Dialog
+        open={isPhantomModalOpen}
+        onOpenChange={setIsPhantomModalOpen}
+        isdark={isDark}
+      >
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <DialogTitle className="sr-only">Add Phantom Wallet</DialogTitle>
+          <DialogTitle 
+            className={cn(
+              "sr-only",
+              isDark ? "text-white" : "text-gray-800"
+            )}>Add Phantom Wallet</DialogTitle>
           <PhantomPayoutForm
             onSave={async (details) => {
               // Save Phantom Wallet payout method
               setIsLoading(true);
               try {
-                const { error } = await supabase
-                  .from('payout_methods')
-                  .insert({
-                    user_id: authUser.id,
-                    method_type: 'phantom',
-                    details,
-                    is_default: payoutMethods.length === 0, // Set as default if first method
-                    friendly_name: details.friendly_name || 'Phantom Wallet'
-                  });
+                const { error } = await supabase.from("payout_methods").insert({
+                  user_id: authUser.id,
+                  method_type: "phantom",
+                  details,
+                  is_default: payoutMethods.length === 0, // Set as default if first method
+                  friendly_name: details.friendly_name || "Phantom Wallet",
+                });
 
                 if (error) throw error;
 
                 // Refresh payout methods
                 const { data: newMethods } = await supabase
-                  .from('payout_methods')
-                  .select('*')
-                  .eq('user_id', authUser.id)
-                  .order('created_at', { ascending: false });
+                  .from("payout_methods")
+                  .select("*")
+                  .eq("user_id", authUser.id)
+                  .order("created_at", { ascending: false });
 
                 setPayoutMethods(newMethods || []);
                 setIsPhantomModalOpen(false);
-                toast.success('Phantom Wallet added successfully!');
+                toast.success("Phantom Wallet added successfully!");
               } catch (error: any) {
-                toast.error(error.message || 'Failed to add Phantom Wallet');
+                toast.error(error.message || "Failed to add Phantom Wallet");
               } finally {
                 setIsLoading(false);
               }
             }}
             onCancel={() => setIsPhantomModalOpen(false)}
             isLoading={isLoading}
+            isDark={isDark}
           />
         </DialogContent>
       </Dialog>

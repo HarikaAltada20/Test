@@ -122,24 +122,17 @@ export function SubscriptionFailedClient({
     };
 
     return (
-        <div className="min-h-screen  bg-[#000825] text-white  flex items-center justify-center p-4">
+        <div className="min-h-screen bg-[#000825] text-white flex items-center justify-center p-4 border-b border-[#A87313] pb-12">
             <div className="max-w-7xl w-full space-y-8">
                 {/* Error Header */}
                 <div className="text-center space-y-4">
-                    <div className="flex justify-center">
-                        <div className="bg-purple-100 p-4 rounded-full">
-                            <XCircle className="h-16 w-16 text-purple-600" />
+                    <div className="flex justify-center pt-8">
+                        <div className="bg-[#FF323242] p-5 rounded-full">
+                            <XCircle className="h-16 w-16 text-[#FF3232]" />
                         </div>
                     </div>
-                    <h1 className="text-4xl mt-3 font-bold"
-                     style={{
-                        background:
-                          "linear-gradient(180deg, #7F39EC 26.04%, #AD6BF3 81.25%)",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                        backgroundClip: "text",
-        
-                        }}>
+                    <h1 className="text-4xl mt-3 font-bold text-white"
+                    >
                         {errorDetails.title}
                     </h1>
                     <p className="text-lg text-white">
@@ -271,7 +264,7 @@ export function SubscriptionFailedClient({
                 </div>
 
                 {/* Support Information */}
-                <Card className="bg-[#7F39EC52] border-[#7F39EC]">
+                <Card className="bg-[#C9A7FF26] border-[#C9A7FF]">
                     <CardContent className="pt-6">
                         <div className="text-center space-y-3">
                             <h3 className="font-semibold text-white">Need Help?</h3>

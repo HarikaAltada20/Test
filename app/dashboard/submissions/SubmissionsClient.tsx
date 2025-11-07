@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -30,6 +31,7 @@ import Image from "next/image";
 import React from "react";
 import { centsToDollars } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
+import { cn } from "@/lib/utils";
 
 // Map human-readable rejection reason labels to their descriptions
 const REJECTION_REASON_DESCRIPTIONS: Record<string, string> = {
@@ -84,7 +86,38 @@ export default function SubmissionsClient({
     useState<ContestTypeFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("all");
+  const [mode, setMode] = useState<"light" | "dark">("light");
 
+  // Read mode from data attribute
+  useEffect(() => {
+    const checkMode = () => {
+      const modeElement = document.querySelector("[data-mode]");
+      if (modeElement) {
+        const currentMode = modeElement.getAttribute("data-mode") as
+          | "light"
+          | "dark";
+        if (currentMode) {
+          setMode(currentMode);
+        }
+      }
+    };
+
+    checkMode();
+
+    // Watch for changes in the data attribute
+    const observer = new MutationObserver(checkMode);
+    const targetNode = document.querySelector("[data-mode]");
+    if (targetNode) {
+      observer.observe(targetNode, {
+        attributes: true,
+        attributeFilter: ["data-mode"],
+      });
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  const isDark = mode === "dark";
   // Helper for dynamic card titles and descriptions
   const filterDisplayInfo: Record<
     StatusFilter,
@@ -428,10 +461,10 @@ export default function SubmissionsClient({
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by Type" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types of Contests</SelectItem>
-            <SelectItem value="leaderboard">Leaderboard</SelectItem>
-            <SelectItem value="cpm">CPM</SelectItem>
+          <SelectContent isDark={isDark}>
+            <SelectItem  isDark={isDark} value="all">All Types of Contests</SelectItem>
+            <SelectItem isDark={isDark} value="leaderboard">Leaderboard</SelectItem>
+            <SelectItem isDark={isDark} value="cpm">CPM</SelectItem>
           </SelectContent>
         </Select>
         <Select
@@ -441,10 +474,10 @@ export default function SubmissionsClient({
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by Platform" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Platforms</SelectItem>
-            <SelectItem value="youtube">YouTube</SelectItem>
-            <SelectItem value="instagram">Instagram</SelectItem>
+          <SelectContent isDark={isDark}>
+            <SelectItem isDark={isDark}value="all">All Platforms</SelectItem>
+            <SelectItem isDark={isDark} value="youtube">YouTube</SelectItem>
+            <SelectItem isDark={isDark} value="instagram">Instagram</SelectItem>
           </SelectContent>
         </Select>
         {/* Consider replacing Button with Tabs for status filters for better UX */}
@@ -463,43 +496,64 @@ export default function SubmissionsClient({
         <TabsList className="flex gap-4">
           <TabsTrigger
             value="all"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             All
           </TabsTrigger>
           <TabsTrigger
             value="active"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             Active
           </TabsTrigger>
           <TabsTrigger
             value="pending"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             Pending
           </TabsTrigger>
           <TabsTrigger
             value="verified"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             Verified
           </TabsTrigger>
           <TabsTrigger
             value="rejected"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             Rejected
           </TabsTrigger>
           <TabsTrigger
             value="ended"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             Ended
           </TabsTrigger>
           <TabsTrigger
             value="paid"
-            className="border border-[#7F39EC] text-md text-[#7F39EC]"
+            className={cn(
+              "border text-md",
+              isDark ? "text-white border-gray-500" : "text-[#7F39EC] border-[#7F39EC]"
+            )}
           >
             Paid
           </TabsTrigger>
@@ -672,7 +726,11 @@ export default function SubmissionsClient({
                   return (
                     <div
                       key={submission.id}
-                      className="border border-[#D1B7F9] bg-white rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow"
+                     
+                      className={cn(
+                           "rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:shadow-md transition-shadow",    
+                        isDark ? "border border-gray-600" : "border border-[#D1B7F9] bg-white "
+                      )}
                     >
                       <div className="flex items-center space-x-4 flex-grow">
                         {submission.video_thumbnail_url ? (
@@ -694,12 +752,18 @@ export default function SubmissionsClient({
                               href={`/dashboard/opportunities/${contestId}`}
                               className="hover:underline"
                             >
-                              <p className="text-xl font-semibold text-black">
+                              <p className={cn(
+                                "text-xl font-semibold",
+                                isDark ? "text-white" : "text-black"
+                              )}>
                                 {contest?.title || "Contest Title N/A"}
                               </p>
                             </Link>
                           ) : (
-                            <p className="text-xl font-semibold">
+                            <p className={cn(
+                              "text-xl font-semibold",
+                              isDark ? "text-white" : "text-black"
+                            )}>
                               {contest?.title || "Contest Title N/A"}
                             </p>
                           )}
@@ -748,7 +812,10 @@ export default function SubmissionsClient({
 
                       <div className="flex flex-col sm:items-end gap-3 w-full sm:w-auto">
                         <div className="text-sm text-left sm:text-right p-3 rounded-md min-w-[200px]">
-                          <p className="font-medium text-slate-700 dark:text-slate-300">
+                          <p className={cn(
+                            "font-medium",
+                            isDark ? "text-slate-300" : "text-slate-700"
+                          )}>
                             {views.toLocaleString()} views
                           </p>
 
