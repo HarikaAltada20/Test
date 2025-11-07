@@ -1598,14 +1598,17 @@ export default function SettingsPage({
       )}
       {/* Survey Section - Only for Creators who have completed the survey */}
       {userType === "creator" && isSurveyCompleted && !isSurveyLoading && (
-        <div className="bg-white rounded-xl shadow-lg border border-purple-100 overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5">
+        <div className={cn(
+          "rounded-xl shadow-lg overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5",
+          isDark ? "bg-[#180438]" : "bg-white border border-purple-100"
+        )}>
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
             {/* Content Section */}
             <div className="flex flex-col sm:flex-row items-center sm:items-start flex-1 w-full">
               {/* Image */}
               <div className="relative flex-shrink-0 flex justify-center sm:justify-start">
                 <img
-                  src="/images/360_F_1018050560_kQHuMNjN5tHrhUKxnT9dBbOoxjCEe9cu-removebg-preview.avif"
+                  src="/images/survey-form.avif"
                   alt="Survey illustration"
                   className="h-[80px] sm:h-[100px] md:h-[110px] lg:h-[130px] object-contain"
                 />
@@ -1613,36 +1616,28 @@ export default function SettingsPage({
               {/* Text Content */}
               <div className="flex-1 space-y-4 w-full sm:w-auto text-center pt-7 sm:text-left">
                 <div>
-                  <h3 className="font-semibold text-base sm:text-lg mb-1 text-gray-900">
+                  <h3 className={cn(
+                    "font-semibold text-base sm:text-lg mb-1",
+                    isDark ? "text-white" : "text-gray-900"
+                  )}>
                     Survey Completed
                   </h3>
-                  <p className="text-xs sm:text-[12.5px] text-gray-600 leading-relaxed">
+                  <p className={cn(
+                    "text-xs sm:text-[12.5px] leading-relaxed",
+                    isDark ? "text-gray-300" : "text-gray-600"
+                  )}>
                     Thank you for completing our survey! Your feedback is
                     valuable to us and helps improve the platform. We appreciate
                     your time and thoughtful responses.
                   </p>
                 </div>
-                {/* Reward Badge */}
-                {/* <div className="flex items-center justify-center sm:justify-start gap-2 bg-gradient-to-r from-purple-100 to-pink-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-purple-200 w-full sm:w-fit shadow-sm">
-                  <Gift className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 animate-pulse flex-shrink-0" />
-                  <span className="text-xs sm:text-sm font-semibold text-purple-700 whitespace-nowrap">
-                    Survey completed - Thank you!
-                  </span>
-                </div> */}
+                
               </div>
             </div>
-            {/* Button Section */}
-            {/* <div className="w-full sm:w-auto lg:pr-2 lg:flex-shrink-0 mt-3 md:mt-0">
-              <div className="flex items-center justify-center sm:justify-start gap-2 bg-green-100 px-4 py-2 rounded-lg border border-green-200">
-                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium text-green-700">
-                  Completed
-                </span>
-              </div>
-            </div> */}
+            
           </div>
         </div>
-      )}
+      )} 
 
        {/* Referral Links */}
        {username && (

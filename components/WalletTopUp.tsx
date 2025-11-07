@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EnhancedTabs, Tab } from "@/components/ui/enhancedTabs";
 import { toast } from "sonner";
 import { Loader2, CreditCard, DollarSign, Wallet } from "lucide-react";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -528,6 +528,31 @@ export function WalletTopUp({
 
   const predefinedAmounts = [25, 50, 100, 200, 500];
 
+  const paymentTabs: Tab[] = [
+    {
+      id: "stripe",
+      label: (
+        <>
+          <CreditCard className="h-4 w-4" />
+          <span className="text-xs sm:text-sm leading-tight whitespace-normal">
+            Credit Card
+          </span>
+        </>
+      ),
+    },
+    {
+      id: "solana",
+      label: (
+        <>
+          <Wallet className="h-4 w-4" />
+          <span className="text-xs sm:text-sm leading-tight whitespace-normal">
+            Solana (USDC/USDT)
+          </span>
+        </>
+      ),
+    },
+  ];
+
   const handleSolanaSuccess = (newBalance: number) => {
     toast.success("Solana payment received! Your balance has been updated.");
     onBalanceUpdate(newBalance);
@@ -555,58 +580,44 @@ export function WalletTopUp({
           </CardTitle>
         </div>
 
-        <Tabs
-          value={paymentMethod}
-          onValueChange={(value) =>
-            setPaymentMethod(value as "stripe" | "solana")
-          }
-          className="w-full"
-        >
-          <TabsList className="grid w-full grid-cols-2 gap-2 mb-6">
-            <TabsTrigger
-              value="stripe"
-              className="flex items-center gap-2 text-xs sm:text-sm leading-tight px-3 py-2 whitespace-normal"
-            >
-              <CreditCard className="h-4 w-4" />
-              Credit Card
-            </TabsTrigger>
-            <TabsTrigger
-              value="solana"
-              className="flex items-center gap-2 text-xs sm:text-sm leading-tight px-3 py-2 whitespace-normal"
-            >
-              <Wallet className="h-4 w-4" />
-              Solana (USDC/USDT)
-            </TabsTrigger>
-          </TabsList>
+        <EnhancedTabs
+          tabs={paymentTabs}
+          activeTab={paymentMethod}
+          onTabChange={(id) => setPaymentMethod(id as "stripe" | "solana")}
+          isDark={isDark}
+          light={!isDark}
+          className="w-full mb-6"
+        />
 
-          <div className="space-y-6">
-            <div
-              className={cn(
-                "p-4 rounded-lg border",
-                isDark ? "border-gray-600" : "border-gray-400"
-              )}
-            >
-              <div className="flex items-start sm:items-center justify-between gap-2">
-                <span
-                  className={cn(
-                    "text-md font-medium",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}
-                >
-                  Current Balance
-                </span>
-                <span
-                  className={cn(
-                    "text-lg sm:text-xl font-bold",
-                    isDark ? "text-white" : "text-gray-600"
-                  )}
-                >
-                  {formatCurrencyFromCents(currentBalance)}
-                </span>
-              </div>
+        <div className="space-y-6">
+          <div
+            className={cn(
+              "p-4 rounded-lg border",
+              isDark ? "border-gray-600" : "border-gray-400"
+            )}
+          >
+            <div className="flex items-start sm:items-center justify-between gap-2">
+              <span
+                className={cn(
+                  "text-md font-medium",
+                  isDark ? "text-white" : "text-gray-600"
+                )}
+              >
+                Current Balance
+              </span>
+              <span
+                className={cn(
+                  "text-lg sm:text-xl font-bold",
+                  isDark ? "text-white" : "text-gray-600"
+                )}
+              >
+                {formatCurrencyFromCents(currentBalance)}
+              </span>
             </div>
+          </div>
 
-            <TabsContent value="stripe" className="mt-0 space-y-4">
+          {paymentMethod === "stripe" ? (
+            <div className="mt-0 space-y-4">
               {!showPaymentForm ? (
                 <div className="space-y-4">
                   <div className="space-y-4">
@@ -719,52 +730,53 @@ export function WalletTopUp({
                   </Elements>
                 </div>
               )}
-            </TabsContent>
-
-            <TabsContent value="solana" className="mt-0 space-y-4">
+            </div>
+          ) : (
+            <div className="mt-0 space-y-4">
               <div className="text-center py-6 sm:py-8 px-2 space-y-4">
                 <div className="text-4xl sm:text-5xl mb-4">💳</div>
-                <h3 
-                 className={cn(
-                  "text-lg font-semibold",
-                  isDark
-                    ? "text-white"
-                    : "text-gray-800"
-                )}>Pay with Solana</h3>
-                <p className={cn(
-                  "text-sm max-w-md mx-auto",
-                  isDark
-                    ? "text-white"
-                    : "text-gray-600"
-                )}>
+                <h3
+                  className={cn(
+                    "text-lg font-semibold",
+                    isDark ? "text-white" : "text-gray-800"
+                  )}
+                >
+                  Pay with Solana
+                </h3>
+                <p
+                  className={cn(
+                    "text-sm max-w-md mx-auto",
+                    isDark ? "text-white" : "text-gray-600"
+                  )}
+                >
                   Top up your wallet instantly using USDC or USDT on the Solana
                   blockchain. Fast, secure, and with low transaction fees.
                 </p>
                 <div className="flex flex-col gap-2 max-w-xs mx-auto">
-                  <div className={cn(
-                    "flex items-center gap-2 text-sm",
-                    isDark
-                      ? "text-white"
-                      : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 text-sm",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}
+                  >
                     <span className="text-green-500">✓</span>
                     <span>Instant processing (1-2 minutes)</span>
                   </div>
-                  <div className={cn(
-                    "flex items-center gap-2 text-sm",
-                    isDark
-                      ? "text-white"
-                      : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 text-sm",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}
+                  >
                     <span className="text-green-500">✓</span>
                     <span>Low transaction fees</span>
                   </div>
-                  <div className={cn(
-                    "flex items-center gap-2 text-sm",
-                    isDark
-                      ? "text-white"
-                      : "text-gray-600"
-                  )}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-2 text-sm",
+                      isDark ? "text-white" : "text-gray-600"
+                    )}
+                  >
                     <span className="text-green-500">✓</span>
                     <span>Support for USDC & USDT</span>
                   </div>
@@ -778,9 +790,9 @@ export function WalletTopUp({
                   Pay with Phantom Wallet
                 </Button>
               </div>
-            </TabsContent>
-          </div>
-        </Tabs>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Solana Payment Modal */}
