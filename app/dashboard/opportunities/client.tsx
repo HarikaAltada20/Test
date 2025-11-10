@@ -524,7 +524,11 @@ export default function OpportunitiesPage({
   const handleViewDetails = (id: string) => {
     router.push(`/dashboard/opportunities/${id}`);
   };
-
+  const resetFilters = () => {
+    setPlatformFilter("all");
+    setTypeFilter("all");
+    setSortOption("start_date_desc");
+  };
   if (isFetchingData) {
     return (
       <div className="flex items-center justify-center h-[76vh]">
@@ -1223,7 +1227,7 @@ export default function OpportunitiesPage({
             ))
             .slice(0, 50) // Limit to 50 contests for performance
         ) : (
-          <div className="col-span-full text-center py-12">
+          <div className="col-span-full text-center py=-12">
             <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <h2
               className="text-xl font-medium mb-2"
@@ -1235,7 +1239,7 @@ export default function OpportunitiesPage({
               No contests match your criteria
             </h2>
             <p
-              className="mb-4"
+              className="mb-3"
               style={{
                 color: isDark ? "#94a3b8" : "#64748b",
                 transition: "none",
@@ -1243,6 +1247,18 @@ export default function OpportunitiesPage({
             >
               Try adjusting your filters or check back later.
             </p>
+            <Button
+              onClick={resetFilters}
+              className="mt-4"
+              style={{
+                backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
+                color: "white",
+                transition: "none",
+              }}
+            >
+              Reset
+            </Button>
+
           </div>
         )}
       </div>
