@@ -528,11 +528,11 @@ export function CreatorSubmissionsModal({
           {/* Status Filter Tabs */}
           <div
             className={cn(
-              "flex items-center justify-between px-6 py-3 border-b flex-shrink-0",
+              "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 border-b flex-shrink-0",
               isDark ? "bg-[#06021D] " : "bg-white"
             )}
           >
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
               <Button
                 size="sm"
                 variant={statusFilter === "all" ? "default" : "outline"}
@@ -656,7 +656,7 @@ export function CreatorSubmissionsModal({
                 </Badge>
               </Button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full flex-wrap justify-between sm:w-auto sm:flex-nowrap sm:justify-end">
               <span
                 className={cn(
                   "text-sm",
@@ -665,30 +665,35 @@ export function CreatorSubmissionsModal({
               >
                 Sort by
               </span>
-              <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-                <SelectTrigger
-                  className={cn(
-                    "w-[180px]",
-                    isDark ? "text-white border-gray-600" : "text-gray-600"
-                  )}
+              <div className="flex-1 sm:flex-none">
+                <Select
+                  value={sortBy}
+                  onValueChange={(v) => setSortBy(v as any)}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  <SelectItem value="date-desc" isDark={isDark}>
-                    Date (Newest First)
-                  </SelectItem>
-                  <SelectItem value="date-asc" isDark={isDark}>
-                    Date (Oldest First)
-                  </SelectItem>
-                  <SelectItem value="views-desc" isDark={isDark}>
-                    Views (High → Low)
-                  </SelectItem>
-                  <SelectItem value="views-asc" isDark={isDark}>
-                    Views (Low → High)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    className={cn(
+                      "w-full sm:w-[180px]",
+                      isDark ? "text-white border-gray-600" : "text-gray-600"
+                    )}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent isDark={isDark}>
+                    <SelectItem value="date-desc" isDark={isDark}>
+                      Date (Newest First)
+                    </SelectItem>
+                    <SelectItem value="date-asc" isDark={isDark}>
+                      Date (Oldest First)
+                    </SelectItem>
+                    <SelectItem value="views-desc" isDark={isDark}>
+                      Views (High → Low)
+                    </SelectItem>
+                    <SelectItem value="views-asc" isDark={isDark}>
+                      Views (Low → High)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 

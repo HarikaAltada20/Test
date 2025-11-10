@@ -56,6 +56,7 @@ import {
   Landmark,
   Wallet as CryptoWalletIcon,
   Wallet,
+  X,
   Sparkles,
   Power,
   Loader2,
@@ -1849,27 +1850,43 @@ export default function BillingClientPage({
         }}
         isdark={isDark}
       >
-        <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle
-              style={{
-                color: isDark ? "white" : "#1f2937",
-                transition: "none",
-              }}
-            >
-              {currentPayoutMethod?.id
-                ? "Edit Payout Method"
-                : "Add New Payout Method"}
-            </DialogTitle>
-            <DialogDescription
-              style={{
-                color: isDark ? "white" : "#1f2937",
-                transition: "none",
-              }}
-            >
-              Manage your payout methods. Your default method will be
-              pre-selected for withdrawals.
-            </DialogDescription>
+        <DialogContent
+          hideCloseButton
+          className="sm:max-w-2xl sm:w-[95vw] max-w-xl w-[92vw] max-h-[90vh] overflow-y-auto"
+        >
+          <DialogHeader className="text-left">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <DialogTitle
+                  style={{
+                    color: isDark ? "white" : "#1f2937",
+                    transition: "none",
+                  }}
+                >
+                  {currentPayoutMethod?.id
+                    ? "Edit Payout Method"
+                    : "Add New Payout Method"}
+                </DialogTitle>
+                <DialogDescription
+                  style={{
+                    color: isDark ? "white" : "#1f2937",
+                    transition: "none",
+                  }}
+                >
+                  Manage your payout methods. Your default method will be
+                  pre-selected for withdrawals.
+                </DialogDescription>
+              </div>
+              <DialogClose
+                className={cn(
+                  "shrink-0 rounded-full transition-colors",
+                  isDark ? "text-white" : "text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
+            </div>
           </DialogHeader>
           <div className="py-4 space-y-4">
             {/* Country selector controls which payout methods show */}
@@ -2458,7 +2475,6 @@ export default function BillingClientPage({
                 {payoutMethods.map((method) => (
                   <div
                     key={method.id}
-                   
                     className={cn(
                       "flex items-center justify-between p-3 rounded-lg border transition-colors",
                       isDark
