@@ -4035,8 +4035,8 @@ export default function ContestDetailClient({
                   <CardContent className="p-0">
                     <div className="overflow-auto">
                       {/* View Mode Toggle and Sort control */}
-                      <div className="flex items-center justify-between px-4 py-2 mb-4">
-                        <div className="flex items-center gap-3 text-md">
+                      <div className="flex flex-col gap-4 px-4 py-2 mb-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                           <span
                             className={cn(
                               isDark ? "text-white" : "text-slate-600"
@@ -4052,7 +4052,7 @@ export default function ContestDetailClient({
                           >
                             <SelectTrigger
                               className={cn(
-                                "h-12 w-[180px]",
+                                "h-12 w-full sm:w-[180px]",
                                 isDark ? "border-gray-500" : "border-gray-300"
                               )}
                             >
@@ -4069,7 +4069,7 @@ export default function ContestDetailClient({
                           </Select>
                         </div>
 
-                        <div className="flex items-center gap-3 text-md">
+                        <div className="flex flex-col gap-2 text-md sm:flex-row sm:items-center sm:gap-3">
                           <span
                             className={cn(
                               "text-md",
@@ -4084,7 +4084,7 @@ export default function ContestDetailClient({
                           >
                             <SelectTrigger
                               className={cn(
-                                "h-12 w-[220px]",
+                                "h-12 w-full sm:w-[220px]",
                                 isDark ? "border-gray-500" : "border-slate-300"
                               )}
                             >

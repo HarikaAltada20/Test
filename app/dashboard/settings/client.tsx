@@ -40,7 +40,7 @@ import {
   API_TIMEOUT_SHORT,
 } from "@/constants/subscriptionPlans";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
-import { SurveyButton } from "@/components/SurveyButton";
+
 import { hasSubmitted } from "@/lib/form-submissions";
 import { cn } from "@/lib/utils";
 dayjs.extend(isSameOrAfter);
@@ -1096,7 +1096,6 @@ export default function SettingsPage({
       )}
 
       {/* Connected Accounts - Only for Creators */}
-       {/* Connected Accounts - Only for Creators */}
        {userType === "creator" && (
         <div>
           <div 

@@ -26,6 +26,8 @@ import {
   Minus,
   AlertTriangle,
   CheckCheck,
+  CalendarDays,
+  Film,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -3912,10 +3914,16 @@ export default function SubmitContentPage({
                                         video.id.videoId,
                                         `https://www.youtube.com/watch?v=${video.id.videoId}`
                                       )
-                                        ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                        ? isDark
+                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                          : "border-2 border-red-300 bg-red-50 opacity-75"
                                         : selectedVideoIndices.includes(index)
-                                        ? "border-2 border-purple-500 bg-purple-50"
-                                        : "border border-gray-200 hover:border-purple-300"
+                                        ? isDark
+                                          ? "border-2 border-purple-400 bg-[#2B184A]"
+                                          : "border-2 border-purple-500 bg-purple-50"
+                                        : isDark
+                                        ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                        : "border border-gray-200 hover:border-purple-300 bg-white"
                                     }`}
                                     onClick={() =>
                                       handleVideoSelection(
@@ -3957,9 +3965,23 @@ export default function SubmitContentPage({
                                                   </div>
                                                 )}
                                               </div>
-                                              <div className="flex items-center gap-4 text-xs text-gray-600">
+                                              <div
+                                                className={cn(
+                                                  "flex items-center gap-4 text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-600"
+                                                )}
+                                              >
                                                 <div className="flex items-center gap-1">
-                                                  <Eye className="h-4 w-4" />
+                                                  <Eye
+                                                    className={cn(
+                                                      "h-4 w-4",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-gray-600"
+                                                    )}
+                                                  />
                                                   <span className="font-medium">
                                                     {video.statistics
                                                       ?.viewCount || 0}{" "}
@@ -3967,27 +3989,37 @@ export default function SubmitContentPage({
                                                   <span>views</span>
                                                 </div>
 
-
                                                 <div className="flex items-center gap-1">
-                                                <span>
-                                                  <ThumbsUp className="h-4 w-4" />
-                                                  {video.statistics
-                                                    ?.likeCount || 0}{" "}
-                                                  
-                                                </span>
-                                                <span>likes</span>
+                                                  <ThumbsUp
+                                                    className={cn(
+                                                      "h-4 w-4",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-gray-600"
+                                                    )}
+                                                  />
+                                                  <span>
+                                                    {video.statistics
+                                                      ?.likeCount || 0}{" "}
+                                                  </span>
+                                                  <span>likes</span>
                                                 </div>
 
-
                                                 <div className="flex items-center gap-1">
-                                                  <MessageSquare className="h-4 w-4" />
+                                                  <MessageSquare
+                                                    className={cn(
+                                                      "h-4 w-4",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-gray-600"
+                                                    )}
+                                                  />
                                                   <span className="font-medium">
-                                                  {video.statistics
-                                                    ?.commentCount || 0}{" "}
-                                                    </span>
+                                                    {video.statistics
+                                                      ?.commentCount || 0}{" "}
+                                                  </span>
                                                   <span>comments</span>
                                                 </div>
-                                                
                                               </div>
                                             </div>
                                             <div className="flex-shrink-0 ml-2">
@@ -4015,16 +4047,23 @@ export default function SubmitContentPage({
                                 reel && (
                                   <Card
                                     key={`instagram-${index}`}
-                                    className={`cursor-pointer transition-all duration-200 ${
+                                    className={cn(
+                                      "cursor-pointer transition-all duration-200",
                                       isVideoAlreadySubmitted(
                                         reel.id,
                                         reel.permalink
                                       )
-                                        ? "border-2 border-red-300 bg-red-50 opacity-75"
+                                        ? isDark
+                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                          : "border-2 border-red-300 bg-red-50 opacity-75"
                                         : selectedReelIndices.includes(index)
-                                        ? "border-2 border-purple-500 bg-purple-50"
-                                        : "border border-gray-200 hover:border-purple-300"
-                                    }`}
+                                        ? isDark
+                                          ? "border-2 border-purple-400 bg-[#2B184A]"
+                                          : "border-2 border-purple-500 bg-purple-50"
+                                        : isDark
+                                        ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                        : "border border-gray-200 hover:border-purple-300 bg-white"
+                                    )}
                                     onClick={() =>
                                       handleVideoSelection(
                                         index,
@@ -4052,7 +4091,14 @@ export default function SubmitContentPage({
                                           <div className="flex items-start justify-between">
                                             <div className="flex-1">
                                               <div className="flex items-start gap-2 mb-2">
-                                                <h5 className="font-medium text-sm line-clamp-2 flex-1">
+                                                <h5
+                                                  className={cn(
+                                                    "font-medium text-sm line-clamp-2 flex-1",
+                                                    isDark
+                                                      ? "text-white"
+                                                      : "text-gray-900"
+                                                  )}
+                                                >
                                                   {reel.caption ||
                                                     "Instagram Reel"}
                                                 </h5>
@@ -4060,28 +4106,39 @@ export default function SubmitContentPage({
                                                   reel.id,
                                                   reel.permalink
                                                 ) && (
-                                                  <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                  <div
+                                                    className={cn(
+                                                      "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                      isDark
+                                                        ? "text-red-300 bg-red-900/60 border border-red-500/40"
+                                                        : "text-red-600 bg-red-100"
+                                                    )}
+                                                  >
                                                     <AlertTriangle className="h-3 w-3" />
                                                     Already Submitted
                                                   </div>
                                                 )}
                                               </div>
-                                              <div 
-                                               className={cn(
-                                                "flex items-center gap-4 text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-600"
-                                              )}>
-                                                <span>
-                                                  📅{" "}
-                                                  {dayjs(reel.timestamp).format(
-                                                    "MMM D, YYYY"
-                                                  )}
-                                                </span>
-                                                <span>
-                                                  🎬 {reel.media_type}
-                                                </span>
+                                              <div
+                                                className={cn(
+                                                  "flex items-center gap-4 text-xs",
+                                                  isDark
+                                                    ? "text-gray-300"
+                                                    : "text-gray-600"
+                                                )}
+                                              >
+                                                <div className="flex items-center gap-1">
+                                                  <CalendarDays className="h-4 w-4" />
+                                                  <span>
+                                                    {dayjs(
+                                                      reel.timestamp
+                                                    ).format("MMM D, YYYY")}
+                                                  </span>
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                  <Film className="h-4 w-4" />
+                                                  <span>{reel.media_type}</span>
+                                                </div>
                                               </div>
                                             </div>
                                             <div className="flex-shrink-0 ml-2">
@@ -4092,7 +4149,14 @@ export default function SubmitContentPage({
                                                   <Check className="h-4 w-4" />
                                                 </div>
                                               ) : (
-                                                <div className="w-6 h-6 border-2 border-gray-300 rounded-full"></div>
+                                                <div
+                                                  className={cn(
+                                                    "w-6 h-6 border-2 rounded-full",
+                                                    isDark
+                                                      ? "border-gray-500"
+                                                      : "border-gray-300"
+                                                  )}
+                                                ></div>
                                               )}
                                             </div>
                                           </div>
