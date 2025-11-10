@@ -388,6 +388,20 @@ export default function EarningsClientPage({
     }
   };
 
+  const isAlphabeticName = (name: string): boolean => {
+    const cleanedName = name.trim();
+    if (!cleanedName) return false;
+    return /^[A-Za-z][A-Za-z\s'.-]*$/.test(cleanedName);
+  };
+
+  const isValidUpiId = (value: string): boolean => {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return false;
+    return /^[A-Za-z0-9][A-Za-z0-9.\-_]{1,}@[A-Za-z][A-Za-z0-9]{2,}$/.test(
+      trimmedValue
+    );
+  };
+
   const handleSavePayoutMethod = async () => {
     if (!authUser) {
       toast.error("Authentication error.");
@@ -395,6 +409,10 @@ export default function EarningsClientPage({
     }
     if (!payoutFriendlyName.trim()) {
       toast.error("Please provide a friendly name for this payout method.");
+      return;
+    }
+    if (/^\d+$/.test(payoutFriendlyName.trim())) {
+      toast.error("Invalid friendly name.");
       return;
     }
 
@@ -417,6 +435,14 @@ export default function EarningsClientPage({
     } else if (selectedPayoutType === "upi") {
       if (!bankAccountHolder.trim() || !upiId.trim()) {
         toast.error("Account holder name and UPI ID are required.");
+        return;
+      }
+      if (!isAlphabeticName(bankAccountHolder)) {
+        toast.error("Invalid account holder name.");
+        return;
+      }
+      if (!isValidUpiId(upiId)) {
+        toast.error("Please enter a valid UPI ID (e.g., name@bank).");
         return;
       }
       details = {
