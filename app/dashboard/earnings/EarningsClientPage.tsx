@@ -617,6 +617,16 @@ export default function EarningsClientPage({
   const handleEditPayoutMethod = (method: PayoutMethod) => {
     setCurrentPayoutMethod(method);
     setSelectedPayoutType(method.method_type);
+    if (
+      method.method_type === "upi" ||
+      method.method_type === "bank_transfer"
+    ) {
+      setPayoutCountry("IN");
+    } else {
+      setPayoutCountry((prev) =>
+        prev === "IN" && method.method_type !== "phantom" ? "IN" : "OTHER"
+      );
+    }
     setPayoutFriendlyName(method.friendly_name || "");
 
     if (method.method_type === "crypto" && method.details) {
@@ -625,6 +635,7 @@ export default function EarningsClientPage({
       setCryptoCurrency(method.details.currency || "BNB");
     } else if (method.method_type === "upi" && method.details) {
       setUpiId(method.details.upi_id || "");
+      setBankAccountHolder(method.details.account_holder_name || "");
     } else if (method.method_type === "bank_transfer" && method.details) {
       setBankAccountHolder(method.details.account_holder_name || "");
       setBankAccountNumber(method.details.account_number || "");
@@ -1934,7 +1945,7 @@ export default function EarningsClientPage({
             </div>
             {/* Tabs for payout types */}
             <Tabs
-              defaultValue={selectedPayoutType}
+              value={selectedPayoutType}
               onValueChange={(value) =>
                 setSelectedPayoutType(value as PayoutMethodType)
               }

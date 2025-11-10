@@ -9,10 +9,10 @@ export interface CreatorProfileData {
 
 // Advertiser profile data for billing section
 export interface AdvertiserProfileData {
-    total_money_spent: number;
-    total_contests_run: number;
-    available_deposit_balance: number;
-    withdrawable_balance: number;
+  total_money_spent: number;
+  total_contests_run: number;
+  available_deposit_balance: number;
+  withdrawable_balance: number;
 }
 
 // Data fetched from the 'users' table
@@ -68,13 +68,14 @@ export interface CryptoPayoutDetails {
 
 export interface PhantomPayoutDetails {
   wallet_address: string;
-  preferred_token: 'USDC' | 'USDT';
-  network: 'devnet' | 'mainnet';
+  preferred_token: "USDC" | "USDT";
+  network: "devnet" | "mainnet";
   friendly_name?: string;
 }
 
 export interface UpiPayoutDetails {
   upi_id: string;
+  account_holder_name?: string;
 }
 
 export interface BankPayoutDetails {
@@ -87,7 +88,11 @@ export interface BankPayoutDetails {
   country: string;
 }
 
-export type PayoutMethodDetails = CryptoPayoutDetails | UpiPayoutDetails | BankPayoutDetails | PhantomPayoutDetails;
+export type PayoutMethodDetails =
+  | CryptoPayoutDetails
+  | UpiPayoutDetails
+  | BankPayoutDetails
+  | PhantomPayoutDetails;
 
 // For creator earnings props
 export interface EarningsClientPageProps {
@@ -118,8 +123,15 @@ export interface WithdrawalRequest {
   updated_at?: string;
   amount: number; // Renamed from amount_cents
   currency: string; // e.g., 'USD', 'COIN'
-  amount_type: 'cash' | 'coins';
-  status: 'pending' | 'approved' | 'rejected' | 'processed' | 'failed' | 'cancelled' | 'in_review'; // Added 'in_review'
+  amount_type: "cash" | "coins";
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "processed"
+    | "failed"
+    | "cancelled"
+    | "in_review"; // Added 'in_review'
   payout_method_id?: string | null; // Optional
   user_notes: string | null;
   admin_notes?: string | null;
@@ -131,4 +143,4 @@ export interface WithdrawalRequest {
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
   payout_method_summary?: string; // This is a frontend-added field
-} 
+}

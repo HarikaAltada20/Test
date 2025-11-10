@@ -16,6 +16,7 @@ import {
   Gift,
   Tag,
   Star, Play, GraduationCap,
+  RotateCcw,
 } from "lucide-react";
 import { User, UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
@@ -1249,15 +1250,17 @@ export default function OpportunitiesPage({
             </p>
             <Button
               onClick={resetFilters}
-              className="mt-4"
+              className="mt-4 text-md"
               style={{
                 backgroundColor: isDark ? "#7F39EC" : "#7F39EC",
                 color: "white",
                 transition: "none",
               }}
             >
+              <RotateCcw className="h-4 w-4" />
               Reset
             </Button>
+           
 
           </div>
         )}

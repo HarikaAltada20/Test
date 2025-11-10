@@ -378,8 +378,10 @@ export default function BillingClientPage({
         return `Bank: ...${
           method.details?.account_number?.slice(-4) || "XXXX"
         } (${method.friendly_name || "Bank"})`;
-        case "phantom":
-          return `Phantom: ...${method.details?.wallet_address?.slice(-4) || 'XXXX'} (${method.friendly_name || 'Phantom Wallet'})`;
+      case "phantom":
+        return `Phantom: ...${
+          method.details?.wallet_address?.slice(-4) || "XXXX"
+        } (${method.friendly_name || "Phantom Wallet"})`;
       default:
         return "Unknown Method Type";
     }
@@ -643,6 +645,7 @@ export default function BillingClientPage({
       setCryptoNetwork(method.details.network || "BNB_BEP20");
     } else if (method.method_type === "upi" && method.details) {
       setUpiId(method.details.upi_id || "");
+      setBankAccountHolder(method.details.account_holder_name || "");
     } else if (method.method_type === "bank_transfer" && method.details) {
       setBankAccountHolder(method.details.account_holder_name || "");
       setBankAccountNumber(method.details.account_number || "");
@@ -1954,7 +1957,7 @@ export default function BillingClientPage({
             </div>
             {/* Tabs for payout types */}
             <Tabs
-              defaultValue={selectedPayoutType}
+              value={selectedPayoutType}
               onValueChange={(value) =>
                 setSelectedPayoutType(value as PayoutMethodType)
               }
