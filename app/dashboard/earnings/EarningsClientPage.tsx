@@ -2460,7 +2460,7 @@ export default function EarningsClientPage({
                 "w-full text-md rounded-full",
                 isDark
                   ? "bg-[#7F39EC]  py-3 text-white"
-                  : " bg-[#D9C0FF61]  py-3.5text-[#7F39EC] "
+                  : " bg-[#D9C0FF61]  py-3.5 text-[#7F39EC] "
               )}
             >
               {isLoading
